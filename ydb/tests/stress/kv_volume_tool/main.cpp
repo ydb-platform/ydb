@@ -49,10 +49,7 @@ static TString AuthToken;
 
 namespace {
 
-using NKvVolumeTool::IsFailover;
-using NKvVolumeTool::TryNextAddress;
-using NKvVolumeTool::TryNextNode;
-
+constexpr int TryNextNode = -1;
 constexpr auto GrpcDeadline = 30s;
 constexpr ui64 GrpcMaxMessageSize = 64_MB;
 constexpr ui64 FileTransferChunkSize = 32_MB;
@@ -136,14 +133,14 @@ std::shared_ptr<grpc::ChannelCredentials> MakeChannelCredentials(bool useTls) {
 }
 
 struct TNodeEndpoint {
-    TVector<TString> Addresses;
+    TString HostPort;
     bool UseTls = false;
     TString SslTargetNameOverride;
     float LoadFactor = 0;
     bool Local = false;
 };
 
-std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TNodeEndpoint& node, const TString& address, ui32 channelId = 0) {
+std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TNodeEndpoint& node, ui32 channelId = 0) {
     grpc::ChannelArguments args;
     args.SetMaxReceiveMessageSize(GrpcMaxMessageSize);
     args.SetMaxSendMessageSize(GrpcMaxMessageSize);
@@ -154,14 +151,7 @@ std::shared_ptr<grpc::Channel> MakeGrpcChannel(const TNodeEndpoint& node, const 
     if (!node.SslTargetNameOverride.empty()) {
         args.SetSslTargetNameOverride(std::string(node.SslTargetNameOverride));
     }
-    return grpc::CreateCustomChannel(std::string(address), MakeChannelCredentials(node.UseTls), args);
-}
-
-int FailoverCode(const grpc::Status& status) {
-    if (status.error_code() == grpc::StatusCode::UNIMPLEMENTED) {
-        return TryNextNode;
-    }
-    return TryNextAddress;
+    return grpc::CreateCustomChannel(std::string(node.HostPort), MakeChannelCredentials(node.UseTls), args);
 }
 
 bool IsNodeUnavailable(const grpc::Status& status) {
@@ -171,7 +161,7 @@ bool IsNodeUnavailable(const grpc::Status& status) {
 
 int FailGrpc(const grpc::Status& status) {
     if (IsNodeUnavailable(status)) {
-        return FailoverCode(status);
+        return TryNextNode;
     }
     Cerr << "gRPC call failed: " << status.error_message() << Endl;
     return 1;
@@ -196,7 +186,6 @@ using TKvStub = Ydb::KeyValue::V1::KeyValueService::Stub;
 struct TNodeSession {
     std::shared_ptr<TVector<TNodeEndpoint>> Nodes = std::make_shared<TVector<TNodeEndpoint>>();
     size_t Index = 0;
-    size_t AddressIndex = 0;
     size_t PreferredIndex = 0;
     ui32 ChannelId = 0;
     bool Ready = false;
@@ -223,10 +212,6 @@ struct TNodeSession {
 
     const TVector<TNodeEndpoint>& Endpoints() const {
         return *Nodes;
-    }
-
-    const TString& CurrentAddress() const {
-        return (*Nodes)[Index].Addresses[AddressIndex];
     }
 
     TNodeSession Spawn(
@@ -261,14 +246,12 @@ struct TNodeSession {
         const int code = Retry([&] {
             return fn(*KvStub);
         }, true);
-        if (!IsFailover(code)) {
+        if (code != TryNextNode) {
             return code;
         }
         Cerr << "Failed to connect to any discovered endpoint:" << Endl;
         for (const auto& node : *Nodes) {
-            for (const auto& address : node.Addresses) {
-                Cerr << "  " << address << Endl;
-            }
+            Cerr << "  " << node.HostPort << Endl;
         }
         return 1;
     }
@@ -283,7 +266,7 @@ struct TNodeSession {
             errorOut.clear();
             return fn(*KvStub);
         }, false);
-        if (IsFailover(code) && errorOut.empty()) {
+        if (code == TryNextNode && errorOut.empty()) {
             errorOut = "all discovered endpoints are unavailable";
         }
         return code == 0;
@@ -291,7 +274,6 @@ struct TNodeSession {
 
 private:
     static constexpr int DiscoveryRounds = 2;
-    static constexpr auto RediscoveryDelay = 1s;
 
     bool Stopped() const {
         if (Stop && Stop->load(std::memory_order_relaxed)) {
@@ -301,22 +283,11 @@ private:
     }
 
     bool WaitBeforeRediscovery() const {
-        auto until = std::chrono::steady_clock::now() + RediscoveryDelay;
-        if (Deadline < until) {
-            until = Deadline;
-        }
-        while (std::chrono::steady_clock::now() < until) {
-            if (Stop && Stop->load(std::memory_order_relaxed)) {
+        for (int step = 0; step < 10; ++step) {
+            if (Stopped()) {
                 return false;
             }
-            auto slice = std::chrono::duration_cast<std::chrono::milliseconds>(until - std::chrono::steady_clock::now());
-            if (slice > 50ms) {
-                slice = 50ms;
-            }
-            if (slice <= 0ms) {
-                break;
-            }
-            std::this_thread::sleep_for(slice);
+            std::this_thread::sleep_for(100ms);
         }
         return !Stopped();
     }
@@ -325,52 +296,30 @@ private:
     int Retry(TFn&& fn, bool logAlways) {
         for (int round = 0; round < DiscoveryRounds; ++round) {
             if (round > 0) {
-                if (Stopped()) {
-                    break;
-                }
-                if (logAlways || VerboseMode) {
-                    Cerr << "Discovered endpoints are exhausted, refreshing discovery" << Endl;
-                }
-                if (!WaitBeforeRediscovery() || !ReloadEndpoints()) {
+                if (Stopped() || !WaitBeforeRediscovery() || !ReloadEndpoints()) {
                     break;
                 }
                 Reopen();
             }
-            if (Nodes->empty()) {
-                break;
-            }
-
-            TVector<size_t> addressCounts;
-            addressCounts.reserve(Nodes->size());
-            for (const auto& node : *Nodes) {
-                addressCounts.push_back(node.Addresses.size());
-            }
-
-            NKvVolumeTool::TFailoverPosition position;
-            position.Node = Index;
-            position.Address = AddressIndex;
-
-            while (true) {
+            const size_t count = Nodes->size();
+            for (size_t attempt = 0; attempt < count; ++attempt) {
+                if (attempt > 0 && Stopped()) {
+                    break;
+                }
                 if (VerboseMode) {
-                    Cerr << "Trying endpoint: " << CurrentAddress() << Endl;
+                    Cerr << "Trying endpoint: " << (*Nodes)[Index].HostPort << Endl;
                 }
                 const int code = fn();
-                if (!IsFailover(code)) {
+                if (code != TryNextNode) {
                     return code;
                 }
-                const size_t failedNode = position.Node;
-                if (!NKvVolumeTool::AdvanceAfterFailover(position, code, addressCounts) || Stopped()) {
+                if (attempt + 1 == count || Stopped()) {
                     break;
                 }
                 if (logAlways || VerboseMode) {
-                    if (position.Node == failedNode) {
-                        Cerr << "Address " << CurrentAddress() << " is unavailable, trying the next address" << Endl;
-                    } else {
-                        Cerr << "Endpoint " << CurrentAddress() << " is unavailable, trying the next one" << Endl;
-                    }
+                    Cerr << "Endpoint " << (*Nodes)[Index].HostPort << " is unavailable, trying the next one" << Endl;
                 }
-                Index = position.Node;
-                AddressIndex = position.Address;
+                Index = (Index + 1) % count;
                 Reopen();
             }
         }
@@ -378,7 +327,7 @@ private:
     }
 
     void Reopen() {
-        Channel = MakeGrpcChannel((*Nodes)[Index], CurrentAddress(), ChannelId);
+        Channel = MakeGrpcChannel((*Nodes)[Index], ChannelId);
         KvStub = Ydb::KeyValue::V1::KeyValueService::NewStub(Channel);
     }
 
@@ -399,15 +348,15 @@ private:
         OrderNodes(*fresh);
         Nodes = std::move(fresh);
         Index = PreferredIndex % Nodes->size();
-        AddressIndex = 0;
         return true;
     }
 
     bool FetchEndpoints(TVector<TNodeEndpoint>& nodes) const {
         TNodeEndpoint bootstrap;
+        bootstrap.HostPort = DiscoveryHostPort;
         bootstrap.UseTls = DiscoveryUseTls;
 
-        auto channel = MakeGrpcChannel(bootstrap, DiscoveryHostPort);
+        auto channel = MakeGrpcChannel(bootstrap);
         auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(channel);
 
         Ydb::Discovery::ListEndpointsRequest request;
@@ -460,18 +409,15 @@ private:
             if (info.port() == 0) {
                 continue;
             }
-            auto selected = NKvVolumeTool::SelectNode(info, DiscoveryUseTls);
-            if (selected.Addresses.empty()) {
-                continue;
+            for (auto& candidate : NKvVolumeTool::SelectEndpoints(info, DiscoveryUseTls)) {
+                TNodeEndpoint node;
+                node.HostPort = std::move(candidate.HostPort);
+                node.UseTls = DiscoveryUseTls;
+                node.SslTargetNameOverride = std::move(candidate.SslTargetNameOverride);
+                node.LoadFactor = info.load_factor();
+                node.Local = !selfLocation.empty() && info.location() == selfLocation;
+                nodes.push_back(std::move(node));
             }
-
-            TNodeEndpoint node;
-            node.Addresses = std::move(selected.Addresses);
-            node.UseTls = DiscoveryUseTls;
-            node.SslTargetNameOverride = std::move(selected.SslTargetNameOverride);
-            node.LoadFactor = info.load_factor();
-            node.Local = !selfLocation.empty() && info.location() == selfLocation;
-            nodes.push_back(std::move(node));
         }
 
         if (nodes.empty()) {
@@ -486,12 +432,10 @@ private:
             }
             Cerr << Endl;
             for (const auto& node : nodes) {
-                for (const auto& address : node.Addresses) {
-                    Cerr << "  " << address
-                         << " load=" << node.LoadFactor
-                         << (node.Local ? " local" : "")
-                         << Endl;
-                }
+                Cerr << "  " << node.HostPort
+                     << " load=" << node.LoadFactor
+                     << (node.Local ? " local" : "")
+                     << Endl;
             }
         }
 
@@ -932,7 +876,7 @@ int ExecuteTransaction(
 
     if (!status.ok()) {
         if (IsNodeUnavailable(status)) {
-            return FailoverCode(status);
+            return TryNextNode;
         }
         Cerr << "gRPC call failed: " << status.error_message() << Endl;
         return 1;
@@ -991,7 +935,7 @@ int ReadValueChunk(
 
     if (!status.ok()) {
         if (IsNodeUnavailable(status)) {
-            return FailoverCode(status);
+            return TryNextNode;
         }
         Cerr << "gRPC call failed: " << status.error_message() << Endl;
         return 1;
@@ -1089,7 +1033,7 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
 
             Cout << "Uploading part " << partIndex << ": key=" << partKey << " (" << readBytes << " bytes)" << Endl;
             if (const int code = ExecuteTransaction(stub, database, std::move(request), "Write"); code != 0) {
-                if (!IsFailover(code)) {
+                if (code != TryNextNode) {
                     CleanupPartKeys(stub, database, path, partitionId, partKeys);
                 }
                 return code;
@@ -1111,7 +1055,7 @@ int UploadFile(TKvStub& stub, const TString& database, const TString& path, ui64
 
         Cout << "Concatenating " << partKeys.size() << " part(s) into key=" << key << Endl;
         if (const int code = ExecuteTransaction(stub, database, std::move(request), "Concat"); code != 0) {
-            if (!IsFailover(code)) {
+            if (code != TryNextNode) {
                 CleanupPartKeys(stub, database, path, partitionId, partKeys);
             }
             return code;
@@ -1190,7 +1134,7 @@ int FromGrpcStatus(const grpc::Status& status, TString* errorOut) {
         *errorOut = TStringBuilder() << "gRPC error: " << status.error_message()
             << " (code=" << static_cast<int>(status.error_code()) << ")";
     }
-    return IsNodeUnavailable(status) ? FailoverCode(status) : 1;
+    return IsNodeUnavailable(status) ? TryNextNode : 1;
 }
 
 int FromOperationStatus(const Ydb::Operations::Operation& operation, TString* errorOut) {
@@ -1593,9 +1537,7 @@ int LoadVolume(const TOptions& options, TNodeSession& session, const TString& pa
     Cout << "Load started:" << Endl;
     Cout << "  endpoints: " << ctx.Session.Endpoints().size() << Endl;
     for (const auto& ep : ctx.Session.Endpoints()) {
-        for (const auto& address : ep.Addresses) {
-            Cout << "    " << address << Endl;
-        }
+        Cout << "    " << ep.HostPort << Endl;
     }
     Cout << "  storage channel: " << options.StorageChannel << Endl;
     Cout << "  write threads: " << options.Threads << Endl;

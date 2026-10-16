@@ -4,11 +4,7 @@
 
 namespace {
 
-using NKvVolumeTool::AdvanceAfterFailover;
-using NKvVolumeTool::SelectNode;
-using NKvVolumeTool::TFailoverPosition;
-using NKvVolumeTool::TryNextAddress;
-using NKvVolumeTool::TryNextNode;
+using NKvVolumeTool::SelectEndpoints;
 
 Ydb::Discovery::EndpointInfo MakeInfo() {
     Ydb::Discovery::EndpointInfo info;
@@ -30,14 +26,16 @@ Y_UNIT_TEST_SUITE(KvVolumeEndpointSelect) {
         info.add_ip_v6("2001:db8::1");
         info.add_ip_v6("[::1]");
 
-        const auto node = SelectNode(info, true);
+        const auto endpoints = SelectEndpoints(info, true);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[0], "10.0.0.1:2135");
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[1], "10.0.0.2:2135");
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[2], "[2001:db8::1]:2135");
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[3], "[::1]:2135");
-        UNIT_ASSERT_VALUES_EQUAL(node.SslTargetNameOverride, "node.example");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].HostPort, "10.0.0.1:2135");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[1].HostPort, "10.0.0.2:2135");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[2].HostPort, "[2001:db8::1]:2135");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[3].HostPort, "[::1]:2135");
+        for (const auto& endpoint : endpoints) {
+            UNIT_ASSERT_VALUES_EQUAL(endpoint.SslTargetNameOverride, "node.example");
+        }
     }
 
     Y_UNIT_TEST(IgnoresUnresolvableHostnameWhenAnIpIsPresent) {
@@ -45,19 +43,19 @@ Y_UNIT_TEST_SUITE(KvVolumeEndpointSelect) {
         info.set_address("this.dns.name.is.not.reachable");
         info.add_ip_v4("127.0.0.1");
 
-        const auto node = SelectNode(info, true);
+        const auto endpoints = SelectEndpoints(info, true);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[0], "127.0.0.1:2135");
-        UNIT_ASSERT_VALUES_EQUAL(node.SslTargetNameOverride, "this.dns.name.is.not.reachable");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].HostPort, "127.0.0.1:2135");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].SslTargetNameOverride, "this.dns.name.is.not.reachable");
     }
 
     Y_UNIT_TEST(FallsBackToHostnameWhenNoIpIsAdvertised) {
-        const auto node = SelectNode(MakeInfo(), true);
+        const auto endpoints = SelectEndpoints(MakeInfo(), true);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[0], "node.example:2135");
-        UNIT_ASSERT(node.SslTargetNameOverride.empty());
+        UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].HostPort, "node.example:2135");
+        UNIT_ASSERT(endpoints[0].SslTargetNameOverride.empty());
     }
 
     Y_UNIT_TEST(KeepsExplicitTlsOverride) {
@@ -66,64 +64,20 @@ Y_UNIT_TEST_SUITE(KvVolumeEndpointSelect) {
         info.add_ip_v6("2001:db8::1");
         info.set_ssl_target_name_override("balancer.example");
 
-        const auto node = SelectNode(info, true);
+        const auto endpoints = SelectEndpoints(info, true);
 
-        UNIT_ASSERT_VALUES_EQUAL(node.SslTargetNameOverride, "balancer.example");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].SslTargetNameOverride, "balancer.example");
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[1].SslTargetNameOverride, "balancer.example");
     }
 
     Y_UNIT_TEST(DoesNotInventTlsOverrideWithoutTls) {
         auto info = MakeInfo();
         info.add_ip_v4("10.0.0.1");
 
-        const auto node = SelectNode(info, false);
+        const auto endpoints = SelectEndpoints(info, false);
 
-        UNIT_ASSERT(node.SslTargetNameOverride.empty());
-        UNIT_ASSERT_VALUES_EQUAL(node.Addresses[0], "10.0.0.1:2135");
+        UNIT_ASSERT(endpoints[0].SslTargetNameOverride.empty());
+        UNIT_ASSERT_VALUES_EQUAL(endpoints[0].HostPort, "10.0.0.1:2135");
     }
-
-    Y_UNIT_TEST(ConnectionFailureTriesEveryAddressBeforeTheNextNode) {
-        const TVector<size_t> addressCounts = {2, 1};
-        TFailoverPosition position;
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 0);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 1);
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 1);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 0);
-
-        UNIT_ASSERT(!AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-    }
-
-    Y_UNIT_TEST(NodeFailureSkipsRemainingAddresses) {
-        const TVector<size_t> addressCounts = {3, 2};
-        TFailoverPosition position;
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextNode, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 1);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 0);
-
-        UNIT_ASSERT(!AdvanceAfterFailover(position, TryNextNode, addressCounts));
-    }
-
-    Y_UNIT_TEST(WrapsUntilEveryNodeWasTriedThenReportsExhaustion) {
-        const TVector<size_t> addressCounts = {1, 2, 1};
-        TFailoverPosition position;
-        position.Node = 2;
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 0);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 0);
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 1);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 0);
-
-        UNIT_ASSERT(AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-        UNIT_ASSERT_VALUES_EQUAL(position.Node, 1);
-        UNIT_ASSERT_VALUES_EQUAL(position.Address, 1);
-
-        UNIT_ASSERT(!AdvanceAfterFailover(position, TryNextAddress, addressCounts));
-    }
-} // Y_UNIT_TEST_SUITE(KvVolumeEndpointSelect)
+}

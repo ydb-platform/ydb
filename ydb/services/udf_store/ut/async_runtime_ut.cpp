@@ -120,6 +120,41 @@ struct TEnv {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TWasmAsyncRuntimeTest) {
+    Y_UNIT_TEST(DefaultHeapPreservesModuleDataAcrossRepeatedAllocations) {
+        auto compartment = CreateRegistryCompartment({});
+        // Model static storage of a libc-free coroutine module extending past
+        // 64 KiB. The old fallback heap overwrote this storage on the first call.
+        const TString wat = R"WAST((module
+            (import "env" "memory" (memory i64 8 2097152))
+            (data (i64.const 65536) "live coroutine state")
+        ))WAST";
+        const auto object = CompileModuleObjectCode(wat, EBytecodeFormat::HumanReadable);
+        AddPrecompiledModule(compartment.get(), MakeModuleBytecode(wat, object, EBytecodeFormat::HumanReadable), "StaticStorage");
+        const auto initialSize = compartment->GetLinearMemorySize();
+        for (size_t i = 0; i < 200; ++i) {
+            constexpr size_t size = 8192;
+            const auto offset = compartment->AllocateBytes(size);
+            UNIT_ASSERT(offset);
+            std::memset(compartment->GetHostPointer(offset, size), 'x', size);
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(static_cast<const char*>(compartment->GetHostPointer(65536, 20)), 20), "live coroutine state");
+            compartment->FreeBytes(offset);
+        }
+        UNIT_ASSERT(compartment->GetLinearMemorySize() > initialSize);
+    }
+
+    Y_UNIT_TEST(DefaultHeapHonorsFenceBeforeFirstAllocation) {
+        auto compartment = CreateRegistryCompartment({});
+        constexpr size_t size = 65536;
+        const auto pinned = compartment->AllocateDetachedBytes(size);
+        std::memset(compartment->GetHostPointer(pinned, size), 'p', size);
+        UNIT_ASSERT(compartment->ReserveGuestHeapBelow(pinned + size));
+        const auto offset = compartment->AllocateBytes(size);
+        UNIT_ASSERT(offset >= pinned + size);
+        std::memset(compartment->GetHostPointer(offset, size), 'x', size);
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(static_cast<const char*>(compartment->GetHostPointer(pinned, size)), size), TString(size, 'p'));
+        compartment->FreeBytes(offset);
+    }
+
     Y_UNIT_TEST(ImmediateGuestResultAndTerminalPoll) {
         TEnv env;
         const auto call = env.Start(0, 42);

@@ -44,6 +44,11 @@ struct TKqlTransformContext : TThrRefBase {
 
     TIntrusivePtr<NYql::TExprNode> ExplainTransformerInput; // Explain transformer must work after other transformers, but use input before peephole
     std::optional<NJson::TJsonValue> PlanJson; // JSON plan for the new optimizer
+    // QUCA2: [канал доставки, шаг 1] Сюда RBO-трансформер кладёт выход рядом с PlanJson:
+    //   ECacheObject CacheObject = None;                          // CompiledQuery | PreCboSnapshot | None
+    //   TIntrusiveConstPtr<TPreCboSnapshot> CacheSnapshot;             // только если CacheObject == PreCboSnapshot
+    //   THashMap<TPeepholeKey, TPeepholeResult> NewPeephole;      // промахи peephole этой компиляции
+    //   Все три очищаются в Reset().
     TMaybe<NYql::NNodes::TKiDataQueryBlocks> DataQueryBlocks;
 
     void Reset();

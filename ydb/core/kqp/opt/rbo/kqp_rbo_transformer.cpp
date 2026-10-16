@@ -204,6 +204,9 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         return status;
     }
 
+    // QUCA2: [вход снимка, doc §7] Здесь доступен KqpCtx.OptimizerInput.CacheSnapshot (nullptr при промахе).
+    //   Всё выше — разбор, типизация, загрузка метаданных — KQP выполняет как обычно и при попадании.
+    //   Снимок неизменяем и читается параллельно другими компиляциями.
     if (IsSuitableToRequestStatistics()) {
         // Async request for statistics.
         auto status = RequestColumnStatistics(ctx);
@@ -523,6 +526,11 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                 auto output = RBO.Optimize(Roots, rboCtx);
                 traceOutput.Flush();
                 AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+                // QUCA2: [канал доставки, шаг 1] К этому моменту KQP ожидает заполненными KqpCtx.CacheObject,
+                //   KqpCtx.CacheSnapshot (если создан) и KqpCtx.NewPeephole; здесь они переносятся в TransformCtx:
+                //   TransformCtx->CacheObject   = KqpCtx.CacheObject;
+                //   TransformCtx->CacheSnapshot = std::move(KqpCtx.CacheSnapshot);
+                //   TransformCtx->NewPeephole   = std::move(KqpCtx.NewPeephole);
                 return output;
             } else {
                 return node;
@@ -719,6 +727,10 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> indexSelectionRules;
     indexSelectionRules.emplace_back(std::make_unique<TPushRangesRule>(NYql::EStorageType::RowStorage));
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Index selection rules", std::move(indexSelectionRules)));
+
+    // QUCA2: [точка снимка PreCboSnapshot, doc §7] ===== после ранних RBO-правил, перед Prepare for CBO =====
+    //   Предлагаемая граница снимка (на согласование). Для KQP: набор стадий выше зависит от конфига (pruneKeyColumns,
+    //   allowChannelSpilling) и должен покрываться инвалидацией (у EnablePruneKeyColumns сейчас нет InvalidateCompileCache).
 
     // CBO stages.
     TVector<std::unique_ptr<IRule>> initialCBOStageRules;

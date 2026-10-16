@@ -309,6 +309,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildMaterialize(int rootIdx, TExprNode::
     auto& ctx = RBOCtx.ExprCtx;
 
     TExprNode::TPtr afterPeephole;
+    // QUCA2: [doc «Открытые вопросы»] Отдельный вызов peephole для materialize, без TKqpProgram/argsType.
+    //   Включать ли его в кэш — не решено.
     auto status =
         ::NKikimr::NKqp::NOpt::PeepHoleOptimize(TExprBase(node), afterPeephole, ctx, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, true, {});
     if (status != IGraphTransformer::TStatus::Ok) {
@@ -937,6 +939,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
             argsType.push_back(argTypeAnn);
         }
 
+        // QUCA2: [lookup peephole, doc §3, §8] Точка интеграции: перед вызовом peephole доступен
+        //   RBOCtx.KqpCtx.OptimizerInput.PeepholeLookup->Find(key) -> TIntrusiveConstPtr<TPeepholeResult> | nullptr
+        //   (объект неизменяем, читается параллельно). Ключ TPeepholeKey строит оптимизатор (хеш + равенство).
+        //   Новые результаты KQP забирает из KqpCtx.NewPeephole[key] после успеха всей компиляции;
+        //   до этого в кэш ничего не попадает.
         newProgram = PeepHoleOptimize(newProgram, argsType);
         Y_ENSURE(newProgram);
         // Collect program after peephole.

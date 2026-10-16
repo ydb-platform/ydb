@@ -167,6 +167,8 @@ public:
 
     void FillResult(TResult& queryResult) const override {
         queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
+        // QUCA2: [doc «Производительность и замеры»] Точка для вывода времени по стадиям:
+        //   YQL_CLOG(DEBUG, ProviderKqp) << NCommon::TransformerStatsToYson(GetTransformer().GetStatistics());
     }
 
 private:
@@ -186,6 +188,9 @@ public:
         , FunctionRegistry(funcRegistry)
         , Config(sessionCtx->ConfigPtr())
         , TransformCtx(transformCtx)
+        // QUCA2: [протаскивание] Снимок и PeepholeLookup кладутся в OptimizeCtx — единственный объект,
+        //   видимый и runner'у, и TPhysicalQueryBuilder (через RBOCtx.KqpCtx):
+        //   OptimizeCtx->OptimizerInput = std::move(optimizerInput);
         , OptimizeCtx(MakeIntrusive<TKqpOptimizeContext>(cluster, Config, sessionCtx->QueryPtr(),
             sessionCtx->TablesPtr(), sessionCtx->GetUserRequestContext(), usePessimisticLocks))
         , BuildQueryCtx(MakeIntrusive<TKqpBuildQueryContext>())
@@ -547,6 +552,7 @@ private:
 
 } // anonymous namespace
 
+// QUCA2: [сигнатура] + TOptimizerInput optimizerInput (объявление в kqp_host_impl.h тоже).
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     const TIntrusivePtr<TTypeAnnotationContext>& typesCtx, const TIntrusivePtr<TKikimrSessionContext>& sessionCtx,
     const TIntrusivePtr<TKqlTransformContext>& transformCtx, const NMiniKQL::IFunctionRegistry& funcRegistry, TActorSystem* actorSystem,

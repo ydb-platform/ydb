@@ -25,6 +25,11 @@ void TKqlTransformContext::Reset() {
     PhysicalQuery = nullptr;
     ExplainTransformerInput = nullptr;
     DataQueryBlocks = Nothing();
+    // QUCA2: [Reset] При повторном запуске и fallback очищать выбранный объект для кэша и пакет новых
+    //   PeepholeResult: артефакты неуспешного прохода не должны попасть в ответ следующей попытки.
+    //   Запрос: добавить сюда PlanJson.reset(). Сейчас PlanJson в Reset() не очищается, а AddPlans
+    //   (kqp_rbo_transformer.cpp) требует пустого слота; это работает только потому, что контекст создаётся
+    //   заново на каждую компиляцию. Нам нужно чистить все выходные поля в одном месте.
 }
 
 IGraphTransformer::TStatus TLogExprTransformer::operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output,

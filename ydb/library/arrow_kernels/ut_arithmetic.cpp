@@ -2,7 +2,7 @@
 #include "functions.h"
 #include "ut_common.h"
 
-#include <ydb/library/arrow_helpers/array.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>

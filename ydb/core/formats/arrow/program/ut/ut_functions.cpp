@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/program/functions.h>
 
-#include <ydb/library/arrow_helpers/array.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry.h>

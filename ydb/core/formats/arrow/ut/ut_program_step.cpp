@@ -14,7 +14,7 @@
 #include <ydb/core/formats/arrow/program/projection.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
 
-#include <ydb/library/arrow_helpers/array.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/arrow_kernels/ut_common.h>
 

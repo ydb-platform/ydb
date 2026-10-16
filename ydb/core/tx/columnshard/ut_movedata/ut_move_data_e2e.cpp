@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         f.ReassignPastWrittenData();
 
         TActorId driver;
-        TAutoPtr<IEventHandle> metadata;
+        std::vector<TAutoPtr<IEventHandle>> metadata;
         bool holdMetadata = true;
         bool injected = false;
         f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -402,21 +402,23 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             if (holdMetadata && ev->HasEvent() && dynamic_cast<const TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
                 UNIT_ASSERT(driver);
                 UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), driver);
-                UNIT_ASSERT(!metadata);
-                metadata.Reset(ev.Release());
+                metadata.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }
             // Put the result behind tablet death, ahead of the driver's cleanup poison.
-            if (ev->GetTypeRewrite() == TEvTablet::EvTabletDead && metadata) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvTabletDead && !metadata.empty()) {
                 holdMetadata = false;
                 injected = true;
-                f.Runtime.Send(metadata.Release());
+                for (auto& result : metadata) {
+                    f.Runtime.Send(result.Release());
+                }
+                metadata.clear();
             }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
         f.StartMove();
         UNIT_ASSERT_C(!f.DriveGate(10), "a move with held metadata must not report Success");
-        UNIT_ASSERT_C(metadata, "no MoveData metadata result was intercepted");
+        UNIT_ASSERT_C(!metadata.empty(), "no MoveData metadata result was intercepted");
 
         f.Restart();
         f.Runtime.DispatchEvents({}, TDuration::Seconds(1));

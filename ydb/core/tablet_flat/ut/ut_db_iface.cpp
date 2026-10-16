@@ -1172,6 +1172,93 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(41).ReadTx(123).Select(table1).HasN(1_u64, 21_u64, 22_u64).HasN(2_u64, 23_u64, 10005_u64);
     }
 
+    TString DumpRemovedTxOps(TDbExec& me, ui32 table, ui64 txId) {
+        const auto* ranges = me->FindRemovedTxOps(table, txId);
+        return ranges ? ToString(*ranges) : TString("none");
+    }
+
+    Y_UNIT_TEST(RemoveTxOps) {
+        TDbExec me;
+
+        const ui32 table1 = 1;
+
+        me.To(10).Begin();
+        me.To(11).Apply(*TAlter()
+                .AddTable("me_1", table1)
+                .AddColumn(table1, "key",    1, ETypes::Uint64, false, false)
+                .AddColumn(table1, "arg1",   4, ETypes::Uint64, false, false, Cimple(10004_u64))
+                .AddColumnToKey(table1, 1));
+        me.To(12).Commit();
+
+        me.To(20).Begin();
+        me.To(21).WriteTx(123, 5).PutN(table1, 1_u64, 21_u64);
+        me.To(22).WriteTx(123, 7).PutN(table1, 2_u64, 22_u64);
+        me.To(23).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+
+        // Adjacent and overlapping ranges are merged, rejected changes are undone
+        me.To(30).Begin();
+        me.To(31).RemoveTxOps(table1, 123, 5, 6);
+        me.To(32).RemoveTxOps(table1, 123, 7, 7);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 7] }");
+        me.To(33).Reject();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "none");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 0u);
+
+        // Seq num 0 means no savepoint seq num and cannot be rolled back
+        me.To(40).Begin();
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 123, 0, 5), yexception);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 123, 7, 5), yexception);
+        me.To(41).RemoveTxOps(table1, 123, 5, 6);
+        me.To(42).RemoveTxOps(table1, 123, 9, 10);
+        me.To(43).Commit();
+
+        // The new redo event is written once per call
+        UNIT_ASSERT_VALUES_EQUAL(CountRedoEvents(me.BackLog().Redo, NRedo::ERedo::RemoveTxOps), 2u);
+        // Older versions fail on such a redo chunk with an explicit ABI incompatibility
+        UNIT_ASSERT_VALUES_EQUAL(GetRedoRequiredEvolution(me.BackLog().Redo), SavepointSeqNumEvolution);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 6], [9, 10] }");
+
+        me.To(50).Begin();
+        me.To(51).RemoveTxOps(table1, 123, 6, 9);
+        me.To(52).Commit();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
+
+        // A rejected transaction undoes several additions on top of existing ranges
+        me.To(53).Begin();
+        me.To(54).RemoveTxOps(table1, 123, 12, 12);
+        me.To(55).RemoveTxOps(table1, 123, 11, 11);
+        me.To(56).RemoveTxOps(table1, 123, 20, 21);
+        me.To(57).RemoveTxOps(table1, 123, 3, 4);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [3, 12], [20, 21] }");
+        me.To(58).Reject();
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        UNIT_ASSERT_VALUES_EQUAL(me->GetRemovedTxOpsCount(table1), 1u);
+
+        me.To(60).Replay(EPlay::Boot);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+        me.To(61).Replay(EPlay::Redo);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 123), "{ [5, 10] }");
+
+        // Removed operations don't affect transaction status or visibility yet
+        UNIT_ASSERT(me->HasOpenTx(table1, 123));
+        me.To(70).ReadTx(123).Select(table1).HasN(1_u64, 21_u64).HasN(2_u64, 22_u64);
+
+        // Operations of unknown transactions may be removed, of committed or removed ones may not
+        me.To(80).Begin();
+        me.To(81).RemoveTxOps(table1, 456, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 456), "{ [1, 1] }");
+        me.To(82).WriteTx(234, 3).PutN(table1, 3_u64, 23_u64);
+        me.To(83).CommitTx(table1, 234);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 234, 3, 3), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 234), "none");
+        me.To(84).RemoveTx(table1, 345);
+        UNIT_ASSERT_EXCEPTION(me->RemoveTxOps(table1, 345, 1, 1), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(DumpRemovedTxOps(me, table1, 345), "none");
+        me.To(85).Commit();
+    }
+
     Y_UNIT_TEST(ReplayNewTable) {
         TDbExec me;
 

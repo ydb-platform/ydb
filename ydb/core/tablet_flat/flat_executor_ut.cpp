@@ -4586,11 +4586,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         i64 Key;
         TString Value;
         ui64 TxId;
+        ui32 SavepointSeqNum;
 
-        explicit TTxWriteRow(i64 key, TString value, ui64 txId = 0)
+        explicit TTxWriteRow(i64 key, TString value, ui64 txId = 0, ui32 savepointSeqNum = 0)
             : Key(key)
             , Value(std::move(value))
             , TxId(txId)
+            , SavepointSeqNum(savepointSeqNum)
         { }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -4602,7 +4604,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             if (TxId == 0) {
                 txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
             } else {
-                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId);
+                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId, SavepointSeqNum);
             }
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
@@ -4753,6 +4755,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                         << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2;
                     if (it->IsUncommitted()) {
                         builder << " txId " << it->GetUncommittedTxId();
+                        if (ui32 savepointSeqNum = it->GetUncommittedSavepointSeqNum()) {
+                            builder << " savepointSeqNum " << savepointSeqNum;
+                        }
                     }
                     builder << Endl;
 
@@ -5097,6 +5102,456 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 2 = Upsert value = Empty NULL value2 = Set bar\n"
                 "Key 3 = Upsert value = Set abc value2 = Empty NULL txId 123\n");
         }
+    }
+
+    Y_UNIT_TEST(CompactMultipleChangesSavepointSeqNum) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "bbb", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "ccc", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ddd", 123, 7) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "eee", 123, 7) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "fff", 234, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "qqq", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "www", 123, 11) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Empty NULL value2 = Set ddd txId 123 savepointSeqNum 7\n"
+                "Key 1 = Upsert value = Set ccc value2 = Empty NULL txId 123 savepointSeqNum 5\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set bbb txId 123 savepointSeqNum 5\n"
+                "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n"
+                "Key 3 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 3 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n");
+        }
+
+        // Deltas of the same transaction are only merged when they have the same savepoint seq num,
+        // a newer value of the same column overwrites an older one (key 3)
+        const TString compacted =
+            "Key 1 = Upsert value = Empty NULL value2 = Set ddd txId 123 savepointSeqNum 7\n"
+            "Key 1 = Upsert value = Set ccc value2 = Set bbb txId 123 savepointSeqNum 5\n"
+            "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
+            "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+            "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
+            "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n"
+            "Key 3 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n";
+
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...compacting parts" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        // Savepoint seq nums don't affect how deltas are committed
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set ccc value2 = Set ddd\n"
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL\n"
+                "Key 3 = Upsert value = Set www value2 = Empty NULL\n");
+        }
+    }
+
+    Y_UNIT_TEST(CompactSavepointSeqNumAcrossParts) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+
+        // The first part
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ppp", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "qqq", 123, 11) });
+
+        Cerr << "...compacting mem table into the first part" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n");
+        }
+
+        // The mem table
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "www", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "xxx", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "zzz", 123, 12) });
+
+        {
+            // Mem table deltas first, then deltas of the first part
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set zzz value2 = Empty NULL txId 123 savepointSeqNum 12\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set xxx txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n");
+        }
+
+        // Now "qqq" (savepoint seq num 11) is in the first part, while "www" and "xxx" with
+        // the same seq num are in the mem table. Compacting the mem table merges it with
+        // the first part, and merging deltas with the same savepoint seq num across layers
+        // keeps the newest value of each column. Deltas with other seq nums stay separate.
+        const TString compacted =
+            "Key 1 = Upsert value = Set zzz value2 = Empty NULL txId 123 savepointSeqNum 12\n"
+            "Key 1 = Upsert value = Set www value2 = Set xxx txId 123 savepointSeqNum 11\n"
+            "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n";
+
+        Cerr << "...compacting mem table together with the first part" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...compacting parts" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set zzz value2 = Set xxx\n");
+        }
+    }
+
+    struct TTxRemoveTxOps : public ITransaction {
+        const ui64 TxId;
+        const ui32 FromSavepointSeqNum;
+        const ui32 ToSavepointSeqNum;
+
+        TTxRemoveTxOps(ui64 txId, ui32 fromSavepointSeqNum, ui32 toSavepointSeqNum)
+            : TxId(txId)
+            , FromSavepointSeqNum(fromSavepointSeqNum)
+            , ToSavepointSeqNum(toSavepointSeqNum)
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            txc.DB.RemoveTxOps(TableId, TxId, FromSavepointSeqNum, ToSavepointSeqNum);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            // nothing
+        }
+    };
+
+    struct TTxRemoveLongTx : public ITransaction {
+        const ui64 TxId;
+
+        explicit TTxRemoveLongTx(ui64 txId)
+            : TxId(txId)
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            txc.DB.RemoveTx(TableId, TxId);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            // nothing
+        }
+    };
+
+    struct TTxCheckRemovedTxOps : public ITransaction {
+        TString& Data;
+        const TVector<ui64> TxIds;
+
+        TTxCheckRemovedTxOps(TString& data, TVector<ui64> txIds)
+            : Data(data)
+            , TxIds(std::move(txIds))
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            TStringBuilder builder;
+            builder << "count " << txc.DB.GetRemovedTxOpsCount(TableId);
+            for (ui64 txId : TxIds) {
+                builder << ", " << txId << " = ";
+                if (const auto* ranges = txc.DB.FindRemovedTxOps(TableId, txId)) {
+                    builder << *ranges;
+                } else {
+                    builder << "none";
+                }
+            }
+            Data = builder;
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(RemoveTxOpsCompactionAndRestart) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        auto restartTablet = [&]() {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        auto checkRemovedTxOps = [&](const TString& expected) {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234, 345 }) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, expected);
+        };
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bbb", 123, 7) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "ccc", 234, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 7, 8) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 3, 3) });
+        // Transaction 345 is open but has no rows (e.g. its write is still in flight)
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(345, 1, 2) });
+
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // Removed operations are moved from the mem table to tx status
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 3, 123 = { [7, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // Ranges in the mem table are merged with ranges in tx status
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 10, 10) });
+        checkRemovedTxOps("count 3, 123 = { [7, 8], [10, 10] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // After commit and compaction transaction 234 has no rows left,
+        // so its removed operations become garbage and are dropped
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(234) });
+
+        Cerr << "...compacting table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        Cerr << "...compacting table again to drop garbage" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        // Transaction 345 is still open, so its removed operations are kept
+        // even though it has no rows
+        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 2, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = { [1, 2] }");
+
+        // After remove transaction 345 is decided and has no rows,
+        // so its removed operations are dropped together with its status
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveLongTx(345) });
+
+        Cerr << "...compacting table to drop removed transaction" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = none");
+
+        restartTablet();
+        checkRemovedTxOps("count 1, 123 = { [7, 8], [10, 10] }, 234 = none, 345 = none");
+
+        // Removed operations don't affect visibility yet
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set aaa value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Set bbb value2 = Empty NULL\n"
+                "Key 3 = Upsert value = Set ccc value2 = Empty NULL\n");
+        }
+    }
+
+    Y_UNIT_TEST(RemoveTxOpsBorrow) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        auto restartTablet = [&]() {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+        };
+
+        auto checkRemovedTxOps = [&](const TString& expected) {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRemovedTxOps(data, { 123, 234, 345 }) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, expected);
+        };
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "bbb", 234, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 5, 6) });
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(234, 3, 3) });
+        // Transaction 345 is open but has no rows
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(345, 1, 2) });
+
+        // Some ranges are in tx status and some are in the mem table when the snapshot is made
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 8, 8) });
+
+        checkRemovedTxOps("count 3, 123 = { [5, 6], [8, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        Cerr << "...making snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshot });
+        Cerr << "...waiting for snapshot to complete" << Endl;
+        auto evSnapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        Cerr << "...borrowing snapshot" << Endl;
+        TString snapBody;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody, evSnapshot->Get()->SnapContext, env.Tablet + 1) });
+
+        // Stop the source tablet
+        Cerr << "...stopping the source tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+
+        // Start the destination tablet
+        Cerr << "...starting the destination tablet" << Endl;
+        ++env.Tablet;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        Cerr << "...initializing destination schema" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        checkRemovedTxOps("count 0, 123 = none, 234 = none, 345 = none");
+
+        // Removed operations come with the borrowed tx status
+        Cerr << "...loaning snapshot" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxLoanSnapshot(snapBody) });
+        checkRemovedTxOps("count 3, 123 = { [5, 6], [8, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // New ranges are merged with borrowed ones
+        env.SendSync(new NFake::TEvExecute{ new TTxRemoveTxOps(123, 7, 7) });
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        // Compaction replaces the borrowed tx status with an owned one
+        Cerr << "...compacting destination table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
+
+        restartTablet();
+        checkRemovedTxOps("count 3, 123 = { [5, 8] }, 234 = { [3, 3] }, 345 = { [1, 2] }");
     }
 
     Y_UNIT_TEST(LongTxBorrow) {

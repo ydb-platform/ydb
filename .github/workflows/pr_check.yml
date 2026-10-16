@@ -347,9 +347,9 @@ jobs:
           } >> "$GITHUB_ENV"
         fi
     - name: Checkout
+      id: proxy_checkout
       uses: actions/checkout@v5
-      env:
-        GIT_TRACE: "1"
+      continue-on-error: ${{ vars.GH_PROXY_URL != '' }}
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
@@ -357,9 +357,42 @@ jobs:
         # (collaborator/owner or a maintainer-applied `ok-to-test` label)
         allow-unsafe-pr-checkout: true
     - name: Drop GitHub proxy
-      if: vars.GH_PROXY_URL != ''
+      if: always() && vars.GH_PROXY_URL != ''
       shell: bash
-      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
+      run: |
+        {
+          echo "GIT_CONFIG_COUNT=0"
+          echo "GIT_CONFIG_KEY_0="
+          echo "GIT_CONFIG_VALUE_0="
+        } >> "$GITHUB_ENV"
+    - name: Clear failed proxy checkout
+      if: steps.proxy_checkout.outcome == 'failure'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${GITHUB_WORKSPACE:-}" ] || [ "$GITHUB_WORKSPACE" = "/" ]; then
+          echo "refusing to clean workspace"
+          exit 1
+        fi
+        find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        echo "GH_PROXY_USED=false" >> "$GITHUB_ENV"
+    - name: Checkout without proxy
+      if: steps.proxy_checkout.outcome == 'failure'
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        fetch-depth: 2
+        allow-unsafe-pr-checkout: true
+    - name: Verify checkout commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected="${{ needs.check-running-allowed.outputs.commit_sha }}"
+        actual="$(git rev-parse 'HEAD^{commit}')"
+        if [ "$actual" != "$expected" ]; then
+          echo "HEAD $actual does not match GitHub commit $expected"
+          exit 1
+        fi
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -512,15 +545,48 @@ jobs:
           } >> "$GITHUB_ENV"
         fi
     - name: Checkout
+      id: proxy_checkout
       uses: actions/checkout@v5
-      env:
-        GIT_TRACE: "1"
+      continue-on-error: ${{ vars.GH_PROXY_URL != '' }}
       with:
+        ref: ${{ github.sha }}
         fetch-depth: 2
     - name: Drop GitHub proxy
-      if: vars.GH_PROXY_URL != ''
+      if: always() && vars.GH_PROXY_URL != ''
       shell: bash
-      run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
+      run: |
+        {
+          echo "GIT_CONFIG_COUNT=0"
+          echo "GIT_CONFIG_KEY_0="
+          echo "GIT_CONFIG_VALUE_0="
+        } >> "$GITHUB_ENV"
+    - name: Clear failed proxy checkout
+      if: steps.proxy_checkout.outcome == 'failure'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${GITHUB_WORKSPACE:-}" ] || [ "$GITHUB_WORKSPACE" = "/" ]; then
+          echo "refusing to clean workspace"
+          exit 1
+        fi
+        find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        echo "GH_PROXY_USED=false" >> "$GITHUB_ENV"
+    - name: Checkout without proxy
+      if: steps.proxy_checkout.outcome == 'failure'
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ github.sha }}
+        fetch-depth: 2
+    - name: Verify checkout commit
+      shell: bash
+      run: |
+        set -euo pipefail
+        expected="${{ github.sha }}"
+        actual="$(git rev-parse 'HEAD^{commit}')"
+        if [ "$actual" != "$expected" ]; then
+          echo "HEAD $actual does not match GitHub commit $expected"
+          exit 1
+        fi
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

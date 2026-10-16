@@ -36,7 +36,7 @@ jobs:
             stat -c %s "$f" 2>/dev/null || echo 0
           }
           final_pack() {
-            find "$1/.git/objects/pack" -name '*.pack' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}'
+            find "$1/.git/objects/pack" -name '*.pack' -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}' || true
           }
           mbps() {
             awk -v b="${1:-0}" 'BEGIN { printf "%.2f", (b + 0) / 1000000 }'
@@ -82,14 +82,15 @@ jobs:
           }
 
           timed_clone() {
-            local git_config=$1 dest start end rc bytes secs
+            local git_config=$1 dest log start end rc bytes secs
             dest=$(mktemp -d /tmp/gh-co.XXXXXX)
+            log=$(mktemp)
             start=$(date +%s)
             rc=0
             if [ -n "$git_config" ]; then
-              git -c "$git_config" clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$dest/clone.log" 2>&1 || rc=$?
+              git -c "$git_config" clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$log" 2>&1 || rc=$?
             else
-              git clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$dest/clone.log" 2>&1 || rc=$?
+              git clone --depth 1 --single-branch --no-tags "$repo_url" "$dest" >"$log" 2>&1 || rc=$?
             fi
             end=$(date +%s)
             bytes=$(final_pack "$dest")
@@ -97,10 +98,11 @@ jobs:
             if [ "$secs" -lt 1 ]; then secs=1; fi
             if [ "$rc" -ne 0 ]; then
               echo "clone failed rc=$rc" >&2
-              tail -5 "$dest/clone.log" >&2 || true
+              tail -5 "$log" >&2 || true
             fi
             rm -rf "$dest"
-            echo "$rc $secs $bytes $((bytes / secs))"
+            rm -f "$log"
+            echo "$rc $secs ${bytes:-0} $(( ${bytes:-0} / secs ))"
           }
 
           summary=$(mktemp)
@@ -113,6 +115,7 @@ jobs:
             echo "===== round $round probe ====="
             direct_bps=$(measure "")
             proxy_bps=$(measure "$instead")
+            echo "round $round probe direct $(mbps "$direct_bps") MB/s, proxy $(mbps "$proxy_bps") MB/s"
             echo "===== round $round checkout ====="
             direct_out=$(mktemp)
             proxy_out=$(mktemp)
@@ -122,8 +125,10 @@ jobs:
             ppid=$!
             wait "$dpid" || true
             wait "$ppid" || true
-            read -r d_rc d_secs d_bytes d_co_bps <"$direct_out"
-            read -r p_rc p_secs p_bytes p_co_bps <"$proxy_out"
+            read -r d_rc d_secs d_bytes d_co_bps <"$direct_out" || true
+            read -r p_rc p_secs p_bytes p_co_bps <"$proxy_out" || true
+            d_rc=${d_rc:-1}; d_secs=${d_secs:-0}; d_bytes=${d_bytes:-0}; d_co_bps=${d_co_bps:-0}
+            p_rc=${p_rc:-1}; p_secs=${p_secs:-0}; p_bytes=${p_bytes:-0}; p_co_bps=${p_co_bps:-0}
             rm -f "$direct_out" "$proxy_out"
 
             probe_pick=github

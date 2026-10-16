@@ -60,6 +60,11 @@ struct TParquetExportSettings {
         return *this;
     }
 
+    TParquetExportSettings& WithRowGroupBytes(ui64 rowGroupBytes) {
+        RowGroupBytes = rowGroupBytes;
+        return *this;
+    }
+
     TParquetExportSettings& WithCompression(const TCompressionSettings& compressionSettings) {
         CompressionSettings.Emplace(compressionSettings);
         return *this;
@@ -67,6 +72,11 @@ struct TParquetExportSettings {
 
     IExport::TTableColumns Columns;
     ui64 RowGroupSize = 10000;
+    // The limit on the bytes of the cells of a row group, 0 means no limit. It bounds
+    // the rows a scan holds before they are encoded, and the memory a reader needs
+    // to decode a row group. The default is the default export batch
+    // (BackupBytesBatchSize). A row wider than the limit is a row group of its own.
+    ui64 RowGroupBytes = 32ull << 20;
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 

@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      shard_count:
+        description: 'Passed to Run-tests. 1 keeps one job per branch. 2-16 shards one branch only.'
+        required: false
+        type: string
+        default: '1'
 
 jobs:
   prepare:
@@ -108,6 +113,7 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       branches: ${{ needs.prepare.outputs.branches_json || '' }}
       branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+      shard_count: ${{ inputs.shard_count }}
 
   collect_combined_summary:
     needs: main

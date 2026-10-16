@@ -18,6 +18,7 @@ YA_PHASE_NAMES = (
     "graph_compare",
     "checkout_head",
     "prepare_ya_make",
+    "save_test_graph",
     "ya_make_try_N",
     "ya_build",
     "ya_tests",

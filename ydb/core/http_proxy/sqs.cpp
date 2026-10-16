@@ -287,9 +287,9 @@ namespace NKikimr::NHttpProxy {
             void LogHttpRequestResponse(const TActorContext& ctx, int httpCode, TStringBuf errorText) {
                 const bool isServerError = IsServerError(httpCode);
                 auto priority = isServerError ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO;
-                LOG_LOG_S_SAMPLED_BY(ctx, priority, NKikimrServices::SQS,
-                                     NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId),
-                                     "Request [" << HttpContext.RequestId << "] " << LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "SqsTopic", TopicPath, Method, UserSid_, httpCode, errorText));
+                YDB_LOG_CTX_COMP_SAMPLED_BY(ctx, priority, NKikimrServices::SQS, NSqsTopic::SampleIdFromRequestId(HttpContext.RequestId), "Request",
+                    {"#_HttpContext.RequestId", HttpContext.RequestId},
+                    {"#_num_0", LogHttpRequestResponseCommonInfoString(HttpContext, StartTime, "SqsTopic", TopicPath, Method, UserSid_, httpCode, errorText)});
             }
 
             void ReportInputCounters(const TActorContext& ctx) {

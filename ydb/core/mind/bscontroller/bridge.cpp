@@ -149,31 +149,28 @@ public:
             State->ApplyConfigUpdates();
         }
 
+        // target group may have stopped being a pile while this transaction was in flight (e.g. the bridged group was
+        // decommitted), then there is nothing to sync anymore
         const auto it = Self->TargetGroupToSyncerState.find(TargetGroupId);
-        if (it == Self->TargetGroupToSyncerState.end()) {
-            // target group stopped being a pile while this transaction was in flight (e.g. the bridged group was
-            // decommitted), so there is nothing to sync anymore
-            Self->CheckUnsyncedBridgePiles();
-            Self->ProcessSyncers();
-            return;
-        }
-        TSyncerState& syncerState = it->second;
-        Y_ABORT_UNLESS(syncerState.InCommit);
-        syncerState.InCommit = false;
-        if (!syncerState.NodeIds) {
-            Self->SyncersRequiringAction.PushBack(&syncerState);
-        }
-        if (TGroupInfo *group = Self->FindGroup(syncerState.BridgeProxyGroupId); group && group->BridgeGroupInfo) {
-            for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == TargetGroupId &&
-                        pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
-                    Self->RecheckUnsyncedBridgePiles = true;
-                    for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
-                        const size_t numErased = Self->NodeToSyncerState.erase({nodeId, &syncerState});
-                        Y_ABORT_UNLESS(numErased == 1);
+        if (it != Self->TargetGroupToSyncerState.end()) {
+            TSyncerState& syncerState = it->second;
+            Y_ABORT_UNLESS(syncerState.InCommit);
+            syncerState.InCommit = false;
+            if (!syncerState.NodeIds) {
+                Self->SyncersRequiringAction.PushBack(&syncerState);
+            }
+            if (TGroupInfo *group = Self->FindGroup(syncerState.BridgeProxyGroupId); group && group->BridgeGroupInfo) {
+                for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == TargetGroupId &&
+                            pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
+                        Self->RecheckUnsyncedBridgePiles = true;
+                        for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
+                            const size_t numErased = Self->NodeToSyncerState.erase({nodeId, &syncerState});
+                            Y_ABORT_UNLESS(numErased == 1);
+                        }
+                        Self->TargetGroupToSyncerState.erase(it);
+                        break;
                     }
-                    Self->TargetGroupToSyncerState.erase(it);
-                    break;
                 }
             }
         }
@@ -1014,30 +1011,13 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
 }
 
 void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc) {
-    // collect groups that are not sync targets anymore: deleted groups and piles that were removed from their bridge
-    // proxy groups (e.g. when the whole bridged group gets decommitted, inline pile stays, but it isn't a pile anymore)
+    // collect groups that are not sync targets anymore: deleted groups and piles that stopped being piles (e.g. when the
+    // whole bridged group gets decommitted, inline pile stays, but it isn't a pile anymore); a group is a pile iff it has
+    // BridgePileId, which is checked when loading
     THashSet<TGroupId> targetGroupIds;
     for (const auto& [base, overlay] : state.Groups.Diff()) {
-        if (!base) {
-            continue;
-        }
-        if (!overlay->second) { // deleted group
+        if (base && (!overlay->second || (base->second->BridgePileId && !overlay->second->BridgePileId))) {
             targetGroupIds.insert(base->first);
-        }
-        if (const auto& prev = base->second->BridgeGroupInfo) {
-            const TGroupInfo *cur = overlay->second.Get();
-            THashSet<TGroupId> remaining;
-            if (cur && cur->BridgeGroupInfo) {
-                for (const auto& pile : cur->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                    remaining.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                }
-            }
-            for (const auto& pile : prev->GetBridgeGroupState().GetPile()) {
-                if (const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                        !remaining.contains(groupId)) {
-                    targetGroupIds.insert(groupId);
-                }
-            }
         }
     }
 

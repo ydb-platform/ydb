@@ -1127,16 +1127,14 @@ namespace NKikimr::NBsController {
                         group->BridgePileId = TBridgePileId();
                         group->BridgeProxyGroupId.reset();
 
+                        // group entries are held by pointers, so deleting other groups keeps `group` valid
                         for (const TGroupId pileGroupId : pileGroupIds) {
-                            const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId);
-                            Y_ABORT_UNLESS(pileGroup);
-                            for (const TVSlotInfo *vslot : pileGroup->VDisksInGroup) {
-                                state.DestroyVSlot(vslot->VSlotId);
+                            if (const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId)) {
+                                state.DeleteExistingGroupWithVSlots(*pileGroup);
+                            } else {
+                                Y_DEBUG_ABORT_S("pile group not found GroupId# " << groupId << " PileGroupId# " << pileGroupId);
                             }
-                            state.DeleteExistingGroup(pileGroupId);
                         }
-                        group = state.Groups.FindForUpdate(TGroupId::FromValue(groupId));
-                        Y_ABORT_UNLESS(group);
                     }
                     for (const TVSlotInfo *vslot : group->VDisksInGroup) {
                         state.DestroyVSlot(vslot->VSlotId);

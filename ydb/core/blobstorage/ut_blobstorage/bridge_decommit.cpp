@@ -12,25 +12,6 @@ using namespace NBridgeTest;
 
 namespace {
 
-    // nodes of the natively bridged cluster: 8 nodes per pile
-    TNodeLocation GetBridgedLocation(ui32 nodeId) {
-        NActorsInterconnect::TNodeLocation location;
-        location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 8 + 1);
-        location.SetDataCenter("my_dc");
-        location.SetRack(TStringBuilder() << "rack_" << nodeId);
-        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-        return TNodeLocation(location);
-    }
-
-    // nodes of the cluster being converted have no pile names in their locations
-    TNodeLocation GetUnbridgedLocation(ui32 nodeId) {
-        NActorsInterconnect::TNodeLocation location;
-        location.SetDataCenter("my_dc");
-        location.SetRack(TStringBuilder() << "rack_" << nodeId);
-        location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-        return TNodeLocation(location);
-    }
-
     // test environment has no SchemeCache, while BS_CONTROLLER resolves database of the decommitted group through it;
     // this stub describes the root domain containing provided storage pools
     class TSchemeCacheStub : public TActor<TSchemeCacheStub> {
@@ -82,26 +63,24 @@ namespace {
         return env.Invoke(request); // channel profiles are generated from the group's own pool
     }
 
-    const NKikimrBlobStorage::TBaseConfig::TGroup& FindGroup(const NKikimrBlobStorage::TBaseConfig& baseConfig,
-            ui32 groupId) {
-        for (const auto& group : baseConfig.GetGroup()) {
-            if (group.GetGroupId() == groupId) {
-                return group;
-            }
-        }
-        UNIT_FAIL("group not found GroupId# " << groupId);
-        Y_UNREACHABLE();
-    }
-
-    void WaitForDecommitStatus(TEnvironmentSetup& env, ui32 groupId, NKikimrBlobStorage::TGroupDecommitStatus::E expected) {
+    // wait until the condition holds, checking it every 10 seconds of simulated time
+    void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what) {
         for (ui32 i = 0; i < 60; ++i) {
-            const auto baseConfig = env.FetchBaseConfig();
-            if (FindGroup(baseConfig, groupId).GetVirtualGroupInfo().GetDecommitStatus() == expected) {
+            if (condition()) {
                 return;
             }
             env.Sim(TDuration::Seconds(10));
         }
-        UNIT_FAIL("decommit status " << NKikimrBlobStorage::TGroupDecommitStatus::E_Name(expected) << " not reached");
+        UNIT_FAIL(what << " not reached");
+    }
+
+    NKikimrBlobStorage::TGroupDecommitStatus::E GetDecommitStatus(TEnvironmentSetup& env, ui32 groupId) {
+        return FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus();
+    }
+
+    void WaitForDecommitStatus(TEnvironmentSetup& env, ui32 groupId, NKikimrBlobStorage::TGroupDecommitStatus::E expected) {
+        WaitUntil(env, [&] { return GetDecommitStatus(env, groupId) == expected; },
+            TStringBuilder() << "decommit status " << NKikimrBlobStorage::TGroupDecommitStatus::E_Name(expected));
     }
 
     // keeps events matching the predicate until released
@@ -127,6 +106,13 @@ namespace {
 
         bool HasHeld() const {
             return !Held.empty();
+        }
+
+        void WaitForHeld() {
+            for (ui32 i = 0; i < 120 && Held.empty(); ++i) {
+                Env.Sim(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(!Held.empty());
         }
 
         void Release() {
@@ -222,14 +208,8 @@ namespace {
     }
 
     void WaitForPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
-        for (ui32 i = 0; i < 60; ++i) {
-            if (GetPileState(env, pileIndex) == state) {
-                return;
-            }
-            env.Sim(TDuration::Seconds(10));
-        }
-        UNIT_FAIL("pile state " << NKikimrBridge::TClusterState::EPileState_Name(state) << " not reached, current one is "
-            << NKikimrBridge::TClusterState::EPileState_Name(GetPileState(env, pileIndex)));
+        WaitUntil(env, [&] { return GetPileState(env, pileIndex) == state; },
+            TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
     }
 
     TEnvironmentSetup::TSettings MakeBridgedSettings() {
@@ -298,13 +278,25 @@ namespace {
             return ev.GetTypeRewrite() == TEvBlobStorage::EvPut &&
                 ev.Get<TEvBlobStorage::TEvPut>()->WriteSource == TWriteSource::BlobDepotPut;
         });
+        // remember the latest group info reported to nodes
+        auto reportedGroupInfo = std::make_shared<std::optional<NKikimrBlobStorage::TGroupInfo>>();
+        chain.Add([groupId, reportedGroupInfo](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& group : record.GetServiceSet().GetGroups()) {
+                    auto& info = *reportedGroupInfo;
+                    if (group.GetGroupID() == groupId && (!info || info->GetGroupGeneration() <= group.GetGroupGeneration())) {
+                        info = group;
+                    }
+                }
+            }
+            return true;
+        });
+
         const auto response = DecommitGroup(env, groupId);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         WaitForDecommitStatus(env, groupId, NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
-        for (ui32 i = 0; i < 120 && !hold.HasHeld(); ++i) {
-            env.Sim(TDuration::Seconds(1));
-        }
-        UNIT_ASSERT(hold.HasHeld());
+        hold.WaitForHeld();
 
         // the data is not copied yet, so it is read from the piles through the BlobDepot agent; restarted nodes start
         // proxies of the group being decommitted from scratch
@@ -346,6 +338,13 @@ namespace {
         UNIT_ASSERT(!group.GetIsProxyGroup());
         UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 0);
 
+        // nodes see it as an ordinary decommitted group, without any bridge part (inline pile loses it too)
+        const auto& info = *reportedGroupInfo;
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_C(info->GetDecommitStatus() == NKikimrBlobStorage::TGroupDecommitStatus::DONE, info->ShortDebugString());
+        UNIT_ASSERT_C(!info->HasBridgeGroupState() && !info->HasBridgeProxyGroupId() && !info->HasBridgePileId(),
+            info->ShortDebugString());
+
         // data is served by the BlobDepot now, including the nodes that were restarted
         checker.CheckAll();
         checker.Write(groupId);
@@ -358,8 +357,7 @@ namespace {
         Cerr << "*** restarting controller node" << Endl;
         env.RestartNode(env.Settings.ControllerNodeId);
         env.Sim(TDuration::Seconds(30));
-        UNIT_ASSERT(FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus() ==
-            NKikimrBlobStorage::TGroupDecommitStatus::DONE);
+        UNIT_ASSERT(GetDecommitStatus(env, groupId) == NKikimrBlobStorage::TGroupDecommitStatus::DONE);
         checker.Write(groupId);
         checker.CheckAll();
 
@@ -388,30 +386,9 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
 
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks
     Y_UNIT_TEST(DecommitInlinePile) {
-        TEnvironmentSetup env{{
-            .NodeCount = 9,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetUnbridgedLocation,
-            .SetupHive = true,
-            .SelfManagementConfig = true,
-            .AutomaticBootstrap = true,
-        }};
-        env.CreatePool(2);
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
-        const ui32 groupId = groups.front();
-
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
         TDataChecker checker(env);
-        checker.Write(groupId);
-        RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);
-
-        const auto res = ConvertToBridge(env);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
-        env.Sim(TDuration::Minutes(1));
-        UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-
+        const ui32 groupId = ConvertCluster(env, checker, 2);
         for (ui32 i = 0; i < 10; ++i) {
             checker.Write(groupId);
         }
@@ -458,12 +435,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             // reads are served as usual, the agent needs them
             const auto& [_, id, expected] = checker.GetWritten().front();
             send(new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead));
-            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-            auto& m = *res->Get();
-            UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), expected);
+            CheckGetResult(*env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false)->Get(), expected);
         }});
     }
 
@@ -489,7 +461,6 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
 
             // the filter outlives this function, so its state is shared
             struct TRaceState {
-                bool Armed = true;
                 bool GetSent = false;
                 bool RaceSeen = false;
                 std::vector<std::unique_ptr<IEventHandle>> HeldConfigs;
@@ -497,7 +468,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             auto state = std::make_shared<TRaceState>();
             chain.Add([&env, state, pileGroupIds, bridgeProxy, nodeId, edge, id](ui32 eventNodeId,
                     std::unique_ptr<IEventHandle>& ev) {
-                if (!state->Armed) {
+                if (state->RaceSeen) {
                     return true;
                 } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
                     const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
@@ -515,7 +486,6 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
                     const auto& msg = *ev->Get<TEvBlobStorage::TEvGetResult>();
                     if (msg.Status == NKikimrProto::RACE && msg.ResponseSz == 1 && msg.Responses[0].Id == id) {
                         state->RaceSeen = true;
-                        state->Armed = false;
                         for (auto& config : std::exchange(state->HeldConfigs, {})) {
                             env.Runtime->Send(config.release(), nodeId);
                         }
@@ -530,11 +500,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
             UNIT_ASSERT(state->GetSent);
             UNIT_ASSERT(state->RaceSeen);
-            auto& m = *res->Get();
-            UNIT_ASSERT_VALUES_EQUAL_C(m.Status, NKikimrProto::OK, m.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(m.ResponseSz, 1);
-            UNIT_ASSERT_VALUES_EQUAL_C(m.Responses[0].Status, NKikimrProto::OK, m.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(m.Responses[0].Buffer.ConvertToString(), expected);
+            CheckGetResult(*res->Get(), expected);
             // the agent would answer itself, if it got the restarted request
             UNIT_ASSERT_VALUES_EQUAL(res->Sender, bridgeProxy);
         }});
@@ -557,8 +523,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         RunDecommission(env, chain, checker, groupId, {}, {.InProgress = [&] {
             SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
             WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
-            UNIT_ASSERT(FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus() ==
-                NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
+            UNIT_ASSERT(GetDecommitStatus(env, groupId) == NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS);
             checker.CheckAll(9);
         }});
     }
@@ -583,21 +548,14 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
             if (ev.GetTypeRewrite() != TEvBlobStorage::EvAssimilate || !ev.Get<TEvBlobStorage::TEvAssimilate>()->Reverse) {
                 return false;
             }
-            for (ui32 pileGroupId : pileGroupIds) {
-                if (ev.Recipient == MakeBlobStorageProxyID(pileGroupId)) { // recipient rewrite is resolved already
-                    return true;
-                }
-            }
-            return false;
+            // recipient rewrite is resolved already, so the original recipient is checked
+            return std::ranges::any_of(pileGroupIds, [&](ui32 id) { return ev.Recipient == MakeBlobStorageProxyID(id); });
         });
 
         RunDecommission(env, chain, checker, groupId, {}, {
             .InProgress = [&] {
                 SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-                for (ui32 i = 0; i < 60 && !syncerHold.HasHeld(); ++i) {
-                    env.Sim(TDuration::Seconds(1));
-                }
-                UNIT_ASSERT(syncerHold.HasHeld());
+                syncerHold.WaitForHeld();
                 env.Sim(TDuration::Minutes(1)); // the other group gets synced meanwhile
                 UNIT_ASSERT(GetPileState(env, 1) != NKikimrBridge::TClusterState::SYNCHRONIZED);
             },
@@ -609,4 +567,62 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         checker.CheckAll(9);
     }
 
+    // ordinary group of not bridged cluster goes the same way through decommission
+    Y_UNIT_TEST(DecommitUnbridgedGroup) {
+        TEnvironmentSetup env(MakeUnbridgedSettings(true));
+        env.CreatePool(2);
+        env.Sim(TDuration::Seconds(30));
+
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        const ui32 groupId = groups.front();
+
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 10; ++i) {
+            checker.Write(groupId);
+        }
+        checker.CheckAll();
+
+        TFilterChain chain(env);
+        const auto vanished = RunDecommission(env, chain, checker, groupId, {5});
+        UNIT_ASSERT(vanished.empty());
+    }
+
+    // BlobDepot retries notification of decommission finish with a delay when BS_CONTROLLER fails to process it
+    Y_UNIT_TEST(DecommittedNotifyRetried) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        TFilterChain chain(env);
+        constexpr ui32 numErrors = 3;
+        struct TNotifyState {
+            std::vector<TInstant> NotifyTimestamps;
+            ui32 NumErrorsInjected = 0;
+        };
+        auto state = std::make_shared<TNotifyState>();
+        chain.Add([&env, state](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerGroupDecommittedNotify) {
+                state->NotifyTimestamps.push_back(env.Runtime->GetClock());
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerGroupDecommittedResponse &&
+                    state->NumErrorsInjected < numErrors) {
+                ev->Get<TEvBlobStorage::TEvControllerGroupDecommittedResponse>()->Record.SetStatus(NKikimrProto::ERROR);
+                ++state->NumErrorsInjected;
+            }
+            return true;
+        });
+
+        // BS_CONTROLLER finishes decommission on the first notification, while BlobDepot keeps retrying; wait for the retries
+        // to finish before the controller restart
+        RunDecommission(env, chain, checker, groupId, {}, {.Done = [&] {
+            WaitUntil(env, [&] { return state->NotifyTimestamps.size() > numErrors; }, "notification retries");
+            env.Sim(TDuration::Seconds(10));
+        }});
+        UNIT_ASSERT_VALUES_EQUAL(state->NumErrorsInjected, numErrors);
+        const auto& timestamps = state->NotifyTimestamps;
+        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), numErrors + 1);
+        for (size_t i = 1; i < timestamps.size(); ++i) {
+            UNIT_ASSERT_GE_C(timestamps[i] - timestamps[i - 1], TDuration::Seconds(5), "notify# " << i);
+        }
+    }
 }

@@ -341,6 +341,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
+            bool done = false;
             if (const auto& info = ev->Get()->Info) {
                 Y_ABORT_UNLESS(info->BlobDepotId);
                 if (TabletId != *info->BlobDepotId) {
@@ -350,18 +351,18 @@ namespace NKikimr::NBlobDepot {
                         ConnectToBlobDepot();
                     }
                 }
-                if (info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE && ProxyId) {
-                    // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
-                    // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends;
-                    // the proxy still gets the configuration to pass us requests it has queued while being unconfigured
-                    const TActorId proxyId = std::exchange(ProxyId, {});
-                    TActivationContext::Send(ev->Forward(proxyId));
-                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, proxyId, {}, nullptr, 0));
-                    return;
-                }
+                // decommitted group has lost its physical part, the proxy has nothing to serve anymore; group's VDisk
+                // count can't tell this, as bridge proxy group has no VDisks of its own even before decommission ends
+                done = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
             }
             if (ProxyId) {
+                // the proxy gets the configuration even when it is going to be stopped, to pass us requests it has queued
+                // while being unconfigured
                 TActivationContext::Send(ev->Forward(ProxyId));
+                if (done) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, std::exchange(ProxyId, {}), {},
+                        nullptr, 0));
+                }
             }
         }
 

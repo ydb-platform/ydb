@@ -257,10 +257,7 @@ namespace NKikimr::NBsController {
 
         for (const TGroupId groupId : groups) {
             if (const TGroupInfo *groupInfo = Groups.Find(groupId)) {
-                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                    DestroyVSlot(vslot->VSlotId);
-                }
-                DeleteExistingGroup(groupId);
+                DeleteExistingGroupWithVSlots(*groupInfo);
             } else {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
@@ -892,10 +889,7 @@ namespace NKikimr::NBsController {
             if (!groupInfo) {
                 throw TExGroupNotFound(groupId);
             }
-            for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                DestroyVSlot(vslot->VSlotId);
-            }
-            DeleteExistingGroup(groupInfo->ID);
+            DeleteExistingGroupWithVSlots(*groupInfo);
         }
     }
 

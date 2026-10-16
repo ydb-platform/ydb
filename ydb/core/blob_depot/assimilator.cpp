@@ -366,7 +366,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::HandleRetryAssimilate() {
-        Y_ABORT_UNLESS(ActionInProgress);
+        Y_DEBUG_ABORT_UNLESS(ActionInProgress);
         ActionInProgress = false;
         Action();
     }
@@ -782,16 +782,19 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDT39"},
             {"id", Self->GetLogId()},
             {"status", msg.Status});
-        if (msg.Status != NKikimrProto::OK) {
+        // pipe closed after erroneous response is recreated on resume, so its events are ignored
+        if (msg.ClientId == PipeId && msg.Status != NKikimrProto::OK) {
             CreatePipe();
         }
     }
 
-    void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr /*ev*/) {
+    void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "BDT40"},
             {"id", Self->GetLogId()});
-        CreatePipe();
+        if (ev->Get()->ClientId == PipeId) {
+            CreatePipe();
+        }
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev) {
@@ -830,7 +833,9 @@ namespace NKikimr::NBlobDepot {
             Self->Execute(std::make_unique<TTxFinishDecommission>(this));
             PassAway();
         } else {
+            // retry notification later; action is over, it is restarted on resume
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
+            ActionInProgress = false;
             TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
     }

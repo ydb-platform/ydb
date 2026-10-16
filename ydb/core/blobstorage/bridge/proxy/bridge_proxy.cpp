@@ -736,25 +736,6 @@ namespace NKikimr {
             Send(sender, response.release(), 0, cookie);
         }
 
-        // does this group block writes due to decommission; the same rule as the one VDisks use for their groups
-        bool DecommitFenced() const {
-            switch (Info->DecommitStatus) {
-                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
-                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
-                    return false;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
-                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
-                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
-                    return true;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    break;
-            }
-            Y_UNREACHABLE();
-        }
-
         template<typename TEvent>
         static bool IsFencedWrite([[maybe_unused]] const TEvent& ev) {
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut> ||
@@ -762,7 +743,7 @@ namespace NKikimr {
                     std::is_same_v<TEvent, TEvBlobStorage::TEvPatch>) {
                 return true;
             } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
-                return !ev.Hard || ev.RecordGeneration != Max<ui32>(); // hard barrier of assimilation process is allowed
+                return !TBlobStorageGroupInfo::IsAssimilationBarrier(ev.Hard, ev.RecordGeneration);
             } else {
                 return false;
             }
@@ -793,7 +774,7 @@ namespace NKikimr {
                 return;
             }
 
-            if (DecommitFenced() && IsFencedWrite(*ev->Get())) {
+            if (Info->DecommitBlocksWrites() && IsFencedWrite(*ev->Get())) {
                 // piles of bridged group don't know about its decommission, so this proxy is the only one to block
                 // writes not coming from the BlobDepot (e.g. requests restarted after the group switched to it)
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie, "group is being decommitted");
@@ -915,7 +896,7 @@ namespace NKikimr {
             }
 
             if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
-                if (DecommitFenced()) {
+                if (Info->DecommitBlocksWrites()) {
                     // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes
                     // for them; let the VDisks of piles proceed with assimilation
                     res->IgnoreDecommitState = true;

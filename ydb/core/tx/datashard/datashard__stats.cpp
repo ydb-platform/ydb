@@ -282,12 +282,61 @@ public:
             return true;
         }
 
+        const auto& request = Ev->Get()->Record;
+        if (request.HasHnswIndexBuildId() && !Self->IsFollower() && Self->State == TShardState::Ready) {
+            const auto& table = *tableInfoIt->second;
+            const bool matchingBuild = table.HnswInitialBuildId == request.GetHnswIndexBuildId();
+            if (request.GetHnswReleaseBuild() && matchingBuild) {
+                // Only coordination metadata changes. Preserve graph and journal,
+                // and persist before acknowledging so later split children are free
+                // to reconstruct their graphs without the completed coordinator.
+                auto updated = MakeIntrusive<TUserTable>(table);
+                NKikimrSchemeOp::TTableDescription schema;
+                updated->GetSchema(schema);
+                schema.ClearHnswInitialBuildId();
+                schema.ClearHnswInitialBuildDeadlineUs();
+                updated->HnswInitialBuildId = 0;
+                updated->HnswInitialBuildDeadline = TInstant::Zero();
+                updated->SetSchema(schema);
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistUserTable(db, tableId, *updated);
+                Self->SetUserTable(TPathId(Self->PathOwnerId, tableId), updated);
+            } else if (request.GetHnswStartBuild() && (matchingBuild || !table.HnswInitialBuildId)
+                    && (!table.HnswInitialBuildId || ctx.Now() < table.HnswInitialBuildDeadline) && table.HnswSettings) {
+                auto& entry = Self->HnswIndexCache[table.LocalTid];
+                if (entry.CoordinatedBuildId != request.GetHnswIndexBuildId()) {
+                    entry.CoordinatedBuildId = request.GetHnswIndexBuildId();
+                    entry.InitialBuildAttemptsLeft = 30;
+                }
+                Self->ScheduleHnswRebuild(table.LocalTid);
+            }
+        }
         const TUserTable& tableInfo = *(tableInfoIt->second);
         if (Ev->Get()->Record.HasHnswIndexBuildId()) {
             Result->Record.SetShardState(Self->State);
             const auto cache = Self->HnswIndexCache.find(tableInfo.LocalTid);
             Result->Record.SetHnswBuildInProgress(cache != Self->HnswIndexCache.end()
                 && (cache->second.Building || cache->second.RebuildScheduled));
+            if (!Self->IsFollower()) {
+                const bool installed = tableInfo.HnswSettings && Self->GetHnswIndex(tableInfo.LocalTid,
+                    tableInfo.HnswVectorColumnTag, *tableInfo.HnswSettings, false);
+                TString fallback;
+                if (!appData->FeatureFlags.GetEnableHnswIndex()) {
+                    fallback = "feature disabled";
+                } else if (Self->IsHnswCacheMemoryLimitKnown() && !Self->GetHnswCacheMemoryLimit()) {
+                    fallback = "cache disabled";
+                } else if (cache != Self->HnswIndexCache.end() && !Result->Record.GetHnswBuildInProgress()
+                        && cache->second.CoordinatedBuildId == request.GetHnswIndexBuildId()) {
+                    if (cache->second.NextScanAttemptAt == TInstant::Max()) {
+                        fallback = "below min_rows";
+                    } else if (!cache->second.InitialBuildAttemptsLeft) {
+                        fallback = "build retries exhausted";
+                    }
+                }
+                Result->Record.SetHnswBuildFinished(installed || !fallback.empty());
+                Result->Record.SetHnswFallbackReason(fallback);
+                Result->Record.SetHnswBuildReleased(!tableInfo.HnswInitialBuildId);
+            }
             // Size decisions must include the final uploaded parts, not an
             // earlier statistics snapshot that could hide an imminent split.
             Result->Record.SetHnswStatsFresh(!tableInfo.StatsNeedUpdate && !tableInfo.StatsUpdateInProgress);

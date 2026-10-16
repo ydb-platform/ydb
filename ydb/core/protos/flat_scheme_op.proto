@@ -441,6 +441,10 @@ message TTableDescription {
     optional NKikimrProto.TPathID VectorIndexPathId = 61;
     optional string VectorIndexPath = 62;
     optional bool VectorIndexHnsw = 63;
+    // Initial graph construction is coordinated after posting-table size splits.
+    // These fields travel with the schema to restarted and split tablets.
+    optional uint64 HnswInitialBuildId = 64;
+    optional uint64 HnswInitialBuildDeadlineUs = 65;
 }
 
 message TCompressionOptions {

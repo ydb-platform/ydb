@@ -48,7 +48,7 @@ private:
         auto& result = scan->Result;
         if (!result.Success) {
             auto product = MakeHolder<THnswIndexBuildProduct>(nullptr, nullptr,
-                "Snapshot scan aborted or exceeded its memory budget");
+                result.Error.empty() ? TString("Snapshot scan aborted") : std::move(result.Error));
             product->BelowMinRows = result.BelowMinRows;
             product->Retryable = !result.BelowMinRows;
             Send(ReplyTo, new TEvDataShard::TEvAsyncJobComplete(product.Release()), 0, TxId);
@@ -86,8 +86,9 @@ IActor* CreateHnswIndexBuildJob(const TActorId& replyTo, ui64 txId,
     return new THnswIndexBuildJob(replyTo, txId, settings);
 }
 
-// Builds the in-memory HNSW index for a vector index posting table as part of
-// the ESchemeOpFinalizeBuildIndexImplTable alter that publishes it. This runs
+// Direct/legacy alters build the in-memory HNSW index as part of publication.
+// Coordinated index builds instead authorize graph work after size splits.
+// The eager path runs
 // after TAlterMoveShadowUnit and TAlterTableUnit, so the uploaded rows are in
 // the real table and its final column metadata is visible. The scheme
 // transaction stays suspended until the build finishes (see
@@ -108,6 +109,9 @@ protected:
             return false;
         }
         const auto& alter = schemeTx.GetAlterTable();
+        if (alter.GetHnswInitialBuildId()) {
+            return false; // SchemeShard starts this build after partitioning settles.
+        }
         return alter.GetVectorIndexHnsw()
             && alter.HasVectorIndexKmeansTreeDescription()
             && alter.HasVectorIndexEmbeddingColumnId();

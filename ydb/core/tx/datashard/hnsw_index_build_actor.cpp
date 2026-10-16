@@ -24,6 +24,9 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
+        const auto started = TMonotonic::Now();
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+            "HNSW: graph construction started worker=" << SelfId() << " rows=" << KeysAndVectors.size());
         THnswIndexBuildResult result;
         try {
             auto index = THnswIndex::Build(
@@ -35,6 +38,10 @@ public:
         } catch (const std::exception& error) {
             result.Error = error.what();
         }
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD,
+            "HNSW: graph construction completed worker=" << SelfId()
+            << " rows=" << KeysAndVectors.size() << " success=" << bool(result.Index)
+            << " elapsed=" << TMonotonic::Now() - started << " error=" << result.Error);
         Callback(std::move(result), ctx);
         Die(ctx);
     }
@@ -102,6 +109,9 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
     Actors.erase(ev->Sender);
     auto* result = ev->Get();
     if (!IsHnswBuildCurrent(result->LocalTid, result->BuildToken)) {
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+            << " HNSW: obsolete graph result discarded localTid=" << result->LocalTid
+            << " buildToken=" << result->BuildToken << " rows=" << result->RowCountAtBuild);
         auto it = HnswIndexCache.find(result->LocalTid);
         if (it != HnswIndexCache.end() && it->second.BuildToken == result->BuildToken) {
             DeferHnswIndexBuild(result->LocalTid, TDuration::Seconds(1));

@@ -22,6 +22,10 @@ bool TDataShard::CanReuseHnswGraph(const TUserTable& previous, const TUserTable&
     after.ClearTableSchemaVersion();
     before.ClearCoordinatedSchemaVersion();
     after.ClearCoordinatedSchemaVersion();
+    before.ClearHnswInitialBuildId();
+    after.ClearHnswInitialBuildId();
+    before.ClearHnswInitialBuildDeadlineUs();
+    after.ClearHnswInitialBuildDeadlineUs();
     return before.SerializeAsString() == after.SerializeAsString();
 }
 
@@ -96,6 +100,13 @@ public:
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
         THnswSnapshotScanResult result;
+        result.ScannedRows = Rows.size();
+        result.ReservedBytes = Reservation->Bytes;
+        if (Failed) {
+            result.Error = "Snapshot scan exceeded its memory budget";
+        } else if (status != EStatus::Done) {
+            result.Error = "Snapshot scan aborted";
+        }
         result.Success = !Failed && status == EStatus::Done;
         result.BelowMinRows = result.Success && !Rebuilding
             && (Rows.empty() || Rows.size() < GetHnswMinRows(Settings));
@@ -103,7 +114,6 @@ public:
         if (result.Success) {
             result.Rows = std::move(Rows);
             result.MemoryReservation = Reservation;
-            result.ReservedBytes = Reservation->Bytes;
             result.AllowEmpty = Rebuilding;
         }
         Rows.clear();
@@ -169,7 +179,7 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
                 event->LocalTid = localTid;
                 event->BuildToken = token;
                 event->BelowMinRows = result.BelowMinRows;
-                event->Error = "Snapshot scan aborted or exceeded its memory budget";
+                event->Error = result.Error.empty() ? TString("Snapshot scan aborted") : std::move(result.Error);
                 TActivationContext::Send(new IEventHandle(replyTo, TActorId(), event.Release()));
                 return;
             }
@@ -177,7 +187,10 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
             auto* actor = CreateHnswIndexBuildActor(replyTo, localTid, tag, count, settings,
                 std::move(result.Rows), std::move(result.MemoryReservation), result.ReservedBytes,
                 base, token, result.AllowEmpty);
-            TActivationContext::Register(actor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+            const auto worker = TActivationContext::Register(actor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId);
+            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+                "HNSW: graph worker queued owner=" << replyTo << " localTid=" << localTid
+                << " buildToken=" << token << " rows=" << count << " worker=" << worker);
         };
     }
     PromoteImmediatePostExecuteEdges(base, EPromotePostExecuteEdges::RepeatableRead, txc);
@@ -205,7 +218,7 @@ void TDataShard::StartHnswSnapshotScan(ui32 localTid, TUserTable::TCPtr table,
     });
 }
 
-void TDataShard::Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext&) {
+void TDataShard::Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TActorContext& ctx) {
     auto& request = *ev->Get();
     if (!IsHnswBuildCurrent(request.LocalTid, request.BuildToken)
             || !AppData()->FeatureFlags.GetEnableHnswIndex() || IsStopping() || State != TShardState::Ready) {
@@ -213,8 +226,22 @@ void TDataShard::Handle(TEvPrivate::TEvStartHnswSnapshotScan::TPtr& ev, const TA
         return;
     }
     const auto& entry = HnswIndexCache.at(request.LocalTid);
+    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+        << " HNSW: snapshot scan started localTid=" << request.LocalTid
+        << " buildToken=" << request.BuildToken << " buildId=" << entry.CoordinatedBuildId);
+    auto finish = [finish = std::move(request.Finish), tabletId = TabletID(),
+            localTid = request.LocalTid, token = request.BuildToken, started = ctx.Now()]
+            (THnswSnapshotScanResult&& result) mutable {
+        const auto& ctx = TActivationContext::AsActorContext();
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, tabletId
+            << " HNSW: snapshot scan completed localTid=" << localTid
+            << " buildToken=" << token << " success=" << result.Success
+            << " rows=" << result.ScannedRows << " reservedBytes=" << result.ReservedBytes
+            << " elapsed=" << ctx.Now() - started << " error=" << result.Error);
+        finish(std::move(result));
+    };
     auto* scan = new THnswSnapshotScan(*request.Table, entry.VectorColumnTag, entry.Settings,
-        HnswCacheMemoryTracker, bool(entry.Index), std::move(request.Finish));
+        HnswCacheMemoryTracker, bool(entry.Index), std::move(finish));
     const auto id = Executor()->QueueScan(request.LocalTid, scan, 0, NTabletFlatExecutor::TScanOptions()
         .DisableResourceBroker()
         .SetReadPrio(NTabletFlatExecutor::TScanOptions::EReadPrio::Low)
@@ -260,8 +287,13 @@ public:
                 return true;
             }
             if (!Self->GetHnswCacheMemoryLimit()) {
-                // Registration is asynchronous. An explicit zero grant disables caching.
-                Retry = !Self->IsHnswCacheMemoryLimitKnown();
+                // Registration is asynchronous, but an absent controller must
+                // not keep coordinated CREATE INDEX waiting forever. An
+                // explicit zero grant disables caching immediately.
+                auto& entry = Self->HnswIndexCache[LocalTid];
+                if (!Self->IsHnswCacheMemoryLimitKnown() && entry.InitialBuildAttemptsLeft) {
+                    Retry = --entry.InitialBuildAttemptsLeft != 0;
+                }
                 return true;
             }
             Self->HnswIndexCache.try_emplace(LocalTid);
@@ -355,6 +387,11 @@ bool TDataShard::TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
         const Ydb::Table::VectorIndexSettings& settings, TRowVersion baseVersion) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex()) {
         return false;
+    }
+    for (const auto& [_, table] : TableInfos) {
+        if (table->LocalTid == localTid && IsHnswInitialBuildDeferred(*table)) {
+            return false;
+        }
     }
     auto& entry = HnswIndexCache[localTid];
     if (entry.Building) {
@@ -708,6 +745,14 @@ void TDataShard::AbortHnswIndexChanges(ui32 localTid, ui64 txId, NTable::TDataba
     });
 }
 
+bool TDataShard::IsHnswInitialBuildDeferred(const TUserTable& table) const {
+    if (!table.HnswInitialBuildId || AppData()->TimeProvider->Now() >= table.HnswInitialBuildDeadline) {
+        return false;
+    }
+    const auto it = HnswIndexCache.find(table.LocalTid);
+    return it == HnswIndexCache.end() || it->second.CoordinatedBuildId != table.HnswInitialBuildId;
+}
+
 void TDataShard::ScheduleHnswInitialBuilds() {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower() || State != TShardState::Ready) {
         return;
@@ -715,7 +760,7 @@ void TDataShard::ScheduleHnswInitialBuilds() {
     // Graphs are local to a tablet incarnation: snapshots transfer rows and
     // schema, but not the in-memory graph. Reconstruct it without a first read.
     for (const auto& [_, table] : TableInfos) {
-        if (table->HnswSettings && table->HnswVectorColumnTag) {
+        if (table->HnswSettings && table->HnswVectorColumnTag && !IsHnswInitialBuildDeferred(*table)) {
             auto& entry = HnswIndexCache[table->LocalTid];
             // As with eager finalization, give the controller time to respond
             // to scan demand, but do not loop forever on an insufficient budget.
@@ -728,6 +773,11 @@ void TDataShard::ScheduleHnswInitialBuilds() {
 
 void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
     if (!AppData()->FeatureFlags.GetEnableHnswIndex() || IsFollower()) {
+        return;
+    }
+    // A zero grant may be temporary. Leave retries available for the memory
+    // notification, without reporting a new scheduled build on every probe.
+    if (!GetHnswCacheMemoryLimit() && IsHnswCacheMemoryLimitKnown()) {
         return;
     }
     auto& entry = HnswIndexCache.at(localTid);

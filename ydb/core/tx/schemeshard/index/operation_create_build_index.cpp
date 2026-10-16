@@ -327,7 +327,15 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexDataColumns.insert(indexColumns.KeyColumns.back());
             }
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-            result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+            auto posting = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc);
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw && !prefixVectorIndex && !forReplication) {
+                const auto& limits = domainInfo->GetSchemeLimits();
+                const ui64 used = domainInfo->GetShardsInside() - domainInfo->GetBackupShards();
+                const ui64 available = used + 1 < limits.MaxShards ? limits.MaxShards - used - 1 : 1;
+                ConfigureHnswPostingPartitions(tableInfo, indexDesc.GetVectorIndexKmeansTreeDescription().GetSettings(),
+                    Min<ui64>(limits.MaxShardsInPath, available), posting);
+            }
+            result.push_back(createImplTable(std::move(posting)));
             if (prefixVectorIndex) {
                 const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
                 result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(

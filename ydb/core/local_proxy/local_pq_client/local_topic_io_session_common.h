@@ -3,7 +3,7 @@
 #include "local_topic_client_helpers.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc_bi_streaming.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -12,10 +12,10 @@
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <contrib/libs/grpc/include/grpcpp/support/status.h>
-
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <contrib/libs/grpc/include/grpcpp/support/status.h>
 
 #include <queue>
 

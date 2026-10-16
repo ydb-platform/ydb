@@ -530,6 +530,8 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
             .JoinKeys(join.JoinKeys())
             .LeftJoinKeyNames(join.LeftJoinKeyNames())
             .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Settings()
+            .Build()
             .Done();
     } else if (useGraceCore) {
         auto flags = Build<TCoAtomList>(ctx, join.Pos())

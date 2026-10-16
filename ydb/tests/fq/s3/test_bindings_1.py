@@ -152,9 +152,7 @@ class TestBindings:
             FROM bindings.{storage_binding_name};
             '''
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)
@@ -247,9 +245,7 @@ test'''
             FROM bindings.{storage_binding_name};
             '''
 
-        query_id = client.create_query(
-            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
-        ).result.query_id
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         data = client.get_result_data(query_id)

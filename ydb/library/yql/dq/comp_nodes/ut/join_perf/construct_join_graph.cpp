@@ -386,7 +386,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             return pb.FromFlow(dqPb.DqScalarHashJoin(
                 ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind, descr.LeftSource.KeyColumnIndexes,
                 descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType),
-                descr.LeftFilter, descr.RightFilter, descr.CommonFilter));
+                joinSettings, descr.LeftFilter, descr.RightFilter, descr.CommonFilter));
         }
         default:
             Y_ABORT("unreachable");

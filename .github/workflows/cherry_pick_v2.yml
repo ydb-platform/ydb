@@ -35,18 +35,13 @@ jobs:
     runs-on: [self-hosted, tiny-worker]
     steps:
       - name: Probe GitHub speed
-        if: vars.GH_PROXY_URL != ''
         env:
           GH_PROXY_URL: ${{ vars.GH_PROXY_URL }}
         shell: bash
         run: |
           set -euo pipefail
-          proxy_url="${GH_PROXY_URL:-}"
+          proxy_url="${GH_PROXY_URL:-https://gh-proxy.com}"
           proxy_url="${proxy_url%/}"
-          if [ -z "$proxy_url" ]; then
-            echo "GH_PROXY_URL is empty, checkout stays direct"
-            exit 0
-          fi
 
           archive=https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz
 
@@ -67,12 +62,8 @@ jobs:
           faster=$(awk -v direct="${direct_bps:-0}" -v proxy="${proxy_bps:-0}" 'BEGIN {
             print (proxy + 0 > direct + 0) ? "proxy" : "github"
           }')
-          use_proxy=false
-          if [ "$faster" = proxy ]; then
-            use_proxy=true
-          fi
-
-          echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; use_proxy=${use_proxy}"
+          echo "GitHub $(megabytes "${direct_bytes:-0}" 1) MB in ${direct_seconds:-0}s, $(megabytes "${direct_bps:-0}" 2) MB/s; ${proxy_url} $(megabytes "${proxy_bytes:-0}" 1) MB in ${proxy_seconds:-0}s, $(megabytes "${proxy_bps:-0}" 2) MB/s; faster=${faster}; forcing proxy for this test"
+          use_proxy=true
 
           if [ "$use_proxy" = true ]; then
             {
@@ -84,13 +75,14 @@ jobs:
           fi
       - name: checkout
         uses: actions/checkout@v5
+        env:
+          GIT_TRACE: "1"
         with:
           fetch-depth: 1
           ref: ${{ inputs.script_version_sha }}
           sparse-checkout: |
             .github
       - name: Drop GitHub proxy
-        if: vars.GH_PROXY_URL != ''
         shell: bash
         run: echo "GIT_CONFIG_COUNT=0" >> "$GITHUB_ENV"
       - name: install packages

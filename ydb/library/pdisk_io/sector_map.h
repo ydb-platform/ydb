@@ -111,6 +111,7 @@ class TSectorOperationThrottler {
 public:
     struct TDiskModeParams {
         std::atomic<ui64> SeekSleepMicroSeconds;
+        std::atomic<ui64> SeekSleepJitterMicroSeconds;
         std::atomic<ui64> FirstSectorReadRate;
         std::atomic<ui64> LastSectorReadRate;
         std::atomic<ui64> FirstSectorWriteRate;
@@ -129,6 +130,7 @@ public:
         EDeviceType deviceType = DiskModeToDeviceType(diskMode);
         const auto &devicePerformance = TDevicePerformanceParams::Get(deviceType);
         DiskModeParams.SeekSleepMicroSeconds = (devicePerformance.SeekTimeNs + 1000) / 1000 - 1;
+        DiskModeParams.SeekSleepJitterMicroSeconds = 0;
         DiskModeParams.FirstSectorReadRate = devicePerformance.FirstSectorReadBytesPerSec;
         DiskModeParams.LastSectorReadRate = devicePerformance.LastSectorReadBytesPerSec;
         DiskModeParams.FirstSectorWriteRate = devicePerformance.FirstSectorWriteBytesPerSec;
@@ -139,12 +141,20 @@ public:
     }
 
     void ThrottleRead(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
-        ThrottleOperation(size, offset, prevOperationIsInProgress, operationTimeMs,
-                DiskModeParams.FirstSectorReadRate, DiskModeParams.LastSectorReadRate);
+        Sleep(GetReadDelay(size, offset, prevOperationIsInProgress, operationTimeMs));
     }
 
     void ThrottleWrite(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
-        ThrottleOperation(size, offset, prevOperationIsInProgress, operationTimeMs,
+        Sleep(GetWriteDelay(size, offset, prevOperationIsInProgress, operationTimeMs));
+    }
+
+    TDuration GetReadDelay(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        return GetOperationDelay(size, offset, prevOperationIsInProgress, operationTimeMs,
+                DiskModeParams.FirstSectorReadRate, DiskModeParams.LastSectorReadRate);
+    }
+
+    TDuration GetWriteDelay(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        return GetOperationDelay(size, offset, prevOperationIsInProgress, operationTimeMs,
                 DiskModeParams.FirstSectorWriteRate, DiskModeParams.LastSectorWriteRate);
     }
 
@@ -153,21 +163,24 @@ public:
     }
 
 private:
-    /* throttle read/write operation */
-    void ThrottleOperation(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs,
+    /* calculate read/write operation delay */
+    TDuration GetOperationDelay(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs,
             ui64 firstSectorRate, ui64 lastSectorRate) {
         if (size == 0) {
-            return;
+            return TDuration::Zero();
         }
 
         ui64 beginSector = offset / NSectorMap::SECTOR_SIZE;
         ui64 endSector = (offset + size + NSectorMap::SECTOR_SIZE - 1) / NSectorMap::SECTOR_SIZE;
         ui64 midSector = (beginSector + endSector) / 2;
 
+        TDuration delay = TDuration::Zero();
         {
             TGuard<TMutex> guard(Mutex);
             if (beginSector != MostRecentlyUsedSector + 1 || !prevOperationIsInProgress) {
-                Sleep(TDuration::MicroSeconds(DiskModeParams.SeekSleepMicroSeconds));
+                const ui64 seekSleepJitterMicroSeconds = DiskModeParams.SeekSleepJitterMicroSeconds.load();
+                delay += TDuration::MicroSeconds(DiskModeParams.SeekSleepMicroSeconds.load()
+                        + (seekSleepJitterMicroSeconds ? RandomNumber<ui64>(seekSleepJitterMicroSeconds + 1) : 0));
             }
 
             MostRecentlyUsedSector = endSector - 1;
@@ -177,7 +190,8 @@ private:
 
         auto rateByMilliSeconds = rate / 1000;
         auto milliSecondsToWait = std::max(0., (double)size / rateByMilliSeconds - operationTimeMs);
-        Sleep(TDuration::MilliSeconds(milliSecondsToWait));
+        delay += TDuration::MilliSeconds(milliSecondsToWait);
+        return delay;
     }
 
     static double CalcRate(double firstSectorRate, double lastSectorRate, double sector, double lastSector) {
@@ -279,17 +293,27 @@ public:
         Write((ui8*)str.Detach(), bytes, 0);
     }
 
-    bool Read(ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+    TDuration GetReadDelay(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        if (SectorOperationThrottler.Get() != nullptr) {
+            return SectorOperationThrottler->GetReadDelay(size, offset, prevOperationIsInProgress, operationTimeMs);
+        }
+        return TDuration::Zero();
+    }
+
+    TDuration GetWriteDelay(i64 size, ui64 offset, bool prevOperationIsInProgress, double operationTimeMs) {
+        if (SectorOperationThrottler.Get() != nullptr) {
+            return SectorOperationThrottler->GetWriteDelay(size, offset, prevOperationIsInProgress, operationTimeMs);
+        }
+        return TDuration::Zero();
+    }
+
+    bool ReadNoThrottle(ui8 *data, i64 size, ui64 offset, bool callReadCallback = true) {
         Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
 
         if (ShouldFailRead()) {
             return false;
         }
-
-        i64 dataSize = size;
-        ui64 dataOffset = offset;
-        THPTimer timer;
 
         TGuard<TTicketLock> guard(MapLock);
         for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
@@ -317,9 +341,22 @@ public:
             data += NSectorMap::SECTOR_SIZE;
         }
 
-        if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleRead(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        if (callReadCallback && ReadCallback) {
+            ReadCallback();
         }
+        return true;
+    }
+
+    bool Read(ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+        i64 dataSize = size;
+        ui64 dataOffset = offset;
+        THPTimer timer;
+
+        if (!ReadNoThrottle(data, size, offset, false)) {
+            return false;
+        }
+
+        Sleep(GetReadDelay(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000));
 
         if (ReadCallback) {
             ReadCallback();
@@ -327,9 +364,12 @@ public:
         return true;
     }
 
-    bool Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+    bool WriteNoThrottle(const ui8 *data, i64 size, ui64 offset, bool *shouldThrottle = nullptr) {
         Y_ABORT_UNLESS(size % NSectorMap::SECTOR_SIZE == 0);
         Y_ABORT_UNLESS(offset % NSectorMap::SECTOR_SIZE == 0);
+        if (shouldThrottle) {
+            *shouldThrottle = false;
+        }
 
         if (ShouldFailWrite()) {
             return false;
@@ -337,10 +377,9 @@ public:
         if (ShouldSilentWriteFail()) {
             return true;
         }
-
-        i64 dataSize = size;
-        ui64 dataOffset = offset;
-        THPTimer timer;
+        if (shouldThrottle) {
+            *shouldThrottle = true;
+        }
 
         {
             TGuard<TTicketLock> guard(MapLock);
@@ -385,8 +424,20 @@ public:
             }
         }
 
-        if (SectorOperationThrottler.Get() != nullptr) {
-            SectorOperationThrottler->ThrottleWrite(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000);
+        return true;
+    }
+
+    bool Write(const ui8 *data, i64 size, ui64 offset, bool prevOperationIsInProgress = false) {
+        i64 dataSize = size;
+        ui64 dataOffset = offset;
+        bool shouldThrottle = false;
+        THPTimer timer;
+
+        if (!WriteNoThrottle(data, size, offset, &shouldThrottle)) {
+            return false;
+        }
+        if (shouldThrottle) {
+            Sleep(GetWriteDelay(dataSize, dataOffset, prevOperationIsInProgress, timer.Passed() * 1000));
         }
         return true;
     }

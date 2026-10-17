@@ -257,7 +257,7 @@ namespace NKikimr {
         void ActualizeUnsyncedDisksNum() {
             unsigned unsyncedDisks = 0;
             for (const auto &x : *SyncerData->Neighbors) {
-                if (!x.Myself) {
+                if (!x.Myself && GInfo->IsVDiskInActiveRealm(x.VDiskIdShort)) {
                     auto state = x.Get().PeerSyncState.LastSyncStatus;
                     if (!NSyncer::TPeerSyncState::Good(state))
                         unsyncedDisks++;
@@ -269,7 +269,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             // fill in SchedulerQueue
             for (const auto &x : *SyncerData->Neighbors) {
-                if (!x.Myself) {
+                if (!x.Myself && GInfo->IsVDiskInActiveRealm(x.VDiskIdShort)) {
                     Y_DEBUG_ABORT_UNLESS(x.Get().PeerSyncState.LastSyncStatus != TSyncStatusVal::Running);
                     SchedulerQueue.push(&x);
                     StartupDataSyncPeers.insert(x.OrderNumber);
@@ -317,8 +317,10 @@ namespace NKikimr {
             if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
                 ReportStartupDataSyncDone(ctx);
             }
-            SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
-            Schedule(ctx);
+            if (GInfo->IsVDiskInActiveRealm(TVDiskIdShort(vDiskId))) {
+                SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
+                Schedule(ctx);
+            }
         }
 
         void Commit(
@@ -360,7 +362,9 @@ namespace NKikimr {
         void Handle(TEvSyncerFullSyncFinished::TPtr& ev, const TActorContext& ctx) {
             ActiveActors.Erase(ev->Sender);
 
-            Y_VERIFY_S(FullSyncsInProgress.contains(ev->Sender), SyncerContext->VCtx->VDiskLogPrefix);
+            if (!FullSyncsInProgress.contains(ev->Sender)) {
+                return;
+            }
             auto& oldSyncStates = FullSyncsInProgress[ev->Sender];
 
             for (const auto& [vDiskId, peerSyncState] : ev->Get()->PeerSyncStates) {
@@ -381,6 +385,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvSyncerFullSyncDiskCancelled::TPtr& ev, const TActorContext& ctx) {
+            if (!FullSyncsInProgress.contains(ev->Sender)) {
+                return;
+            }
             const auto vDiskId = ev->Get()->VDiskId;
             const auto peerSyncState = ev->Get()->PeerSyncState;
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: full sync disk cancelled: vDiskId# %s status# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data()));
@@ -483,11 +490,12 @@ namespace NKikimr {
             Die(ctx);
         }
 
-        // BlobStorage Group reconfiguration
+        // A recovery policy change restarts the VDisk; ordinary generation
+        // changes only refresh the context used by subsequent jobs.
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
-            auto *msg = ev->Get();
-            GInfo = msg->NewInfo;
+            Y_DEBUG_ABORT_UNLESS(!ev->Get()->NewInfo->HasSingleDcModeChanged(*GInfo));
+            GInfo = ev->Get()->NewInfo;
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
         }
 

@@ -11,6 +11,42 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
+    Y_UNIT_TEST(SingleDcSettings) {
+        NKikimrBlobStorage::TGroupInfo group;
+        group.SetGroupID(0);
+        group.SetGroupGeneration(1);
+        group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            auto *ring = group.AddRings();
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                auto *location = ring->AddFailDomains()->AddVDiskLocations();
+                location->SetNodeID(1 + realm * 3 + domain);
+                location->SetPDiskID(1);
+                location->SetVDiskSlotID(1);
+            }
+        }
+        auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+        UNIT_ASSERT(!info->EnableSingleDcMode);
+        UNIT_ASSERT(!info->SurvivingDc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            group.SetEnableSingleDcMode(true);
+            group.SetSurvivingDc(realm);
+            info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+            UNIT_ASSERT(info->EnableSingleDcMode);
+            UNIT_ASSERT(info->SurvivingDc.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(*info->SurvivingDc, realm);
+            TBlobStorageGroupInfo copy(info, TVDiskID(0, 1, 0, 0, 0), TActorId());
+            UNIT_ASSERT(copy.EnableSingleDcMode);
+            UNIT_ASSERT_VALUES_EQUAL(*copy.SurvivingDc, realm);
+        }
+        group.SetEnableSingleDcMode(false);
+        group.ClearSurvivingDc();
+        info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(!info->EnableSingleDcMode);
+        UNIT_ASSERT(!info->SurvivingDc);
+    }
+
     Y_UNIT_TEST(TestBelongsToSubgroup) {
         for (ui32 disks = 1; disks < 4; ++disks) {
             for (auto [erasureType, _] : TErasureType::ErasureNames) {

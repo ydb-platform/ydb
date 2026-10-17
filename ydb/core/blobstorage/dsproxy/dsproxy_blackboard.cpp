@@ -228,6 +228,22 @@ void TBlobState::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, TG
 }
 
 bool TBlobState::HasWrittenQuorum(const TBlobStorageGroupInfo& info, const TBlobStorageGroupInfo::TGroupVDisks& expired) const {
+    if (info.EnableSingleDcMode) {
+        if (!info.SurvivingDc || *info.SurvivingDc >= 3
+                || info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+            return false;
+        }
+        ui32 present = 0;
+        for (ui32 diskIdx = 0; diskIdx < Disks.size(); ++diskIdx) {
+            const auto& disk = Disks[diskIdx];
+            if (info.GetVDiskId(disk.OrderNumber).FailRealm == *info.SurvivingDc
+                    && !expired[disk.OrderNumber]
+                    && disk.DiskParts[diskIdx % 3].Situation == ESituation::Present) {
+                ++present;
+            }
+        }
+        return present >= 2;
+    }
     TSubgroupPartLayout layout;
     for (ui32 diskIdx = 0, numDisks = Disks.size(); diskIdx < numDisks; ++diskIdx) {
         const TDisk& disk = Disks[diskIdx];

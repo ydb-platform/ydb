@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 
+#include <util/generic/hash_set.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 
 using namespace NKikimrServices;
@@ -314,13 +316,14 @@ namespace NKikimr {
             TDecisionMaker(const TString& logPrefix,
                            const TVDiskIdShort &self,
                            std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                           const TLocalSyncerState &locallyRecoveredState)
+                           const TLocalSyncerState &locallyRecoveredState,
+                           std::optional<ui32> survivingRealm = std::nullopt)
                 : VDiskLogPrefix(logPrefix)
                 , Self(self)
                 , Top(top)
                 , LocallyRecoveredState(locallyRecoveredState)
                 , Neighbors(self, Top)
-                , QuorumTracker(self, Top, true) // include my faildomain
+                , QuorumTracker(self, Top, true, survivingRealm) // include my faildomain
                 , Sublog(false, self.ToString() + ": ")
             {}
 
@@ -336,7 +339,9 @@ namespace NKikimr {
 
             void RunSurveyOfAllVDisks(std::function<void(TVDiskInfo<TNeighborVDiskState>&)> func) {
                 for (auto &x : Neighbors) {
-                    func(x);
+                    if (QuorumTracker.IsParticipant(x.VDiskIdShort)) {
+                        func(x);
+                    }
                 }
             }
 
@@ -345,7 +350,7 @@ namespace NKikimr {
             {
                 for (auto &x : Neighbors) {
                     const auto &v = x.Get();
-                    if (!v.Obtained) {
+                    if (!v.Obtained && QuorumTracker.IsParticipant(x.VDiskIdShort) && v.ProxyId) {
                         func(x);
                     }
                 }
@@ -354,7 +359,7 @@ namespace NKikimr {
             unsigned AbandomOngoingRequests(const TActorContext &ctx) {
                 unsigned counter = 0;
                 for (const auto &x : Neighbors) {
-                    if (!x.Get().Obtained) {
+                    if (!x.Get().Obtained && x.Get().ProxyId) {
                         // cancel proxy
                         ++counter;
                         ctx.Send(x.Get().ProxyId, new NActors::TEvents::TEvPoisonPill());
@@ -398,7 +403,8 @@ namespace NKikimr {
             TVDiskQuorumDecision VDiskQuorumDecision() const {
                 // analyze obtained results
                 // via finalQuorum we calculate if we got quorum of fail domains of Final State
-                TQuorumTracker finalQuorum(Self, Top, true); // include my faildomain
+                TQuorumTracker finalQuorum(QuorumTracker); // include my faildomain
+                finalQuorum.Clear();
                 TMap<TVDiskEternalGuid, ui32> finalGuidMap;      // Guid -> HowManyVDisksHasThisGuid
                 TMap<TVDiskEternalGuid, ui32> inProgressGuidMap; // Guid -> HowManyVDisksHasThisGuid
                 for (const auto &x : Neighbors) {
@@ -635,6 +641,7 @@ namespace NKikimr {
             const TActorId CommitterId;
             const TActorId NotifyId;
             TDecisionMaker DecisionMaker;
+            THashSet<TActorId> SurveyProxies;
             std::unique_ptr<TDecision> Decision;
             EPhase Phase = PhaseNotSet;
             TActorId FirstRunActorId;
@@ -656,6 +663,7 @@ namespace NKikimr {
                     auto proxyActor = CreateProxyForObtainingVDiskGuid(VCtx, selfVDiskId, vd, aid, ctx.SelfID);
                     auto actorId = ctx.Register(proxyActor);
                     x.Get().SetActorID(actorId);
+                    SurveyProxies.insert(actorId);
                 };
 
                 DecisionMaker.RunSurveyOfAllVDisks(runProxyForVDisk);
@@ -665,8 +673,9 @@ namespace NKikimr {
 
             void HandleObtainGuidQuorumMode(TEvVGenerationChange::TPtr &ev,
                                             const TActorContext &ctx) {
-                // save new Group Info
-                GInfo = ev->Get()->NewInfo;
+                const auto& info = ev->Get()->NewInfo;
+                Y_DEBUG_ABORT_UNLESS(!info->HasSingleDcModeChanged(*GInfo));
+                GInfo = info;
 
                 // reconfigure every proxy that hasn't returned a value yet
                 const TString& logPrefix = VCtx->VDiskLogPrefix;
@@ -694,6 +703,9 @@ namespace NKikimr {
             // Gather Quorum
             ////////////////////////////////////////////////////////////////////////
             void Handle(TEvVDiskGuidObtained::TPtr& ev, const TActorContext &ctx) {
+                if (!SurveyProxies.erase(ev->Sender)) {
+                    return;
+                }
                 const TEvVDiskGuidObtained *msg = ev->Get();
 
                 SUBLOGLINE(NotifyId, ctx, {
@@ -901,7 +913,8 @@ namespace NKikimr {
                 , DecisionMaker(VCtx->VDiskLogPrefix,
                                 VCtx->ShortSelfVDisk,
                                 GInfo->PickTopology(),
-                                locallyRecoveredState)
+                                locallyRecoveredState,
+                                GInfo->EnableSingleDcMode ? GInfo->SurvivingDc : std::nullopt)
                 , Decision()
                 , ReadOnly(readOnly)
             {}

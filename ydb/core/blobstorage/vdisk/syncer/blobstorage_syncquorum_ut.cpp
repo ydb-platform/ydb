@@ -11,6 +11,36 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TQuorumTrackerTests) {
 
+        Y_UNIT_TEST(SingleDcQuorum) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1u, 3u, 3u);
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                const TVDiskIdShort first(realm, 0, 0);
+                const TVDiskIdShort second(realm, 1, 0);
+                TQuorumTracker tracker(first, info.PickTopology(), true, realm);
+                for (ui32 other = 0; other < 3; ++other) {
+                    if (other != realm) {
+                        for (ui32 domain = 0; domain < 3; ++domain) {
+                            tracker.Update(TVDiskIdShort(other, domain, 0));
+                        }
+                    }
+                }
+                UNIT_ASSERT(!tracker.HasQuorum());
+                tracker.Update(first);
+                tracker.Update(first);
+                UNIT_ASSERT(!tracker.HasQuorum());
+                tracker.Update(second);
+                UNIT_ASSERT(tracker.HasQuorum());
+                tracker.Clear();
+                UNIT_ASSERT(!tracker.HasQuorum());
+                TQuorumTracker recovery(first, info.PickTopology(), false, realm);
+                recovery.Update(first);
+                recovery.Update(second);
+                UNIT_ASSERT(!recovery.HasQuorum());
+                recovery.Update(TVDiskIdShort(realm, 2, 0));
+                UNIT_ASSERT(recovery.HasQuorum());
+            }
+        }
+
         TVector<TVDiskID> GetDisks(TBlobStorageGroupInfo *groupInfo) {
             TVector<TVDiskID> vdisks;
             for (const auto &x : groupInfo->GetVDisks()) {

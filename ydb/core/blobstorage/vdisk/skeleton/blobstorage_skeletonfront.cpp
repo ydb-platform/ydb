@@ -885,6 +885,17 @@ namespace NKikimr {
 
             UpdateStats(ctx);
 
+            if (!GInfo->IsVDiskInActiveRealm(TVDiskIdShort(SelfVDiskId))) {
+                SetupMonitoring(ctx);
+                Become(&TThis::StateDatabaseError);
+                VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                const auto& base = Config->BaseInfo;
+                ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                    new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId,
+                        NKikimrBlobStorage::EVDiskStatus::ERROR, false));
+                return;
+            }
+
             // create and run skeleton
             SkeletonId = ctx.Register(CreateVDiskSkeleton(Config, GInfo, ctx.SelfID, VCtx));
             ActiveActors.Insert(SkeletonId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -1702,7 +1713,10 @@ namespace NKikimr {
                     if (vdiskId != SelfVDiskId) {
                         if (SelfVDiskId.GroupGeneration < vdiskId.GroupGeneration && record.HasRecentGroup()) {
                             auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, nullptr);
-                            ChangeGeneration(vdiskId, newInfo, ctx);
+                            if (!ChangeGeneration(vdiskId, newInfo, ctx)) {
+                                return Reply(ev, ctx, NKikimrProto::NOTREADY,
+                                    "VDisk restart required for single DC mode change", TAppData::TimeProvider->Now());
+                            }
                             Y_VERIFY_S(vdiskId == SelfVDiskId, VCtx->VDiskLogPrefix);
                             const TGroupId groupId = newInfo->GroupID;
                             const ui32 generation = newInfo->GroupGeneration;
@@ -1873,7 +1887,7 @@ namespace NKikimr {
             }
         }
 
-        void ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+        bool ChangeGeneration(const TVDiskID& vdiskId, const TIntrusivePtr<TBlobStorageGroupInfo>& info,
                 const TActorContext& ctx) {
             // check group id
             Y_VERIFY_S(info->GroupID == GInfo->GroupID, VCtx->VDiskLogPrefix
@@ -1893,7 +1907,15 @@ namespace NKikimr {
             // check generation for possible race
             if (info->GroupGeneration <= GInfo->GroupGeneration) {
                 // its just a race -- we already have newer group generation
-                return;
+                return true;
+            }
+
+            if (info->HasSingleDcModeChanged(*GInfo)) {
+                // Hull and Syncer policy is immutable for this actor incarnation. RecentGroup may
+                // reach the front before NodeWarden, so let the warden perform the full restart.
+                ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                    new TEvBlobStorage::TEvUpdateGroupInfo(info->GroupID, info->GroupGeneration, *info->Group));
+                return false;
             }
 
             // all checks passed
@@ -1906,6 +1928,20 @@ namespace NKikimr {
             GInfo = info;
             const auto& prevVDiskId = std::exchange(SelfVDiskId, vdiskId);
 
+            if (!GInfo->IsVDiskInActiveRealm(TVDiskIdShort(SelfVDiskId))) {
+                if (SkeletonId) {
+                    ctx.Send(SkeletonId, new TEvents::TEvPoisonPill());
+                    SkeletonId = {};
+                }
+                Become(&TThis::StateDatabaseError);
+                VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                const auto& base = Config->BaseInfo;
+                ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
+                    new TEvStatusUpdate(ctx.SelfID.NodeId(), base.PDiskId, base.VDiskSlotId,
+                        NKikimrBlobStorage::EVDiskStatus::ERROR, false));
+                return true;
+            }
+
             // forward message to Skeleton
             ctx.Send(SkeletonId, new TEvVGenerationChange(vdiskId, info));
 
@@ -1913,6 +1949,7 @@ namespace NKikimr {
             Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
                 new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateGenerationChange(prevVDiskId,
                 SelfVDiskId.GroupGeneration, Config->BaseInfo.WhiteboardInstanceGuid));
+            return true;
         }
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {

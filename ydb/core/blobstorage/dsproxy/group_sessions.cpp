@@ -103,13 +103,27 @@ void TGroupSessions::Poison() {
     }
 }
 
-bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo::TTopology& topology, bool waitForAllVDisks) {
+bool TGroupSessions::GoodToGo(const TBlobStorageGroupInfo& info, bool waitForAllVDisks) {
+    const auto& topology = info.GetTopology();
     // create a set of connected disks
     TBlobStorageGroupInfo::TGroupVDisks connected(&topology);
     for (ui32 i = 0; i < ConnectedQueuesMask.size(); ++i) {
         if (ConnectedQueuesMask[i] == AllQueuesMask) {
             connected += TBlobStorageGroupInfo::TGroupVDisks::CreateFromMask(&topology, ui64(1) << i);
         }
+    }
+
+    if (info.EnableSingleDcMode) {
+        ui32 active = 0;
+        ui32 activeConnected = 0;
+        for (ui32 i = 0; i < ConnectedQueuesMask.size(); ++i) {
+            if (info.IsVDiskInActiveRealm(topology.GetVDiskId(i))) {
+                ++active;
+                activeConnected += ConnectedQueuesMask[i] == AllQueuesMask;
+            }
+        }
+        // Request strategies enforce their own quorum; GET may use the last copy.
+        return active == 3 && (waitForAllVDisks ? activeConnected == active : activeConnected != 0);
     }
 
     // check if we have quorum; in force mode we wait for all disks

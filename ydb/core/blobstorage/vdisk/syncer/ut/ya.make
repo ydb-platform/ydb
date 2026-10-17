@@ -18,6 +18,7 @@ SRCS(
     blobstorage_syncer_data_ut.cpp
     blobstorage_syncer_localwriter_ut.cpp
     blobstorage_syncquorum_ut.cpp
+    guid_firstrun_ut.cpp
 )
 
 END()

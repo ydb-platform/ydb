@@ -30,9 +30,48 @@ public:
         return preferredReplicasPerRealm;
     }
 
+    EStrategyOutcome ProcessSingleDc(TLogContext& logCtx, TBlobState& state,
+            const TBlobStorageGroupInfo& info, TGroupDiskRequests& requests) {
+        if (!info.SurvivingDc || *info.SurvivingDc >= NumFailRealms) {
+            return EStrategyOutcome::Error("Invalid surviving realm for mirror-3-dc");
+        }
+        const ui32 realm = *info.SurvivingDc;
+        ui32 present = 0;
+        ui32 errors = 0;
+        TBlobStorageGroupType::TPartPlacement placement;
+        for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
+            const auto& disk = state.Disks[diskIdx];
+            if (info.GetVDiskId(disk.OrderNumber).FailRealm != realm) {
+                continue;
+            }
+            const ui32 partIdx = diskIdx % NumFailRealms;
+            const auto situation = disk.DiskParts[partIdx].Situation;
+            if (situation == TBlobState::ESituation::Present) {
+                ++present;
+            } else if (situation == TBlobState::ESituation::Error) {
+                ++errors;
+            } else if (situation != TBlobState::ESituation::Sent) {
+                placement.Records.emplace_back(diskIdx, partIdx);
+            }
+        }
+        if (present >= 2) {
+            return EStrategyOutcome::DONE;
+        }
+        if (errors >= 2) {
+            return EStrategyOutcome::Error("mirror-3-dc surviving realm has fewer than two writable VDisks");
+        }
+        if (IsPutNeeded(state, placement)) {
+            PreparePutsForPartPlacement(logCtx, state, info, requests, placement);
+        }
+        return EStrategyOutcome::IN_PROGRESS;
+    }
+
     EStrategyOutcome Process(TLogContext &logCtx, TBlobState &state, const TBlobStorageGroupInfo &info,
             TBlackboard& blackboard, TGroupDiskRequests &groupDiskRequests,
             const TAccelerationParams& accelerationParams) override {
+        if (info.EnableSingleDcMode) {
+            return ProcessSingleDc(logCtx, state, info, groupDiskRequests);
+        }
         TBlobStorageGroupType::TPartPlacement partPlacement;
         bool degraded = false;
         bool isDone = false;

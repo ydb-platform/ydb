@@ -12,6 +12,8 @@ on:
   pull_request:
     paths:
       - 'ydb/docs/**'
+      - '.github/actions/prepare-sdk-snippets/**'
+      - '.github/workflows/docs_build.yaml'
   workflow_dispatch:
     inputs:
       pull_number:
@@ -46,13 +48,28 @@ jobs:
       - name: Disable PDF for PR build
         run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
 
+      - name: Prepare SDK snippets
+        uses: ./.github/actions/prepare-sdk-snippets
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: "stable"
+          cli-version: "5.63.0"
           use-ya-opensource: false
+
+      - name: Remove SDK sources from rendered output
+        run: python ydb/docs/tools/sdk_snippets/clean_output.py _docs-build _docs-lint
+
+      - name: Save publishable documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-md
+          path: _docs-build/
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 1
 
       - name: Fail on documentation build issues
         run: |

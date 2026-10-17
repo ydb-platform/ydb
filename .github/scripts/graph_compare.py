@@ -7,6 +7,10 @@
 import os
 import tempfile
 import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 
 def exec(command: str):
@@ -21,6 +25,22 @@ def log(msg: str):
     print(msg)
 
 
+def prepare_sdk_snippets() -> None:
+    docs = Path('ydb/docs')
+    if (docs / 'sdk-snippets.lock.yaml').is_file():
+        log('Prepare locked documentation SDK snippets...')
+        subprocess.run([
+            os.environ.get('SDK_SNIPPETS_PYTHON', sys.executable),
+            str(docs / 'tools/sdk-snippets'), 'prepare',
+        ], check=True)
+    else:
+        staging = docs / '.generated/sdk-snippets'
+        if staging.is_symlink():
+            staging.unlink()
+        elif staging.exists():
+            shutil.rmtree(staging)
+
+
 def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str) -> None:
     ya = ya_make_command.split(' ')[0]
 
@@ -31,11 +51,13 @@ def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: 
     log(f'Workdir: {workdir}')
     log('Checkout base commit...')
     exec(f'git checkout {base_commit}')
+    prepare_sdk_snippets()
     log('Build graph for base commit...')
     exec(f'{ya_make_command} ydb --cache-tests --save-graph-to {workdir}/graph_base.json --save-context-to {workdir}/context_base.json')
 
     log('Checkout head commit...')
     exec(f'git checkout {head_commit}')
+    prepare_sdk_snippets()
     log('Build graph for head commit...')
     exec(f'{ya_make_command} ydb --cache-tests --save-graph-to {workdir}/graph_head.json --save-context-to {workdir}/context_head.json')
 

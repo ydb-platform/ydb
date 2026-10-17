@@ -20,13 +20,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Prepare SDK snippets
+        uses: ./.github/actions/prepare-sdk-snippets
+        with:
+          docs-root: ${{ vars.SRC_ROOT }}
+
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
-          cli-version: "stable"
+          cli-version: "5.63.0"
           use-ya-opensource: false
+
+      - name: Remove SDK sources from rendered output
+        run: python ydb/docs/tools/sdk_snippets/clean_output.py _docs-build _docs-lint
+
+      - name: Save publishable documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output-md
+          path: _docs-build/
+          include-hidden-files: true
+          overwrite: true
+          retention-days: 1
 
   upload:
     needs: build

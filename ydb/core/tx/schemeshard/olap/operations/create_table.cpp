@@ -697,12 +697,23 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
+        auto guard = context.DbGuard();
+        TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewColumnTable(context.SS, pathId);
+        context.MemChanges.GrabDomain(context.SS, dstPath.GetPathIdForDomain());
+
+        context.DbChanges.PersistPath(pathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, pathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Add(1);
 
-        TPathId pathId = dstPath.Base()->PathId;
         dstPath.Base()->CreateTxId = opTxId;
         dstPath.Base()->LastTxId = opTxId;
         dstPath.Base()->PathState = TPathElement::EPathState::EPathStateCreate;
@@ -712,9 +723,9 @@ public:
         txState.NeedUpdateObject = needUpdateObject;
 
         if (storeInfo) {
-            NIceDb::TNiceDb db(context.GetDB());
-
             auto olapStorePath = parentPath.FindOlapStore();
+            context.MemChanges.GrabPath(context.SS, olapStorePath->PathId);
+            context.MemChanges.GrabOlapStore(context.SS, olapStorePath->PathId);
 
             txState.State = TTxState::ConfigureParts;
             txState.Shards.reserve(tableInfo->GetColumnShards().size());
@@ -725,8 +736,9 @@ public:
                 TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
                 txState.Shards.emplace_back(shardIdx, ETabletType::ColumnShard, TTxState::ConfigureParts);
                 // N.B. we seem to only need CurrentTxId when creating/modifying tablets
+                context.MemChanges.GrabShard(context.SS, shardIdx);
                 shardInfo.CurrentTxId = opTxId;
-                context.SS->PersistShardTx(db, shardIdx, opTxId);
+                context.DbChanges.PersistShardTx(shardIdx, opTxId);
             }
 
             auto pending = context.SS->ColumnTables.BuildNew(pathId);
@@ -735,8 +747,8 @@ public:
             tableInfo->SetOlapStorePathId(olapStorePath->PathId);
             storeInfo->ColumnTables.insert(pathId);
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
-            context.SS->PersistColumnTable(db, pathId, *pending);
-            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
+            context.DbChanges.PersistColumnTable(pathId);
+            context.DbChanges.PersistColumnTableAlter(pathId);
             context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
@@ -750,7 +762,7 @@ public:
                 context.OnComplete.Dependence(olapStorePath.Base()->LastTxId, opTxId);
             }
             olapStorePath.Base()->LastTxId = opTxId;
-            context.SS->PersistLastTxId(db, olapStorePath.Base());
+            context.DbChanges.PersistLastTxId(olapStorePath->PathId);
         } else {
             tableInfo->StandaloneSharding = NKikimrSchemeOp::TColumnStoreSharding();
             const NKikimrSchemeOp::TColumnStorageConfig& storageConfig = tableInfo->Description.GetStorageConfig();
@@ -771,6 +783,8 @@ public:
 
             for (ui64 i = 0; i < shardsCount; ++i) {
                 TShardIdx idx = context.SS->RegisterShardInfo(columnShardInfo);
+                context.MemChanges.GrabNewShard(context.SS, idx);
+                context.DbChanges.PersistShard(idx);
                 context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
                 txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
 
@@ -779,18 +793,13 @@ public:
 
             context.SS->SetPartitioning(pathId, tableInfo);
 
-            NIceDb::TNiceDb db(context.GetDB());
-            for (auto shard : txState.Shards) {
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, pathId, opTxId, shard.TabletType);
-                context.SS->PersistChannelsBinding(db, shard.Idx, channelsBindings);
-            }
             Y_ABORT_UNLESS(txState.Shards.size() == shardsCount);
 
             auto pending = context.SS->ColumnTables.BuildNew(pathId);
             pending->AlterData = tableInfo;
 
-            context.SS->PersistColumnTable(db, pathId, *pending);
-            context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
+            context.DbChanges.PersistColumnTable(pathId);
+            context.DbChanges.PersistColumnTableAlter(pathId);
             context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
@@ -800,47 +809,33 @@ public:
             }
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         for (const auto& tier : tableInfo->GetUsedTiers()) {
             auto tierPath = TPath::Resolve(tier, context.SS);
             AFL_VERIFY(tierPath.IsResolved())("path", tier);
-            context.SS->PersistExternalDataSourceReference(db, tierPath->PathId, dstPath);
+            context.DbChanges.PersistExternalDataSourceReference(tierPath->PathId, dstPath.Base()->PathId);
         }
-
-        context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);
 
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
         }
-        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
-        context.SS->PersistUpdateNextPathId(db);
-        context.SS->PersistUpdateNextShardIdx(db);
-
-        ++parentPath.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);
-
-        context.SS->ClearDescribePathCaches(dstPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         if (!storeInfo) {
             dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
             dstPath.Base()->IncShardsInside(tableInfo->GetOwnedColumnShardsVerified().size());
         }
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState(!!storeInfo));
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TCreateColumnTable");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

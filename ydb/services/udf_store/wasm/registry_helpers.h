@@ -20,7 +20,8 @@ struct TNamedModuleBytecode {
 
 void AddPrecompiledModule(NYdb::NWasm::IWebAssemblyCompartment* compartment, const NYdb::NWasm::TModuleBytecode& bytecode, TStringBuf name);
 
-std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(const TVector<TNamedModuleBytecode>& libraries);
+std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(const TVector<TNamedModuleBytecode>& libraries,
+    NYdb::NWasm::IWebAssemblyCompartment* parent = nullptr, size_t maxRealmMemoryBytes = 64 << 20);
 
 //! Bridge string builders use ui32 lengths; reject oversized host strings.
 ui32 CheckedAbiLength(size_t size, TStringBuf what);

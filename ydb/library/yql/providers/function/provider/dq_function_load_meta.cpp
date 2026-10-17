@@ -1,9 +1,11 @@
 #include "dq_function_provider.h"
 
+#include <library/cpp/threading/future/async.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
-#include <library/cpp/threading/future/async.h>
+#include <memory>
+#include <optional>
 
 namespace NYql::NDqFunction {
 namespace {
@@ -14,8 +16,15 @@ class TDqFunctionResolverTransform : public TGraphTransformerBase {
 private:
     struct TResolverContext : public TThrRefBase {
         using TPtr = TIntrusivePtr<TResolverContext>;
-        TVector<TIssue> ResolveIssues;
-        TDqFunctionsSet FunctionsDescription;
+
+        struct TResult {
+            std::optional<TDqFunctionDescription> Description;
+            std::optional<TIssue> Issue;
+        };
+
+        // Each completion owns a separate slot. Shared containers are updated
+        // only on the transformer thread, after all callbacks have completed.
+        TVector<std::shared_ptr<TResult>> Results;
     };
 public:
     TDqFunctionResolverTransform(TDqFunctionState::TPtr state)
@@ -40,15 +49,16 @@ public:
             auto gateway = State->GatewayFactory->CreateDqFunctionGateway(
                     functionDesc.Type, State->SecureParams, functionDesc.Connection);
 
+            auto result = std::make_shared<TResolverContext::TResult>();
+            resolverContext->Results.push_back(result);
             auto future = gateway->ResolveFunction(State->ScopeFolderId, functionDesc.FunctionName);
-            resolverHandles.push_back(future.Apply([resolverContext, position]
-                (const NThreading::TFuture<TDqFunctionDescription>& future) {
-                    try {
-                        resolverContext->FunctionsDescription.emplace(future.GetValue());
-                    } catch (const std::exception& e) {
-                        resolverContext->ResolveIssues.push_back(ExceptionToIssue(e, position));
-                    }
-                }));
+            resolverHandles.push_back(future.Apply([result, position](const NThreading::TFuture<TDqFunctionDescription>& future) {
+                try {
+                    result->Description = future.GetValue();
+                } catch (const std::exception& e) {
+                    result->Issue = ExceptionToIssue(e, position);
+                }
+            }));
         }
 
         if (resolverHandles.empty()) {
@@ -65,19 +75,22 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-
-        Y_UNUSED(ctx);
         YQL_ENSURE(AllFutures.HasValue());
         output = input;
 
-        if (!ResolverContext->ResolveIssues.empty()) {
-            ctx.IssueManager.RaiseIssues(TIssues(ResolverContext->ResolveIssues));
+        bool failed = false;
+        for (const auto& result : ResolverContext->Results) {
+            if (result->Issue) {
+                ctx.IssueManager.RaiseIssue(*result->Issue);
+                failed = true;
+            }
+        }
+        if (failed) {
             ResolverContext.Reset();
             return TStatus::Error;
         }
-
-        for (auto function : ResolverContext->FunctionsDescription) {
-            State->FunctionsDescription.emplace(std::move(function));
+        for (auto& result : ResolverContext->Results) {
+            State->FunctionsDescription.emplace(std::move(*result->Description));
         }
         ResolverContext.Reset();
         return TStatus::Ok;

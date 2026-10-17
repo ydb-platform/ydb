@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "connection_ddl.h"
 
 #include <memory>
 
@@ -17,6 +18,8 @@ public:
     void PrintQueryResults() const;
 
     bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) const;
+
+    void CreateConnectionsFromDdl(const std::vector<TConnectionDdl>& statements, const TFqOptions& options) const;
 
     bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const;
 

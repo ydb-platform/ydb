@@ -28,6 +28,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/function/expr_nodes
     ydb/core/base
     ydb/core/docapi
     ydb/core/external_sources

@@ -10,6 +10,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/fq/libs/wasm_services/mock
+    ydb/core/fq/libs/wasm_services/query
     library/cpp/getopt
 
     ydb/core/protos
@@ -46,4 +48,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     tests
+    wasm_tests
 )

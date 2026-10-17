@@ -454,4 +454,6 @@ message TFeatureFlags {
     // Existing TTL settings continue to execute when the flag is disabled.
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
     optional bool EnableColumnShardSetNotNull = 367 [default = false];
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
 }

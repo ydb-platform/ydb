@@ -1464,6 +1464,11 @@ void TWriteSessionActor<Protocol>::Handle(NGRpcService::TGRpcRequestProxy::TEvRe
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx,
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        return;
+    }
     RequestNotChecked = true;
 
     if (State != ES_INITED) {

@@ -65,6 +65,7 @@ public:
     };
 
     struct TExecScriptSettings {
+        bool IsInternalCall = false;
         NYql::TKikimrQueryDeadlines Deadlines;
         NYql::EKikimrStatsMode StatsMode = NYql::EKikimrStatsMode::None;
         std::shared_ptr<NGRpcService::IRequestCtxMtSafe> RpcCtx;

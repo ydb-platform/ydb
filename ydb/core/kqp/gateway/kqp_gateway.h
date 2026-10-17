@@ -192,6 +192,7 @@ public:
     };
 
     struct TAstQuerySettings {
+        bool IsInternalCall = false;
         Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     };
 

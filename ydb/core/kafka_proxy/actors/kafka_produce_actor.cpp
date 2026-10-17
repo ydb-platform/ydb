@@ -454,6 +454,18 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvProduceRequest::TPtr request, const
     }
 
     PendingRequest = std::make_shared<TPendingRequest>(request);
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        PendingRequest->StartTime = ctx.Now();
+        for (const auto& topic : PendingRequest->Request->Get()->Request->TopicData) {
+            for (size_t i = 0; i < topic.PartitionData.size(); ++i) {
+                auto& result = PendingRequest->Results.emplace_back();
+                result.ErrorCode = EKafkaErrors::POLICY_VIOLATION;
+                result.ErrorMessage = "Client data writes are disabled";
+            }
+        }
+        SendResults(ctx);
+        return;
+    }
     StartPendingRequest(ctx);
 }
 

@@ -296,6 +296,28 @@ namespace {
             UNIT_ASSERT_EQUAL(message.Results[1].Results[0].ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
         }
 
+        Y_UNIT_TEST(ClientModificationsTxnOffsetCommit) {
+            Ctx->Runtime->GetAppData().FeatureFlags.SetEnableClientModifications(false);
+
+            auto saved = SaveTxnProducer("my-tx-id", 1, 0);
+            UNIT_ASSERT_EQUAL(saved->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+
+            SendTxnOffsetCommitRequest(123, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});
+            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            UNIT_ASSERT_VALUES_EQUAL(response->CorrelationId, 123);
+
+            const auto& message = static_cast<const NKafka::TTxnOffsetCommitResponseData&>(*response->Response);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[0].Partitions.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions.size(), 1);
+
+            for (const auto& topic : message.Topics) {
+                for (const auto& partition : topic.Partitions) {
+                    UNIT_ASSERT_EQUAL(partition.ErrorCode, NKafka::EKafkaErrors::POLICY_VIOLATION);
+                }
+            }
+        }
+
         Y_UNIT_TEST(OnTxnOffsetCommit_ShouldSendBack_PRODUCER_FENCED_ErrorIfProducerIsNotInitialized) {
             ui64 correlationId = 123;
             SendTxnOffsetCommitRequest(correlationId, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});

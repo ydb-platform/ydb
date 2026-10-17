@@ -215,6 +215,9 @@ void TConsumerActor::PassAway() {
     if (DLQMoverActorId) {
         Send(DLQMoverActorId, new TEvents::TEvPoison());
     }
+    if (MessageEnricherActorId) {
+        Send(MessageEnricherActorId, new TEvents::TEvPoison());
+    }
 
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
 
@@ -473,7 +476,12 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
-        RegisterWithSameMailbox(CreateMessageEnricher(TabletId, PartitionId, Config.GetName(), std::move(msgs)));
+        MessageEnricherActorId = RegisterWithSameMailbox(CreateMessageEnricher(
+            TabletId,
+            PartitionId,
+            Config.GetName(),
+            std::move(msgs),
+            SelfId()));
     }
     ReplyOffsetsOkAll<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOffsetsOkAll<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
@@ -676,6 +684,7 @@ STFUNC(TConsumerActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
+        hFunc(TEvPQ::TEvMLPEnricherFinished, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -708,6 +717,7 @@ STFUNC(TConsumerActor::StateWrite) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPQ::TEvMLPDLQMoverResponse, Handle);
+        hFunc(TEvPQ::TEvMLPEnricherFinished, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
@@ -762,6 +772,10 @@ void TConsumerActor::ProcessEventQueue() {
     // Must not apply queued ops while a KV persist is in flight (StateWrite):
     // callers are gated by InStateWork(); Persist() switches to StateWrite only after this turn starts.
     AFL_ENSURE(InStateWork());
+    if (MessageEnricherActorId) {
+        LOG_D("Skip ProcessEventQueue: message enricher is still running");
+        return;
+    }
 
     LOG_D("ProcessEventQueue");
 
@@ -845,6 +859,9 @@ void TConsumerActor::ProcessEventQueue() {
         {"afterDeadlinesDump", Storage->DebugString()}
     );
 
+    // Drop messages already past retention before Read copies their offsets into PendingReadQueue.
+    Storage->Compact();
+
     auto now = TAppData::TimeProvider->Now();
 
     TStorage::TPosition position;
@@ -894,8 +911,6 @@ void TConsumerActor::ProcessEventQueue() {
 
 void TConsumerActor::Persist() {
     LOG_D("Persist");
-
-    Storage->Compact();
 
     auto batch = Storage->ExtractBatch();
     if (batch.Empty()) {
@@ -1203,6 +1218,12 @@ void TConsumerActor::MoveToDLQIfPossible() {
             .Messages = std::move(messages)
         }));
     }
+}
+
+void TConsumerActor::Handle(TEvPQ::TEvMLPEnricherFinished::TPtr&) {
+    LOG_D("Handle TEvPQ::TEvMLPEnricherFinished");
+    MessageEnricherActorId = {};
+    ScheduleProcessing();
 }
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {

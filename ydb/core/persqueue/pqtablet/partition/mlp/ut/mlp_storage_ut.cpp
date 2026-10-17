@@ -2126,6 +2126,59 @@ Y_UNIT_TEST(CompactStorage_ByRetention) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 2);
 }
 
+Y_UNIT_TEST(CompactStorage_LockedAndDlqUseRetentionDeadline) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    const auto base = timeProvider->Now();
+
+    TStorage storage(timeProvider, {});
+    storage.SetRetentionPeriod(TDuration::Seconds(10));
+    storage.AddMessage(0, false, 0, base);
+    storage.AddMessage(1, false, 0, base + TDuration::Seconds(1));
+
+    TStorage::TPosition position;
+    auto first = storage.Next(timeProvider->Now() + TDuration::Hours(1), position);
+    auto second = storage.Next(timeProvider->Now() + TDuration::Hours(1), position);
+    UNIT_ASSERT(first && second);
+    UNIT_ASSERT_VALUES_EQUAL(first->Offset, 0);
+    UNIT_ASSERT_VALUES_EQUAL(second->Offset, 1);
+
+    timeProvider->Tick(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(storage.Compact(), 1);
+
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 1);
+    {
+        auto [message, _] = storage.GetMessage(1);
+        UNIT_ASSERT(message);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::Locked);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetMetrics().TotalDeletedByRetentionMessageCount, 1);
+
+    auto dlqTime = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    const auto dlqBase = dlqTime->Now();
+    TStorage dlq(dlqTime, {});
+    dlq.SetRetentionPeriod(TDuration::Seconds(10));
+    dlq.SetMaxMessageProcessingCount(1);
+    dlq.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+    dlq.AddMessage(0, false, 0, dlqBase);
+    dlq.AddMessage(1, false, 0, dlqBase + TDuration::Seconds(1));
+
+    TStorage::TPosition dlqPosition;
+    UNIT_ASSERT(dlq.Next(dlqTime->Now() + TDuration::Hours(1), dlqPosition));
+    UNIT_ASSERT(dlq.Next(dlqTime->Now() + TDuration::Hours(1), dlqPosition));
+    UNIT_ASSERT(dlq.Unlock(0) == EOperationResult::Success);
+    UNIT_ASSERT(dlq.Unlock(1) == EOperationResult::Success);
+
+    dlqTime->Tick(TDuration::Seconds(10));
+    UNIT_ASSERT_VALUES_EQUAL(dlq.Compact(), 1);
+    {
+        auto [message, _] = dlq.GetMessage(1);
+        UNIT_ASSERT(message);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::DLQ);
+    }
+    UNIT_ASSERT(!dlq.GetMessage(0).first);
+    UNIT_ASSERT_VALUES_EQUAL(dlq.GetMetrics().TotalDeletedByRetentionMessageCount, 0);
+}
+
 Y_UNIT_TEST(CompactStorage_ByDeadline) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() + TDuration::Seconds(7);

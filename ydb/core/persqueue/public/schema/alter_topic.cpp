@@ -13,10 +13,26 @@ namespace NKikimr::NPQ::NSchema {
 namespace {
 
 TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+    // Set by KQP when ALTER CONSUMER changes read_from to an Interval.
+    // The existing consumer type is known only here.
+    if (alter.alter_attributes().contains("_ydb_read_from_rolling_window")) {
+        if (consumer.has_shared_consumer_type()) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "reading only messages from the last N seconds is not supported for shared consumer '"
+                << consumer.name() << "'"};
+        }
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << "Failed to parse read_from setting value for consumer '" << consumer.name()
+            << "'. Datetime(), Timestamp or integer value is supported"};
+    }
     if (alter.has_set_important()) {
         consumer.set_important(alter.set_important());
     }
     if (alter.has_set_read_from()) {
+        if (consumer.has_shared_consumer_type()) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_from cannot be changed for shared consumer '" << consumer.name() << "'"};
+        }
         consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
     }
     if (alter.has_set_supported_codecs()) {

@@ -45,7 +45,7 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             for pool in self.pools.values():
                 pool.stop()
             for driver in self.drivers.values():
-                driver.stop()
+                self.stop_driver(driver)
         finally:
             super().teardown_method()
 

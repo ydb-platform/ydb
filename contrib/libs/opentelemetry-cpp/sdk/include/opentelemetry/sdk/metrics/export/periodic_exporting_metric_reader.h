@@ -67,6 +67,17 @@ private:
   std::condition_variable cv_, force_flush_cv_;
   std::mutex cv_m_, force_flush_m_;
 
+  /**
+   * Set by OnShutDown() to tell the worker thread to stop. This is intentionally separate from
+   * the base class's IsShutdown(), which is already true by the time OnShutDown() runs:
+   * OnShutDown() first performs one last OnForceFlush() drain, which needs the worker thread to
+   * still be alive and servicing wake-ups, and needs OnForceFlush()'s break_condition not to
+   * treat the in-progress shutdown as "nothing to do" and bail out before that drain happens.
+   * The worker thread's loop and wait predicate, and OnForceFlush()'s break_condition, must
+   * therefore key off this flag rather than IsShutdown() to know when to stop.
+   */
+  std::atomic<bool> is_stop_requested_{false};
+
   /* The background worker thread */
   std::shared_ptr<sdk::common::ThreadInstrumentation> worker_thread_instrumentation_;
   std::thread worker_thread_;

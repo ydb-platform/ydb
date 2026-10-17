@@ -1,4 +1,5 @@
 #include "aio.h"
+#include "aio_completion.h"
 #include "buffers.h"
 
 //#include <ydb/core/blobstorage/base/wilson_events.h>
@@ -206,7 +207,8 @@ public:
 
             events[i].Operation = op;
 
-            events[i].Result = RetErrnoToContextError(ioEvents[i].res, "ioEvents[].res");
+            events[i].Result = RetErrnoToContextError(
+                NDetail::CheckIoCompletion(ioEvents[i].res, op->GetSize()), "ioEvents[].res");
 
             events[i].Operation->ExecCallback(&events[i]);
 
@@ -297,7 +299,12 @@ public:
     int LockFile() {
         int ret = -1;
         errno = EWOULDBLOCK;
-        int retry = 2;
+        int retry = 5;
+
+        // Note, that previous process incarnation might still hold the
+        // lock to finish its I/O (especially when we use io_uring without SQPOLL).
+        // Even after waitpid() has returned for that process, lock is still held
+        // until all I/O is either cancelled or finished
         while (ret == -1 && errno == EWOULDBLOCK && retry > 0) {
             errno = 0;
             ret = File->Flock(LOCK_EX | LOCK_NB);
@@ -529,7 +536,8 @@ public:
         for (auto i = 0u; i < numEvents; ++i) {
             auto *op = reinterpret_cast<TAsyncIoOperationLiburing*>(io_uring_cqe_get_data(&cqes[i]));
             events[i].Operation = op;
-            events[i].Result = RetErrnoToContextError(cqes[i].res, "cqes[]->res");
+            events[i].Result = RetErrnoToContextError(
+                NDetail::CheckIoCompletion(cqes[i].res, op->GetSize()), "cqes[]->res");
             events[i].Operation->ExecCallback(&events[i]);
         }
 

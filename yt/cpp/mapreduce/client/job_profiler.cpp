@@ -44,8 +44,8 @@ public:
         try {
             InitializeProfiler();
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Failed to initialize job profiler: %v",
-                ex.what());
+            YT_TLOG_ERROR("Failed to initialize job profiler")
+                .With("Error", ex.what());
         }
     }
 

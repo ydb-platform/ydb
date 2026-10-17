@@ -44,13 +44,11 @@
 // Boost Variant2 supports all C++ versions back to C++11
 #if BOOST_CXX_VERSION >= 201103L
 #include <boost/variant2/variant.hpp>
-#include <type_traits>
 #endif
 
-// Boost Variant2 supports all C++ versions back to C++11
+// std::variant supports all C++ versions back to C++11
 #ifndef BOOST_NO_CXX17_HDR_VARIANT
 #include <variant>
-//#include <type_traits>
 #endif
 
 #include <boost/archive/archive_exception.hpp>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ddisk_helpers.h"
+#include "direct_session_registry.h"
 #include "ic_storage_transport_events.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
@@ -17,6 +18,10 @@ class TICStorageTransportActor
 {
 private:
     TLogTitle LogTitle;
+    // Optional: when set, DirectSession handles from TEvNodeConnected are
+    // published here for TICDirectStorageTransport datapath sends.
+    const std::shared_ptr<TDirectSessionRegistry> DirectSessionRegistry;
+    const bool EnableChecksums;
 
     ui64 RequestIdGenerator = 0;
 
@@ -51,6 +56,9 @@ private:
     THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvListPBufferEntries>>
         ListPBufferEntriesRequests;
 
+    THashMap<ui64, std::unique_ptr<TEvTransportPrivate::TEvDeleteTabletChunks>>
+        DeleteTabletChunksRequests;
+
     struct TWriteToManyPBuffersReqInfo
     {
         std::unique_ptr<TEvTransportPrivate::TEvWriteToManyPBuffers> Request;
@@ -65,7 +73,10 @@ private:
 public:
     TICStorageTransportActor(
         const TDiskDescription& diskDescription,
-        ui32 dbgIndex);
+        ui32 dbgIndex,
+        bool enableChecksums,
+        std::shared_ptr<TDirectSessionRegistry> directSessionRegistry =
+            nullptr);
 
     ~TICStorageTransportActor() override;
 
@@ -82,6 +93,27 @@ private:
         const NActors::TActorContext& ctx);
     void HandleConnectResult(
         const NKikimr::NDDisk::TEvConnectResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleGetPersistentBufferRegistrationTokenResult(
+        const NKikimr::NDDisk::TEvGetPersistentBufferRegistrationTokenResult::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleGetPersistentBufferRegistrationTokenUndelivery(
+        const NKikimr::NDDisk::TEvGetPersistentBufferRegistrationToken::TPtr&
+            ev,
+        const NActors::TActorContext& ctx);
+    void HandleRegisterPersistentBufferResult(
+        const NKikimr::NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleRegisterPersistentBufferUndelivery(
+        const NKikimr::NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void CompletePBufferConnection(ui64 requestId, ui32 status, TString reason);
+    void SendPBufferRegistration(
+        ui64 requestId,
+        const NActors::TActorContext& ctx);
+    void HandleRegistrationRetry(
+        const NActors::TEvents::TEvWakeup::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleWritePersistentBuffer(
@@ -170,11 +202,24 @@ private:
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleDeleteTabletChunks(
+        const TEvTransportPrivate::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksUndelivery(
+        const NKikimr::NDDisk::TEvDeleteTabletChunks::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDeleteTabletChunksResult(
+        const NKikimr::NDDisk::TEvDeleteTabletChunksResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void PassAway() override;
     void RejectAllSessionRequestsForNode(
         ui32 nodeId,
         const NActors::TActorContext& ctx);
 
+    void HandleICNodeConnected(
+        const NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
     void HandleICNodeDisconnected(
         const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -184,7 +229,9 @@ private:
 
 NActors::TActorId CreateTransportActor(
     const TDiskDescription& diskDescription,
-    ui32 dbgIndex);
+    ui32 dbgIndex,
+    bool enableChecksums,
+    std::shared_ptr<TDirectSessionRegistry> directSessionRegistry = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////////
 

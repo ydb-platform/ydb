@@ -162,9 +162,8 @@ TTxController::TTxInfo TTxController::RegisterTxWithDeadline(const std::shared_p
 bool TTxController::AbortTx(const TPlanQueueItem planQueueItem) {
     auto opIt = Operators.find(planQueueItem.TxId);
     AFL_VERIFY(opIt != Operators.end())("tx_id", planQueueItem.TxId);
-    AFL_VERIFY(opIt->second->GetTxInfo().PlanStep == 0)("tx_id", planQueueItem.TxId)("plan_step", opIt->second->GetTxInfo().PlanStep);
+    AFL_VERIFY(!opIt->second->IsPlanned())("tx_id", planQueueItem.TxId)("plan_step", opIt->second->GetTxInfo().PlanStep);
     AFL_VERIFY(DeadlineQueue.erase(planQueueItem))("tx_id", planQueueItem.TxId);
-    Counters.OnAbortTx(opIt->second->GetOpType());
     Owner.CancelTransaction(planQueueItem.TxId);
     YDB_LOG_WARN("",
         {"event", "abort_tx"},
@@ -174,10 +173,14 @@ bool TTxController::AbortTx(const TPlanQueueItem planQueueItem) {
 
 bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc) {
     ITransactionOperator::TPtr op = MoveOperatorToCompleting(txId);
-    AFL_VERIFY(op->GetTxInfo().PlanStep == 0)("tx_id", txId)("plan_step", op->GetTxInfo().PlanStep);
+    AFL_VERIFY(!op->IsPlanned())("tx_id", txId)("plan_step", op->GetStep());
 
+    if (op->GetTxInfo().MaxStep != Max<ui64>()) {
+        DeadlineQueue.erase(TPlanQueueItem(op->GetTxInfo().MaxStep, txId));
+    }
     op->ExecuteOnAbort(Owner, txc);
 
+    Counters.OnAbortTx(op->GetOpType());
     NIceDb::TNiceDb db(txc.DB);
     Schema::EraseTxInfo(db, txId);
     return true;
@@ -186,13 +189,10 @@ bool TTxController::ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTrans
 bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) {
     auto opIt = CompletingOperators.find(txId);
     AFL_VERIFY(opIt != CompletingOperators.end())("tx_id", txId);
-    AFL_VERIFY(opIt->second->GetTxInfo().PlanStep == 0)("tx_id", txId)("plan_step", opIt->second->GetTxInfo().PlanStep);
+    AFL_VERIFY(!opIt->second->IsPlanned())("tx_id", txId)("plan_step", opIt->second->GetTxInfo().PlanStep);
 
     opIt->second->CompleteOnAbort(Owner, ctx);
 
-    if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
-        DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
-    }
     YDB_LOG_WARN("",
         {"event", "cancel_tx"},
         {"txId", txId});
@@ -338,7 +338,9 @@ size_t TTxController::CleanExpiredTxs() {
                 break;
             }
             ui64 txId = it->TxId;
-            LOG_S_DEBUG(TStringBuilder() << "Removing outdated txId " << txId << " max step " << it->Step << " outdated step ");
+            YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Removing otdated step",
+                {"txId", txId},
+                {"maxStep", it->Step});
             AbortTx(*it);
             ++removedCount;
         }

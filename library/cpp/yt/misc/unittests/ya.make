@@ -8,6 +8,8 @@ SRCS(
     enum_ut.cpp
     guid_ut.cpp
     hash_ut.cpp
+    immortal_ut.cpp
+    lazy_ut.cpp
     numeric_helpers_ut.cpp
     preprocessor_ut.cpp
     range_helpers_ut.cpp

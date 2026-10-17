@@ -65,13 +65,12 @@ namespace NKikimr::NSqsTopic::V1 {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
 
-            TMaybe purgeSettings = MakePurgerSettings(ctx);
-            if (!purgeSettings.Defined()) {
+            PurgeSettings_ = MakePurgerSettings(ctx);
+            if (!PurgeSettings_.Defined()) {
                 return;
             }
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*purgeSettings))};
-            ReaderActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            this->DescribeTopic(NACLib::DescribeSchema);
             this->Become(&TPurgeQueueActor::StateWork);
         }
 
@@ -92,7 +91,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
                 HFunc(NKikimr::NPQ::NMLP::TEvPurgeResponse, Handle);
                 default:
                     TBase::StateWork(ev);
@@ -120,15 +118,24 @@ namespace NKikimr::NSqsTopic::V1 {
             return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
         }
 
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+            this->ChargeRequestUnits(TlsActivationContext->AsActorContext());
+        }
+
+        ui64 GetRUCost() override {
+            return NBilling::RoundRu(NBilling::DEFAULT_REQUEST_COST);
+        }
+
+        void OnRequestUnitsCharged(const TActorContext& ctx) {
+            ReaderActorId_ = ctx.RegisterWithSameMailbox(
+                NKikimr::NPQ::NMLP::CreatePurger(this->SelfId(), std::move(*PurgeSettings_)));
+        }
+
         void Die(const TActorContext& ctx) override {
             if (ReaderActorId_) {
                 ctx.Send(ReaderActorId_, new TEvents::TEvPoison);
             }
             this->TBase::Die(ctx);
-        }
-
-        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
         }
 
     private:
@@ -139,6 +146,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         TActorId ReaderActorId_;
+        TMaybe<NKikimr::NPQ::NMLP::TPurgerSettings> PurgeSettings_;
     };
 
     std::unique_ptr<NActors::IActor> CreatePurgeQueueActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

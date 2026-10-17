@@ -1,6 +1,8 @@
 #include "datashard_impl.h"
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -132,11 +134,10 @@ public:
         TSerializedCellVec suffixColumns;
         if (Ev->Get()->Record.GetSerializedStartAfterKeySuffix().empty()) {
             if (Ev->Get()->Record.HasLastPath()) {
-                TString reqLastPath = Ev->Get()->Record.GetLastPath();
+                // key holds a view into the string: it must be the function-scope one
+                startAfterPath = Ev->Get()->Record.GetLastPath();
 
-                key.emplace_back(reqLastPath, NScheme::NTypeIds::Utf8);
-
-                startAfterPath = reqLastPath;
+                key.emplace_back(startAfterPath, NScheme::NTypeIds::Utf8);
             } else {
                 minKeyInclusive = true;
                 key.emplace_back(pathPrefix.data(), pathPrefix.size(), NScheme::NTypeIds::Utf8);
@@ -147,16 +148,15 @@ public:
             size_t prefixSize = prefixColumns.GetCells().size();
 
             if (Ev->Get()->Record.HasLastPath()) {
-                TString reqLastPath = Ev->Get()->Record.GetLastPath();
-                
-                key.emplace_back(reqLastPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
+                // key holds a view into the string: it must be the function-scope one
+                startAfterPath = Ev->Get()->Record.GetLastPath();
+
+                key.emplace_back(startAfterPath, tableInfo.KeyColumnTypes[prefixSize].GetTypeId());
 
                 for (size_t i = 1; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
                     key.emplace_back(suffixColumns.GetCells()[i].Data(), suffixColumns.GetCells()[i].Size(), tableInfo.KeyColumnTypes[ki].GetTypeId());
                 }
-                
-                startAfterPath = reqLastPath;
             } else {
                 for (size_t i = 0; i < suffixColumns.GetCells().size(); ++i) {
                     size_t ki = prefixSize + i;
@@ -192,11 +192,14 @@ public:
             endKeyInclusive = false;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: start at key ("
-            << JoinVectorIntoString(key, " ") << "), end at key (" << JoinVectorIntoString(endKey, " ") << ")"
-            << " restarted: " << RestartCount-1 << " last path: \"" << LastPath << "\""
-            << " contents: " << Result->Record.ContentsRowsSize()
-            << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
+        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key",
+            {"tabletId", Self->TabletID()},
+            {"startKey", JoinVectorIntoString(key, " ")},
+            {"endKey", JoinVectorIntoString(endKey, " ")},
+            {"restarted", RestartCount-1},
+            {"lastPath", LastPath},
+            {"contents", Result->Record.ContentsRowsSize()},
+            {"commonPrefixes", Result->Record.CommonPrefixesRowsSize()});
 
         Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo));
 
@@ -233,7 +236,7 @@ public:
             for (const auto& colId : filter.columns()) {
                 filterColumnIds.push_back(colId);
             }
-            
+
             for (const auto& matchType : filter.matchtypes()) {
                 if (!NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType_IsValid(matchType)) {
                     TString errorReason = Sprintf("Unknown match type %" PRIu32, matchType);
@@ -291,8 +294,10 @@ public:
             }
 
             TDbTupleRef value = iter->GetValues();
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: "
-                "\"" << path << "\"" << (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString()));
+            YDB_LOG_TRACE_CTX(ctx, "S3 Listing",
+                {"tabletId", Self->TabletID()},
+                {"path", path},
+                {"leafPathDetails", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
 
             if (isLeafPath) {
                 ++stats.LeafRows;
@@ -342,7 +347,7 @@ public:
                             continue;
                         }
                     }
-                    
+
                     // Add a row with path column and all columns requested by user
                     Result->Record.AddContentsRows(newContentsRow);
                     if (++foundKeys >= maxKeys) {
@@ -359,7 +364,7 @@ public:
                         Y_ENSURE(columnId < value.Cells().size());
 
                         NKikimrTxDataShard::TObjectStorageListingFilter_EMatchType matchType;
-                        
+
                         if (matchTypes.size() == filterColumnIds.size()) {
                             matchType = matchTypes[i];
                         } else {
@@ -393,7 +398,7 @@ public:
                         continue;
                     }
                 }
-                
+
                 // For prefix save only path
                 if (path > startAfterPath && path != lastCommonPath) {
                     LastCommonPath = path;
@@ -455,11 +460,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " S3 Listing: finished "
-                    << " status: " << Result->Record.GetStatus()
-                    << " description: \"" << Result->Record.GetErrorDescription() << "\""
-                    << " contents: " << Result->Record.ContentsRowsSize()
-                    << " common prefixes: " << Result->Record.CommonPrefixesRowsSize());
+        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished",
+            {"tabletId", Self->TabletID()},
+            {"status", Result->Record.GetStatus()},
+            {"errorDescription", Result->Record.GetErrorDescription()},
+            {"contents", Result->Record.ContentsRowsSize()},
+            {"commonPrefixes", Result->Record.CommonPrefixesRowsSize()});
         ctx.Send(Ev->Sender, Result.Release());
 
         if (ListingSpan) {
@@ -570,3 +576,7 @@ void TDataShard::Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, 
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

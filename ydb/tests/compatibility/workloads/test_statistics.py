@@ -269,6 +269,12 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             additional_log_configs={
                 'STATISTICS': LogLevels.DEBUG,
             },
+            column_shard_config={
+                "statistics": {
+                    "report_base_statistics_period_ms": 1000,
+                    "report_executor_statistics_period_ms": 1000,
+                },
+            },
         )
 
     def create_tables(self):

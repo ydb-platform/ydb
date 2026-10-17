@@ -1,9 +1,9 @@
 from collections import deque
-from typing import Union
 
 from multidict import CIMultiDict, MultiDict
+from multidict._multidict_py import MultiDict as PyMultiDict
 
-_MD_Classes = Union[type[MultiDict[int]], type[CIMultiDict[int]]]
+_MD_Classes = type[MultiDict[int]] | type[CIMultiDict[int]]
 
 
 def test_update_replace(any_multidict_class: _MD_Classes) -> None:
@@ -148,3 +148,49 @@ def test_update_with_empty_slots(any_multidict_class: _MD_Classes) -> None:
     del obj["0"]
     obj.update({"1": 100})
     assert obj == {"1": 100}
+
+
+def test_pure_python_parse_args_size_hint_with_seq_and_kwargs() -> None:
+    """Regression test for pure-Python ``_parse_args`` size hint.
+
+    When a positional iterable and keyword arguments are both supplied,
+    ``_parse_args`` previously yielded ``len(arg) + len(kwargs)`` after
+    merging ``kwargs.items()`` into ``arg``. That double-counted the
+    kwargs and over-allocated the internal hash table. The hint must
+    equal the actual number of yielded entries.
+    """
+    md: PyMultiDict[int] = PyMultiDict()
+    arg = [("a", 1), ("b", 2)]
+    kwargs = {"c": 3, "d": 4}
+
+    it = md._parse_args(arg, kwargs)
+    size_hint = next(it)
+    entries = list(it)
+
+    assert size_hint == len(entries) == len(arg) + len(kwargs)
+
+
+def test_pure_python_parse_args_size_hint_with_mapping_and_kwargs() -> None:
+    """Same regression but exercising the mapping (``keys()``) branch."""
+    md: PyMultiDict[int] = PyMultiDict()
+    arg = {"a": 1, "b": 2}
+    kwargs = {"c": 3, "d": 4}
+
+    it = md._parse_args(arg, kwargs)
+    size_hint = next(it)
+    entries = list(it)
+
+    assert size_hint == len(entries) == len(arg) + len(kwargs)
+
+
+def test_pure_python_parse_args_size_hint_with_md_and_kwargs() -> None:
+    """``MultiDict`` positional argument already yields the correct hint."""
+    md: PyMultiDict[int] = PyMultiDict()
+    arg = PyMultiDict([("a", 1), ("a", 2), ("b", 3)])
+    kwargs = {"c": 4}
+
+    it = md._parse_args(arg, kwargs)
+    size_hint = next(it)
+    entries = list(it)
+
+    assert size_hint == len(entries) == len(arg) + len(kwargs)

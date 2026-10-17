@@ -1,5 +1,7 @@
 #include "extension_whoami.h"
 
+#include <ydb/library/security/util.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -156,10 +158,13 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         SetExtendedError(errorJson, "Iam", "ResponseDetails", error->Get()->Details);
     }
 
+    // Masked, not raw: the session cookie is httpOnly on purpose, so the token it is exchanged
+    // for must not be usable from JS. Kept for access debuggability until observability improves,
+    // then this whole block should go away.
     if (!json.Has(ORIGINAL_USER_TOKEN)) {
         TStringBuf tail;
         if (TStringBuf(AuthHeader).AfterPrefix(IAM_TOKEN_SCHEME, tail)) {
-            json[ORIGINAL_USER_TOKEN] = tail;
+            json[ORIGINAL_USER_TOKEN] = NKikimr::MaskTicket(tail);
         }
     }
 

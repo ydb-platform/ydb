@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     actor.cpp
@@ -20,8 +20,6 @@ PEERDIR(
     ydb/core/base
     ydb/core/security/util
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

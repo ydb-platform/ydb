@@ -35,6 +35,8 @@ namespace NInterconnect {
         ui64 BytesPerSecond = 0;         // average throughput over the whole run, bytes/sec
         TDuration RttWindow;             // window over which RTT samples were collected (last aggregation window)
         ui64 RttSamples = 0;             // number of RTT samples within RttWindow
+        ui64 TotalRttSamples = 0;
+        TDuration MaxRttGap;             // includes measurement boundaries
         ui64 NumDropped = 0;             // number of dropped (timed out) messages, full-run total
 
         // Latency (RTT) percentiles; pair of {quantile in [0..1], value in microseconds}.

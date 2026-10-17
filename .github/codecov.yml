@@ -1,0 +1,75 @@
+# Codecov config for ydb-platform/ydb (C++ SDK + CLI + workload).
+# Separate from per-language SDK repos (java/go/js) and their native-sdk component.
+
+codecov:
+  # PR code is measured, but it must not be able to weaken coverage policy.
+  strict_yaml_branch: default
+  # Delay notifications until CI completes. The trusted PR workflow separately
+  # rejects a coverage-relevant exact base without a successful all-suite run.
+  require_ci_to_pass: true
+  notify:
+    wait_for_ci: true
+
+# Flag-filtered GitHub Checks are not emitted by the current repository
+# integration. Ask Codecov to use ordinary commit statuses instead.
+github_checks: false
+
+coverage:
+  status:
+    # Suite-specific statuses are defined with their flags below. Keeping the
+    # legacy status groups disabled also avoids aggregate missing-upload noise.
+    project: off
+    patch: off
+
+flag_management:
+  default_rules:
+    # Every relevant main push uploads all three flags. PRs intentionally
+    # upload only affected flags, so no synthetic carryforward is needed.
+    carryforward: false
+  individual_flags:
+    - name: cpp_sdk
+      paths:
+        - ydb/public/sdk/cpp/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 0.1%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
+    - name: cli
+      paths:
+        - ydb/apps/ydb/**
+        - ydb/public/lib/ydb_cli/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 5%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
+    - name: cli_workload
+      paths:
+        - ydb/library/workload/**
+      statuses:
+        - type: project
+          target: auto
+          threshold: 5%
+          flag_coverage_not_uploaded_behavior: exclude
+        - type: patch
+          target: 80%
+          informational: true
+          flag_coverage_not_uploaded_behavior: exclude
+
+comment:
+  # Codecov's flags table always includes missing base flags as `?`, and its
+  # diff table aggregates unlike reports. Keep the built-in comment patch-only;
+  # suite project deltas are exposed by the flag statuses above.
+  layout: "condensed_header, condensed_files, condensed_footer"
+  behavior: default
+  require_changes: false
+  hide_project_coverage: true

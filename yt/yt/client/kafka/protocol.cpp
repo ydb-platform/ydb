@@ -245,8 +245,8 @@ public:
     {
         if (!IsFinished()) {
             THROW_ERROR_EXCEPTION("Expected end of stream")
-                << TErrorAttribute("offset", Offset_)
-                << TErrorAttribute("message_size", Data_.size());
+                .With("offset", Offset_)
+                .With("message_size", Data_.size());
         }
     }
 
@@ -277,8 +277,8 @@ private:
     {
         if (std::ssize(Data_) - Offset_ < size) {
             THROW_ERROR_EXCEPTION("Premature end of stream while reading %v bytes", size)
-                << TErrorAttribute("data_size", std::ssize(Data_))
-                << TErrorAttribute("offset", Offset_);
+                .With("data_size", std::ssize(Data_))
+                .With("offset", Offset_);
         }
     }
 };

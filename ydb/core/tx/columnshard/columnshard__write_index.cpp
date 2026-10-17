@@ -10,6 +10,8 @@
 #include <ydb/library/slide_limiter/usage/abstract.h>
 #include <ydb/library/slide_limiter/usage/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard {
 
 class TDiskResourcesRequest: public NLimiter::IResourceRequest {
@@ -79,9 +81,11 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
         }
     } else {
         if (putStatus == NKikimrProto::OK) {
-            LOG_S_DEBUG("WriteIndex at tablet " << TabletID());
+            YDB_LOG_DEBUG("WriteIndex at tablet",
+                {"tabletID", TabletID()});
         } else {
-            LOG_S_INFO("WriteIndex error at tablet " << TabletID());
+            YDB_LOG_INFO("WriteIndex error at tablet",
+                {"tabletID", TabletID()});
         }
 
         OnYellowChannels(*ev->Get()->PutResult);

@@ -19,6 +19,7 @@ TEST_SRCS(
     http_helpers.py
     test_auditlog.py
     test_canonical_records.py
+    test_canonical_records_legacy_dstool.py
 )
 
 DEPENDS(

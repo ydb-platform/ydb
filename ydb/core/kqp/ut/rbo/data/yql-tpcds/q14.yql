@@ -26,9 +26,9 @@ $cross_items = (
             AND d1.d_year BETWEEN 1998 AND 1998 + 2
         INTERSECT
         SELECT
-            ics.i_brand_id,
-            ics.i_class_id,
-            ics.i_category_id
+            ics.i_brand_id AS brand_id,
+            ics.i_class_id AS class_id,
+            ics.i_category_id AS category_id
         FROM
             `/Root/test/ds/catalog_sales`
         ,
@@ -41,9 +41,9 @@ $cross_items = (
             AND d2.d_year BETWEEN 1998 AND 1998 + 2
         INTERSECT
         SELECT
-            iws.i_brand_id,
-            iws.i_class_id,
-            iws.i_category_id
+            iws.i_brand_id AS brand_id,
+            iws.i_class_id AS class_id,
+            iws.i_category_id AS category_id
         FROM
             `/Root/test/ds/web_sales`
         ,
@@ -247,9 +247,9 @@ $cross_items = (
             AND d1.d_year BETWEEN 1998 AND 1998 + 2
         INTERSECT
         SELECT
-            ics.i_brand_id,
-            ics.i_class_id,
-            ics.i_category_id
+            ics.i_brand_id AS brand_id,
+            ics.i_class_id AS class_id,
+            ics.i_category_id AS category_id
         FROM
             `/Root/test/ds/catalog_sales`
         ,
@@ -262,9 +262,9 @@ $cross_items = (
             AND d2.d_year BETWEEN 1998 AND 1998 + 2
         INTERSECT
         SELECT
-            iws.i_brand_id,
-            iws.i_class_id,
-            iws.i_category_id
+            iws.i_brand_id AS brand_id,
+            iws.i_class_id AS class_id,
+            iws.i_category_id AS category_id
         FROM
             `/Root/test/ds/web_sales`
         ,

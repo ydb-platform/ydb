@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(1.24.0)
+VERSION(1.25.0)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.24.0/ngtcp2-1.24.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.xz)
 
 LICENSE(
     "(Apache-2.0 OR MIT)" AND

@@ -9,6 +9,7 @@ from ydb.tools.cfg.base import ClusterDetailsProvider
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
 from ydb.tools.cfg.utils import write_to_file
+from ydb.tools.ydbd_slice import process_profiles
 
 
 # --- Add custom loader for duplicate key detection ---
@@ -54,6 +55,10 @@ class ClusterDetails(ClusterDetailsProvider):
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
+        self.__host_dynamic_slot_counts = None
+        self.__host_storage_enabled = None
+        self.__host_storage_profile = None
+        self.__host_dynamic_profiles = None
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
@@ -74,6 +79,58 @@ class ClusterDetails(ClusterDetailsProvider):
     @property
     def hosts_names(self):
         return sorted(list(set(node.hostname for node in self.hosts)))
+
+    def _iter_host_yaml(self):
+        for host in self.template.get('hosts', []):
+            hostname = host.get('name') or host.get('host')
+            if hostname is not None:
+                yield hostname, host
+
+    @property
+    def host_dynamic_slot_counts(self):
+        """Per-host limit on how many dynamic slots to start.
+
+        Domain-level ``dynamic_slots`` still defines the slot types (ports).
+        If a host does not set ``dynamic_slots``, all domain slots are eligible
+        on that host (legacy round-robin behaviour).
+        """
+        if self.__host_dynamic_slot_counts is None:
+            counts = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'dynamic_slots' not in host:
+                    continue
+                counts[hostname] = int(host['dynamic_slots'])
+            self.__host_dynamic_slot_counts = counts
+        return self.__host_dynamic_slot_counts
+
+    @property
+    def host_storage_enabled(self):
+        """hostname -> whether to start the static/storage process.
+
+        Omitted ``storage`` means True (legacy: start kikimr on every listed host).
+        """
+        if self.__host_storage_enabled is None:
+            enabled = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'storage' not in host:
+                    continue
+                enabled[hostname] = bool(host['storage'])
+            self.__host_storage_enabled = enabled
+        return self.__host_storage_enabled
+
+    @property
+    def host_storage_profile(self):
+        """hostname -> storage process profile id."""
+        if self.__host_storage_profile is None:
+            self.__host_storage_profile = process_profiles.host_storage_profiles(self.template)
+        return self.__host_storage_profile
+
+    @property
+    def host_dynamic_profiles(self):
+        """hostname -> list of dynnode profile ids, indexed by domain slot type."""
+        if self.__host_dynamic_profiles is None:
+            self.__host_dynamic_profiles = process_profiles.host_dynamic_profiles(self.template)
+        return self.__host_dynamic_profiles
 
     @property
     def hosts_datacenters(self):
@@ -147,6 +204,7 @@ class Configurator(object):
         self.__dynamic_cfg = os.path.join(out_dir, 'kikimr-dynamic')
         self.__subdomains = None
         self.__walle_provider = walle_provider
+        self.enable_process_profiles = False
 
     @property
     def kikimr_bin(self):
@@ -235,6 +293,14 @@ class Configurator(object):
     def create_static_cfg(self):
         make_dir(self.__static_cfg)
         self._make_cfg(self.static, self.__static_cfg)
+        if self.enable_process_profiles:
+            config_yaml_path = os.path.join(self.__static_cfg, 'config.yaml')
+            if os.path.isfile(config_yaml_path):
+                process_profiles.emit_profile_yaml_files(
+                    config_yaml_path,
+                    self.detail.template,
+                    convert_sys=True,
+                )
         return self.__static_cfg
 
     @property

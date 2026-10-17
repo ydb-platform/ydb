@@ -7,7 +7,7 @@ pragma Engine = "ytflow";
 pragma Ytflow.Cluster = "plato";
 pragma Ytflow.PipelinePath = "pipelines/test";
 
-insert into Output
+replace into Output with primary_key = "[key_b;key_a]"
 select
     key_a,
     key_b || "_b" as key_b,

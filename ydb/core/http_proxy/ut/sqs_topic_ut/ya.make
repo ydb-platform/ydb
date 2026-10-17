@@ -21,6 +21,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/persqueue/tests
     ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
     ydb/services/sqs_topic

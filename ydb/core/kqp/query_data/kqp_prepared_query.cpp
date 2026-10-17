@@ -45,8 +45,8 @@ public:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
 
-    TPreparedQueryAllocHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry)
-        : Alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), functionRegistry->SupportsSizedAllocators())
+    TPreparedQueryAllocHolder()
+        : Alloc(__LOCATION__)
         , TypeEnv(Alloc)
     {
         Alloc.Release();
@@ -175,7 +175,7 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
 {
 
     if (functionRegistry) {
-        Alloc = std::make_shared<TPreparedQueryAllocHolder>(functionRegistry);
+        Alloc = std::make_shared<TPreparedQueryAllocHolder>();
     }
 
     // In case of some compilation failures filling tables may produce new problems which may replace original error messages.
@@ -231,7 +231,9 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
                     tablesSet.insert(indexSettings.GetTable().GetPath());
                     if (indexSettings.HasFulltextSettings()) {
                         tablesSet.insert(indexSettings.GetDocsTable().GetPath());
-                        tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        if (indexSettings.HasDictTable()) {
+                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                        }
                         tablesSet.insert(indexSettings.GetStatsTable().GetPath());
                     }
                 }
@@ -333,7 +335,9 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                             }
                         };
                         fillColumns(indexSettings.GetDocsTable(), indexSettings.GetDocsColumns());
-                        fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        if (indexSettings.HasDictTable()) {
+                            fillColumns(indexSettings.GetDictTable(), indexSettings.GetDictColumns());
+                        }
                         fillColumns(indexSettings.GetStatsTable(), indexSettings.GetStatsColumns());
                     }
                 }

@@ -2,7 +2,7 @@ LIBRARY()
 
 
 PEERDIR(
-    contrib/libs/protobuf
+    library/cpp/protobuf/runtime
     library/cpp/binsaver
     library/cpp/protobuf/util/proto
     library/cpp/string_utils/base64
@@ -17,6 +17,7 @@ SRCS(
     pb_utils.h
     repeated_field_utils.h
     simple_reflection.cpp
+    stream_adaptors.cpp
     walk.cpp
 )
 

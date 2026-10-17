@@ -27,6 +27,8 @@ items:
   href: host_configs.md
 - name: hosts
   href: hosts.md
+- name: immediate_controls_config
+  href: immediate_controls_config.md
 - name: kafka_proxy_config
   href: kafka_proxy_config.md
 - name: log_config

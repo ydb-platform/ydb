@@ -68,6 +68,30 @@ namespace NKikimr::NTestShard {
             }
             return res;
         }
+
+        ::NTestShard::TStateServer::TWriteResult Execute(const ::NTestShard::TStateServer::TInitialize& cmd) {
+            using TStateServer = ::NTestShard::TStateServer;
+            TStateServer::TWriteResult res;
+            auto& info = Tablets[cmd.GetTabletId()];
+            if (cmd.GetGeneration() < info.LastSeenGeneration) {
+                res.SetStatus(TStateServer::RACE);
+                return res;
+            }
+            info.LastSeenGeneration = cmd.GetGeneration();
+
+            if (!info.State.empty()) {
+                res.SetStatus(TStateServer::ERROR);
+                return res;
+            }
+
+            decltype(info.State) state;
+            for (const auto& key : cmd.GetKeys()) {
+                state.emplace(key, TStateServer::CONFIRMED);
+            }
+            info.State.swap(state);
+            res.SetStatus(TStateServer::OK);
+            return res;
+        }
     };
 
 } // NKikimr::NTestShard

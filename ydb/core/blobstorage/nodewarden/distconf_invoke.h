@@ -162,7 +162,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerDistconfResponse::TPtr ev);
         void Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev);
-        void BootstrapCluster(const TString& selfAssemblyUUID);
+        void BootstrapCluster(const TQuery::TBootstrapCluster& request);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Bridge mode

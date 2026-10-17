@@ -19,11 +19,11 @@ bool CanPushLimitToRead(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePt
 
 bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
-    return (kind == EOperator::Map && input->IsSingleConsumer() && limit->Props.StageId == input->Props.StageId);
+    return (kind == EOperator::Map && limit->Props.StageId == input->Props.StageId);
 }
 
 bool CanPushLimitToStage(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
-    return !(limit->Props.StageId == input->Props.StageId || !input->IsSingleConsumer() ||
+    return !(limit->Props.StageId == input->Props.StageId || input->Kind == EOperator::Replicate ||
              (input->GetKind() == EOperator::Source && CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::RowStorage));
 }
 
@@ -70,7 +70,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
         const auto map = CastOperator<TOpMap>(limitInput);
         const auto newLimit = MakeIntrusive<TOpLimit>(CastOperator<IUnaryOperator>(limitInput)->GetInput(), limit->Pos, limit->Props, limit->GetLimitCond(),
                                                       limit->GetLimitPhase());
-        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements(), map->IsOrdered());
+        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements());
     } else if (CanPushLimitToStage(limit, limitInput)) {
         auto props = limit->Props;
         props.StageId = limitInput->Props.StageId;
@@ -78,7 +78,7 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     } else if (CanPushLimitToRead(limit, limitInput)) {
         const auto read = CastOperator<TOpRead>(limitInput);
         const auto limitCond = limit->GetLimitCond().Node->ChildPtr(1);
-        return MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->OutputIUs, read->StorageType, read->TableCallable, read->OlapFilterLambda, limitCond,
+        return MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->GetTableStorageType(), read->TableCallable, read->OlapFilterLambda, limitCond,
                                       read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     }
     return input;

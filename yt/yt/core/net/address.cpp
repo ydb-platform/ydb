@@ -21,7 +21,7 @@
 
 #include <yt/yt/core/rpc/dispatcher.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -143,7 +143,7 @@ TNetworkAddress::TNetworkAddress(const TNetworkAddress& other, int port)
             break;
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", Storage_.ss_family);
+                .With("family", Storage_.ss_family);
     }
 }
 
@@ -162,7 +162,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in*>(&Storage_);
             if (size > sizeof(sockaddr_in)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin_addr, addr, size);
             Length_ = sizeof(sockaddr_in);
@@ -172,7 +172,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
             auto* typedSockAddr = reinterpret_cast<sockaddr_in6*>(&Storage_);
             if (size > sizeof(sockaddr_in6)) {
                 THROW_ERROR_EXCEPTION("Wrong size of AF_INET6 address")
-                    << TErrorAttribute("size", size);
+                    .With("size", size);
             }
             memcpy(&typedSockAddr->sin6_addr, addr, size);
             Length_ = sizeof(sockaddr_in6);
@@ -180,7 +180,7 @@ TNetworkAddress::TNetworkAddress(int family, const char* addr, size_t size)
         }
         default:
             THROW_ERROR_EXCEPTION("Unknown network address family")
-                << TErrorAttribute("family", family);
+                .With("family", family);
     }
 }
 
@@ -356,8 +356,8 @@ TNetworkAddress TNetworkAddress::CreateUnixDomainSocketAddress(const std::string
     sockaddr_un sockAddr = {};
     if (socketPath.size() > sizeof(sockAddr.sun_path)) {
         THROW_ERROR_EXCEPTION("Unix domain socket path is too long")
-            << TErrorAttribute("socket_path", socketPath)
-            << TErrorAttribute("max_socket_path_length", sizeof(sockAddr.sun_path));
+            .With("socket_path", socketPath)
+            .With("max_socket_path_length", sizeof(sockAddr.sun_path));
     }
 
     sockAddr.sun_family = AF_UNIX;
@@ -391,7 +391,7 @@ void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress)
 {
     if (protoAddress.size() > sizeof(address->Storage_)) {
         THROW_ERROR_EXCEPTION("Network address size is too big")
-            << TErrorAttribute("size", protoAddress.size());
+            .With("size", protoAddress.size());
     }
     address->Storage_ = {};
     memcpy(&address->Storage_, protoAddress.data(), protoAddress.size());
@@ -980,10 +980,22 @@ void Serialize(const TIP6Network& value, IYsonConsumer* consumer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+//! A resolution cache key.
+//! The second component overrides the IPv4/IPv6 flags.
+using TResolveKey = std::pair<std::string, std::optional<NDns::TDnsResolveOptions>>;
+
+using TResolveKeyView = std::pair<TStringBuf, std::optional<NDns::TDnsResolveOptions>>;
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Performs asynchronous host name resolution.
 class TAddressResolver::TImpl
     : public virtual TRefCounted
-    , private TAsyncExpiringCache<std::string, TNetworkAddress>
+    , private TAsyncExpiringCache<TResolveKey, TNetworkAddress>
 {
 public:
     explicit TImpl(TAddressResolverConfigPtr config)
@@ -996,7 +1008,7 @@ public:
         Configure(std::move(config));
     }
 
-    TFuture<TNetworkAddress> Resolve(TStringBuf hostName)
+    TFuture<TNetworkAddress> Resolve(TStringBuf hostName, std::optional<NDns::TDnsResolveOptions> options = {})
     {
         // Check if |address| parses into a valid IPv4 or IPv6 address.
         if (auto result = TNetworkAddress::TryParse(hostName); result.IsOK()) {
@@ -1004,12 +1016,12 @@ public:
         }
 
         // Fast path: probe the cache without materializing a std::string key.
-        if (auto address = Find(hostName)) {
+        if (auto address = Find(TResolveKeyView(hostName, options))) {
             return MakeFuture(*address);
         }
 
         // Slow path: materialize the key and run async resolution.
-        return Get(std::string(hostName));
+        return Get(TResolveKey(std::string(hostName), options));
     }
 
     IDnsResolverPtr GetDnsResolver()
@@ -1073,19 +1085,26 @@ private:
 
     std::atomic<bool> HasCachedLocalAddresses_ = false;
     std::vector<TNetworkAddress> CachedLocalAddresses_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, CacheLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, CacheLock_);
 
     const TActionQueuePtr Queue_ = New<TActionQueue>("AddressResolver");
 
     TAtomicIntrusivePtr<IDnsResolver> DnsResolver_;
 
-    TFuture<TNetworkAddress> DoGet(const std::string& hostName, bool /*isPeriodicUpdate*/) noexcept override
+    TFuture<TNetworkAddress> DoGet(const TResolveKey& key, bool /*isPeriodicUpdate*/) noexcept override
     {
-        const auto config = Config_.Acquire();
-        TDnsResolveOptions options{
-            .EnableIPv4 = config->EnableIPv4,
-            .EnableIPv6 = config->EnableIPv6,
-        };
+        const auto& [hostName, optionsOverride] = key;
+
+        TDnsResolveOptions options;
+        if (optionsOverride) {
+            options = *optionsOverride;
+        } else {
+            const auto config = Config_.Acquire();
+            options = {
+                .EnableIPv4 = config->EnableIPv4,
+                .EnableIPv6 = config->EnableIPv6,
+            };
+        }
         return GetDnsResolver()->Resolve(hostName, options)
             .Apply(BIND([=] (const TErrorOr<TNetworkAddress>& result) {
                 // Empty callback just to forward future callbacks into proper thread.
@@ -1129,9 +1148,9 @@ TAddressResolver* TAddressResolver::Get()
     return LeakySingleton<TAddressResolver>();
 }
 
-TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address)
+TFuture<TNetworkAddress> TAddressResolver::Resolve(TStringBuf address, std::optional<NDns::TDnsResolveOptions> options)
 {
-    return Impl_->Resolve(address);
+    return Impl_->Resolve(address, options);
 }
 
 IDnsResolverPtr TAddressResolver::GetDnsResolver()
@@ -1260,36 +1279,6 @@ void TMtnAddress::SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-constexpr size_t MaxYPClusterNameSize = 32;
-
-////////////////////////////////////////////////////////////////////////////////
-
-} // namespace
-
-std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName)
-{
-    auto start = hostName.find_first_of('.');
-    if (start == TStringBuf::npos) {
-        return {};
-    }
-    auto end = hostName.find_first_of('.', start + 1);
-    if (end == TStringBuf::npos) {
-        return {};
-    }
-    auto cluster = hostName.substr(start + 1, end - start - 1);
-    if (cluster.empty()) {
-        return {};
-    }
-    if (cluster.length() > MaxYPClusterNameSize) {
-        return {};
-    }
-    return {cluster};
-}
 
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName)
 {

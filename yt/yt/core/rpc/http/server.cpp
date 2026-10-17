@@ -120,7 +120,7 @@ public:
         YT_VERIFY(message.Size() >= 2);
         if (responseHeader.has_format()) {
             auto format = FromProto<EMessageFormat>(responseHeader.format());
-            Rsp_->GetHeaders()->Add("Content-Type", ToHttpContentType(format));
+            Rsp_->GetHeaders()->Add(NHeaders::ContentTypeHeaderName, ToHttpContentType(format));
         }
 
         FillYTErrorHeaders(Rsp_, TError{});
@@ -254,7 +254,7 @@ private:
             auto decodedType = FromHttpContentType(*contentTypeString);
             if (!decodedType) {
                 return TError("Invalid \"Content-Type\" header value")
-                    << TErrorAttribute("value", *contentTypeString);
+                    .With("value", *contentTypeString);
             }
             rpcHeader->set_request_format(ToProto(*decodedType));
         }
@@ -267,7 +267,7 @@ private:
             auto decodedType = FromHttpContentType(*acceptString);
             if (!decodedType) {
                 return TError("Invalid \"Accept\" header value")
-                    << TErrorAttribute("value", *acceptString);
+                    .With("value", *acceptString);
             }
             rpcHeader->set_response_format(ToProto(*decodedType));
         }
@@ -279,12 +279,21 @@ private:
         if (const auto* requestIdString = httpHeaders->Find(RequestIdHeaderName)) {
             if (!TRequestId::FromString(*requestIdString, requestId)) {
                 return TError("Invalid %Qv header value", RequestIdHeaderName)
-                    << TErrorAttribute("value", *requestIdString);
+                    .With("value", *requestIdString);
             }
         } else {
             *requestId = TRequestId::Create();
         }
         ToProto(rpcHeader->mutable_request_id(), *requestId);
+
+        if (const auto* startTimeString = httpHeaders->Find(StartTimeHeaderName)) {
+            i64 startTime;
+            if (!TryFromString(*startTimeString, startTime)) {
+                return TError("Invalid %Qv header value", StartTimeHeaderName)
+                    .With("value", *startTimeString);
+            }
+            rpcHeader->set_start_time(startTime);
+        }
 
         auto getCredentialsExt = [&] {
             return rpcHeader->MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext);

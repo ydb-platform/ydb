@@ -55,6 +55,10 @@ public:
         return Broken;
     }
 
+    void SetBroken() {
+        Broken = true;
+    }
+
     ui64 GetInternalGenerationCounter() const {
         return IsBroken() ? TSysTables::TLocksTable::TLock::ESetErrors::ErrorBroken : 0;
     }
@@ -77,6 +81,8 @@ private:
     bool Aborting = false;
     bool Aborted = false;
     ui64 TxId = 0;
+
+    void SetTxId(const ui64 txId);
 
 public:
     ui64 GetLockId() const {
@@ -111,7 +117,7 @@ public:
     }
 
     void SetBroken() {
-        SharingInfo->Broken = true;
+        SharingInfo->SetBroken();
     }
 
     bool IsBroken() const {
@@ -158,7 +164,7 @@ public:
         return Aborted;
     }
 
-    void SetTxId(const ui64 txId);
+    bool TryProposeTransaction(const ui64 txId);
     bool IsTxIdAssigned() const;
     ui64 GetTxId() const;
 
@@ -232,6 +238,10 @@ public:
     }
 
     bool Load(NTabletFlatExecutor::TTransactionContext& txc);
+
+    std::vector<ui64> GetLockIdsOfNotProposedTransactions() const;
+    bool HasWriteOperations(const TInternalPathId pathId) const;
+
     void AddEventForTx(TColumnShard& owner, const ui64 txId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void AddEventForLock(TColumnShard& owner, const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer);
     void SetOperationFinished(const TOperationWriteId writeId);

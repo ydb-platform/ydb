@@ -4,6 +4,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -56,7 +58,8 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
-    AFL_DEBUG(NKikimrServices::TX_DATASHARD)("event", "subdomain_found");
+    YDB_LOG_DEBUG("Handle TEvSubDomainPathIdFound",
+        {"ev", ev->Get()->ToString()});
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
@@ -202,9 +205,10 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
 
         const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at datashard " << TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state",
+            {"pathId", msg->PathId},
+            {"outOfSpace", outOfSpace},
+            {"tabletId", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
 
@@ -225,3 +229,7 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

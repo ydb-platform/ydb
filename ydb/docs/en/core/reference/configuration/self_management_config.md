@@ -4,6 +4,7 @@ The `self_management_config` section configures [distributed configuration V2](.
 
 ## Syntax
 
+
 ```yaml
 self_management_config:
   enabled: true
@@ -14,10 +15,11 @@ self_management_config:
   - 3
 ```
 
+
 ## Parameters {#parameters}
 
 | Parameter | Default value | Description |
-|-----------|---------------|-------------|
+| --- | --- | --- |
 | `enabled` | `false` | Enables the distributed configuration mechanism in configuration V2. |
 | `automatic_static_group_management` | `false` | Allows distributed configuration to change static group VDisk placement automatically. |
 | `static_group_self_heal_allowed_nodes` | `[]` | Restricts the set of nodes to which SelfHeal can move a static group VDisk. Specify a list of node IDs. An empty list means that no restrictions apply. |

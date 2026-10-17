@@ -91,7 +91,7 @@ public:
 
     void Stop();
 
-    const NSplitter::TSplitSettings& GetBlobSplitSettings() const;
+    NSplitter::TSplitSettings GetBlobSplitSettings() const;
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
 
@@ -129,6 +129,9 @@ public:
     std::shared_ptr<IBlobsDeclareRemovingAction> StartDeclareRemovingAction(const NBlobOperations::EConsumer consumerId) {
         AFL_VERIFY(IsReady());
         return DoStartDeclareRemovingAction(Counters->GetConsumerCounter(consumerId)->GetRemoveDeclareCounters());
+    }
+
+    virtual void UpdateChannelApproximateFreeSpace(ui32 /*channel*/, float /*approximateFreeSpaceShare*/) {
     }
 
     std::shared_ptr<IBlobsWritingAction> StartWritingAction(const NBlobOperations::EConsumer consumerId) {

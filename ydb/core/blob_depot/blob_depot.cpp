@@ -77,6 +77,24 @@ namespace NKikimr::NBlobDepot {
                     << " NextExpectedMsgId# " << info.NextExpectedMsgId << " Type# " << Sprintf("%08" PRIx32,
                     ev->GetTypeRewrite()) << " Id# " << GetLogId());
                 ++info.NextExpectedMsgId;
+
+                // A newer pipe may have registered while this request was queued. Use the sender's node when the
+                // initial registration has not yet recorded NodeId, and compare connection order rather than
+                // registration delivery order. The last accepted sequence survives disconnect, so an old pipe
+                // cannot become current again even after its replacement has disconnected.
+                const ui32 nodeId = info.NodeId.value_or(ev->Sender.NodeId());
+                const auto agentIt = Agents.find(nodeId);
+                if (agentIt != Agents.end() && info.ConnectionSequence < agentIt->second.LastConnectionSequence) {
+                    YDB_LOG_DEBUG("HandleDelivery dropped for superseded connection",
+                        {"marker", "BDT94"},
+                        {"id", GetLogId()},
+                        {"requestId", ev->Cookie},
+                        {"sender", ev->Sender},
+                        {"pipeServerId", ev->Recipient},
+                        {"type", ev->Type});
+                    return;
+                }
+
                 HandleFromAgent(ev);
             };
 
@@ -144,8 +162,13 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
 
+                hFunc(TEvTablet::TEvMoveData, Handle);
+                cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
+                hFunc(TEvMoveDataBlobCopied, Handle);
+
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+                cFunc(TEvPrivate::EvCheckExpiredAgents, HandleCheckExpiredAgents);
 
                 cFunc(TEvPrivate::EvCommitCertainKeys, Data->HandleCommitCertainKeys);
                 cFunc(TEvPrivate::EvDoGroupMetricsExchange, DoGroupMetricsExchange);
@@ -173,7 +196,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const TActorId& actorId : {GroupAssimilatorId}) {
+        for (const TActorId& actorId : {GroupAssimilatorId, CopyBlobActorId}) {
             if (actorId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }

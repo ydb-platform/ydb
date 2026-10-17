@@ -97,6 +97,8 @@ protected:
     virtual TTargetWithStreamCounters* GetCountersImpl();
 
 private:
+    bool CanDetachWithoutStream() const;
+
     std::unique_ptr<TTargetWithStreamStats> Stats;
     std::unique_ptr<TTargetWithStreamCounters> Counters;
 

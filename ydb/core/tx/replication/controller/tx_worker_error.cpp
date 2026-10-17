@@ -1,10 +1,13 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxWorkerError: public TTxBase {
     const TWorkerId WorkerId;
     const TString Error;
+    bool RemoveStoppedWorker = false;
 
 public:
     explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error)
@@ -19,35 +22,48 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute"
-            << ": workerId# " << WorkerId
-            << ", error# " << Error);
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"workerId", WorkerId},
+            {"error", Error});
 
         auto replication = Self->Find(WorkerId.ReplicationId());
         if (!replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << WorkerId.ReplicationId());
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"rid", WorkerId.ReplicationId()});
             return true;
         }
 
         if (replication->GetState() == TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication is being removed"
-                << ": rid# " << WorkerId.ReplicationId());
+            YDB_LOG_WARN_CTX(ctx, "Replication is being removed",
+                {"rid", WorkerId.ReplicationId()});
             return true;
         }
 
         auto* target = replication->FindTarget(WorkerId.TargetId());
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << WorkerId.ReplicationId()
-                << ", tid# " << WorkerId.TargetId());
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"rid", WorkerId.ReplicationId()},
+                {"tid", WorkerId.TargetId()});
             return true;
         }
 
-        CLOG_E(ctx, "Worker error"
-            << ": rid# " << WorkerId.ReplicationId()
-            << ", tid# " << WorkerId.TargetId()
-            << ", error# " << Error);
+        if (target->GetDstState() == TReplication::EDstState::Removing) {
+            return true;
+        }
+
+        const auto build = Self->IndexBuilds.find({WorkerId.ReplicationId(), WorkerId.TargetId()});
+        if (build != Self->IndexBuilds.end() && Self->IsCancelledIndexBuild(build->second)) {
+            // Removal may not have reached RemoveQueue when this error was
+            // received. Check the durable build phase when the transaction runs.
+            RemoveStoppedWorker = true;
+            return true;
+        }
+
+        YDB_LOG_ERROR_CTX(ctx, "Worker error",
+            {"rid", WorkerId.ReplicationId()},
+            {"tid", WorkerId.TargetId()},
+            {"error", Error});
 
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
@@ -69,7 +85,25 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        if (RemoveStoppedWorker) {
+            const auto worker = Self->Workers.find(WorkerId);
+            if (worker != Self->Workers.end() && worker->second.HasSession()) {
+                const auto session = Self->Sessions.find(worker->second.GetSession());
+                if (session != Self->Sessions.end()) {
+                    session->second.DetachWorker(WorkerId);
+                }
+
+                worker->second.ClearSession();
+            }
+
+            // STATUS_STOPPED already confirms that the cancelled writer has
+            // exited; do not wait for another stop acknowledgement.
+            Self->RemoveQueue.insert(WorkerId);
+            Self->RemoveWorker(WorkerId, ctx);
+        }
     }
 
 }; // TTxWorkerError

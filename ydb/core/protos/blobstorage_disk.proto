@@ -90,9 +90,10 @@ message TPDiskMetrics {
     optional TPDiskState.E State = 10;
 
     optional uint64 UpdateTimestamp = 11; // TInstant::GetValue()
-    optional uint64 SlotCount = 12;
+    optional uint64 ExpectedSlotCount = 12;
     optional uint32 SlotSizeInUnits = 13;
     optional double PDiskUsage = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 15;  // Max(SharedQuota.Color, CommonLog.Color)
     optional uint64 ExpectedSlotSize = 16; // expected slot size for space limit calculation, 0 if not set
+    optional uint64 UserChunkPoolSize = 17; // in bytes; total size of all chunks in shared quota
 }

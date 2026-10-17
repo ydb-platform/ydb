@@ -24,11 +24,10 @@ struct THunkDescriptor
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSerializableHunkDescriptor
+struct TSerializableHunkDescriptor
     : public THunkDescriptor
     , public NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSerializableHunkDescriptor);
 
     static void Register(TRegistrar registrar);
@@ -104,11 +103,10 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
     NTransactionClient::TTimestamp Timestamp;
 };
 
-class TSerializableGetOrderedTabletSafeTrimRowCountRequest
+struct TSerializableGetOrderedTabletSafeTrimRowCountRequest
     : public TGetOrderedTabletSafeTrimRowCountRequest
     , public NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSerializableGetOrderedTabletSafeTrimRowCountRequest);
 
     static void Register(TRegistrar registrar);
@@ -116,20 +114,6 @@ public:
 
 using TSerializableGetOrderedTabletSafeTrimRowCountRequestPtr =
     TIntrusivePtr<TSerializableGetOrderedTabletSafeTrimRowCountRequest>;
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TRegisterShuffleChunksOptions
-    : public TTimeoutOptions
-{
-    bool OverwriteExistingWriterData = false;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TFetchShuffleChunksOptions
-    : public TTimeoutOptions
-{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -194,7 +178,7 @@ struct IInternalClient
     //! Same as NApi::IClient::PullQueue, but without authentication.
     //! This is used inside methods like NApi::IClient::PullQueueConsumer, which perform their own authentication
     //! and allow reading from a queue without having read permissions for the underlying dynamic table.
-    virtual TFuture<NQueueClient::IQueueRowsetPtr> PullQueueUnauthenticated(
+    virtual TFuture<TPullQueueResult> PullQueueUnauthenticated(
         const NYPath::TRichYPath& queuePath,
         i64 offset,
         int partitionIndex,
@@ -228,18 +212,6 @@ struct IInternalClient
         NObjectClient::TObjectId leaseId,
         bool persistent,
         const TUnreferenceLeaseOptions& options = {}) = 0;
-
-    virtual TFuture<void> RegisterShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
-        std::optional<int> writerIndex,
-        const TRegisterShuffleChunksOptions& options = {}) = 0;
-
-    virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
-        const TShuffleHandlePtr& handle,
-        int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const TFetchShuffleChunksOptions& options = {}) = 0;
 
     virtual TFuture<void> ForsakeChaosCoordinator(
         NHydra::TCellId chaosCellId,

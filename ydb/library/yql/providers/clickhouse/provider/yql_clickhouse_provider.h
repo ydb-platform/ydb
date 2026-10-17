@@ -25,7 +25,7 @@ struct TClickHouseState : public TThrRefBase
     std::unordered_map<std::string_view, std::string_view> Timezones;
 
     TTypeAnnotationContext* Types = nullptr;
-    TClickHouseConfiguration::TPtr Configuration = MakeIntrusive<TClickHouseConfiguration>();
+    TClickHouseConfiguration::TPtr Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;

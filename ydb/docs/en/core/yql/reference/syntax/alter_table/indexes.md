@@ -1,4 +1,4 @@
-# Adding, deleting, and renaming an index
+# Managing Indexes
 
 ## Adding an index {#add-index}
 
@@ -20,6 +20,12 @@ ALTER TABLE `<table_name>`
 
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
+
+{% if backend_name == "YDB" and oss == true %}
+
+You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
+
+{% endif %}
 
 Parameters for all index types:
 
@@ -47,23 +53,31 @@ Parameters specific to full-text indexes:
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
-{% if backend_name == "YDB" and oss == true %}
+### Parameters of the local min_max index {#local-min-max}
 
-You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
-
-{% endif %}
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
 
-Features of local Bloom indexes:
+Features of local bloom indexes:
 
 {% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
 
 {% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+Features of the local min_max index:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
 
 {% endnote %}
 
@@ -139,6 +153,16 @@ ALTER TABLE `/Root/Table`
 ```
 
 
+min_max index:
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
+```
+
+
 ## Changing index parameters {#alter-index}
 
 Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
@@ -160,7 +184,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 * `<index_name>` - name of the index to change.
 * `<setting_name>` - name of the parameter to change. The set of allowed parameters depends on the index type:
 
-  * For global secondary indexes:
+  * for global secondary indexes:
 
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
@@ -172,6 +196,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` and `CASE_SENSITIVE` (only for `bloom_ngram_filter`)
+  * The min_max index does not support `ALTER INDEX`.
 
 {% note info %}
 
@@ -202,7 +227,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 
-For local Bloom indexes, you can also change parameters specific to them, for example:
+For local bloom indexes, you can also change their specific parameters, for example:
 
 
 ```yql
@@ -213,6 +238,50 @@ ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
 );
 ```
 
+
+## Rebuilding a Vector Index {#rebuild-index}
+
+`REBUILD INDEX` builds a replacement for an existing [vector index](../../../../dev/vector-indexes.md) from the table data and atomically replaces the old index under the same name. Use it to recalculate clusters after the data distribution changes or to change clustering parameters.
+
+The operation supports only `vector_kmeans_tree` indexes, including filtered and covering indexes. The index must already exist and be in the `Ready` state, which means its previous build has completed. You can check that the index exists and verify its type with [scheme describe](../../../../reference/ydb-cli/commands/scheme-describe.md).
+
+To rebuild an index with its current settings:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`;
+```
+
+To change clustering parameters during the rebuild, add `WITH`:
+
+```yql
+ALTER TABLE `my_table` REBUILD INDEX `my_vector_index`
+WITH (clusters = 128, levels = 2);
+```
+
+The `WITH` clause accepts the following parameters:
+
+| Parameter | Description |
+| --- | --- |
+| `clusters` | Number of clusters. An integer from `2` to `2048`. |
+| `levels` | Number of tree levels. An integer from `1` to `16`. |
+| `overlap_clusters` | Number of nearest leaf clusters to which each vector is added. When specified, an integer from `2` to `2048` and no greater than `clusters`. When omitted, retains the existing setting; if the existing index has no value, the effective default is `1`. |
+| `overlap_ratio` | Non-negative distance ratio threshold for adding a vector to additional clusters; `0` disables the threshold. |
+| `adaptive_clusters` | Whether to select the number of clusters automatically for each filtering-column value in a filtered index. Accepts `true` or `false`. |
+| `parallel` | Maximum number of partition handlers involved in rebuilding. Uses the same limits and default as [`ADD INDEX`](#add-index). |
+
+Clustering parameters omitted from `WITH` retain their existing values. In particular, omitting `clusters` and `levels` does not automatically select new values for the current table size. The [vector index parameter constraints](#add-index) also apply when rebuilding.
+
+The index keeps its indexed and covered columns. Its distance or similarity function, vector value type, and vector dimensionality are inherited from the existing index. Do not specify `distance`, `similarity`, `vector_type`, or `vector_dimension` in `WITH`: the statement rejects these parameters, even if their values match the existing settings. To change them, create a separate index.
+
+The existing index remains available for queries and continues to receive table updates while the replacement is built. After a successful build, {{ ydb-short-name }} atomically switches to the replacement. Queries continue to use the same index name. If rebuilding fails or is cancelled before replacement, the old index remains available. Rebuilding can resume after a restart of the schema management tablet.
+
+Replacing the index can invalidate cached query plans. A query using the index may return a transient `ABORTED` status during the switch. If this happens while the [rebuild operation](../../../../reference/ydb-cli/operation-list.md) is completing, retry the entire query using the standard [SDK retry mechanism](../../../../recipes/ydb-sdk/retry.md).
+
+{% note warning %}
+
+The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, [pause application writes and wait for the rebuild to succeed](../../../../dev/vector-indexes.md#rebuild). This temporary limitation is planned to be removed in a future {{ ydb-short-name }} release.
+
+{% endnote %}
 
 ## Deleting an index {#drop-index}
 

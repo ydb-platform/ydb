@@ -113,6 +113,12 @@ TCoroutine<R(TArgs...)>::TCoroutine(TCallee&& callee, const EExecutionStackKind 
 }
 
 template <class R, class... TArgs>
+TCoroutine<R(TArgs...)>::~TCoroutine()
+{
+    Abandon();
+}
+
+template <class R, class... TArgs>
 template <class... TParams>
 const std::optional<R>& TCoroutine<R(TArgs...)>::Run(TParams&& ... params)
 {
@@ -159,6 +165,12 @@ TCoroutine<void(TArgs...)>::TCoroutine(TCallee&& callee, const EExecutionStackKi
     : NDetail::TCoroutineBase(MakeBody(std::forward<TCallee>(callee)), stackKind)
 {
     static_assert(NMpl::CInvocable<TCallee, void(TCoroutine<void(TArgs...)>&, TArgs...)>);
+}
+
+template <class... TArgs>
+TCoroutine<void(TArgs...)>::~TCoroutine()
+{
+    Abandon();
 }
 
 template <class... TArgs>

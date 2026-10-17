@@ -3,7 +3,7 @@
 #include "x86simdsort-internal.h"
 
 namespace xss {
-namespace avx512 {
+namespace fp16_spr {
     template <>
     void qsort(_Float16 *arr, size_t size, bool hasnan, bool descending)
     {
@@ -27,5 +27,5 @@ namespace avx512 {
     {
         x86simdsortStatic::partial_qsort(arr, k, arrsize, hasnan, descending);
     }
-} // namespace avx512
+} // namespace fp16_spr
 } // namespace xss

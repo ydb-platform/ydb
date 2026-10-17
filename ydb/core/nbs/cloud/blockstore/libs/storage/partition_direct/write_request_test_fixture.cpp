@@ -38,12 +38,13 @@ void TWriteRequestTestFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [this]   //
         (ui32 vChunkIndex,
          ui8 hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
+         const TBlockChecksums& checksums,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+        Y_UNUSED(hostIndex, pBufferKey, traceId, guardedSglist, checksums);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -60,10 +61,11 @@ void TWriteRequestTestFixture::Init()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
-            ui64 lsn,
-            TBlockRange64 range,
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId,
             IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
     {
@@ -71,10 +73,11 @@ void TWriteRequestTestFixture::Init()
             vChunkIndex,
             coordinatorHostIndex,
             hostIndexes,
-            lsn,
+            pBufferKey,
             range,
             replyTimeout,
             guardedSglist,
+            checksums,
             traceId);
 
         // Store the callback so tests can invoke it later to simulate a
@@ -142,16 +145,22 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
-            ui64 lsn,
-            TBlockRange64 range,
+            TPBufferKey pBufferKey,
+            TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId,
             IDirectBlockGroup::TWriteBlocksToManyPBuffersCallback callback)
     {
-        Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
+        Y_UNUSED(
+            coordinatorHostIndex,
+            replyTimeout,
+            guardedSglist,
+            checksums,
+            traceId);
 
-        UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
+        UNIT_ASSERT_VALUES_EQUAL(UserPBufferKey.Print(), pBufferKey.Print());
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
@@ -188,7 +197,7 @@ TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
         Range);
-    bundle->SetLsn(UserLsn);
+    bundle->SetPBufferKey(UserPBufferKey);
 
     WriteClient->Response.reset();
     DirectBlockGroup->Oracle.WriteMode = writeMode;

@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/services/persqueue_v1/actors/schema/pqv1)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
 SIZE(MEDIUM)
 
 YQL_LAST_ABI_VERSION()
@@ -8,6 +10,7 @@ SRCS(
     alter_topic_sdk_ut.cpp
     create_topic_ut.cpp
     create_topic_sdk_ut.cpp
+    describe_topic_sdk_ut.cpp
     pqv1_sdk_test_utils.cpp
     schema_ops_ut.cpp
 )

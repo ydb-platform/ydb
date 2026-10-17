@@ -48,8 +48,6 @@ SRCS(
     pqtablet_ut.cpp
     sourceid_ut.cpp
     user_info_ut.cpp
-    pqrb_describes_ut.cpp
-    partition_scale_manager_graph_cmp_ut.cpp
     utils_ut.cpp
     events_ut.cpp
     write_id_ut.cpp

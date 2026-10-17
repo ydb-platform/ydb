@@ -1,4 +1,9 @@
 {
+    "test.test[BFloat16Serialization]": [
+        {
+            "uri": "file://test.test_BFloat16Serialization_/results.txt"
+        }
+    ],
     "test.test[BitSerialization]": [
         {
             "uri": "file://test.test_BitSerialization_/results.txt"
@@ -52,6 +57,11 @@
     "test.test[EuclideanDistance]": [
         {
             "uri": "file://test.test_EuclideanDistance_/results.txt"
+        }
+    ],
+    "test.test[Float16Serialization]": [
+        {
+            "uri": "file://test.test_Float16Serialization_/results.txt"
         }
     ],
     "test.test[InnerProductSimilarity]": [

@@ -9,4 +9,4 @@ namespace NYql {
 
 IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TTypeAnnotationContext& types, TExprContext& ctx);
 
-}
+} // namespace NYql

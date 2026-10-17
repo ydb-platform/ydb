@@ -11,7 +11,6 @@
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 
-
 namespace NYql::NTypeAnnImpl {
 
 namespace {
@@ -65,8 +64,11 @@ const TTypeAnnotationNode* ResolveCommonVariantAlternativeType(const TExprNode& 
         auto firstType = tupleType->GetItems()[0];
         for (size_t i = 1; i < tupleType->GetSize(); ++i) {
             if (firstType != tupleType->GetItems()[i]) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input.Pos()), TStringBuilder()
-                    << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *tupleType->GetItems()[i])));
+                ctx.Expr.AddError(TIssue(
+                    ctx.Expr.GetPosition(input.Pos()),
+                    TStringBuilder()
+                        << "All Variant item types should be equal: "
+                        << GetTypeDiff(*firstType, *tupleType->GetItems()[i])));
                 return nullptr;
             }
         }
@@ -76,8 +78,11 @@ const TTypeAnnotationNode* ResolveCommonVariantAlternativeType(const TExprNode& 
         auto firstType = structType->GetItems()[0]->GetItemType();
         for (size_t i = 1; i < structType->GetSize(); ++i) {
             if (firstType != structType->GetItems()[i]->GetItemType()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input.Pos()), TStringBuilder()
-                    << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *structType->GetItems()[i]->GetItemType())));
+                ctx.Expr.AddError(TIssue(
+                    ctx.Expr.GetPosition(input.Pos()),
+                    TStringBuilder()
+                        << "All Variant item types should be equal: "
+                        << GetTypeDiff(*firstType, *structType->GetItems()[i]->GetItemType())));
                 return nullptr;
             }
         }
@@ -178,12 +183,14 @@ IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input,
         for (auto& atom : input->Child(1)->ChildrenList()) {
             ui32 idx;
             if (!TryFromString(atom->Content(), idx)) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()),
+                ctx.Expr.AddError(TIssue(
+                    ctx.Expr.GetPosition(atom->Pos()),
                     TStringBuilder() << "Expecting integer as replicate index, got: " << atom->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
             if (idx >= streamItemTypes.size() - 1) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()),
+                ctx.Expr.AddError(TIssue(
+                    ctx.Expr.GetPosition(atom->Pos()),
                     TStringBuilder() << "Replicate index too big: " << idx << ", should be less than " << (streamItemTypes.size() - 1)));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -249,21 +256,24 @@ IGraphTransformer::TStatus BlockCompressWrapper(const TExprNode::TPtr& input, TE
 
     ui32 index = 0;
     if (!TryFromString(input->Child(1)->Content(), index)) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
-                          TStringBuilder() << "Failed to convert to integer: " << input->Child(1)->Content()));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Child(1)->Pos()),
+            TStringBuilder() << "Failed to convert to integer: " << input->Child(1)->Content()));
         return IGraphTransformer::TStatus::Error;
     }
 
     if (index >= blockItemTypes.size() - 1) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()),
-                          TStringBuilder() << "Index out of range. Index: " << index << ", maximum is: " << blockItemTypes.size() - 1));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Child(1)->Pos()),
+            TStringBuilder() << "Index out of range. Index: " << index << ", maximum is: " << blockItemTypes.size() - 1));
         return IGraphTransformer::TStatus::Error;
     }
 
     auto bitmapType = blockItemTypes[index];
     if (bitmapType->GetKind() != ETypeAnnotationKind::Data || bitmapType->Cast<TDataExprType>()->GetSlot() != NUdf::EDataSlot::Bool) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
-                          TStringBuilder() << "Expecting Bool as bitmap column type, but got: " << *bitmapType));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Head().Pos()),
+            TStringBuilder() << "Expecting Bool as bitmap column type, but got: " << *bitmapType));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -293,8 +303,9 @@ IGraphTransformer::TStatus BlockExistsWrapper(const TExprNode::TPtr& input, TExp
     if (blockItemType->GetKind() != ETypeAnnotationKind::Optional &&
         blockItemType->GetKind() != ETypeAnnotationKind::Pg)
     {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() <<
-            "Expecting Optional or Pg type as an argument, but got: " << *blockItemType));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Head().Pos()),
+            TStringBuilder() << "Expecting Optional or Pg type as an argument, but got: " << *blockItemType));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -338,7 +349,7 @@ IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TE
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto first  = input->Child(0);
+    auto first = input->Child(0);
     auto second = input->Child(1);
     if (!EnsureBlockOrScalarType(*first, ctx.Expr) ||
         !EnsureBlockOrScalarType(*second, ctx.Expr))
@@ -349,8 +360,9 @@ IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TE
     bool firstIsScalar;
     auto firstItemType = GetBlockItemType(*first->GetTypeAnn(), firstIsScalar);
     if (firstItemType->GetKind() != ETypeAnnotationKind::Optional && firstItemType->GetKind() != ETypeAnnotationKind::Pg) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(first->Pos()), TStringBuilder() <<
-            "Expecting Optional or Pg type as first argument, but got: " << *firstItemType));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(first->Pos()),
+            TStringBuilder() << "Expecting Optional or Pg type as first argument, but got: " << *firstItemType));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -360,8 +372,7 @@ IGraphTransformer::TStatus BlockCoalesceWrapper(const TExprNode::TPtr& input, TE
     if (!IsSameAnnotation(*firstItemType, *secondItemType) &&
         !IsSameAnnotation(*RemoveOptionalType(firstItemType), *secondItemType))
     {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
-            "Uncompatible coalesce types: first is " << *firstItemType << ", second is " << *secondItemType));
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Uncompatible coalesce types: first is " << *firstItemType << ", second is " << *secondItemType));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -378,7 +389,7 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
 
     bool isOptionalResult = false;
     bool allScalars = true;
-    for (ui32 i = 0U; i < input->ChildrenSize() ; ++i) {
+    for (ui32 i = 0U; i < input->ChildrenSize(); ++i) {
         auto child = input->Child(i);
         if (!EnsureBlockOrScalarType(*child, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -410,7 +421,7 @@ IGraphTransformer::TStatus BlockLogicalWrapper(const TExprNode::TPtr& input, TEx
 }
 
 IGraphTransformer::TStatus BlockDecimalBinaryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    return DecimalBinaryWrapperBase(input, output, ctx, /*blocks=*/ true);
+    return DecimalBinaryWrapperBase(input, output, ctx, /*blocks=*/true);
 }
 
 IGraphTransformer::TStatus BlockGuessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -603,8 +614,8 @@ IGraphTransformer::TStatus BlockDynamicVariantWrapper(const TExprNode::TPtr& inp
     }
 
     const EDataSlot expectedIndexSlot = variantType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple
-        ? EDataSlot::Uint32
-        : EDataSlot::Utf8;
+                                            ? EDataSlot::Uint32
+                                            : EDataSlot::Utf8;
     if (!EnsureSpecificDataType(indexNode->Pos(), *indexDataType, expectedIndexSlot, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -621,7 +632,7 @@ IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNod
     }
 
     auto pred = input->Child(0);
-    auto thenNode  = input->Child(1);
+    auto thenNode = input->Child(1);
     auto elseNode = input->Child(2);
 
     if (!EnsureBlockOrScalarType(*pred, ctx.Expr) ||
@@ -644,8 +655,9 @@ IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNod
     const TTypeAnnotationNode* elseItemType = GetBlockItemType(*elseNode->GetTypeAnn(), elseIsScalar);
 
     if (!IsSameAnnotation(*thenItemType, *elseItemType)) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() <<
-            "Mismatch item types: then branch is " << *thenItemType << ", else branch is " << *elseItemType));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Mismatch item types: then branch is " << *thenItemType << ", else branch is " << *elseItemType));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -806,7 +818,6 @@ IGraphTransformer::TStatus BlockMemberWrapper(const TExprNode::TPtr& input, TExp
     return IGraphTransformer::TStatus::Ok;
 }
 
-
 IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -834,8 +845,7 @@ IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNo
 
             tupleType = itemType->Cast<TTupleExprType>();
             isOptional = true;
-        }
-        else {
+        } else {
             if (!EnsureTupleType(child->Pos(), *blockItemType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -855,8 +865,9 @@ IGraphTransformer::TStatus BlockNthWrapper(const TExprNode::TPtr& input, TExprNo
         }
 
         if (index >= tupleType->GetSize()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Index out of range. Index: " <<
-                index << ", size: " << tupleType->GetSize()));
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Index out of range. Index: " << index << ", size: " << tupleType->GetSize()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -961,7 +972,7 @@ IGraphTransformer::TStatus BlockFuncWrapper(const TExprNode::TPtr& input, TExprN
 }
 
 bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems,
-    TExprNode& keys, TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
+                       TExprNode& keys, TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx) {
     if (!EnsureTupleMinSize(keys, 1, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
@@ -984,7 +995,7 @@ bool ValidateBlockKeys(TPositionHandle pos, const TTypeAnnotationNode::TListType
 }
 
 bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType& inputItems, TExprNode& aggs,
-    TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState, bool many) {
+                       TTypeAnnotationNode::TListType& retMultiType, TExprContext& ctx, bool overState, bool many) {
     if (!EnsureTuple(aggs, ctx)) {
         return false;
     }
@@ -1019,16 +1030,18 @@ bool ValidateBlockAggs(TPositionHandle pos, const TTypeAnnotationNode::TListType
             }
 
             if (many && inputItems[argColumnIndex]->GetKind() != ETypeAnnotationKind::Optional) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
-                    "Expected optional state, but got: " << *inputItems[argColumnIndex]));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(pos),
+                    TStringBuilder() << "Expected optional state, but got: " << *inputItems[argColumnIndex]));
                 return false;
             }
 
             auto applyArgType = agg->Head().Child(i + (overState ? 1 : 0))->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             auto expectedType = many ? ctx.MakeType<TOptionalExprType>(applyArgType) : applyArgType;
             if (!IsSameAnnotation(*inputItems[argColumnIndex], *expectedType)) {
-                ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
-                    "Mismatch argument type, expected: " << *expectedType << ", got: " << *inputItems[argColumnIndex]));
+                ctx.AddError(TIssue(
+                    ctx.GetPosition(pos),
+                    TStringBuilder() << "Mismatch argument type, expected: " << *expectedType << ", got: " << *inputItems[argColumnIndex]));
                 return false;
             }
         }
@@ -1436,7 +1449,8 @@ IGraphTransformer::TStatus BlockPgOpWrapper(const TExprNode::TPtr& input, TExprN
         bool isScalar;
         auto itemType = GetBlockItemType(*input->Child(i)->GetTypeAnn(), isScalar);
         if (itemType->GetKind() != ETypeAnnotationKind::Pg) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Expected PG type, but got: " << *itemType));
             return IGraphTransformer::TStatus::Error;
         }
@@ -1449,7 +1463,8 @@ IGraphTransformer::TStatus BlockPgOpWrapper(const TExprNode::TPtr& input, TExprN
     auto operId = FromString<ui32>(input->Child(1)->Content());
     const auto& oper = NPg::LookupOper(operId, argTypes);
     if (oper.Name != name) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Mismatch of resolved operator name, expected: " << name << ", but got:" << oper.Name));
         return IGraphTransformer::TStatus::Error;
     }
@@ -1502,7 +1517,8 @@ IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExp
                 return IGraphTransformer::TStatus::Error;
             }
         } else {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unexpected setting " << content << " in function " << name));
 
             return IGraphTransformer::TStatus::Error;
@@ -1520,7 +1536,7 @@ IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExp
         auto itemType = GetBlockItemType(*input->Child(i)->GetTypeAnn(), isScalar);
         if (itemType->GetKind() != ETypeAnnotationKind::Pg) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Expected PG type, but got: " << *itemType));
+                                     TStringBuilder() << "Expected PG type, but got: " << *itemType));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1532,26 +1548,30 @@ IGraphTransformer::TStatus BlockPgCallWrapper(const TExprNode::TPtr& input, TExp
     auto procId = FromString<ui32>(input->Child(1)->Content());
     const auto& proc = NPg::LookupProc(procId, argTypes);
     if (proc.Name != name) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Mismatch of resolved function name, expected: " << name << ", but got:" << proc.Name));
         return IGraphTransformer::TStatus::Error;
     }
 
     if (proc.Kind == NPg::EProcKind::Window) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Window function " << name << " cannot be called directly"));
         return IGraphTransformer::TStatus::Error;
     }
 
     if (proc.Kind == NPg::EProcKind::Aggregate) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Aggregate function " << name << " cannot be called directly"));
         return IGraphTransformer::TStatus::Error;
     }
 
     const TTypeAnnotationNode* result = ctx.Expr.MakeType<TPgExprType>(proc.ResultType);
     if (proc.ReturnSet) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Not supported return set"));
         return IGraphTransformer::TStatus::Error;
     }
@@ -1579,15 +1599,16 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
         }
 
         if (currentItemTypes.size() != commonItemTypes.size()) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(child->Pos()),
                 TStringBuilder() << "Expected same width ( " << commonItemTypes.size() << ") on all inputs, but got: " << *child->GetTypeAnn() << " on input #" << idx));
             return IGraphTransformer::TStatus::Error;
         }
 
-
         for (size_t i = 0; i < currentItemTypes.size(); ++i) {
             if (!IsSameAnnotation(*currentItemTypes[i], *commonItemTypes[i])) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
+                ctx.Expr.AddError(TIssue(
+                    ctx.Expr.GetPosition(child->Pos()),
                     TStringBuilder() << "Expected item type " << *commonItemTypes[i] << " at column #" << i << " on input #" << idx << ", but got : " << *currentItemTypes[i]));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -1604,4 +1625,3 @@ IGraphTransformer::TStatus BlockExtendWrapper(const TExprNode::TPtr& input, TExp
 }
 
 } // namespace NYql::NTypeAnnImpl
-

@@ -148,7 +148,15 @@ struct TTabletRangeOptions;
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
+struct TTableReaderTimingStatistics;
+struct TRemoteTableReaderTimingStatistics;
+
 struct TGetCurrentUserOptions;
+struct TGetJobStderrOptions;
+struct TGetJobStderrResponse;
+struct TSelectRowsOptions;
+struct TTabletReadOptions;
+struct TOperation;
 
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)

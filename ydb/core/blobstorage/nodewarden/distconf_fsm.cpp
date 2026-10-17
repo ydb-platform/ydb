@@ -22,13 +22,6 @@ namespace NKikimr::NStorage {
                 connected.push_back(nodeId);
             }
 
-            ui32 numConnected = 0;
-            ui32 numDisconnected = 0;
-            for (const auto& [nodeId, node] : AllNodeIds) {
-                ++(AllBoundNodes.contains(node) ? numConnected : numDisconnected);
-            }
-            MajorityOfNodesConnected = numConnected > numDisconnected;
-
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
@@ -49,7 +42,14 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::CheckRootNodeStatus() {
+    void TDistributedConfigKeeper::ReconcileNodeRole() {
+        UpdateQuorums();
+        if (RootProbe && (HasStaticGroupConfig() || !AllNodeIds.contains(RootProbe->NodeId)
+                          || AllBoundNodes.contains(AllNodeIds.at(RootProbe->NodeId)))) {
+            AbortRootProbe();
+        }
+        IssueNextBindRequest();
+
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
             RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
             static_cast<bool>(Scepter),
@@ -103,6 +103,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::UnbecomeRoot() {
+        AbortRootProbe();
         if (StateStorageSelfHealActor) {
             Send(new IEventHandle(TEvents::TSystem::Poison, 0, StateStorageSelfHealActor.value(), SelfId(), nullptr, 0));
             StateStorageSelfHealActor.reset();
@@ -115,24 +116,29 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC38"},
             {"rootState", RootState},
             {"reason", reason});
+        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
+        StopRootActivities(reason);
+        RootState = ERootState::ERROR_TIMEOUT;
+        ErrorReason = reason;
+        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
+        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TDistributedConfigKeeper::StopRootActivities(const TString& reason) {
         if (Scepter) {
             UnbecomeRoot();
             Scepter.reset();
             ++ScepterCounter;
         }
-        Y_ABORT_UNLESS(RootState != ERootState::ERROR_TIMEOUT);
-        RootState = ERootState::ERROR_TIMEOUT;
-        ErrorReason = reason;
+        RootState = ERootState::INITIAL;
         OpQueueOnError(reason);
         if (CurrentProposition) {
-           UndoCurrentPropositionNodeChange(*CurrentProposition);
-           CurrentProposition.reset();
+            UndoCurrentPropositionNodeChange(*CurrentProposition);
+            CurrentProposition.reset();
         }
         CurrentSelfAssemblyUUID.reset();
         ApplyConfigUpdateToDynamicNodes(true);
         AbortAllScatterTasks(std::nullopt);
-        const TDuration timeout = TDuration::FromValue(ErrorTimeout.GetValue() * (25 + RandomNumber(51u)) / 50);
-        TActivationContext::Schedule(timeout, new IEventHandle(TEvPrivate::EvErrorTimeout, 0, SelfId(), {}, nullptr, 0));
     }
 
     void TDistributedConfigKeeper::HandleErrorTimeout() {
@@ -329,6 +335,7 @@ namespace NKikimr::NStorage {
             std::vector<TSuccessfulDisk> HavingDisksCommitted;
         };
         THashMap<TStorageConfigMeta, TDiskConfigInfo> persistentConfigs;
+        ui64 maxSeenGeneration = 0;
         for (auto&& [field, isCommitted] : {
                     std::make_tuple(&res->GetCommittedConfigs(), true),
                     std::make_tuple(&res->GetProposedConfigs(), false),
@@ -351,6 +358,8 @@ namespace NKikimr::NStorage {
                     r.HavingDisksProposedOrCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
                         disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                     if (isCommitted) {
+                        // A committed copy must be accounted for even before its quorum joins the collection.
+                        maxSeenGeneration = Max(maxSeenGeneration, config.GetGeneration());
                         r.HavingDisksCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
                             disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                     }
@@ -391,13 +400,8 @@ namespace NKikimr::NStorage {
 
         // find the latest actual configuration with quorum
         NKikimrBlobStorage::TStorageConfig *persistedConfig = nullptr;
-        ui64 maxSeenGeneration = 0;
         for (auto& [generation, item] : configsWithQuorum) {
-            auto& [committed, configPtr] = item;
-            if (committed) {
-                maxSeenGeneration = Max(maxSeenGeneration, configPtr->GetGeneration());
-            }
-            persistedConfig = configPtr; // we pick the latest
+            persistedConfig = std::get<1>(item); // we pick the latest
         }
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
             return {.ErrorReason = "Couldn't obtain quorum for configuration that was seen in effect"};

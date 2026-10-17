@@ -19,7 +19,7 @@ struct TPrepareGetPartitionResponse {
     TNextPartitionPersistChanges PersistChanges;
 };
 
-class TMLPConsumer {
+class TMLPConsumer : public TLogPrefix {
 public:
     struct TMetrics {
         ui64 Messages = 0;
@@ -36,6 +36,7 @@ public:
 
     void RestoreReceiveAttemptPartition(const TString& receiveAttemptId, ui32 partitionId, TInstant expiry);
     std::vector<TReceiveAttemptPartitionDelete> CollectExpiredReceiveAttemptPartitions(TInstant now);
+    std::vector<TReceiveAttemptPartitionDelete> ExtractReceiveAttemptPartitions();
 
     const TMetrics& GetMetrics() const;
 
@@ -51,6 +52,7 @@ public:
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
+    TStructuredMessage LogPrefix() const override;
 
 private:
     TDuration GetReceiveAttemptIdPeriod() const;
@@ -83,7 +85,7 @@ private:
     TMetrics Metrics;
 };
 
-class TMLPBalancer {
+class TMLPBalancer : public TLogPrefix {
 public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
@@ -106,7 +108,7 @@ public:
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
 
-    void UpdateConfig(const std::vector<ui32>& addedPartitions);
+    std::vector<TReceiveAttemptPartitionDelete> UpdateConfig(const std::vector<ui32>& addedPartitions);
 
     void SetUseForReading(const TString& consumerName,
                           ui32 partitionId,
@@ -119,6 +121,7 @@ public:
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
     const TPartitionGraph& GetPartitionGraph() const;
     const std::vector<ui32>& GetActivePartitions() const;
+    TStructuredMessage LogPrefix() const override;
 
 private:
     TPersQueueReadBalancer& TopicActor;

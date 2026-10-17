@@ -121,7 +121,7 @@ Only the first text field will be represented as a log line by default. This beh
 ### Macros
 
 The query can contain macros, which simplify syntax and allow for dynamic parts, like date range filters.
-There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macroses will be treated by {{ ydb-short-name }} server-side.
+There are two kinds of macros - [Grafana-level](#macros) and {{ ydb-short-name }}-level. The plugin will parse query text and, before sending it to {{ ydb-short-name }}, substitute variables and Grafana-level macros with particular values. After that {{ ydb-short-name }}-level macros will be treated by {{ ydb-short-name }} server-side.
 
 Here is an example of a query with a macro that will use Grafana's time filter:
 

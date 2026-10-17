@@ -106,6 +106,7 @@ struct TKiExploreTxResults {
     TVector<TKiQueryBlock> QueryBlocks;
     bool HasExecute;
     bool HasErrors;
+    bool HasKillSession = false;
 
     THashSet<const TExprNode*> GetSyncSet() const {
         THashSet<const TExprNode*> syncSet;
@@ -217,14 +218,19 @@ struct TKiExploreTxResults {
                 YQL_ENSURE(indexTables.size() == 1, "Global fulltext plain index should have 1 table");
                 dataTable = indexTable = indexTables[0];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
-            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance) {
                 YQL_ENSURE(indexTables.size() == 4, "Global fulltext relevance index should have 4 tables");
                 indexTable = indexTables[3];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
                 dictTable = indexTables[0];
                 YQL_ENSURE(dictTable.EndsWith(NKikimr::NTableIndex::NFulltext::DictTable));
                 dataTable = indexTables[1];
+                YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
+            } else if (index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                YQL_ENSURE(indexTables.size() == 3, "Global fulltext compact relevance index should have 3 tables");
+                indexTable = indexTables[2];
+                YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::ImplTable));
+                dataTable = indexTables[0];
                 YQL_ENSURE(dataTable.EndsWith(NKikimr::NTableIndex::NFulltext::DocsTable));
             } else {
                 YQL_ENSURE(indexTables.size() == 1, "Only index with one impl table is supported");
@@ -233,8 +239,7 @@ struct TKiExploreTxResults {
 
             if (!isUpdate) {
                 ops[indexTable] = TPrimitiveYdbOperation::Write;
-                if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                    index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                if (!dictTable.empty()) {
                     ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                 }
             } else {
@@ -242,8 +247,7 @@ struct TKiExploreTxResults {
                     if (updateColumns.contains(column)) {
                         // delete old index values and upsert rows into index table
                         ops[indexTable] = TPrimitiveYdbOperation::Write;
-                        if (index.Type == TIndexDescription::EType::GlobalFulltextRelevance ||
-                            index.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance) {
+                        if (!dictTable.empty()) {
                             ops[dictTable] |= TPrimitiveYdbOperation::Read|TPrimitiveYdbOperation::Write;
                         }
                         break;
@@ -732,6 +736,16 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (auto maybeKillSession = node.Maybe<TKiKillSession>()) {
+        if (!checkDataSink(maybeKillSession.Cast().DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        txRes.HasKillSession = true;
+        return true;
+    }
+
     if (auto maybeExecQuery = node.Maybe<TKiExecDataQuery>()) {
         auto execQuery = maybeExecQuery.Cast();
         if (!checkDataSink(execQuery.DataSink())) {
@@ -1155,6 +1169,21 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));
         }
         return txExplore.HasErrors ? nullptr : node.Ptr();
+    }
+
+    if (txExplore.HasKillSession) {
+        bool hasData = txExplore.HasExecute;
+        for (const auto& block : txExplore.QueryBlocks) {
+            // Constant SELECTs have results but no table operations.
+            hasData |= !block.Results.empty() || !block.Effects.empty();
+        }
+        if (hasData) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(commit.Pos()), TIssuesIds::KIKIMR_MIXED_SCHEME_DATA_TX,
+                "KILL SESSION cannot be combined with data queries in a single compiled query. "
+                "Use separate queries or per-statement execution."));
+            return nullptr;
+        }
+        return MakeSchemeTx(commit, ctx);
     }
 
     if (txExplore.HasExecute) {

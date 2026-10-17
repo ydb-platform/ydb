@@ -8,7 +8,7 @@
 
 #include <library/cpp/yt/misc/leaky_global.h>
 
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
 
 #include <any>
 #include <typeindex>
@@ -65,6 +65,7 @@ private:
 };
 
 YT_DEFINE_LEAKY_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
+YT_DEFINE_LEAKY_GLOBAL(const TPropagatingStorage, EmptyPropagatingStorage);
 
 class TPropagatingStorageManager
 {
@@ -85,7 +86,7 @@ private:
     static constexpr int MaxSwitchHandlerCount_ = 16;
     std::atomic<int> SwitchHandlerCount_ = 0;
     std::array<TPropagatingStorageGlobalSwitchHandler, MaxSwitchHandlerCount_> SwitchHandlers_{};
-    NThreading::TForkAwareSpinLock SwitchHandlerLock_;
+    TForkAwareSpinLock SwitchHandlerLock_;
 
     void RunSwitchHandlers(
         const TPropagatingStorage& oldStorage,
@@ -109,8 +110,7 @@ inline const TPropagatingStorage& GetCurrentPropagatingStorage()
     if (auto& slot = NDetail::PropagatingStorageSlot(); slot.IsInitialized()) {
         return *slot;
     } else {
-        static const TPropagatingStorage Empty;
-        return Empty;
+        return NDetail::EmptyPropagatingStorage();
     }
 }
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_ydb_read_actor.cpp
@@ -17,7 +17,5 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/ydb/proto
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

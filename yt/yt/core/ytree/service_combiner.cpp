@@ -89,7 +89,7 @@ private:
 
     const TPromise<void> InitializedPromise_ = NewPromise<void>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, KeyMappingSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, KeyMappingSpinLock_);
     using TKeyMappingOrError = TErrorOr<THashMap<std::string, IYPathServicePtr>>;
     TKeyMappingOrError KeyMapping_;
 
@@ -151,7 +151,8 @@ private:
             ? request->limit()
             : DefaultVirtualChildLimit;
 
-        context->SetRequestInfo("Limit: %v", limit);
+        context->AnnotateRequest()
+            .With("Limit", limit);
 
         std::vector<TFuture<TYPathProxy::TRspGetPtr>> innerFutures;
         for (const auto& service : Services_) {
@@ -213,7 +214,8 @@ private:
             ? request->limit()
             : DefaultVirtualChildLimit;
 
-        context->SetRequestInfo("Limit: %v", limit);
+        context->AnnotateRequest()
+            .With("Limit", limit);
 
         std::vector<TFuture<TYPathProxy::TRspListPtr>> innerFutures;
         for (const auto& service : Services_) {

@@ -93,12 +93,15 @@ def get_gateway_cfg_suffix():
     return get_param('gateway_config_suffix', default_suffix) or ''
 
 
-def get_gateway_cfg_filename():
+def get_gateway_cfg_dir():
     suffix = get_gateway_cfg_suffix()
     if suffix == '':
-        return 'gateways.conf'
-    else:
-        return 'gateways-' + suffix + '.conf'
+        return 'yql/essentials/cfg/tests'
+    return 'yql/essentials/cfg/tests-' + suffix
+
+
+def get_gateway_cfg_filename():
+    return 'gateways.conf'
 
 
 def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
@@ -111,13 +114,17 @@ def merge_gateway_cfg_patch(patch_cfg_file, gateway_config):
 
 
 def merge_default_gateway_cfg(cfg_dir, gateway_config):
-
-    with open(yql_source_path(os.path.join(cfg_dir, 'gateways.conf'))) as f:
+    gateway_cfg_filename = get_gateway_cfg_filename()
+    with open(yql_source_path(os.path.join(cfg_dir, gateway_cfg_filename))) as f:
         text_format.Merge(f.read(), gateway_config)
 
     suffix = get_gateway_cfg_suffix()
     if suffix:
-        with open(yql_source_path(os.path.join(cfg_dir, 'gateways-' + suffix + '.conf'))) as f:
+        # The patch lives in a dedicated folder (e.g. tests-experimental),
+        # independent of the base cfg_dir which may point elsewhere
+        # (yql/cfg/local for LOCAL_BENCH, yql/essentials/cfg/udf_test, etc.).
+        patch_dir = get_gateway_cfg_dir()
+        with open(yql_source_path(os.path.join(patch_dir, gateway_cfg_filename))) as f:
             text_format.Merge(f.read(), gateway_config)
 
 
@@ -145,6 +152,17 @@ def yql_binary_path(*args, **kwargs):
 
     else:
         return find_file(args[0])
+
+
+def yql_binary_path_with_impl(path):
+    directory, binary = os.path.split(path)
+    try:
+        impl_path = yql_binary_path(os.path.join(directory, 'impl', binary))
+        if impl_path:
+            return impl_path
+    except Exception:
+        pass
+    return yql_binary_path(path)
 
 
 def yql_source_path(*args, **kwargs):

@@ -86,6 +86,8 @@ class _NoopCtx:
 class NoopSpan:
     """Span implementation used while no provider is enabled."""
 
+    __slots__ = ()
+
     def set_error(self, exception):
         pass
 
@@ -96,6 +98,8 @@ class NoopSpan:
         pass
 
     def attach_context(self, end_on_exit=True):
+        if self is NoopTracingProvider._SPAN:
+            return _NOOP_CTX
         return _NoopCtx(self)
 
 
@@ -112,6 +116,11 @@ class NoopTracingProvider:
 
 
 _NOOP_PROVIDER = NoopTracingProvider()
+_NOOP_CTX = _NoopCtx(NoopTracingProvider._SPAN)
+
+
+def _noop_finish(exception=None):
+    pass
 
 
 class _TracingRegistry:
@@ -243,24 +252,25 @@ def create_ydb_span(name, driver_config, node_id=None, kind=None, peer=None) -> 
     is returned so callers can use ``.attach_context()``, ``.set_attribute(...)``
     etc. unconditionally with zero overhead.
     """
-    tracing_active = _registry.is_active()
     metrics_active = _metrics.is_metrics_enabled()
-    if not tracing_active and not metrics_active:
-        return NoopTracingProvider._SPAN
+    tracing_active = _registry.is_active()
 
-    if tracing_active:
-        span = _registry.create_span(name, attributes=_build_ydb_attrs(driver_config, node_id, peer), kind=kind)
-    else:
-        span = NoopTracingProvider._SPAN
+    if not metrics_active:
+        if not tracing_active:
+            return NoopTracingProvider._SPAN
+        return _registry.create_span(name, attributes=_build_ydb_attrs(driver_config, node_id, peer), kind=kind)
 
-    metrics_attrs = _metrics._build_ydb_metrics_attrs(driver_config) if metrics_active else None
-    metrics = _metrics.create_metrics_operation(name, metrics_attrs)
+    metrics = _metrics.create_metrics_operation(name, _metrics._build_ydb_metrics_attrs(driver_config))
+    if not tracing_active:
+        return metrics
+
+    span = _registry.create_span(name, attributes=_build_ydb_attrs(driver_config, node_id, peer), kind=kind)
     return _TelemetryOperation(span, metrics)
 
 
 def set_peer_attributes(span: Span, peer) -> None:
     """Fill in network.peer.* and ydb.node.dc on an existing span once the peer is known."""
-    if peer is None:
+    if peer is None or span is NoopTracingProvider._SPAN:
         return
     address, port, location = peer
     if address is not None:
@@ -273,6 +283,9 @@ def set_peer_attributes(span: Span, peer) -> None:
 
 def span_finish_callback(span: Span) -> Callable[..., None]:
     """Return an on_finish callable that ends *span* when a streaming result iterator completes."""
+
+    if span is NoopTracingProvider._SPAN:
+        return _noop_finish
 
     def _finish(exception=None):
         if exception is not None:

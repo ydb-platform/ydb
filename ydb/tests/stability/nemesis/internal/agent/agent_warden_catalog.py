@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Iterable, List, Tuple
+from typing import Any, Iterable, List, Optional, Tuple
 
 from ydb.tests.library.nemesis.safety_warden import (
     AggregateSafetyWarden,
@@ -18,6 +18,7 @@ from ydb.tests.library.wardens.logs import (
     kikimr_crit_and_alert_logs_safety_warden_factory,
     kikimr_grep_kernel_log_safety_warden_factory,
 )
+from ydb.tests.stability.nemesis.internal.models import WardenTimeWindow
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import SafetyCheckSpec
 
@@ -30,6 +31,7 @@ class AgentSafetyContext:
 
     log_directory: str
     hostname: str
+    time_window: Optional[WardenTimeWindow] = None
 
     @property
     def log_prefix(self) -> str:
@@ -52,7 +54,10 @@ def _pairs_from_wardens(factory_name: str, wardens: Iterable[Any]) -> List[Tuple
     ]
 
 
-def safety_warden_factory(cluster, lines_after=20, cut=False, modification_days=3):
+def safety_warden_factory(
+    cluster, lines_after=20, cut=False, modification_days=3,
+    start_time=None, end_time=None,
+):
     """
     Local version of ``ydb.tests.library.wardens.factories.safety_warden_factory``.
 
@@ -65,7 +70,11 @@ def safety_warden_factory(cluster, lines_after=20, cut=False, modification_days=
     """
     executor = LocalCommandExecutor()
     wardens = []
-    wardens.extend(kikimr_grep_kernel_log_safety_warden_factory(executor=executor))
+    wardens.extend(kikimr_grep_kernel_log_safety_warden_factory(
+        executor=executor,
+        start_time=start_time,
+        end_time=end_time,
+    ))
 
     by_directory = {}
     for node in list(cluster.slots.values()) + list(cluster.nodes.values()):
@@ -98,12 +107,18 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
     directly on the agent host, no SSH.
     """
     local_executor = LocalCommandExecutor()
+    window = ctx.time_window or WardenTimeWindow.from_hours_back(24)
+    start_dt, end_dt = window.as_local_naive()
 
     return [
         SafetyCheckSpec(
             name="safety_warden_factory",
             description="Local safety_warden_factory (nodes + slots log dirs, lines_after=20, cut=False, modification_days=3)",
-            build_warden=lambda: safety_warden_factory(require_external_cluster()),
+            build_warden=lambda: safety_warden_factory(
+                require_external_cluster(),
+                start_time=start_dt,
+                end_time=end_dt,
+            ),
         ),
         SafetyCheckSpec(
             name="kikimr_grep_kernel_log",
@@ -112,7 +127,8 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
                 executor=local_executor,
                 list_of_markers=['Out of memory: Kill process'],
                 lines_after=5,
-                hours_back=24,
+                start_time=start_dt,
+                end_time=end_dt,
             ),
         ),
         SafetyCheckSpec(
@@ -128,11 +144,17 @@ def collect_agent_safety_check_specs(ctx: AgentSafetyContext) -> List[SafetyChec
         SafetyCheckSpec(
             name="unified_agent_verify_failed",
             description="Check for VERIFY failed errors in unified agent logs",
-            build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(hours_back=24),
+            build_warden=lambda: UnifiedAgentVerifyFailedSafetyWarden(
+                start_time=start_dt,
+                end_time=end_dt,
+            ),
         ),
         SafetyCheckSpec(
             name="unified_agent_sanitizer",
             description="Check for sanitizer errors (ASan/LSan/TSan/MSan/UBSan) in unified agent logs",
-            build_warden=lambda: UnifiedAgentSanitizerSafetyWarden(hours_back=24),
+            build_warden=lambda: UnifiedAgentSanitizerSafetyWarden(
+                start_time=start_dt,
+                end_time=end_dt,
+            ),
         ),
     ]

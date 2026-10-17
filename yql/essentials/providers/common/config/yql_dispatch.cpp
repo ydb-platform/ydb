@@ -195,7 +195,7 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
         return handler->Handle(cluster, value, validateOnly, errorCallback);
     } else {
         // ignore unknown names in config
-        if (stage == EStage::CONFIG) {
+        if (stage == EStage::CONFIG && !StrictConfigValidation_) {
             return true;
         }
 

@@ -60,7 +60,7 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
         TabletIndexId_ = NameTable_->GetIdOrRegisterName(TabletIndexColumnName);
     } catch (const std::exception& ex) {
         SetError(TError("Failed to add system columns to name table for a format writer")
-            << ex);
+            .With(ex));
     }
 }
 
@@ -229,7 +229,7 @@ bool TSchemalessFormatWriterBase::CheckKeySwitch(TUnversionedRow row, bool isLas
         CurrentKey_ = row;
     } catch (const std::exception& ex) {
         // COMPAT(psushin): composite values are not comparable anymore.
-        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream") << ex;
+        THROW_ERROR_EXCEPTION("Cannot inject key switch into output stream").With(ex);
     }
 
     if (isLastRow && CurrentKey_) {

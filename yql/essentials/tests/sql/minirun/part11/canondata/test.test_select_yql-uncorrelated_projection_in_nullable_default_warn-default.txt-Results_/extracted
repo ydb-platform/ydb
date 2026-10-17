@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	SELECT (2 IN $x); -- false: Bool, also warning
+	^
+        <tmp_path>/program.sql:<main>:2:9: Warning: At function: SqlIn
+        	SELECT (2 IN $x); -- false: Bool, also warning
+	        ^
+            <tmp_path>/program.sql:<main>:2:9: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+            	SELECT (2 IN $x); -- false: Bool, also warning
+	        ^

@@ -6,4 +6,4 @@ namespace NYql::NDq {
 
 TTaskTransformFactory CreatePqDqTaskTransformFactory();
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

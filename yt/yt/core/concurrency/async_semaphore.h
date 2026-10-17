@@ -6,7 +6,7 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -96,7 +96,7 @@ public:
     TFuture<void> GetReadyEvent();
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     i64 TotalSlots_;
     i64 FreeSlots_;
 

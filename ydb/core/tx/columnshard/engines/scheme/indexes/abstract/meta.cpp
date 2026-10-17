@@ -51,7 +51,7 @@ std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTas
     return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
-std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {
+std::optional<ui64> IIndexMeta::CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const {
     return DoCalcCategory(subColumnName);
 }
 

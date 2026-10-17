@@ -1102,6 +1102,48 @@ namespace NAsyncTest {
             ASYNC_ASSERT_SEQUENCE(sequence, "callback resumed", "callback finished", "returning", "finished");
         }
 
+
+        // The async<T> overloads take an already created lazy frame
+        Y_UNIT_TEST(AsyncOverloadsReturnValue) {
+            TVector<TString> sequence;
+            TAsyncCancellationScope scope;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto callback = [&]() -> async<int> {
+                    sequence.push_back("callback");
+                    co_return 42;
+                };
+                auto voidCallback = [&]() -> async<void> {
+                    sequence.push_back("void callback");
+                    co_return;
+                };
+
+                auto result = co_await scope.Wrap(callback());
+                UNIT_ASSERT(result.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+
+                bool completed = co_await scope.Wrap(voidCallback());
+                UNIT_ASSERT(completed);
+
+                result = co_await scope.WrapShielded(callback());
+                UNIT_ASSERT(result.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+
+                int value = co_await InterceptCancellation(callback(), [&]{ sequence.push_back("on cancel"); });
+                UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "callback", "void callback", "callback", "callback", "returning", "finished");
+            UNIT_ASSERT(!state.Destroyed);
+        }
+
     } // Y_UNIT_TEST_SUITE(Cancellation)
 
 } // namespace NAsyncTest

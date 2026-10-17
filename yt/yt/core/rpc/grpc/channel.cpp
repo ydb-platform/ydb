@@ -16,8 +16,8 @@
 #include <contrib/libs/grpc/src/core/lib/channel/call_tracer.h>
 #include <contrib/libs/grpc/src/core/lib/surface/call.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -102,7 +102,7 @@ public:
         }
 
         return TError(StatusCodeToErrorCode(static_cast<grpc_status_code>(statusCode)), std::move(statusDetail), TError::DisableFormat)
-            << TErrorAttribute("status_code", statusCode);
+            .With("status_code", statusCode);
     }
 
     void RecordReceivedTrailingMetadata(
@@ -119,6 +119,11 @@ public:
 
     std::shared_ptr<grpc_core::TcpTracerInterface> StartNewTcpTrace() override
     { return {}; }
+
+    void AddOptionalLabels(
+        OptionalLabelComponent /* component */,
+        std::shared_ptr<std::map<TString, TString>> /* labels */) override
+    { }
 
 private:
     AtomicError Error_;
@@ -248,7 +253,7 @@ private:
 
     TSingleShotCallbackList<void(const TError&)> Terminated_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     TError TerminationError_;
     TGrpcLibraryLockPtr LibraryLock_ = TDispatcher::Get()->GetLibraryLock();
     TGrpcChannelPtr Channel_;
@@ -283,6 +288,8 @@ private:
 
         void Initialize()
         {
+            Request_->Header().set_start_time(ToProto(TInstant::Now()));
+
             YT_TLOG_DEBUG("Sending request")
                 .With("RequestId", Request_->GetRequestId())
                 .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
@@ -291,7 +298,10 @@ private:
             {
                 auto completionQueueGuard = GuardedCompletionQueue_->TryLock();
                 if (!completionQueueGuard) {
-                    NotifyError("Failed to initialize request call", TError{"Completion queue is shut down"});
+                    NotifyError(
+                        YT_TLOG_STATIC_ANCHOR_REF(),
+                        "Failed to initialize request call"_sb,
+                        TError("Completion queue is shut down"));
                     return;
                 }
 
@@ -314,6 +324,7 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
+            InitialMetadataBuilder_.Add(StartTimeMetadataKey, ToString(Request_->Header().start_time()));
             if (Request_->GetUser() != RootUserName) {
                 InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
             }
@@ -374,7 +385,7 @@ private:
                 auto responseHandler = TryAcquireResponseHandler();
                 YT_VERIFY(responseHandler);
                 responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                    << ex);
+                    .With(ex));
                 return;
             }
 
@@ -463,7 +474,8 @@ private:
                 .With("RequestId", Request_->GetRequestId());
 
             NotifyError(
-                TStringBuf("Request canceled"),
+                YT_TLOG_STATIC_ANCHOR_REF(),
+                "Request canceled"_sb,
                 TError(NYT::EErrorCode::Canceled, "Request canceled"));
         }
 
@@ -484,7 +496,7 @@ private:
 
         const NLogging::TLogger& Logger = GrpcLogger();
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ResponseHandlerLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, ResponseHandlerLock_);
         IClientResponseHandlerPtr ResponseHandler_;
 
         // Completion queue must be accessed under read lock
@@ -553,7 +565,10 @@ private:
         void OnRequestSent(const TError& error)
         {
             if (!error.IsOK()) {
-                NotifyError(TStringBuf("Failed to send request"), error);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Failed to send request"_sb,
+                    error);
                 Unref();
                 return;
             }
@@ -581,7 +596,10 @@ private:
         void OnInitialMetadataReceived(const TError& error)
         {
             if (!error.IsOK()) {
-                NotifyError(TStringBuf("Failed to receive initial response metadata"), error);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Failed to receive initial response metadata"_sb,
+                    error);
                 Unref();
                 return;
             }
@@ -617,7 +635,10 @@ private:
             auto guard = Finally([this] { Unref(); });
 
             if (!error.IsOK()) {
-                NotifyError(TStringBuf("Failed to receive response"), error);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Failed to receive response"_sb,
+                    error);
                 return;
             }
 
@@ -628,15 +649,21 @@ private:
                     error = DeserializeError(*serializedError);
                 } else {
                     error = TError(StatusCodeToErrorCode(ResponseStatusCode_), ResponseStatusDetails_.AsString(), TError::DisableFormat)
-                        << TErrorAttribute("status_code", ResponseStatusCode_);
+                        .With("status_code", ResponseStatusCode_);
                 }
-                NotifyError(TStringBuf("Request failed"), error);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request failed"_sb,
+                    error);
                 return;
             }
 
             if (!ResponseBodyBuffer_) {
                 auto error = TError(NRpc::EErrorCode::ProtocolError, "Empty response body");
-                NotifyError(TStringBuf("Request failed"), error);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Request failed"_sb,
+                    error);
                 return;
             }
 
@@ -648,8 +675,11 @@ private:
                     messageBodySize = FromString<ui32>(*messageBodySizeString);
                 } catch (const std::exception& ex) {
                     auto error = TError(NRpc::EErrorCode::TransportError, "Failed to parse response message body size")
-                        << ex;
-                    NotifyError(TStringBuf("Failed to parse response message body size"), error);
+                        .With(ex);
+                    NotifyError(
+                        YT_TLOG_STATIC_ANCHOR_REF(),
+                        "Failed to parse response message body size"_sb,
+                        error);
                     return;
                 }
             }
@@ -669,8 +699,11 @@ private:
                     messageBodySize,
                     !responseHeader.has_codec());
             } catch (const std::exception& ex) {
-                auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body") << ex;
-                NotifyError(TStringBuf("Failed to receive request body"), error);
+                auto error = TError(NRpc::EErrorCode::TransportError, "Failed to receive request body").With(ex);
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Failed to receive request body"_sb,
+                    error);
                 return;
             }
 
@@ -689,7 +722,10 @@ private:
 
             auto completionQueueGuard = GuardedCompletionQueue_->TryLock();
             if (!completionQueueGuard) {
-                NotifyError("Failed to enqueue request operations batch", TError{"Completion queue is shut down"});
+                NotifyError(
+                    YT_TLOG_STATIC_ANCHOR_REF(),
+                    "Failed to enqueue request operations batch"_sb,
+                    TError("Completion queue is shut down"));
                 return false;
             }
 
@@ -703,7 +739,10 @@ private:
             return true;
         }
 
-        void NotifyError(TStringBuf reason, const TError& error)
+        void NotifyError(
+            NLogging::NDetail::TStaticAnchorRef anchorRef,
+            TStringBuf reason,
+            const TError& error)
         {
             auto responseHandler = TryAcquireResponseHandler();
             if (!responseHandler) {
@@ -711,20 +750,24 @@ private:
             }
 
             auto detailedError = error
-                << TErrorAttribute("realm_id", Request_->GetRealmId())
-                << TErrorAttribute("service", Request_->GetService())
-                << TErrorAttribute("method", Request_->GetMethod())
-                << TErrorAttribute("request_id", Request_->GetRequestId())
-                << Owner_->GetEndpointAttributes();
+                .With("realm_id", Request_->GetRealmId())
+                .With("service", Request_->GetService())
+                .With("method", Request_->GetMethod())
+                .With("request_id", Request_->GetRequestId())
+                .With(Owner_->GetEndpointAttributes());
             if (Options_.Timeout) {
                 detailedError = detailedError
-                    << TErrorAttribute("timeout", Options_.Timeout);
+                    .With("timeout", Options_.Timeout);
             }
 
             ProfileError(error);
-            YT_LOG_DEBUG(detailedError, "%v (RequestId: %v)",
-                reason,
-                Request_->GetRequestId());
+            YT_TLOG_EVENT_WITH_STATIC_ANCHOR(
+                Logger,
+                NLogging::ELogLevel::Debug,
+                anchorRef,
+                reason)
+                .With("RequestId", Request_->GetRequestId())
+                .With(detailedError);
 
             responseHandler->HandleError(std::move(detailedError), Owner_->GetEndpointAddress());
         }

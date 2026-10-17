@@ -1,4 +1,3 @@
-PRAGMA FeatureR010="prototype";
 
 $input = SELECT * FROM AS_TABLE([
     <|time: 0, value: 1u, name: "A"|>,

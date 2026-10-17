@@ -3,13 +3,15 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/common/common.h>
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_session.h>
 
 #include <yql/essentials/public/udf/udf_value.h>
 
+#include <span>
+
 namespace NFq::NRowDispatcher {
 
-class IParsedDataConsumer : public TThrRefBase {
+class IParsedDataConsumer: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IParsedDataConsumer>;
 
@@ -20,19 +22,19 @@ public:
     virtual void OnParsedData(ui64 numberRows) = 0;
 };
 
-class ITopicParser : public TThrRefBase, public TNonCopyable {
+class ITopicParser: public TThrRefBase, public TNonCopyable {
 public:
     using TPtr = TIntrusivePtr<ITopicParser>;
 
 public:
-    virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
+    virtual void ParseRecords(const std::vector<TMessageStreamRecord>& records) = 0;
     virtual void Refresh(bool force = false) = 0;
     virtual TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) = 0;
 
-    virtual const TVector<ui64>& GetOffsets() const = 0;
+    virtual std::span<const ui64> GetOffsets() const = 0;
     virtual TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) = 0;
 
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) = 0;
 };
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

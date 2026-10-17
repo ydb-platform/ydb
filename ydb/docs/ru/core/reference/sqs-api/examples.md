@@ -3,8 +3,6 @@
 
 В этой статье приведены примеры работы с [топиками](../../concepts/datamodel/topic.md) с использованием Amazon SQS API с помощью [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
 
-{% include [x](_includes/limitations.md) %}
-
 {% include [x](_includes/examples_prerequisites.md) %}
 
 ## Формирование endpoint для подключения

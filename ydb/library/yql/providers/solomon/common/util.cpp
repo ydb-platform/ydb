@@ -1,13 +1,11 @@
 #include "util.h"
 
-#include <yql/essentials/utils/yql_panic.h>
-
+#include <contrib/libs/re2/re2/re2.h>
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
-
-#include <contrib/libs/re2/re2/re2.h>
+#include <yql/essentials/utils/yql_panic.h>
 
 namespace {
 
@@ -17,31 +15,31 @@ THolder<re2::RE2> CompileRE2WithCheck(const std::string& pattern) {
     return re;
 }
 
-const TString LABEL_NAME_PATTERN        = R"( *[a-zA-Z0-9-._/]{1,50} *)";
-const TString LABEL_VALUE_PATTERN       = R"( *["'][ -!#-&(-)+->@-_a-{}-~*|-]{1,200}["'] *)";
-const TString OPERATOR_PATTERN          = R"(=|!=|==|!==|=~|!~)";
+const TString LABEL_NAME_PATTERN = R"( *[a-zA-Z0-9-._/]{1,50} *)";
+const TString LABEL_VALUE_PATTERN = R"( *["'][ -!#-&(-)+->@-_a-{}-~*|-]{1,200}["'] *)";
+const TString OPERATOR_PATTERN = R"(=|!=|==|!==|=~|!~)";
 
-const TString SENSOR_NAME_PATTERN       = "(" + LABEL_VALUE_PATTERN + ")?({.*})";
-THolder<re2::RE2> SENSOR_NAME_RE        = CompileRE2WithCheck(SENSOR_NAME_PATTERN);
+const TString SENSOR_NAME_PATTERN = "(" + LABEL_VALUE_PATTERN + ")?({.*})";
+THolder<re2::RE2> SENSOR_NAME_RE = CompileRE2WithCheck(SENSOR_NAME_PATTERN);
 
-const TString SELECTOR_PATTERN          = "(?:(" + LABEL_NAME_PATTERN + ")(" + OPERATOR_PATTERN + ")(" + LABEL_VALUE_PATTERN + "))";
-THolder<re2::RE2> SELECTOR_RE           = CompileRE2WithCheck(SELECTOR_PATTERN);
+const TString SELECTOR_PATTERN = "(?:(" + LABEL_NAME_PATTERN + ")(" + OPERATOR_PATTERN + ")(" + LABEL_VALUE_PATTERN + "))";
+THolder<re2::RE2> SELECTOR_RE = CompileRE2WithCheck(SELECTOR_PATTERN);
 
-const TString SELECTORS_FULL_PATTERN    = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
-THolder<re2::RE2> SELECTORS_FULL_RE     = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
+const TString SELECTORS_FULL_PATTERN = "{((" + SELECTOR_PATTERN + ",)*" + SELECTOR_PATTERN + ")?}";
+THolder<re2::RE2> SELECTORS_FULL_RE = CompileRE2WithCheck(SELECTORS_FULL_PATTERN);
 
-const TString USER_LABELS_PATTERN       = "(" + LABEL_NAME_PATTERN + ")(?: (?i:as) (" + LABEL_NAME_PATTERN + "))?";
-THolder<re2::RE2> USER_LABELS_RE        = CompileRE2WithCheck(USER_LABELS_PATTERN);
+const TString USER_LABELS_PATTERN = "(" + LABEL_NAME_PATTERN + ")(?: (?i:as) (" + LABEL_NAME_PATTERN + "))?";
+THolder<re2::RE2> USER_LABELS_RE = CompileRE2WithCheck(USER_LABELS_PATTERN);
 
 TMaybe<TString> InsertOrCheck(NYql::NSo::TSelectors& selectors, const TString& name, const TString& value) {
-    auto [it, inserted] = selectors.emplace(name, NYql::NSo::TSelector{"=", value});
+    auto [it, inserted] = selectors.emplace(name, NYql::NSo::TSelector{ "=", value });
     if (!inserted && it->second.Value != value) {
         return TStringBuilder() << "You shouldn't specify \"" << name << "\" label in selectors, already has value `" << it->second.Value << "`";
     }
     return {};
 }
 
-} // namespace
+}   // namespace
 
 namespace NYql::NSo {
 
@@ -56,7 +54,7 @@ void SelectorsToProto(const TSelectors& selectors, NYql::NSo::MetricQueue::TSele
 
 void ProtoToSelectors(const NYql::NSo::MetricQueue::TSelectors& proto, TSelectors& selectors) {
     for (const auto& [key, selector] : proto.GetSelectors()) {
-        selectors[key] = {selector.GetOperator(), selector.GetValue()};
+        selectors[key] = { selector.GetOperator(), selector.GetValue() };
     }
 }
 
@@ -65,13 +63,11 @@ bool TSelector::operator==(const TSelector& other) const {
 }
 
 bool TSelector::operator<(const TSelector& other) const {
-    return std::tie(Op, Value) <
-           std::tie(other.Op, other.Value);
+    return std::tie(Op, Value) < std::tie(other.Op, other.Value);
 }
 
 bool TMetricTimeRange::operator<(const TMetricTimeRange& other) const {
-    return std::tie(Selectors, Program, From, To) < 
-           std::tie(other.Selectors, other.Program, other.From, other.To);
+    return std::tie(Selectors, Program, From, To) < std::tie(other.Selectors, other.Program, other.From, other.To);
 }
 
 TMaybe<TString> ParseSelectorValues(const TString& selectors, TSelectors& result) {
@@ -83,7 +79,7 @@ TMaybe<TString> ParseSelectorValues(const TString& selectors, TSelectors& result
 
     if (sensorName) {
         TString name = StripString(*sensorName);
-        result["name"] = {"=", name.substr(1, name.size() - 2)};
+        result["name"] = { "=", name.substr(1, name.size() - 2) };
     }
 
     if (!RE2::FullMatch(fullBrackets, *SELECTORS_FULL_RE)) {
@@ -97,17 +93,17 @@ TMaybe<TString> ParseSelectorValues(const TString& selectors, TSelectors& result
     while (RE2::FindAndConsume(&fullBracketsView, *SELECTOR_RE, &Name, &Op, &Value)) {
         TString key = StripString(Name);
         TString value = StripString(Value);
-        result[key] = {Op, value.substr(1, value.size() - 2)};
+        result[key] = { Op, value.substr(1, value.size() - 2) };
     }
 
     return {};
 }
 
 TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source, const TString& selectors, TSelectors& result) {
-    #define RET_ON_ERROR(expr)      \
-        if (auto error = expr) {    \
-            return error;           \
-        }
+#define RET_ON_ERROR(expr)   \
+    if (auto error = expr) { \
+        return error;        \
+    }
 
     RET_ON_ERROR(ParseSelectorValues(selectors, result));
 
@@ -115,6 +111,12 @@ TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source,
         RET_ON_ERROR(InsertOrCheck(result, "cloudId", source.GetProject()));
         RET_ON_ERROR(InsertOrCheck(result, "folderId", source.GetCluster()));
         RET_ON_ERROR(InsertOrCheck(result, "service", source.GetService()));
+    } else if (source.GetClusterType() == NSo::NProto::CT_MONIUM) {
+        // The project already scopes the request, so nothing is injected for routing
+        // and the table name is only a default for "service".
+        if (const auto& service = source.GetService(); service && !result.contains("service")) {
+            result["service"] = { "=", service };
+        }
     } else {
         RET_ON_ERROR(InsertOrCheck(result, "project", source.GetProject()));
     }
@@ -130,7 +132,7 @@ TMaybe<TString> BuildSelectorValues(const NSo::NProto::TDqSolomonSource& source,
         }
     }
 
-    #undef RET_ON_ERROR
+#undef RET_ON_ERROR
     return {};
 }
 
@@ -138,7 +140,7 @@ TMaybe<TString> ParseLabelNames(const TString& labelNames, TVector<TString>& nam
     auto labels = StringSplitter(labelNames).Split(',').SkipEmpty().ToList<TString>();
     names.reserve(labels.size());
     aliases.reserve(labels.size());
-    
+
     for (TString& label : labels) {
         TString name;
         std::optional<TString> alias;
@@ -165,21 +167,22 @@ NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonC
     }
 }
 
+bool IsMoniumProject(const TSolomonClusterConfig& config) {
+    for (const auto& attr : config.settings()) {
+        if (attr.name() == "monium_project"sv) {
+            return attr.value() == "true"sv;
+        }
+    }
+    return false;
+}
+
 NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, const TString& project) {
     NSo::NProto::TDqSolomonSource source;
 
-    source.SetClusterType(NSo::MapClusterType(config->GetClusterType()));
+    source.SetClusterType(IsMoniumProject(*config) ? NSo::NProto::CT_MONIUM : NSo::MapClusterType(config->GetClusterType()));
     source.SetUseSsl(config->GetUseSsl());
-    
-    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-        source.SetProject(config->GetPath().GetProject());
-        source.SetCluster(config->GetPath().GetCluster());
-        source.SetService(project);
-    } else {
-        source.SetProject(project);
-    }
-    
-    source.SetEndpoint(config->GetCluster()); // Backward compatibility
+
+    source.SetEndpoint(config->GetCluster());   // Backward compatibility
     source.SetHttpEndpoint(config->GetCluster());
     source.SetGrpcEndpoint(config->GetCluster());
     for (const auto& attr : config->settings()) {
@@ -188,17 +191,24 @@ NProto::TDqSolomonSource FillSolomonSource(const TSolomonClusterConfig* config, 
         }
     }
 
+    if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+        source.SetProject(config->GetPath().GetProject());
+        source.SetCluster(config->GetPath().GetCluster());
+        source.SetService(project);
+    } else if (source.GetClusterType() == NSo::NProto::CT_MONIUM) {
+        source.SetProject(config->GetPath().GetProject());
+        source.SetService(project);
+    } else {
+        source.SetProject(project);
+    }
+
     return source;
 }
 
 namespace {
 
 template <typename T>
-T ParseSettingWithMin(
-    const google::protobuf::Map<TString, TString>& settings,
-    const TString& key,
-    T defaultValue,
-    T minValue)
+T ParseSettingWithMin(const google::protobuf::Map<TString, TString>& settings, const TString& key, T defaultValue, T minValue)
 {
     if (auto it = settings.find(key); it != settings.end()) {
         T parsed;
@@ -214,12 +224,7 @@ T ParseSettingWithMin(
 }
 
 template <typename T>
-T ParseSettingWithMinMax(
-    const google::protobuf::Map<TString, TString>& settings,
-    const TString& key,
-    T defaultValue,
-    T minValue,
-    T maxValue)
+T ParseSettingWithMinMax(const google::protobuf::Map<TString, TString>& settings, const TString& key, T defaultValue, T minValue, T maxValue)
 {
     if (auto it = settings.find(key); it != settings.end()) {
         T parsed;
@@ -237,10 +242,7 @@ T ParseSettingWithMinMax(
     return defaultValue;
 }
 
-bool ParseBoolSetting(
-    const google::protobuf::Map<TString, TString>& settings,
-    const TString& key,
-    bool defaultValue)
+bool ParseBoolSetting(const google::protobuf::Map<TString, TString>& settings, const TString& key, bool defaultValue)
 {
     if (auto it = settings.find(key); it != settings.end()) {
         bool parsed = false;
@@ -252,10 +254,9 @@ bool ParseBoolSetting(
     return defaultValue;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
-TSolomonReadActorConfig ParseSolomonReadActorConfig(
-    const google::protobuf::Map<TString, TString>& settings)
+TSolomonReadActorConfig ParseSolomonReadActorConfig(const google::protobuf::Map<TString, TString>& settings)
 {
     TSolomonReadActorConfig cfg;
 
@@ -270,25 +271,18 @@ TSolomonReadActorConfig ParseSolomonReadActorConfig(
     cfg.MaxPointsPerOneRequest = ParseSettingWithMinMax<ui64>(settings, "maxPointsPerOneRequest", 10'000, 1, 10'000);
     cfg.MetricsQueueBatchCountLimit = ParseSettingWithMin<ui64>(settings, "metricsQueueBatchCountLimit", 500, 1);
     cfg.MetricsQueuePrefetchSize = ParseSettingWithMin<ui64>(settings, "metricsQueuePrefetchSize", 1000, 1);
-    cfg.PoisonTimeout = TDuration::Seconds(
-        ParseSettingWithMin<ui64>(settings, "poisonTimeoutSec", 3 * 3600, 60));
-    cfg.RoundRobinStageTimeout = TDuration::MilliSeconds(
-        ParseSettingWithMin<ui64>(settings, "roundRobinStageTimeoutMs", 3000, 1));
+    cfg.PoisonTimeout = TDuration::Seconds(ParseSettingWithMin<ui64>(settings, "poisonTimeoutSec", 3 * 3600, 60));
+    cfg.RoundRobinStageTimeout = TDuration::MilliSeconds(ParseSettingWithMin<ui64>(settings, "roundRobinStageTimeoutMs", 3000, 1));
 
     cfg.LabelsListingLimit = ParseSettingWithMinMax<ui64>(settings, "labelsListingLimit", 100'000, 1, 100'000);
 
-    cfg.RetryConfig.MinDelay = TDuration::MilliSeconds(
-        ParseSettingWithMin<ui64>(settings, "retryMinDelayMs", 50, 1));
-    cfg.RetryConfig.MinLongRetryDelay = TDuration::MilliSeconds(
-        ParseSettingWithMin<ui64>(settings, "retryMinLongRetryDelayMs", 200, 1));
-    cfg.RetryConfig.MaxDelay = TDuration::MilliSeconds(
-        ParseSettingWithMin<ui64>(settings, "retryMaxDelayMs", 1000, 1));
-    cfg.RetryConfig.MaxRetries =
-        ParseSettingWithMin<ui64>(settings, "retryMaxRetries", 10, 1);
-    cfg.RetryConfig.MaxTime =
-        TDuration::Seconds(ParseSettingWithMin<ui64>(settings, "retryMaxTimeSec", 30, 1));
+    cfg.RetryConfig.MinDelay = TDuration::MilliSeconds(ParseSettingWithMin<ui64>(settings, "retryMinDelayMs", 50, 1));
+    cfg.RetryConfig.MinLongRetryDelay = TDuration::MilliSeconds(ParseSettingWithMin<ui64>(settings, "retryMinLongRetryDelayMs", 200, 1));
+    cfg.RetryConfig.MaxDelay = TDuration::MilliSeconds(ParseSettingWithMin<ui64>(settings, "retryMaxDelayMs", 1000, 1));
+    cfg.RetryConfig.MaxRetries = ParseSettingWithMin<ui64>(settings, "retryMaxRetries", 10, 1);
+    cfg.RetryConfig.MaxTime = TDuration::Seconds(ParseSettingWithMin<ui64>(settings, "retryMaxTimeSec", 30, 1));
 
     return cfg;
 }
 
-} // namespace NYql::NSo
+}   // namespace NYql::NSo

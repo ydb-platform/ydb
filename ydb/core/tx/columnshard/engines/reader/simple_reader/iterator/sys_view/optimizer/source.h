@@ -22,6 +22,8 @@ private:
     }
 
 public:
+    virtual NColumnShard::TInternalPathId GetPathId() const override;
+
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule,
         std::vector<NStorageOptimizer::TTaskDescription>&& tasks, const NColumnShard::TSchemeShardLocalPathId& externalPathId,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
@@ -30,6 +32,9 @@ public:
         , OptimizerTasks(std::move(tasks))
         , ExternalPathId(externalPathId)
     {
+        if (context->GetReadMetadata()->IsSortedScanWithLimit()) {
+            std::sort(OptimizerTasks.begin(), OptimizerTasks.end());
+        }
     }
 };
 

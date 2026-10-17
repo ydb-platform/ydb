@@ -400,13 +400,16 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
-                NKikimrBridge::TGroupState::EStage stage;
+                NKikimrBridge::TGroupState::EStage stage = NKikimrBridge::TGroupState::BLOCKS;
+                bool found = false;
                 for (const auto& pile : bridgeGroupInfo.GetBridgeGroupState().GetPile()) {
                     if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId) {
                         stage = pile.GetStage();
+                        found = true;
                         break;
                     }
                 }
+                Y_DEBUG_ABORT_UNLESS(found);
                 updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TRegisterError{
                     .Stage = stage,
                     .Error = syncer.GetErrorReason(),
@@ -486,12 +489,13 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
     groupId.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
     cmd->SetGroupGeneration(generation);
     cmd->MutableBridgeGroupInfo()->CopyFrom(bridgeGroupInfo);
-    InvokeOnRoot(std::move(request), [=](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+    InvokeOnRoot(std::move(request), [this, targetGroupId](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             YDB_LOG_ERROR("UpdateBridgeGroupInfo has unexpectedly failed",
                 {"marker", "BSCBR08"},
                 {"result", result});
-            return UpdateStaticGroupBridgeGroupInfo(groupId, generation, std::move(bridgeGroupInfo), targetGroupId);
+            // Another pile may have advanced the group generation. Release this commit and let
+            // the syncer retry using the current group configuration instead of resending stale state.
         }
         if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
             TSyncerState& syncerState = it->second;
@@ -500,6 +504,9 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
             if (!syncerState.NodeIds) {
                 SyncersRequiringAction.PushBack(&syncerState);
             }
+        }
+        if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+            ProcessSyncers();
         }
     });
 }

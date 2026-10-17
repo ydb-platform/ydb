@@ -12,7 +12,7 @@
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+#include <cerrno>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 

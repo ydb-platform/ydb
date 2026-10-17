@@ -17,6 +17,8 @@ namespace NLongTxService {
 
         TCounterPtr TimeSinceLastRemoteSnapshotsUpdateMs;
         TCounterPtr RemoteSnapshotsInRegistry;
+        TCounterPtr OldestSnapshotInRegistryAgeSeconds;
+        TCounterPtr OldestLocalSnapshotInRegistryAgeSeconds;
         TCounterPtr SnapshotsCollectionTimeMs;
         TCounterPtr SnapshotsPropagationTimeMs;
 

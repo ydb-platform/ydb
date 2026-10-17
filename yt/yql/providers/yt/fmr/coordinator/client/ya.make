@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_coordinator_client.cpp
@@ -14,7 +14,5 @@ PEERDIR(
     yt/yql/providers/yt/fmr/utils
     yql/essentials/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,0 +1,4 @@
+/* custom error: Cannot infer common type for Data and List */
+PRAGMA YqlSelect = 'force';
+
+SELECT * FROM (VALUES (1), (AsList(1))) AS t(x);

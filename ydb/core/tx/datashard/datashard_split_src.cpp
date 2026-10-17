@@ -7,6 +7,8 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/util/pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -29,8 +31,10 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " received split OpId " << opId
-                    << " at state " << DatashardStateName(Self->State));
+        YDB_LOG_DEBUG_CTX(ctx, "Received split",
+            {"tabletId", Self->TabletID()},
+            {"opId", opId},
+            {"state", DatashardStateName(Self->State)});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -97,7 +101,9 @@ public:
         if (SplitAlreadyFinished) {
             // Send the Ack
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << Self->SrcSplitOpId);
+                YDB_LOG_DEBUG_CTX(ctx, "Ack split to schemeshard",
+                    {"tabletId", Self->TabletID()},
+                    {"srcSplitOpId", Self->SrcSplitOpId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(Self->SrcSplitOpId, Self->TabletID()));
             }
         } else {
@@ -143,14 +149,24 @@ public:
 
         Self->SplitStarted = true;
 
-        // We need to remove all locks first, making sure persistent uncommitted
-        // changes are not borrowed by new shards. Otherwise those will become
-        // unaccounted for.
+        // We need to remove all locks that we won't be transferring to dst shards first,
+        // making sure their uncommitted changes are not borrowed by new shards.
         if (!Self->SysLocksTable().GetLocks().empty()) {
+            const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+            auto lockTransferPredicate = [lockTransferEnabled](const TLockInfo& lock) {
+                return lockTransferEnabled
+                    && !lock.IsBroken()
+                    && lock.IsPersistent() && lock.GetReadTables().empty();
+            };
+
             auto countBefore = Self->SysLocksTable().GetLocks().size();
             TDataShardLocksDb locksDb(*Self, txc);
             TSetupSysLocks guardLocks(*Self, &locksDb);
             for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                if (lockTransferPredicate(*pr.second)) {
+                    continue;
+                }
                 Self->SysLocksTable().EraseLock(pr.first);
                 if (pr.second->IsPersistent()) {
                     // Don't erase more than one persistent lock at a time
@@ -164,13 +180,78 @@ public:
                                                Nothing(), victimQuerySpanIds);
             }
             auto countAfter = Self->SysLocksTable().GetLocks().size();
-            Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
-            Self->Execute(Self->CreateTxStartSplit(), ctx);
-            return true;
+
+            if (countAfter < countBefore) {
+                // Still removing locks, re-execute.
+                Self->Execute(Self->CreateTxStartSplit(), ctx);
+                return true;
+            }
+
+            Y_ENSURE(countAfter == countBefore);
+            // All remaining locks are those that we want to transfer.
+            // Collect them for the snapshot.
+            Self->SrcLocksToTransfer.clear();
+            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
+                const TLockInfo& lock = *pr.second;
+                Y_ENSURE(lockTransferPredicate(lock));
+
+                auto& srcLockInfo = Self->SrcLocksToTransfer.emplace_back();
+                srcLockInfo.SetLockId(lock.GetLockId());
+                srcLockInfo.SetLockNodeId(lock.GetLockNodeId());
+                srcLockInfo.SetGeneration(lock.GetGeneration());
+                srcLockInfo.SetCounter(lock.GetRawCounter());
+                srcLockInfo.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
+                srcLockInfo.SetFlags(ui64(lock.GetFlags()));
+
+                auto writeSeqNumStateToProto = [](const TWriteSeqNumState& state, auto* proto) {
+                    proto->SetWriterIndex(state.WriterIndex);
+                    proto->SetWriteSeqNum(state.WriteSeqNum);
+                    if (!state.SerializedResult.empty()) {
+                        proto->SetSerializedResult(state.SerializedResult);
+                    }
+                };
+
+                for (const auto& [_, state] : lock.GetWriteSeqNumStates()) {
+                    if (state.WriteSeqNum == 0) {
+                        continue;
+                    }
+                    writeSeqNumStateToProto(state, srcLockInfo.AddWriteSeqNumStates());
+                }
+
+                // Forward grandparent ancestor locks (multi-hop split/merge)
+                for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
+                    auto& proto = *srcLockInfo.AddAncestorLocks();
+                    proto.SetTabletId(tabletId);
+                    proto.SetGeneration(ancestorLock.Generation);
+                    proto.SetCounter(ancestorLock.Counter);
+                    proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
+                    proto.SetFlags(ui64(ancestorLock.Flags));
+                    for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
+                        if (state.WriteSeqNum == 0) {
+                            continue;
+                        }
+                        writeSeqNumStateToProto(state, proto.AddWriteSeqNumStates());
+                    }
+                }
+
+                for (const auto& pathId : lock.GetWriteTables()) {
+                    pathId.ToProto(srcLockInfo.AddWriteTables());
+                }
+
+                lock.ForAllConflicts([&](TLockInfo* otherLock) {
+                    if (Self->SysLocksTable().GetLocks().contains(otherLock->GetLockId())) {
+                        srcLockInfo.AddConflicts(otherLock->GetLockId());
+                    }
+                }, ELockConflictFlags::BreakThemOnOurCommit);
+            }
+        } else {
+            Self->SrcLocksToTransfer.clear();
         }
 
         ui64 opId = Self->SrcSplitOpId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " starting snapshot for split OpId " << opId);
+        YDB_LOG_DEBUG_CTX(ctx, "Starting snapshot for split OpId",
+            {"tabletId", Self->TabletID()},
+            {"opId", opId});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -191,8 +272,10 @@ public:
             if (isStrictCheck) { \
                 Y_ENSURE(str.empty(), #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : \n" << str.Str()); \
             } else if (!str.empty()) { \
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, \
-                     #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : " << str.Str()); \
+                YDB_LOG_ERROR_CTX(ctx, "Table is not empty when starting Split at tablet", \
+                    {"tableName", #table}, \
+                    {"tabletId", Self->TabletID()}, \
+                    {"rows", str.Str()}); \
             } \
         }
 
@@ -265,7 +348,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         ui64 opId = Self->SrcSplitOpId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " snapshot complete for split OpId " << opId);
+        YDB_LOG_DEBUG_CTX(ctx, "Snapshot complete for split",
+            {"tabletId", Self->TabletID()},
+            {"opId", opId});
 
         Y_ENSURE(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state " << DatashardStateName(Self->State));
 
@@ -334,14 +419,19 @@ public:
                 }
 
                 if (snapBody.empty()) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot needs to load pages for table "
-                                << localTableId << " for split OpId " << opId);
+                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot needs to load pages for table for split",
+                        {"tabletId", Self->TabletID()},
+                        {"localTableId", localTableId},
+                        {"opId", opId});
                     needToReadPages = true;
                 } else {
                     totalSnapshotSize += snapBody.size();
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot: table "
-                                << localTableId << " snapshot size is " << snapBody.size() << " total snapshot size is "
-                                << totalSnapshotSize << " for split OpId " << opId);
+                    YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot for split",
+                        {"tabletId", Self->TabletID()},
+                        {"localTableId", localTableId},
+                        {"snapshotSize", snapBody.size()},
+                        {"totalSnapshotSize", totalSnapshotSize},
+                        {"opId", opId});
                 }
 
                 if (!needToReadPages) {
@@ -397,6 +487,11 @@ public:
                     snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
                 }
 
+                // Attach qualifying persistent write-only locks as ancestor locks for dst
+                for (const auto& ancestorLock : Self->SrcLocksToTransfer) {
+                    *snapshot->AddLocks() = ancestorLock;
+                }
+
                 // Persist snapshot data so that it can be sent if this datashard restarts
                 TString snapshotMeta;
                 Y_PROTOBUF_SUPPRESS_NODISCARD snapshot->SerializeToString(&snapshotMeta);
@@ -409,7 +504,9 @@ public:
         }
 
         if (needToReadPages) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
+            YDB_LOG_DEBUG_CTX(ctx, "BorrowSnapshot is restarting for split",
+                {"tabletId", Self->TabletID()},
+                {"opId", opId});
             return false;
         } else {
             txc.Env.DropSnapshot(SnapContext);
@@ -433,7 +530,9 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Sending snapshots from src for split OpId " << Self->SrcSplitOpId);
+        YDB_LOG_DEBUG_CTX(ctx, "Sending snapshots from src for split",
+            {"tabletId", Self->TabletID()},
+            {"opId", Self->SrcSplitOpId});
         Self->SplitSrcSnapshotSender.DoSend(ctx);
         if (ChangeExchangeSplit) {
             Self->KillChangeSender(ctx);
@@ -469,8 +568,10 @@ public:
 
         ui64 opId = Ev->Get()->Record.GetOperationCookie();
         ui64 dstTabletId = Ev->Get()->Record.GetTabletId();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    Self->TabletID() << " Received snapshot Ack from dst " << dstTabletId << " for split OpId " << opId);
+        YDB_LOG_DEBUG_CTX(ctx, "Received snapshot Ack from dstTablet for split",
+            {"tabletId", Self->TabletID()},
+            {"dstTabletId", dstTabletId},
+            {"opId", opId});
 
         Self->SplitSrcSnapshotSender.AckSnapshot(dstTabletId, ctx);
 
@@ -494,7 +595,9 @@ public:
         if (AllDstAcksReceived) {
             for (const TActorId& ackTo : Self->SrcAckSplitTo) {
                 ui64 opId = Self->SrcSplitOpId;
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split to schemeshard " << opId);
+                YDB_LOG_DEBUG_CTX(ctx, "Ack split to schemeshard",
+                    {"tabletId", Self->TabletID()},
+                    {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitAck(opId, Self->TabletID()));
             }
         }
@@ -541,7 +644,9 @@ public:
     void Complete(const TActorContext &ctx) override {
         for (const auto& [ackTo, opIds] : Waiters) {
             for (const ui64 opId : opIds) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
+                YDB_LOG_DEBUG_CTX(ctx, "Ack split partitioning changed to schemeshard",
+                    {"tabletId", Self->TabletID()},
+                    {"opId", opId});
                 ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
             }
         }
@@ -571,17 +676,18 @@ void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, con
 void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
     const auto opId = ev->Get()->Record.GetOperationCookie();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged"
-        << ": opId: " << opId
-        << ", at datashard: " << TabletID()
-        << ", state: " << DatashardStateName(State).data());
+    YDB_LOG_DEBUG_CTX(ctx, "Got TEvSplitPartitioningChanged",
+        {"opId", opId},
+        {"tabletId", TabletID()},
+        {"state", DatashardStateName(State).data()});
 
     SrcAckPartitioningChangedTo[ev->Sender].insert(opId);
 
     if (ChangesQueue || !ChangeSenderActivator.AllAcked()) {
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " delay partitioning changed ack"
-            << ", ChangesQueue size: " << ChangesQueue.size()
-            << ", siblings to be activated: " << ChangeSenderActivator.Dump());
+        YDB_LOG_NOTICE_CTX(ctx, "Delay partitioning changed ack",
+            {"tabletId", TabletID()},
+            {"changesQueueSize", ChangesQueue.size()},
+            {"siblingsToBeActivated", ChangeSenderActivator.Dump()});
     } else {
         Execute(CreateTxSplitPartitioningChanged(std::move(SrcAckPartitioningChangedTo)), ctx);
         SrcAckPartitioningChangedTo.clear(); // to be sure
@@ -593,3 +699,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

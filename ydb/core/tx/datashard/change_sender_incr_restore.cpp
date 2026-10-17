@@ -251,3 +251,7 @@ IActor* CreateIncrRestoreChangeSender(const TActorId& changeServerActor, const T
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

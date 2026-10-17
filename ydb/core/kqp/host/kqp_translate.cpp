@@ -9,7 +9,6 @@
 
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v0/sql.h>
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -176,7 +175,6 @@ TKqpTranslationSettingsBuilder& TKqpTranslationSettingsBuilder::SetFromConfig(co
     SetLangVer(config.GetDefaultLangVer());
     SetBackportMode(config.GetYqlBackportMode());
     SetIsAmbiguityError(config.GetAntlr4ParserIsAmbiguityError());
-    KqpYqlSyntaxVersion = config.GetSqlVersion();
     return *this;
 }
 
@@ -185,21 +183,7 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     settings.LangVer = LangVer;
     settings.BackportMode = BackportMode;
 
-    if (QueryType == NYql::EKikimrQueryType::Scan || QueryType == NYql::EKikimrQueryType::Query) {
-        SqlVersion = SqlVersion ? *SqlVersion : 1;
-    }
-
-    if (SqlVersion) {
-        settings.SyntaxVersion = *SqlVersion;
-
-        if (*SqlVersion > 0) {
-            // Restrict fallback to V0
-            settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        }
-    } else {
-        settings.SyntaxVersion = KqpYqlSyntaxVersion;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
-    }
+    settings.SyntaxVersion = 1;
 
     if (IsEnableExternalDataSources) {
         settings.DynamicClusterProvider = NYql::KikimrProviderName;
@@ -208,8 +192,6 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
     }
 
     settings.InferSyntaxVersion = true;
-    settings.V0ForceDisable = false;
-    settings.WarnOnV0 = false;
     settings.DefaultCluster = Cluster;
     settings.ClusterMapping = {
         {Cluster, TString(NYql::KikimrProviderName)},
@@ -247,6 +229,11 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("WarnOnAnsiAliasShadowing");
         settings.Flags.insert("AnsiCurrentRow");
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
+    }
+
+    if (QueryType == NYql::EKikimrQueryType::Query) {
+        // Allow comment-only SQL via ExecuteQuery; preserve other APIs' existing behavior.
+        settings.Flags.insert("AllowNoStatements");
     }
 
     // __ydb_row_id (added to a user table for the fulltext UseRowIdAsDocId opt-in) must not surface
@@ -314,7 +301,6 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder, bool& keepInCache, TMaybe<TString>& commandTagName,
         NSQLTranslation::TTranslationSettings* effectiveSettings) {
     NYql::TAstParseResult astRes;
-    settingsBuilder.SetSqlVersion(sqlVersion);
     if (isSql) {
         if (QueryRequestsPgSyntax(queryText)) {
             return MakeRejectedSyntaxResult(PgSyntaxNotSupportedMessage);
@@ -333,14 +319,14 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
         NSQLTranslation::TTranslators translators(
-            NSQLTranslationV0::MakeTranslator(),
+            nullptr,
             NSQLTranslationV1::MakeTranslator(lexers, parsers),
             NSQLTranslationPG::MakeTranslator()
         );
 
         auto ast = NSQLTranslation::SqlToYql(translators, queryText, settings, nullptr, &stmtParseInfo, effectiveSettings);
-        deprecatedSQL = (ast.ActualSyntaxType == NYql::ESyntaxType::YQLv0);
-        sqlVersion = ast.ActualSyntaxType == NYql::ESyntaxType::YQLv1 ? 1 : 0;
+        deprecatedSQL = false;
+        sqlVersion = 1;
         keepInCache = stmtParseInfo.KeepInCache;
         commandTagName = stmtParseInfo.CommandTagName;
         return std::move(ast);
@@ -348,7 +334,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         sqlVersion = {};
         deprecatedSQL = true;
         return NYql::ParseAst(queryText);
-        // Do not check SQL constraints on s-expressions input, as it may come from both V0/V1.
+        // Do not check SQL constraints on s-expressions input.
         // Constraints were already checked on type annotation of SQL query.
     }
 }
@@ -371,7 +357,6 @@ TQueryAst ParseQuery(const TString& queryText, const TMaybe<Ydb::Query::Syntax>&
 TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<ui16>& sqlVersion, bool& deprecatedSQL,
         NYql::TExprContext& ctx, TKqpTranslationSettingsBuilder& settingsBuilder) {
     TVector<TQueryAst> result;
-    settingsBuilder.SetSqlVersion(sqlVersion);
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
@@ -380,7 +365,7 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(
-        NSQLTranslationV0::MakeTranslator(),
+        nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
@@ -393,14 +378,27 @@ TVector<TQueryAst> ParseStatements(const TString& queryText, bool isSql, TMaybe<
         auto settings = settingsBuilder.Build(ctx);
         TKqpAutoParamBuilderFactory autoParamBuilderFactory;
         settings.AutoParamBuilderFactory = &autoParamBuilderFactory;
-        ui16 actualSyntaxVersion = 0;
+        auto parsedSettings = settings;
+        NYql::TIssues settingsIssues;
+        if (!ParseTranslationSettings(queryText, parsedSettings, settingsIssues)) {
+            auto parseResult = MakeRejectedSyntaxResult(settingsIssues.ToOneLineString());
+            return {{std::make_shared<NYql::TAstParseResult>(std::move(parseResult)), {}, {}, false, {}}};
+        }
+        ui16 actualSyntaxVersion = 1;
         TVector<NYql::TStmtParseInfo> stmtParseInfo;
         auto astStatements = NSQLTranslation::SqlToAstStatements(translators, queryText, settings, nullptr, &actualSyntaxVersion, &stmtParseInfo);
-        deprecatedSQL = (actualSyntaxVersion == 0);
+        deprecatedSQL = false;
         sqlVersion = actualSyntaxVersion;
         YQL_ENSURE(astStatements.size() == stmtParseInfo.size());
+        if (astStatements.empty() && settings.Flags.contains("AllowNoStatements")) {
+            // An empty result also represents a full-text parse failure; the
+            // SqlToAstStatements API does not expose issues in that case. Reparse
+            // the original text to recover diagnostics or obtain a valid empty
+            // program. The compile service requires at least one AST result.
+            return {ParseQuery(queryText, /*syntax=*/{}, isSql, settingsBuilder)};
+        }
         for (size_t i = 0; i < astStatements.size(); ++i) {
-            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, (actualSyntaxVersion == 0), stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
+            result.push_back({std::make_shared<NYql::TAstParseResult>(std::move(astStatements[i])), sqlVersion, false, stmtParseInfo[i].KeepInCache, stmtParseInfo[i].CommandTagName});
         }
         return result;
     } else {

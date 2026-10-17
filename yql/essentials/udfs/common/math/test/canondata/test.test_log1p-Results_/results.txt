@@ -1,0 +1,53 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ];
+                            [
+                                "column2";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ];
+                            [
+                                "column3";
+                                [
+                                    "DataType";
+                                    "Double"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "-0.6931471805599453";
+                        "0";
+                        "0.000000009999999950000001";
+                        "0.6931471805599453"
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

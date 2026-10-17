@@ -46,7 +46,6 @@ private:
         Y_ENSURE(Pos_ + delta <= Buf_.size(), "Unexpected end of buffer");
     }
 
-private:
     size_t Pos_ = 0;
     TStringBuf Buf_;
 };
@@ -104,7 +103,6 @@ private:
         }
     }
 
-private:
     size_t Pos_ = 0;
     TVector<char> Vec_;
 };

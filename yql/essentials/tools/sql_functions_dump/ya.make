@@ -1,5 +1,7 @@
 PROGRAM()
 
+NO_BUILD_IF(EXPORT_CMAKE)
+
 SRCS(
     sql_functions_dump.cpp
 )

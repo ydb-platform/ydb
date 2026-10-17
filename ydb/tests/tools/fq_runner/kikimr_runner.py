@@ -40,11 +40,11 @@ def plain_or_under_sanitizer_wrapper(plain, sanitized):
 
 class BaseTenant(abc.ABC):
     def __init__(
-            self,
-            tenant_name,  # str
-            node_count,  # int
-            port_allocator,  # KikimrPortManagerPortAllocator
-            config_generator  # KikimrConfigGenerator
+        self,
+        tenant_name,  # str
+        node_count,  # int
+        port_allocator,  # KikimrPortManagerPortAllocator
+        config_generator,  # KikimrConfigGenerator
     ):
         self.bootstraped_nodes = set()
         self.node_count = node_count
@@ -53,8 +53,7 @@ class BaseTenant(abc.ABC):
         self.config_generator = config_generator
 
     def start(self):
-        self.kikimr_cluster = KiKiMR(configurator=self.config_generator,
-                                     cluster_name=self.tenant_name.replace('/', ''))
+        self.kikimr_cluster = KiKiMR(configurator=self.config_generator, cluster_name=self.tenant_name.replace('/', ''))
         self.kikimr_cluster.start()
 
     def stop(self):
@@ -63,15 +62,18 @@ class BaseTenant(abc.ABC):
 
     def endpoint(self, node_index=None):
         return "localhost:{}".format(
-            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).grpc_port)
+            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).grpc_port
+        )
 
     def http_api_endpoint(self, node_index=None):
         return "http://localhost:{}".format(
-            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).public_http_port)
+            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).public_http_port
+        )
 
     def monitoring_endpoint(self, node_index=None):
         return "http://localhost:{}".format(
-            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).mon_port)
+            self.port_allocator.get_node_port_allocator(node_index if node_index is not None else 1).mon_port
+        )
 
     @property
     def fq_config(self):
@@ -135,24 +137,30 @@ class BaseTenant(abc.ABC):
 
     def fill_gateways_cfg(self, gateways):
         if not self.cloud_mode:
-            gateways['pq']['cluster_mapping'].append({
-                'name': "pq",
-                'cluster_type': gateways_config_pb2.TPqClusterConfig.CT_PERS_QUEUE,
-                'endpoint': "localhost:{}".format(int(os.getenv("LOGBROKER_PORT"))),
-                'config_manager_endpoint': "localhost:{}".format(int(os.getenv("LB_CONFIG_MANAGER_PORT"))),
-            })
-            gateways['solomon']['cluster_mapping'].append({
-                'name': "solomon",
-                'cluster_type': gateways_config_pb2.TSolomonClusterConfig.SCT_SOLOMON,
-                'cluster': os.getenv("SOLOMON_ENDPOINT"),
-                'use_ssl': False,
-            })
+            gateways['pq']['cluster_mapping'].append(
+                {
+                    'name': "pq",
+                    'cluster_type': gateways_config_pb2.TPqClusterConfig.CT_PERS_QUEUE,
+                    'endpoint': "localhost:{}".format(int(os.getenv("LOGBROKER_PORT"))),
+                    'config_manager_endpoint': "localhost:{}".format(int(os.getenv("LB_CONFIG_MANAGER_PORT"))),
+                }
+            )
+            gateways['solomon']['cluster_mapping'].append(
+                {
+                    'name': "solomon",
+                    'cluster_type': gateways_config_pb2.TSolomonClusterConfig.SCT_SOLOMON,
+                    'cluster': os.getenv("SOLOMON_ENDPOINT"),
+                    'use_ssl': False,
+                }
+            )
 
-        gateways['dq']['default_settings'].extend([
-            {'name': "AnalyzeQuery", 'value': "true"},
-            {'name': "EnableInsert", 'value': "true"},
-            {'name': "ComputeActorType", 'value': "sync"},
-        ])
+        gateways['dq']['default_settings'].extend(
+            [
+                {'name': "AnalyzeQuery", 'value': "true"},
+                {'name': "EnableInsert", 'value': "true"},
+                {'name': "ComputeActorType", 'value': "sync"},
+            ]
+        )
         gateways['yql_core'] = {}
         gateways['yql_core']['flags'] = []
         gateways['yql_core']['flags'].append({'name': "_EnableMatchRecognize"})
@@ -210,12 +218,15 @@ class BaseTenant(abc.ABC):
         if node_index is None:
             return sum(self.get_task_count(n, query_id) for n in self.kikimr_cluster.nodes)
         else:
-            result = self.get_sensors(node_index, "yq").find_sensor({"query_id": query_id, "Stage": "Total", "sensor": "Tasks"})
+            result = self.get_sensors(node_index, "yq").find_sensor(
+                {"query_id": query_id, "Stage": "Total", "sensor": "Tasks"}
+            )
             return result if result is not None else 0
 
     def get_actor_count(self, node_index, activity):
         result = self.get_sensors(node_index, "utils").find_sensor(
-            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
+            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"}
+        )
         return result if result is not None else 0
 
     def get_ca_count(self, node_index):
@@ -223,10 +234,13 @@ class BaseTenant(abc.ABC):
 
     def get_worker_count(self, node_index):
         result = self.get_sensors(node_index, "yq").find_sensor(
-            {"subsystem": "worker_manager", "sensor": "ActiveWorkers"})
+            {"subsystem": "worker_manager", "sensor": "ActiveWorkers"}
+        )
         return result if result is not None else 0
 
-    def wait_worker_count(self, node_index, activity, expected_count, timeout=plain_or_under_sanitizer_wrapper(30, 150)):
+    def wait_worker_count(
+        self, node_index, activity, expected_count, timeout=plain_or_under_sanitizer_wrapper(30, 150)
+    ):
         deadline = time.time() + timeout
         while True:
             count = self.get_actor_count(node_index, activity)
@@ -238,7 +252,8 @@ class BaseTenant(abc.ABC):
 
     def get_mkql_limit(self, node_index):
         result = self.get_sensors(node_index, "yq").find_sensor(
-            {"subsystem": "worker_manager", "sensor": "MkqlMemoryLimit"})
+            {"subsystem": "worker_manager", "sensor": "MkqlMemoryLimit"}
+        )
         return result if result is not None else 0
 
     def get_mkql_allocated(self, node_index=None):
@@ -246,29 +261,18 @@ class BaseTenant(abc.ABC):
             return sum(self.get_mkql_allocated(n) for n in self.kikimr_cluster.nodes)
 
         result = self.get_sensors(node_index, "yq").find_sensor(
-            {
-                "subsystem": "worker_manager",
-                "sensor": "MkqlMemoryAllocated"
-            }
+            {"subsystem": "worker_manager", "sensor": "MkqlMemoryAllocated"}
         )
         logging.debug("MQKL node " + str(node_index) + " = " + str(result))
         return result if result is not None else 0
 
     def get_peer_count(self, node_index):
-        result = self.get_sensors(node_index, "yq").find_sensor(
-            {
-                "subsystem": "node_manager",
-                "sensor": "PeerCount"
-            }
-        )
+        result = self.get_sensors(node_index, "yq").find_sensor({"subsystem": "node_manager", "sensor": "PeerCount"})
         return result if result is not None else 0
 
     def get_request_count(self, node_index, name, sensor="Ok"):
         result = self.get_sensors(node_index, "yq").find_sensor(
-            {
-                "subsystem": "ControlPlaneStorage",
-                "request_common": name, "sensor": sensor
-            }
+            {"subsystem": "ControlPlaneStorage", "request_common": name, "sensor": sensor}
         )
         return result if result is not None else 0
 
@@ -305,8 +309,9 @@ class BaseTenant(abc.ABC):
             deadline = time.time() + wait_time
             logging.debug("Wait for node {} peer discovery".format(node_index))
             while True:
-                assert time.time() < deadline, "Node {} peer discovery deadline {}s exceeded".format(node_index,
-                                                                                                     wait_time)
+                assert time.time() < deadline, "Node {} peer discovery deadline {}s exceeded".format(
+                    node_index, wait_time
+                )
                 try:
                     peer_count = self.get_peer_count(node_index)
                     if peer_count is None or peer_count < self.node_count:
@@ -347,11 +352,7 @@ class BaseTenant(abc.ABC):
         found = False
         for node_index in self.kikimr_cluster.nodes:
             sensor = self.get_sensors(node_index, "yq").find_sensor(
-                {
-                    "query_id": query_id,
-                    "subsystem": "checkpoint_coordinator",
-                    "sensor": metric_name
-                }
+                {"query_id": query_id, "subsystem": "checkpoint_coordinator", "sensor": metric_name}
             )
             if sensor is not None:
                 found = True
@@ -360,40 +361,45 @@ class BaseTenant(abc.ABC):
         return sum
 
     def get_inprogress_checkpoints(self, query_id, expect_counters_exist=False):
-        return self.get_checkpoint_coordinator_metric(query_id, "InProgress",
-                                                      expect_counters_exist=expect_counters_exist)
+        return self.get_checkpoint_coordinator_metric(
+            query_id, "InProgress", expect_counters_exist=expect_counters_exist
+        )
 
     def get_completed_checkpoints(self, query_id, expect_counters_exist=False):
-        return self.get_checkpoint_coordinator_metric(query_id, "CompletedCheckpoints",
-                                                      expect_counters_exist=expect_counters_exist)
+        return self.get_checkpoint_coordinator_metric(
+            query_id, "CompletedCheckpoints", expect_counters_exist=expect_counters_exist
+        )
 
-    def wait_completed_checkpoints(self, query_id, expected,
-                                   timeout=plain_or_under_sanitizer_wrapper(30, 150),
-                                   expect_counters_exist=False):
+    def wait_completed_checkpoints(
+        self, query_id, expected, timeout=plain_or_under_sanitizer_wrapper(30, 150), expect_counters_exist=False
+    ):
         deadline = time.time() + timeout
         while True:
             completed = self.get_completed_checkpoints(query_id, expect_counters_exist=expect_counters_exist)
             if completed >= expected:
                 break
-            assert time.time() < deadline, "Wait checkpoint failed, actual current: " + str(completed) + ", expected " + str(expected)
+            assert time.time() < deadline, (
+                "Wait checkpoint failed, actual current: " + str(completed) + ", expected " + str(expected)
+            )
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
-    def wait_zero_checkpoint(self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150),
-                             expect_counters_exist=False):
+    def wait_zero_checkpoint(
+        self, query_id, timeout=plain_or_under_sanitizer_wrapper(30, 150), expect_counters_exist=False
+    ):
         self.wait_completed_checkpoints(query_id, 1, timeout, expect_counters_exist)
 
 
 class YdbTenant(BaseTenant):
     def __init__(
-            self,
-            tenant_name="/default",
-            node_count=1,
-            control_services=True,
-            compute_services=True,
-            dc_mapping={},
-            extra_feature_flags=None,  # list[str]
-            disabled_feature_flags=None,  # list[str]
-            extra_grpc_services=None,  # list[str]
+        self,
+        tenant_name="/default",
+        node_count=1,
+        control_services=True,
+        compute_services=True,
+        dc_mapping={},
+        extra_feature_flags=None,  # list[str]
+        disabled_feature_flags=None,  # list[str]
+        extra_grpc_services=None,  # list[str]
     ):
         assert node_count == 1
         assert control_services is False
@@ -415,40 +421,41 @@ class YdbTenant(BaseTenant):
                 use_in_memory_pdisks=True,
                 port_allocator=port_allocator,
                 dynamic_storage_pools=[
-                    dict(name="dynamic_storage_pool:1",
-                         kind="hdd",
-                         pdisk_user_kind=0),
-                    dict(name="dynamic_storage_pool:2",
-                         kind="ssd",
-                         pdisk_user_kind=0)
+                    dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0),
+                    dict(name="dynamic_storage_pool:2", kind="ssd", pdisk_user_kind=0),
                 ],
                 enable_pqcd=False,
                 dc_mapping=dc_mapping,
                 extra_feature_flags=extra_feature_flags,
                 disabled_feature_flags=disabled_feature_flags,
-                extra_grpc_services=extra_grpc_services
-            ))
+                extra_grpc_services=extra_grpc_services,
+            ),
+        )
 
     def fill_config(self, control_plane):
         self.config_generator.yaml_config["table_service_config"]["bindings_mode"] = "BM_DROP"
-        self.config_generator.yaml_config["table_service_config"]["resource_manager"] = {"query_memory_limit": 64424509440}
+        self.config_generator.yaml_config["table_service_config"]["resource_manager"] = {
+            "query_memory_limit": 64424509440
+        }
         self.config_generator.yaml_config["resource_broker_config"] = {}
-        self.config_generator.yaml_config["resource_broker_config"]["queues"] = [{"limit": {"memory": 64424509440}, "weight": 30, "name": "queue_kqp_resource_manager"}]
+        self.config_generator.yaml_config["resource_broker_config"]["queues"] = [
+            {"limit": {"memory": 64424509440}, "weight": 30, "name": "queue_kqp_resource_manager"}
+        ]
         self.config_generator.yaml_config["resource_broker_config"]["resource_limit"] = {"memory": 64424509440}
         self.enable_logs()
 
 
 class YqTenant(BaseTenant):
     def __init__(
-            self,
-            tenant_name="/default",
-            node_count=1,
-            control_services=True,
-            compute_services=True,
-            dc_mapping={},
-            extra_feature_flags=None,  # list[str]
-            disabled_feature_flags=None,  # list[str]
-            extra_grpc_services=None,  # list[str]
+        self,
+        tenant_name="/default",
+        node_count=1,
+        control_services=True,
+        compute_services=True,
+        dc_mapping={},
+        extra_feature_flags=None,  # list[str]
+        disabled_feature_flags=None,  # list[str]
+        extra_grpc_services=None,  # list[str]
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -460,9 +467,7 @@ class YqTenant(BaseTenant):
         port_allocator = KikimrPortManagerPortAllocator()
         public_http_config = None
         if node_count == 1:
-            public_http_config = {
-                "port": port_allocator.get_node_port_allocator(1).public_http_port
-            }
+            public_http_config = {"port": port_allocator.get_node_port_allocator(1).public_http_port}
         self.control_services = control_services
         self.compute_services = compute_services
 
@@ -480,8 +485,9 @@ class YqTenant(BaseTenant):
                 public_http_config=public_http_config,
                 extra_feature_flags=extra_feature_flags,
                 disabled_feature_flags=disabled_feature_flags,
-                extra_grpc_services=extra_grpc_services
-            ))
+                extra_grpc_services=extra_grpc_services,
+            ),
+        )
 
     def fill_config(self, control_plane):
         self.config_generator.yaml_config.pop('blob_storage_config', None)
@@ -525,13 +531,14 @@ class YqTenant(BaseTenant):
             # yq services
             fq_config['pinger']['ping_period'] = "5s"  # == "10s" / 2
             fq_config['private_api']['task_service_endpoint'] = "localhost:" + str(
-                control_plane.port_allocator.get_node_port_allocator(1).grpc_port)
+                control_plane.port_allocator.get_node_port_allocator(1).grpc_port
+            )
             fq_config['private_api']['task_service_database'] = control_plane.tenant_name
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True
             fq_config['task_controller'] = {}
-            fq_config['task_controller']['ping_period'] = "5s"      # task_lease_ttl / 4
+            fq_config['task_controller']['ping_period'] = "5s"  # task_lease_ttl / 4
             fq_config['task_controller']['aggr_period'] = "1s"
         else:
             fq_config['nodes_manager']['enabled'] = False
@@ -539,27 +546,26 @@ class YqTenant(BaseTenant):
 
         self.fill_storage_config(fq_config['db_pool']['storage'], "DbPoolStorage_" + self.uuid)
         self.fill_gateways_cfg(fq_config['gateways'])
-        self.fill_storage_config(fq_config['checkpoint_coordinator']['storage'],
-                                 "CheckpointCoordinatorStorage_" + self.uuid)
+        self.fill_storage_config(
+            fq_config['checkpoint_coordinator']['storage'], "CheckpointCoordinatorStorage_" + self.uuid
+        )
 
         fq_config['row_dispatcher'] = {
             'enabled': True,
             'timeout_before_start_session_sec': 5,
             'send_status_period_sec': 2,
             'max_session_used_memory': 1000000,
-            'without_consumer': True}
+            'without_consumer': True,
+        }
         fq_config['row_dispatcher']['coordinator'] = {'coordination_node_path': "row_dispatcher"}
         fq_config['row_dispatcher']['coordinator']['rebalancing_timeout_sec'] = 30
         fq_config['row_dispatcher']['coordinator']['database'] = {}
-        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'],
-                                 "RowDispatcher_" + self.uuid)
+        self.fill_storage_config(fq_config['row_dispatcher']['coordinator']['database'], "RowDispatcher_" + self.uuid)
 
         fq_config['quotas_manager'] = {'enabled': True}
-        fq_config['quotas_manager']['quota_descriptions'] = [{
-            'subject_type': 'cloud',
-            'metric_name': 'yq.cpuPercent.count',
-            'hard_limit': 10000,
-            'default_limit': 10000}]
+        fq_config['quotas_manager']['quota_descriptions'] = [
+            {'subject_type': 'cloud', 'metric_name': 'yq.cpuPercent.count', 'hard_limit': 10000, 'default_limit': 10000}
+        ]
 
         fq_config['rate_limiter'] = {'enabled': True}
         self.fill_rate_limiter_config(fq_config['rate_limiter'], "RateLimiter_" + self.uuid)
@@ -571,13 +577,14 @@ class TenantType(Enum):
 
 
 class TenantConfig:
-    def __init__(self,
-                 node_count,  # int
-                 tenant_type=TenantType.YQ,  # TenantType
-                 extra_feature_flags=None,  # list[str]
-                 disabled_feature_flags=None,  # list[str]
-                 extra_grpc_services=None  # list[str]
-                 ):
+    def __init__(
+        self,
+        node_count,  # int
+        tenant_type=TenantType.YQ,  # TenantType
+        extra_feature_flags=None,  # list[str]
+        disabled_feature_flags=None,  # list[str]
+        extra_grpc_services=None,  # list[str]
+    ):
         if extra_feature_flags is None:
             extra_feature_flags = []
         if disabled_feature_flags is None:
@@ -592,14 +599,15 @@ class TenantConfig:
 
 
 class StreamingOverKikimrConfig:
-    def __init__(self,
-                 cloud_mode=False,
-                 node_count=1,  # Union[int, dict[str, TenantConfig]]
-                 tenant_mapping=None,  # dict[str, str]
-                 cloud_mapping=None,  # dict
-                 dc_mapping=None,  # dict
-                 mvp_external_ydb_endpoint=None  # str
-                 ):
+    def __init__(
+        self,
+        cloud_mode=False,
+        node_count=1,  # Union[int, dict[str, TenantConfig]]
+        tenant_mapping=None,  # dict[str, str]
+        cloud_mapping=None,  # dict
+        dc_mapping=None,  # dict
+        mvp_external_ydb_endpoint=None,  # str
+    ):
         if tenant_mapping is None:
             tenant_mapping = {}
         if cloud_mapping is None:
@@ -615,42 +623,46 @@ class StreamingOverKikimrConfig:
 
 
 class StreamingOverKikimr(object):
-    def __init__(self,
-                 configuration=None  # Optional[StreamingOverKikimrConfig]
-                 ):
+    def __init__(self, configuration=None):  # Optional[StreamingOverKikimrConfig]
         if configuration is None:
             configuration = StreamingOverKikimrConfig()
         self.uuid = str(uuid.uuid4())
         self.mvp_mock_port = library.python.port_manager.PortManager().get_port()
-        self.mvp_mock_server = Process(target=MvpMockServer(self.mvp_mock_port,  configuration.mvp_external_ydb_endpoint).serve_forever)
+        self.mvp_mock_server = Process(
+            target=MvpMockServer(self.mvp_mock_port, configuration.mvp_external_ydb_endpoint).serve_forever
+        )
         self.tenants = {}
         _tenant_mapping = configuration.tenant_mapping.copy()
         if isinstance(configuration.node_count, dict):
             self.compute_plane = None
             control_services = True
-            compute_services = sum(
-                conf.tenant_type == TenantType.YQ
-                for _, conf in configuration.node_count.items()) == 1
+            compute_services = (
+                sum(conf.tenant_type == TenantType.YQ for _, conf in configuration.node_count.items()) == 1
+            )
             fill_mapping = len(_tenant_mapping) == 0
             for name, tenant_config in configuration.node_count.items():
                 if tenant_config.tenant_type == TenantType.YQ:
-                    tenant = YqTenant(tenant_name=name,
-                                      node_count=tenant_config.node_count,
-                                      control_services=control_services,
-                                      compute_services=compute_services,
-                                      dc_mapping=configuration.dc_mapping,
-                                      extra_feature_flags=tenant_config.extra_feature_flags,
-                                      disabled_feature_flags=tenant_config.disabled_feature_flags,
-                                      extra_grpc_services=tenant_config.extra_grpc_services)
+                    tenant = YqTenant(
+                        tenant_name=name,
+                        node_count=tenant_config.node_count,
+                        control_services=control_services,
+                        compute_services=compute_services,
+                        dc_mapping=configuration.dc_mapping,
+                        extra_feature_flags=tenant_config.extra_feature_flags,
+                        disabled_feature_flags=tenant_config.disabled_feature_flags,
+                        extra_grpc_services=tenant_config.extra_grpc_services,
+                    )
                 else:
-                    tenant = YdbTenant(tenant_name=name,
-                                       node_count=tenant_config.node_count,
-                                       control_services=control_services,
-                                       compute_services=compute_services,
-                                       dc_mapping=configuration.dc_mapping,
-                                       extra_feature_flags=tenant_config.extra_feature_flags,
-                                       disabled_feature_flags=tenant_config.disabled_feature_flags,
-                                       extra_grpc_services=tenant_config.extra_grpc_services)
+                    tenant = YdbTenant(
+                        tenant_name=name,
+                        node_count=tenant_config.node_count,
+                        control_services=control_services,
+                        compute_services=compute_services,
+                        dc_mapping=configuration.dc_mapping,
+                        extra_feature_flags=tenant_config.extra_feature_flags,
+                        disabled_feature_flags=tenant_config.disabled_feature_flags,
+                        extra_grpc_services=tenant_config.extra_grpc_services,
+                    )
                 tenant.uuid = self.uuid
                 tenant.cloud_mode = configuration.cloud_mode
                 tenant.mvp_mock_port = self.mvp_mock_port
@@ -668,8 +680,7 @@ class StreamingOverKikimr(object):
                 control_services = False
                 compute_services = True
         else:
-            tenant = YqTenant(node_count=configuration.node_count,
-                              dc_mapping=configuration.dc_mapping)
+            tenant = YqTenant(node_count=configuration.node_count, dc_mapping=configuration.dc_mapping)
             tenant.uuid = self.uuid
             tenant.cloud_mode = configuration.cloud_mode
             tenant.mvp_mock_port = self.mvp_mock_port
@@ -686,13 +697,13 @@ class StreamingOverKikimr(object):
         try:
             self.driver.wait(timeout=10)
         except TimeoutError as e:
-            logging.error("Connect failed to YDB. Last reported errors by discovery: "
-                          + self.driver.discovery_debug_details())
+            logging.error(
+                "Connect failed to YDB. Last reported errors by discovery: " + self.driver.discovery_debug_details()
+            )
             raise e
         self.session_pool = ydb.SessionPool(self.driver, size=1)
         self.table_prefix = os.path.join(
-            os.getenv("YDB_DATABASE"),
-            self.control_plane.fq_config['control_plane_storage']['storage']['table_prefix']
+            os.getenv("YDB_DATABASE"), self.control_plane.fq_config['control_plane_storage']['storage']['table_prefix']
         )
 
         if len(_tenant_mapping) > 0 or len(configuration.cloud_mapping) > 0:
@@ -700,57 +711,64 @@ class StreamingOverKikimr(object):
             def _create_tenants_table(session, path):
                 return session.create_table(
                     path,
-                    ydb.TableDescription().with_column(
-                        ydb.Column('tenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('common', ydb.OptionalType(ydb.DataType.Bool))
-                    ).with_column(
-                        ydb.Column('state', ydb.OptionalType(ydb.DataType.Uint32))
-                    ).with_column(
-                        ydb.Column('state_time', ydb.OptionalType(ydb.DataType.Timestamp))
-                    ).with_primary_key('tenant')
+                    ydb.TableDescription()
+                    .with_column(ydb.Column('tenant', ydb.OptionalType(ydb.DataType.String)))
+                    .with_column(ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String)))
+                    .with_column(ydb.Column('common', ydb.OptionalType(ydb.DataType.Bool)))
+                    .with_column(ydb.Column('state', ydb.OptionalType(ydb.DataType.Uint32)))
+                    .with_column(ydb.Column('state_time', ydb.OptionalType(ydb.DataType.Timestamp)))
+                    .with_primary_key('tenant'),
                 )
 
-            self.session_pool.retry_operation_sync(_create_tenants_table, None,
-                                                   os.path.join(self.table_prefix, "tenants"))
+            self.session_pool.retry_operation_sync(
+                _create_tenants_table, None, os.path.join(self.table_prefix, "tenants")
+            )
 
             def _create_mappings_table(session, path):
                 return session.create_table(
                     path,
-                    ydb.TableDescription().with_column(
-                        ydb.Column('subject_type', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String))
-                    ).with_column(
-                        ydb.Column('node', ydb.OptionalType(ydb.DataType.String))
-                    ).with_primary_keys('subject_type', 'subject_id')
+                    ydb.TableDescription()
+                    .with_column(ydb.Column('subject_type', ydb.OptionalType(ydb.DataType.String)))
+                    .with_column(ydb.Column('subject_id', ydb.OptionalType(ydb.DataType.String)))
+                    .with_column(ydb.Column('vtenant', ydb.OptionalType(ydb.DataType.String)))
+                    .with_column(ydb.Column('node', ydb.OptionalType(ydb.DataType.String)))
+                    .with_primary_keys('subject_type', 'subject_id'),
                 )
 
-            self.session_pool.retry_operation_sync(_create_mappings_table, None,
-                                                   os.path.join(self.table_prefix, "mappings"))
+            self.session_pool.retry_operation_sync(
+                _create_mappings_table, None, os.path.join(self.table_prefix, "mappings")
+            )
 
             query = """--!syntax_v1
             PRAGMA TablePathPrefix("{}");
             """.format(self.table_prefix)
             for vtenant, tenant in _tenant_mapping.items():
-                query = query + """UPSERT INTO tenants (tenant, vtenant, common, state, state_time) values("{}", "{}", true, 0, CurrentUtcTimestamp());
-                """.format(tenant, vtenant)
+                query = (
+                    query
+                    + """UPSERT INTO tenants (tenant, vtenant, common, state, state_time) values("{}", "{}", true, 0, CurrentUtcTimestamp());
+                """.format(
+                        tenant, vtenant
+                    )
+                )
             for cloud, vtenant_with_node in configuration.cloud_mapping.items():
-                query = query + """UPSERT INTO mappings (subject_type, subject_id, vtenant, node) values ("cloud", "{}", "{}", {});
-                """.format(cloud, vtenant_with_node[0], ("\"" + vtenant_with_node[1] + "\"") if vtenant_with_node[1] is not None else 'NULL')
+                query = (
+                    query
+                    + """UPSERT INTO mappings (subject_type, subject_id, vtenant, node) values ("cloud", "{}", "{}", {});
+                """.format(
+                        cloud,
+                        vtenant_with_node[0],
+                        ("\"" + vtenant_with_node[1] + "\"") if vtenant_with_node[1] is not None else 'NULL',
+                    )
+                )
             self.exec_db_statement(query)
             self.control_plane.fq_config['control_plane_storage']['use_db_mapping'] = True
 
     def exec_db_statement(self, query):
         self.session_pool.retry_operation_sync(
             lambda session: session.transaction(ydb.SerializableReadWrite()).execute(
-                query.format(self.table_prefix),
-                commit_tx=True
-            ))
+                query.format(self.table_prefix), commit_tx=True
+            )
+        )
 
     def stop_mvp_mock_server(self):
         self.mvp_mock_server.terminate()

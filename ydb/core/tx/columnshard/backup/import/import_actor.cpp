@@ -97,7 +97,9 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         return;
     }
     if (Stage == EStage::WaitSaveCursor) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "abort_during_save_cursor")("message", errorMessage);
+        YDB_LOG_WARN("",
+            {"event", "abort_during_save_cursor"},
+            {"message", errorMessage});
         return;
     }
     ImportSession->Abort(errorMessage);
@@ -139,8 +141,11 @@ void TImportActor::OnSessionStateSaved() {
 
 void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_batch_after_terminal")("stage", StageToString(Stage))(
-            "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
+        YDB_LOG_WARN("",
+            {"event", "import_batch_after_terminal"},
+            {"stage", StageToString(Stage)},
+            {"isFinished", ImportSession->IsFinished()},
+            {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
     }
     Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
@@ -187,8 +192,11 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     if (ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "import_write_result_after_terminal")("stage", StageToString(Stage))(
-            "is_finished", ImportSession->IsFinished())("is_aborted", ImportSession->IsReadyForRemoveOnFinished());
+        YDB_LOG_WARN("",
+            {"event", "import_write_result_after_terminal"},
+            {"stage", StageToString(Stage)},
+            {"isFinished", ImportSession->IsFinished()},
+            {"isAborted", ImportSession->IsReadyForRemoveOnFinished()});
         return;
     }
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
@@ -216,8 +224,8 @@ void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
 
     const auto& restoreTask = ImportSession->GetTask().GetRestoreTask();
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
-    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-        SelfId(), 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
+    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(SelfId(), static_cast<ui64>(TabletId), 0, restoreTask,
+        NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
     ImportActorId = Register(importActor.release());
     SwitchStage(EStage::Initialization, EStage::WaitData);
     Counters.OnReadStarted();

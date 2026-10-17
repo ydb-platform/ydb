@@ -6,8 +6,7 @@ template<class ExecCtxPtr>
 TString TReduceJobBuilder::SetReduceLambdaCode(TYqlUserJobBase* reduceJob, NNodes::TYtReduce reduce, ExecCtxPtr execCtx, TExprContext& ctx) {
     TString reduceLambda;
     {
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            execCtx->FunctionRegistry_->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
         reduceLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, reduce.Reducer(), ctx);
@@ -44,6 +43,7 @@ void TReduceJobBuilder::SetReduceJobParams(
     reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
     reduceJob->SetLangVer(execCtx->Options_.LangVer());
     reduceJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+    reduceJob->SetBridgeMode(execCtx->Options_.BridgeMode());
 }
 
 } // namespace NYql

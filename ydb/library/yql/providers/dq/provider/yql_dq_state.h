@@ -31,7 +31,7 @@ struct TDqState: public TThrRefBase {
     const TFileStoragePtr FileStorage;
     const TString VanillaJobPath;
     const TString VanillaJobMd5;
-    TDqConfiguration::TPtr Settings = MakeIntrusive<TDqConfiguration>();
+    TDqConfiguration::TPtr Settings;
     bool ExternalUser;
     bool IsFullCaptureReady = true;
 
@@ -74,6 +74,7 @@ struct TDqState: public TThrRefBase {
         , FileStorage(fileStorage)
         , VanillaJobPath(vanillaJobPath)
         , VanillaJobMd5(vanillaJobMd5)
+        , Settings(MakeIntrusive<TDqConfiguration>(typeCtx ? typeCtx->StrictConfigValidation : false))
         , ExternalUser(externalUser)
         , AbortHidden(std::move(hiddenAborter))
     { }

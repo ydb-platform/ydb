@@ -111,6 +111,15 @@ namespace NKikimr {
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Segs->GetOwnedChunks(chunks);
         }
+
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            Segs->ResolveStripeSsts(stripeChunks);
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Segs->ForEachStripeExtent(stripeChunks, callback);
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -163,6 +172,15 @@ namespace NKikimr {
 
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Segs->GetOwnedChunks(chunks);
+        }
+
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            Segs->ResolveStripeSsts(stripeChunks);
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Segs->ForEachStripeExtent(stripeChunks, callback);
         }
 
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
@@ -362,6 +380,23 @@ namespace NKikimr {
             Level0.GetOwnedChunks(chunks);
             for (const auto& level : SortedLevels) {
                 level.GetOwnedChunks(chunks);
+            }
+        }
+
+        // Bulk formed segments are excluded on purpose: they are produced by repl, which never writes into the
+        // stripe heap.
+        void ResolveStripeSsts(const THashSet<TChunkIdx>& stripeChunks) {
+            Level0.ResolveStripeSsts(stripeChunks);
+            for (auto& level : SortedLevels) {
+                level.ResolveStripeSsts(stripeChunks);
+            }
+        }
+
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            Level0.ForEachStripeExtent(stripeChunks, callback);
+            for (const auto& level : SortedLevels) {
+                level.ForEachStripeExtent(stripeChunks, callback);
             }
         }
 

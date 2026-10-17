@@ -1095,7 +1095,6 @@ private:
         }
     }
 
-private:
     TComputationContext& CompCtx_;
     const NUdf::TUnboxedValue Stream_;
     IComputationExternalNode* const Item_;
@@ -1236,7 +1235,6 @@ private:
         }
     }
 
-private:
     TComputationContext& CompCtx_;
     const NUdf::TUnboxedValue Stream_;
     IComputationExternalNode* const Item_;

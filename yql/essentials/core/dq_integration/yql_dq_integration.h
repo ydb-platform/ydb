@@ -45,8 +45,7 @@ private:
 
 class IDqIntegration {
 public:
-    virtual ~IDqIntegration() {
-    }
+    virtual ~IDqIntegration() = default;
 
     struct TPartitionSettings {
         TMaybe<ui64> DataSizePerJob;

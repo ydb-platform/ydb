@@ -415,6 +415,80 @@ namespace NAsyncTest {
             UNIT_ASSERT(state.Destroyed);
         }
 
+
+        // The async<R> overloads take an already created lazy frame
+        Y_UNIT_TEST(AsyncOverloadReturnsValue) {
+            TVector<TString> sequence;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto op = [&]() -> async<int> {
+                    sequence.push_back("op running");
+                    co_return 42;
+                };
+
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), op());
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+
+                result = co_await WithDeadline(TActivationContext::Monotonic() + TDuration::MilliSeconds(10), op());
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+
+                result = co_await WithDeadline(TActivationContext::Now() + TDuration::MilliSeconds(10), op());
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(*result, 42);
+
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "started", "op running", "op running", "op running", "returning", "finished");
+            UNIT_ASSERT(!state.Destroyed);
+        }
+
+        Y_UNIT_TEST(AsyncOverloadTimesOut) {
+            TVector<TString> sequence;
+            std::coroutine_handle<> resume, cancel;
+
+            TAsyncTestActor::TState state;
+            TAsyncTestActorRuntime runtime;
+
+            auto actor = runtime.StartAsyncActor(state, [&](auto*) -> async<void> {
+                sequence.push_back("started");
+                Y_DEFER { sequence.push_back("finished"); };
+
+                auto op = [&]() -> async<int> {
+                    sequence.push_back("suspending");
+                    co_await TSuspendAwaiter{ &resume, &cancel };
+                    sequence.push_back("resumed");
+                    co_return 42;
+                };
+
+                auto result = co_await WithTimeout(TDuration::MilliSeconds(10), op());
+                if (!result) {
+                    sequence.push_back("timeout");
+                    co_return;
+                }
+                sequence.push_back("returning");
+            });
+
+            ASYNC_ASSERT_SEQUENCE(sequence, "started", "suspending");
+            UNIT_ASSERT(resume && !cancel);
+
+            runtime.SimulateSleep(TDuration::MilliSeconds(15));
+            ASYNC_ASSERT_SEQUENCE_EMPTY(sequence);
+            UNIT_ASSERT(cancel);
+
+            actor.ResumeCoroutine(cancel);
+            ASYNC_ASSERT_SEQUENCE(sequence, "timeout", "finished");
+            UNIT_ASSERT(!state.Destroyed);
+        }
+
     }
 
 } // namespace NAsyncTest

@@ -731,6 +731,7 @@ class LintExtraParams:
         'alice/agents/booking',
         'bigrt',
         'grut',
+        'quality/antifraud',
         'quality/user_sessions',
         'yabs',
         'maps',
@@ -1255,6 +1256,14 @@ class TsCheckHasCoverage:
         return spec_args.get("TS_CHECK_HAS_COVERAGE", "no")
 
 
+class TsCheckCommand:
+    KEY = 'TS-CHECK-COMMAND'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return spec_args.get("TS_CHECK_COMMAND", "")
+
+
 class TestedProjectFilename:
     KEY = 'TESTED-PROJECT-FILENAME'
 
@@ -1372,14 +1381,6 @@ class TestFiles:
     def ts_test_srcs(cls, unit, flat_args, spec_args):
         test_files = get_values_list(unit, "_TS_TEST_SRCS_VALUE")
         test_files = _resolve_module_files(unit, unit.get("MODDIR"), test_files)
-        value = serialize_list(test_files)
-        return value
-
-    @classmethod
-    def tsc_typecheck_input_files(cls, unit, flat_args, spec_args):
-        typecheck_files = get_values_list(unit, "TS_INPUT_FILES")
-        typecheck_test_files = get_values_list(unit, "TS_INPUT_TEST_FILES")
-        test_files = [_common.resolve_common_const(f) for f in typecheck_files + typecheck_test_files]
         value = serialize_list(test_files)
         return value
 

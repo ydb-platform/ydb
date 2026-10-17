@@ -63,8 +63,15 @@ auto WrapInPoll(T&& x) -> decltype(PollWrapper<T>::Wrap(std::forward<T>(x))) {
   return PollWrapper<T>::Wrap(std::forward<T>(x));
 }
 
+template <typename F, typename SfinaeVoid = void>
+class PromiseLike;
+
+template <>
+class PromiseLike<void>;
+
 template <typename F>
-class PromiseLike {
+class PromiseLike<F, y_absl::enable_if_t<!std::is_void<
+                         typename std::invoke_result<F>::type>::value>> {
  private:
   GPR_NO_UNIQUE_ADDRESS F f_;
 

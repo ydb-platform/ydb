@@ -128,6 +128,19 @@ BELONGS ya.make
     Files with this license:
         include/boost/icl/type_traits/succ_pred.hpp [2:2]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 699a6d8cfdcd4c05b1d52686ae9d3623
+BELONGS ya.make
+    License text:
+        Copyright (c) 2026: Joaquin M Lopez Munoz
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/icl/detail/assoc_container_adaptor.hpp [2:2]
+        include/boost/icl/detail/map_adaptor.hpp [2:2]
+        include/boost/icl/detail/set_adaptor.hpp [2:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 69c01e55c80a63b913179de5dfb66471
 BELONGS ya.make
     License text:

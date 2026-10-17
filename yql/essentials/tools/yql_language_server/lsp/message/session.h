@@ -32,17 +32,24 @@ struct TTextDocumentSyncOptions {
     TMaybe<ETextDocumentSyncKind> Change;
 };
 
+struct TCompletionOptions {
+    TMaybe<TVector<TString>> TriggerCharacters;
+};
+
 struct TDocumentFormattingOptions {
 };
 
-struct TCompletionOptions {
-    TMaybe<TVector<TString>> TriggerCharacters;
+struct TDiagnosticOptions {
+    TMaybe<TString> Identifier;
+    bool InterFileDependencies = false;
+    bool WorkspaceDiagnostics = false;
 };
 
 struct TServerCapabilities {
     TMaybe<TTextDocumentSyncOptions> TextDocumentSync;
     TMaybe<TCompletionOptions> CompletionProvider;
     TMaybe<TDocumentFormattingOptions> DocumentFormattingProvider;
+    TMaybe<TDiagnosticOptions> DiagnosticProvider;
 };
 
 struct TServerInfo {
@@ -75,9 +82,10 @@ namespace NYql::NReflection {
 YQL_DEFINE_REFLECTING(NLsp::TClientInfo, (Name)(Version));
 YQL_DEFINE_REFLECTING(NLsp::TInitializeParams, (ClientInfo)(InitializationOptions)(Capabilities));
 YQL_DEFINE_REFLECTING(NLsp::TTextDocumentSyncOptions, (OpenClose)(Change));
-YQL_DEFINE_REFLECTING(NLsp::TDocumentFormattingOptions, );
 YQL_DEFINE_REFLECTING(NLsp::TCompletionOptions, (TriggerCharacters));
-YQL_DEFINE_REFLECTING(NLsp::TServerCapabilities, (TextDocumentSync)(CompletionProvider)(DocumentFormattingProvider));
+YQL_DEFINE_REFLECTING(NLsp::TDocumentFormattingOptions, );
+YQL_DEFINE_REFLECTING(NLsp::TDiagnosticOptions, (Identifier)(InterFileDependencies)(WorkspaceDiagnostics));
+YQL_DEFINE_REFLECTING(NLsp::TServerCapabilities, (TextDocumentSync)(CompletionProvider)(DocumentFormattingProvider)(DiagnosticProvider));
 YQL_DEFINE_REFLECTING(NLsp::TServerInfo, (Name)(Version));
 YQL_DEFINE_REFLECTING(NLsp::TInitializeResult, (Capabilities)(ServerInfo));
 YQL_DEFINE_REFLECTING(NLsp::TInitializedParams, );
@@ -93,6 +101,7 @@ JSON_DECLARE_TO(NLsp::ETextDocumentSyncKind, value);
 JSON_DECLARE_TO(NLsp::TTextDocumentSyncOptions, value);
 JSON_DECLARE_TO(NLsp::TCompletionOptions, value);
 JSON_DECLARE_TO(NLsp::TDocumentFormattingOptions, value);
+JSON_DECLARE_TO(NLsp::TDiagnosticOptions, value);
 JSON_DECLARE_TO(NLsp::TServerCapabilities, value);
 JSON_DECLARE_TO(NLsp::TServerInfo, value);
 JSON_DECLARE_TO(NLsp::TInitializeResult, value);

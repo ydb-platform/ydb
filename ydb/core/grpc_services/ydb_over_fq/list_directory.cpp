@@ -4,14 +4,13 @@
 
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class ListDirectoryRPC
-    : public TRpcBase<
-        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse> {
+class ListDirectoryRPC: public TRpcBase<ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse> {
 public:
-    using TBase = TRpcBase<
-        ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>;
+    using TBase = TRpcBase<ListDirectoryRPC, Ydb::Scheme::ListDirectoryRequest, Ydb::Scheme::ListDirectoryResponse>;
     static constexpr std::string_view RpcName = "ListDirectory";
 
     using TBase::TBase;
@@ -31,7 +30,8 @@ public:
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        SRC_LOG_T("listing bindings");
+        YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -80,4 +80,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
         f.RegisterActor(new ListDirectoryRPC(p.release(), grpcProxyId));
     };
 }
-}
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

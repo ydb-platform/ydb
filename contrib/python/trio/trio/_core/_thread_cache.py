@@ -5,6 +5,7 @@ import ctypes.util
 import os
 import sys
 import traceback
+from contextvars import Context
 from functools import partial
 from itertools import count
 from threading import Lock, Thread
@@ -151,8 +152,17 @@ class WorkerThread(Generic[RetT]):
         self._worker_lock = Lock()
         self._worker_lock.acquire()
         self._default_name = f"Trio thread {next(name_counter)}"
-
-        self._thread = Thread(target=self._work, name=self._default_name, daemon=True)
+        if sys.version_info >= (3, 14):
+            self._thread = Thread(
+                target=self._work,
+                name=self._default_name,
+                daemon=True,
+                context=Context(),
+            )
+        else:
+            self._thread = Thread(
+                target=self._work, name=self._default_name, daemon=True
+            )
 
         if set_os_thread_name:
             set_os_thread_name(self._thread.ident, self._default_name)
@@ -177,6 +187,13 @@ class WorkerThread(Generic[RetT]):
             self._thread.name = self._default_name
             if set_os_thread_name:
                 set_os_thread_name(self._thread.ident, self._default_name)
+
+        # Without this, this thread may get rescheduled after `deliver`
+        # and only return after the kernel gets around to it. That's an
+        # arbitrary amount of time during which we keep anything
+        # referred to in the function alive, like contextvars. That's
+        # surprising!
+        del fn
 
         # Tell the cache that we're available to be assigned a new
         # job. We do this *before* calling 'deliver', so that if

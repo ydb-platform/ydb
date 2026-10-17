@@ -1,0 +1,22 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelineDirectory = "pipelines";
+pragma Ytflow.PipelineName = "test";
+
+pragma Udf("custom_string_udf.so");
+
+$suffix = FileContent("file.txt");
+
+insert into Output
+select
+    String::AsciiToUpper(string_field || $suffix) as string_field,
+    int64_field + LENGTH($suffix) as int64_field,
+    String::Contains(string_field, "bar") as bool_field
+from Input;
+
+

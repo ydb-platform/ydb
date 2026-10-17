@@ -7,6 +7,12 @@ feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
+{% note warning %}
+
+Изменяйте параметры секции `feature_flags`, только если уверены в последствиях. Неверная настройка может нарушить работу кластера.
+
+{% endnote %}
+
 ## Функциональные флаги
 
 | Флаг          | Функция |

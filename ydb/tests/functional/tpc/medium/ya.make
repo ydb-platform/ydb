@@ -39,6 +39,7 @@ ENV(OLTP_WORKLOAD_BINARY="ydb/tests/stress/oltp_workload/oltp_workload")
 
 PEERDIR(
     ydb/tests/functional/tpc/lib
+    ydb/tests/workload_manager/common
 )
 
 DEPENDS(

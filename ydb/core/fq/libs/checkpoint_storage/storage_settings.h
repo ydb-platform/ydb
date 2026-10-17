@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/fq/libs/ydb/ydb.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/size_literals.h>
@@ -9,7 +10,7 @@ namespace NKikimrConfig {
 
 class TCheckpointCoordinatorConfig;
 
-} // namespace NKikimrConfig
+}   // namespace NKikimrConfig
 
 namespace NFq {
 
@@ -19,7 +20,7 @@ class TCheckpointCoordinatorConfig;
 class TCheckpointGcConfig;
 class TStateStorageLimitsConfig;
 
-} // namespace NConfig
+}   // namespace NConfig
 
 class TCheckpointStorageSettings {
 public:
@@ -53,6 +54,7 @@ private:
     YDB_ACCESSOR_MUTABLE(TStateStorageLimits, StateStorageLimits, {});
     YDB_ACCESSOR_MUTABLE(TGcSettings, CheckpointGarbageConfig, {});
     YDB_ACCESSOR_MUTABLE(TExternalStorageSettings, ExternalStorage, {});
+    YDB_ACCESSOR(bool, EnableCompression, false);
 };
 
-} // namespace NFq
+}   // namespace NFq

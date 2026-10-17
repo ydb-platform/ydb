@@ -1,12 +1,15 @@
 LIBRARY()
 
 SRCS(
+    yql_pq_deferred_publish_client.cpp
     yql_pq_federated_topic_client.cpp
     yql_pq_topic_client.cpp
 )
 
 PEERDIR(
+    ydb/library/yql/providers/abstract
     ydb/library/yql/providers/pq/gateway/abstract
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     ydb/public/sdk/cpp/src/client/topic
 )
 

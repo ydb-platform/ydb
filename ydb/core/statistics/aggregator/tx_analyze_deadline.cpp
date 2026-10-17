@@ -13,7 +13,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         TActorId ReplyToActorId;
     };
     std::vector<TDeadlineEntry> DeadlineExceeded;
-    bool ActiveDeadlineExceeded = false;
+    TString ActiveDeadlineOperationId;
 
     TTxAnalyzeDeadline(TSelf* self)
         : TTxBase(self)
@@ -40,7 +40,7 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
             } else {
                 if (operation.CreatedAt + Self->AnalyzeDeadline < now) {
                     if (Self->ForceTraversalOperationId == operation.OperationId) {
-                        ActiveDeadlineExceeded = true;
+                        ActiveDeadlineOperationId = operation.OperationId;
                     } else {
                         toFailDeadline.push_back(operation.OperationId);
                     }
@@ -87,10 +87,12 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
             }
         }
 
-        if (ActiveDeadlineExceeded) {
+        if (ActiveDeadlineOperationId
+                && Self->ForceTraversalOperationId == ActiveDeadlineOperationId)
+        {
             YDB_LOG_ERROR("TTxAnalyzeDeadline: active deadline exceeded",
                 {"tabletId", Self->TabletID()},
-                {"operationId", Self->ForceTraversalOperationId.Quote()});
+                {"operationId", ActiveDeadlineOperationId.Quote()});
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue("ANALYZE deadline exceeded"));
             Self->DispatchFinishTraversalTx(

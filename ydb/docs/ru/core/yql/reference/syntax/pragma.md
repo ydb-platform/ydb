@@ -65,6 +65,19 @@ SELECT * FROM test;
 
 Префикс не добавляется, если имя таблицы указано как абсолютный путь (начинается с /).
 
+### RelativePathPrefix {#relative-path-prefix}
+
+| Тип значения | По умолчанию |
+| --- | --- |
+| Строка | — |
+
+Задаёт корень путей схемных объектов относительно базового пути среды выполнения. Значение должно быть относительным (не начинаться с `/`). Прагму можно указать только один раз и только до SQL-операторов. Абсолютные пути схемных объектов не меняются.
+
+```yql
+PRAGMA RelativePathPrefix = "folder";
+SELECT * FROM test;
+```
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Тип значения | По умолчанию |
@@ -493,7 +506,8 @@ SELECT $foo;
 
 ### `ydb.OptimizerHints` {#optimizerhints}
 
-Значение прагмы описано в [отдельном разделе](../../../dev/query-execution-optimization/query-hints.md).
+Значение прагмы описано в [отдельном разделе](../../../dev/optimization/hints.md).
+
 {% if tech %}
 
 ### `kikimr.IsolationLevel`

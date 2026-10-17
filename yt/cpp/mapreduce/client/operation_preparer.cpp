@@ -63,12 +63,13 @@ public:
                 *attributes.State != "initializing";
             return operationHasLockedFiles ? EStatus::PollBreak : EStatus::PollContinue;
         } catch (const TErrorResponse& e) {
-            YT_LOG_ERROR("get_operation request failed: %v (RequestId: %v)",
-                e.GetError().GetMessage(),
-                e.GetRequestId());
+            YT_TLOG_ERROR("Request get_operation failed")
+                .With("Error", e.GetError().GetMessage())
+                .With("RequestId", e.GetRequestId());
             return IsRetriable(e) ? PollContinue : PollBreak;
         } catch (const std::exception& e) {
-            YT_LOG_ERROR("%v", e.what());
+            YT_TLOG_ERROR("Request get_operation failed")
+                .With("Error", e.what());
             return PollBreak;
         }
     }
@@ -190,14 +191,14 @@ TOperationId TOperationPreparer::StartOperation(
             return Client_->GetRawClient()->StartOperation(mutationId, TransactionId_, type, spec);
         });
 
-    YT_LOG_DEBUG("Operation started (OperationId: %v; PreparationId: %v)",
-        operationId,
-        GetPreparationId());
+    YT_TLOG_DEBUG("Operation started")
+        .With("OperationId", operationId)
+        .With("PreparationId", GetPreparationId());
 
-    YT_LOG_INFO("Operation %v started (%v): %v",
-        operationId,
-        type,
-        GetOperationWebInterfaceUrl(GetContext().ServerName, operationId, GetClient()));
+    YT_TLOG_INFO("Operation started")
+        .With("OperationId", operationId)
+        .With("Type", type)
+        .With("Url", GetOperationWebInterfaceUrl(GetContext().ServerName, operationId, GetClient()));
 
     TOperationExecutionTimeTracker::Get()->Start(operationId);
 
@@ -225,11 +226,28 @@ TRichYPath TOperationPreparer::LockFile(const TRichYPath& path)
     result.OriginalPath(path.Path_);
     result.Path("#" + nodeId.AsGuidString());
 
-    YT_LOG_DEBUG("Locked file %v, new path is %v",
-        *result.OriginalPath_,
-        result.Path_);
+    YT_TLOG_DEBUG("Locked file")
+        .With("OriginalPath", *result.OriginalPath_)
+        .With("Path", result.Path_);
 
     return result;
+}
+
+void TOperationPreparer::LockCacheDirectory(const TYPath& path)
+{
+    CheckValidity();
+
+    auto fileTx = Client_->AttachTransaction(
+        FileTransaction_->GetId(),
+        TAttachTransactionOptions()
+            .AbortOnTermination(false)
+            .AutoPingable(false));
+
+    fileTx->Lock(path, ELockMode::LM_SHARED);
+
+    YT_TLOG_DEBUG("Locked cache directory")
+        .With("Path", path)
+        .With("PreparationId", GetPreparationId());
 }
 
 void TOperationPreparer::CheckValidity() const
@@ -490,20 +508,49 @@ TYPath TJobPreparer::GetCachePath() const
         OperationPreparer_.GetContext().Config->Prefix);
 }
 
+bool TJobPreparer::ShouldLockFileStorage() const
+{
+    // NB(achains): The default file storage is never locked.
+    //              It is expected to be protected from cleaning on the cluster side.
+    return OperationPreparer_.GetContext().Config->LockFileStorage
+        && Options_.FileCacheMode_ == TOperationOptions::EFileCacheMode::ApiCommandBased
+        && GetFileStorage() != DefaultRemoteTempFilesDirectory;
+}
+
 void TJobPreparer::CreateStorage() const
 {
-    RequestWithRetry<void>(
-        OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        [this] (TMutationId& mutationId) {
-            RawClient_->Create(
-                mutationId,
-                Options_.FileStorageTransactionId_,
-                GetCachePath(),
-                NT_MAP,
-                TCreateOptions()
-                    .IgnoreExisting(true)
-                    .Recursive(true));
-        });
+    auto createCacheDirectory = [this] {
+        RequestWithRetry<void>(
+            OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            [this] (TMutationId& mutationId) {
+                RawClient_->Create(
+                    mutationId,
+                    Options_.FileStorageTransactionId_,
+                    GetCachePath(),
+                    NT_MAP,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
+    };
+
+    createCacheDirectory();
+
+    if (!ShouldLockFileStorage()) {
+        return;
+    }
+
+    try {
+        OperationPreparer_.LockCacheDirectory(GetCachePath());
+    } catch (const TErrorResponse& e) {
+        if (!e.IsResolveError()) {
+            throw;
+        }
+        // If the directory doesn't exist, it must be removed between Create and Lock.
+        // Let's recreate it and lock again.
+        createCacheDirectory();
+        OperationPreparer_.LockCacheDirectory(GetCachePath());
+    }
 }
 
 int TJobPreparer::GetFileCacheReplicationFactor() const
@@ -589,10 +636,9 @@ TMaybe<TString> TJobPreparer::GetItemFromCypressCache(const TString& md5Signatur
             return RawClient_->GetFileFromCache(TTransactionId(), md5Signature, GetCachePath());
         });
     if (maybePath) {
-        YT_LOG_DEBUG(
-            "File is already in cache (FileName: %v, FilePath: %v)",
-            fileName,
-            *maybePath);
+        YT_TLOG_DEBUG("File is already in cache")
+            .With("FileName", fileName)
+            .With("FilePath", *maybePath);
     }
     return maybePath;
 }
@@ -611,10 +657,10 @@ TString TJobPreparer::UploadToRandomPath(const IItemToUpload& itemToUpload) cons
     TString uniquePath = AddPathPrefix(
         ::TStringBuilder() << GetFileStorage() << "/cpp_" << CreateGuidAsString(),
         OperationPreparer_.GetContext().Config->Prefix);
-    YT_LOG_INFO("Uploading file to random cypress path (FileName: %v; CypressPath: %v; PreparationId: %v)",
-        itemToUpload.GetDescription(),
-        uniquePath,
-        OperationPreparer_.GetPreparationId());
+    YT_TLOG_INFO("Uploading file to random cypress path")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("CypressPath", uniquePath)
+        .With("PreparationId", OperationPreparer_.GetPreparationId());
 
     CreateFileInCypress(uniquePath);
 
@@ -665,31 +711,31 @@ TMaybe<TString> TJobPreparer::TryUploadWithDeduplication(const IItemToUpload& it
     }
 
     auto waitTimeout = GetWaitForUploadTimeout(itemToUpload);
-    YT_LOG_DEBUG("Waiting for the lock on file (FileName: %v; CypressPath: %v; LockTimeout: %v)",
-            itemToUpload.GetDescription(),
-            cypressPath,
-            waitTimeout);
+    YT_TLOG_DEBUG("Waiting for the lock on file")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("CypressPath", cypressPath)
+        .With("LockTimeout", waitTimeout);
 
     if (!TWaitProxy::Get()->WaitFuture(lock->GetAcquiredFuture(), waitTimeout)) {
-        YT_LOG_DEBUG("Waiting for the lock timed out. Fallback to random path uploading (FileName: %v; CypressPath: %v)",
-            itemToUpload.GetDescription(),
-            cypressPath);
+        YT_TLOG_DEBUG("Waiting for the lock timed out; falling back to random path uploading")
+            .With("FileName", itemToUpload.GetDescription())
+            .With("CypressPath", cypressPath);
         return Nothing();
     }
 
-    YT_LOG_DEBUG("Exclusive lock successfully acquired (FileName: %v; CypressPath: %v)",
-            itemToUpload.GetDescription(),
-            cypressPath);
+    YT_TLOG_DEBUG("Exclusive lock successfully acquired")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("CypressPath", cypressPath);
 
     // Ensure that this process is the first to take a lock.
     if (auto cachedItemPath = GetItemFromCypressCache(md5Signature, itemToUpload.GetDescription())) {
         return *cachedItemPath;
     }
 
-    YT_LOG_INFO("Uploading file to cypress (FileName: %v; CypressPath: %v; PreparationId: %v)",
-        itemToUpload.GetDescription(),
-        cypressPath,
-        OperationPreparer_.GetPreparationId());
+    YT_TLOG_INFO("Uploading file to cypress")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("CypressPath", cypressPath)
+        .With("PreparationId", OperationPreparer_.GetPreparationId());
 
     {
         auto writer = uploadTx->CreateFileWriter(cypressPath, GetFileCacheWriterOptions());
@@ -713,9 +759,9 @@ TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) c
         return *cachedItemPath;
     }
 
-    YT_LOG_INFO("File not found in cache; uploading to cypress (FileName: %v; PreparationId: %v)",
-        itemToUpload.GetDescription(),
-        OperationPreparer_.GetPreparationId());
+    YT_TLOG_INFO("File not found in cache; uploading to cypress")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("PreparationId", OperationPreparer_.GetPreparationId());
 
     const auto& config = OperationPreparer_.GetContext().Config;
 
@@ -732,9 +778,9 @@ TString TJobPreparer::UploadToCacheUsingApi(const IItemToUpload& itemToUpload) c
 
 TString TJobPreparer::UploadToCache(const IItemToUpload& itemToUpload) const
 {
-    YT_LOG_INFO("Uploading file (FileName: %v; PreparationId: %v)",
-        itemToUpload.GetDescription(),
-        OperationPreparer_.GetPreparationId());
+    YT_TLOG_INFO("Uploading file")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("PreparationId", OperationPreparer_.GetPreparationId());
 
     TString result;
     switch (Options_.FileCacheMode_) {
@@ -750,9 +796,9 @@ TString TJobPreparer::UploadToCache(const IItemToUpload& itemToUpload) const
             Y_ABORT("Unknown file cache mode: %d", static_cast<int>(Options_.FileCacheMode_));
     }
 
-    YT_LOG_INFO("Complete uploading file (FileName: %v; PreparationId: %v)",
-        itemToUpload.GetDescription(),
-        OperationPreparer_.GetPreparationId());
+    YT_TLOG_INFO("Complete uploading file")
+        .With("FileName", itemToUpload.GetDescription())
+        .With("PreparationId", OperationPreparer_.GetPreparationId());
 
     return result;
 }

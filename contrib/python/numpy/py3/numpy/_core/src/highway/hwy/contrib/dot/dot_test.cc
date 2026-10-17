@@ -43,8 +43,9 @@ HWY_NOINLINE T1 SimpleDot(const T1* pa, const T2* pb, size_t num) {
   return ConvertScalarTo<T1>(sum);
 }
 
-HWY_NOINLINE float SimpleDot(const float* pa, const hwy::bfloat16_t* pb,
-                             size_t num) {
+HWY_MAYBE_UNUSED HWY_NOINLINE float SimpleDot(const float* pa,
+                                              const hwy::bfloat16_t* pb,
+                                              size_t num) {
   float sum = 0.0f;
   for (size_t i = 0; i < num; ++i) {
     sum += pa[i] * F32FromBF16(pb[i]);
@@ -54,8 +55,9 @@ HWY_NOINLINE float SimpleDot(const float* pa, const hwy::bfloat16_t* pb,
 
 // Overload is required because the generic template hits an internal compiler
 // error on aarch64 clang.
-HWY_NOINLINE float SimpleDot(const bfloat16_t* pa, const bfloat16_t* pb,
-                             size_t num) {
+HWY_MAYBE_UNUSED HWY_NOINLINE float SimpleDot(const bfloat16_t* pa,
+                                              const bfloat16_t* pb,
+                                              size_t num) {
   float sum = 0.0f;
   for (size_t i = 0; i < num; ++i) {
     sum += F32FromBF16(pa[i]) * F32FromBF16(pb[i]);
@@ -87,11 +89,10 @@ class TestDot {
       a[i] = ConvertScalarTo<T>(random_t());
       b[i] = ConvertScalarTo<T>(random_t());
     }
-    // Fill padding with NaN - the values are not used, but avoids MSAN errors.
+    // Fill padding - the values are not used, but avoids MSAN errors.
     for (; i < padded; ++i) {
-      ScalableTag<float> df1;
-      a[i] = ConvertScalarTo<T>(GetLane(NaN(df1)));
-      b[i] = ConvertScalarTo<T>(GetLane(NaN(df1)));
+      a[i] = ConvertScalarTo<T>(0);
+      b[i] = ConvertScalarTo<T>(0);
     }
 
     const double expected = SimpleDot(a, b, num);
@@ -100,8 +101,11 @@ class TestDot {
         ConvertScalarTo<double>(Dot::Compute<kAssumptions>(d, a, b, num));
     const double max = static_cast<double>(8 * 8 * num);
     HWY_ASSERT(-max <= actual && actual <= max);
+    // Integer math is exact, so no tolerance.
     const double tolerance =
-        96.0 * ConvertScalarTo<double>(Epsilon<T>()) * HWY_MAX(magnitude, 1.0);
+        IsFloat<T>() ? 96.0 * ConvertScalarTo<double>(Epsilon<T>()) *
+                           HWY_MAX(magnitude, 1.0)
+                     : 0;
     HWY_ASSERT(expected - tolerance <= actual &&
                actual <= expected + tolerance);
   }
@@ -261,14 +265,14 @@ class TestDotF32BF16 {
 // All floating-point types, both arguments same.
 void TestAllDot() { ForFloatTypes(ForPartialVectors<TestDot>()); }
 
-// Mixed f32 and bf16.
-void TestAllDotF32BF16() {
-  ForPartialVectors<TestDotF32BF16> test;
-  test(float());
-}
+// Mixed f32 and bf16 inputs.
+void TestAllDotF32BF16() { ForPartialVectors<TestDotF32BF16>()(float()); }
 
-// Both bf16.
+// Both inputs bf16.
 void TestAllDotBF16() { ForShrinkableVectors<TestDot>()(bfloat16_t()); }
+
+// Both inputs i16.
+void TestAllDotI16() { ForShrinkableVectors<TestDot>()(int16_t()); }
 
 }  // namespace
 // NOLINTNEXTLINE(google-readability-namespace-comments)
@@ -283,6 +287,7 @@ HWY_BEFORE_TEST(DotTest);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDot);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDotF32BF16);
 HWY_EXPORT_AND_TEST_P(DotTest, TestAllDotBF16);
+HWY_EXPORT_AND_TEST_P(DotTest, TestAllDotI16);
 HWY_AFTER_TEST();
 }  // namespace
 }  // namespace hwy

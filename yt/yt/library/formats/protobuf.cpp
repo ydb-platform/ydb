@@ -51,8 +51,8 @@ const std::string& TEnumerationDescription::GetValueName(i32 value) const
         return *valueName;
     }
     THROW_ERROR_EXCEPTION("Invalid value for enum")
-        << TErrorAttribute("enum_name", GetEnumerationName())
-        << TErrorAttribute("value", value);
+        .With("enum_name", GetEnumerationName())
+        .With("value", value);
 }
 
 const std::string* TEnumerationDescription::TryGetValueName(i32 value) const
@@ -70,8 +70,8 @@ i32 TEnumerationDescription::GetValue(TStringBuf valueName) const
         return *value;
     }
     THROW_ERROR_EXCEPTION("Invalid value for enum")
-        << TErrorAttribute("enum_name", GetEnumerationName())
-        << TErrorAttribute("value", valueName);
+        .With("enum_name", GetEnumerationName())
+        .With("value", valueName);
 }
 
 std::optional<i32> TEnumerationDescription::TryGetValue(TStringBuf valueName) const
@@ -125,8 +125,8 @@ public:
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
-                << TErrorAttribute("line_number", line)
-                << TErrorAttribute("column_number", column));
+                .With("line_number", line)
+                .With("column_number", column));
         }
     }
 
@@ -153,8 +153,8 @@ public:
     {
         if (std::ssize(Errors_) < ErrorCountLimit) {
             Errors_.push_back(TError("%v", message)
-                << TErrorAttribute("file_name", fileName)
-                << TErrorAttribute("element_name", elementName));
+                .With("file_name", fileName)
+                .With("element_name", elementName));
         }
     }
 
@@ -162,7 +162,7 @@ public:
     {
         if (!Errors_.empty()) {
             THROW_ERROR_EXCEPTION("Error while building protobuf descriptors")
-                << Errors_;
+                .With(Errors_);
         }
     }
 
@@ -484,8 +484,8 @@ static bool CanBePacked(EProtobufType type)
     THROW_ERROR_EXCEPTION("Table schema and protobuf format config mismatch at %v: %v",
         descriptor.GetDescription(),
         message)
-        << TErrorAttribute("type_in_schema", ToString(*descriptor.GetType()))
-        << TErrorAttribute("protobuf_type", protoTypeConfig);
+        .With("type_in_schema", ToString(*descriptor.GetType()))
+        .With("protobuf_type", protoTypeConfig);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -830,15 +830,15 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptorsLegacy(
     for (size_t i = 0; i < config->FileIndices.size(); ++i) {
         if (config->FileIndices[i] >= std::ssize(fileDescriptors)) {
             THROW_ERROR_EXCEPTION("File index is out of bound")
-                << TErrorAttribute("file_index", config->FileIndices[i])
-                << TErrorAttribute("file_count", fileDescriptors.size());
+                .With("file_index", config->FileIndices[i])
+                .With("file_count", fileDescriptors.size());
         }
         auto* fileDescriptor = fileDescriptors[config->FileIndices[i]];
 
         if (config->MessageIndices[i] >= fileDescriptor->message_type_count()) {
             THROW_ERROR_EXCEPTION("Message index is out of bound")
-                << TErrorAttribute("message_index", config->MessageIndices[i])
-                << TErrorAttribute("message_count", fileDescriptor->message_type_count());
+                .With("message_index", config->MessageIndices[i])
+                .With("message_count", fileDescriptor->message_type_count());
         }
         messageDescriptors.push_back(fileDescriptor->message_type(config->MessageIndices[i]));
     }
@@ -866,7 +866,7 @@ void TProtobufFormatDescriptionBase<TType>::InitFromFileDescriptors(
     parser.RecordErrorsTo(&errorCollector);
     if (!parser.ParseFromString(*config->FileDescriptorSetText, &fileDescriptorSet)) {
         THROW_ERROR_EXCEPTION(R"(Error parsing "file_descriptor_set_text" in protobuf config)")
-            << errorCollector.GetErrors();
+            .With(errorCollector.GetErrors());
     }
 
     DescriptorPool descriptorPool;
@@ -1407,7 +1407,7 @@ void TProtobufWriterFormatDescription::AddTable(TProtobufWriterTypePtr tableType
         if (!inserted) {
             THROW_ERROR_EXCEPTION("Multiple fields with same column name %Qv are forbidden in protobuf format",
                 column->Name)
-                << TErrorAttribute("table_index", std::ssize(Tables_) - 1);
+                .With("table_index", std::ssize(Tables_) - 1);
         }
         if (column->Type->ProtoType == EProtobufType::OtherColumns) {
             table.OtherColumnsField = column.get();

@@ -278,3 +278,7 @@ void TCdcStreamHeartbeatManager::PersistRemove(NIceDb::TNiceDb& db,
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

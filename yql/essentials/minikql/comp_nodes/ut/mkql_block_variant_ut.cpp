@@ -667,7 +667,7 @@ Y_UNIT_TEST(SaveItemAndAddFromInputBuffer) {
         }
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, subsize);
         for (size_t i = 0; i < subsize; ++i) {
             NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, i), data[startOffset + i]);
@@ -714,7 +714,7 @@ Y_UNIT_TEST(SaveScalarItemAndAddFromInputBuffer) {
     builder->Add(in);
     auto resultDatum = builder->Build(true);
     helper.ValidateDatum(resultDatum, Nothing(), blockType);
-    auto resultData = resultDatum.array();
+    const auto& resultData = resultDatum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 1);
     NYql::NUdf::AssertUnboxedValueElementEqual(reader->GetItem(*resultData, 0), TVar{ui32{7}});
@@ -738,7 +738,7 @@ Y_UNIT_TEST(BuilderAddDefault) {
     auto datum = builder->Build(true);
     helper.ValidateDatum(datum, Nothing(), blockType);
 
-    auto resultData = datum.array();
+    const auto& resultData = datum.array();
 
     UNIT_ASSERT_VALUES_EQUAL(resultData->length, 2);
     const auto* typeCodes = resultData->GetValues<i8>(1);
@@ -770,7 +770,7 @@ Y_UNIT_TEST(BuilderAddManyContiguous) {
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, count);
         for (size_t i = 0; i < count; ++i) {
@@ -799,7 +799,7 @@ Y_UNIT_TEST(BuilderAddManySparseBitmap) {
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, popCount);
         size_t resultIdx = 0;
@@ -831,7 +831,7 @@ Y_UNIT_TEST(BuilderAddManyIndexed) {
 
         auto datum = builder->Build(true);
         helper.ValidateDatum(datum, Nothing(), blockType);
-        auto resultData = datum.array();
+        const auto& resultData = datum.array();
 
         UNIT_ASSERT_VALUES_EQUAL(resultData->length, indexCount);
         for (size_t i = 0; i < indexCount; ++i) {

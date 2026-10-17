@@ -1,11 +1,12 @@
 #pragma once
 
+#include "billing.h"
 #include "error.h"
+#include "statuses.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/ru_quoter/ru_quoter.h>
 #include <ydb/core/protos/sqs.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/aclib/aclib.h>
@@ -14,23 +15,26 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
+#include <ydb/library/actors/core/events.h>
+
+#include <util/generic/algorithm.h>
 #include <util/system/type_name.h>
 #include <util/system/backtrace.h>
 
 namespace NKikimr::NSqsTopic::V1 {
 
-    // Database user-attribute keys that carry the rate-limiter (RU billing)
-    // coordination node and topic resource paths. Kept in sync with the gRPC
-    // request check actor (ruRlTopicConfig).
-    inline constexpr TStringBuf RL_COORDINATION_NODE_ATTR = "serverless_rt_coordination_node_path";
-    inline constexpr TStringBuf RL_TOPIC_RESOURCE_ATTR = "serverless_rt_topic_resource_ru";
-
     template<class TDerived, class TRequest>
-    class TGrpcActorBase: public NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest> {
+    class TGrpcActorBase
+        : public NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest>
+    {
         public:
         using TBase = NGRpcProxy::V1::TPQGrpcSchemaBase<TDerived, TRequest>;
-        using TBase::TBase;
+        using TBase::TopicPath;
 
+        TGrpcActorBase(NKikimr::NGRpcService::IRequestOpCtx* request, const TString& topicPath)
+            : TBase(request, topicPath)
+        {
+        }
 
         void ReplyWithError(Ydb::StatusIds::StatusCode status, size_t additionalStatus, const TString& messageText) = delete;
 
@@ -63,6 +67,9 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
         void DescribeTopic(NACLib::EAccessRights accessRights) {
+            if (TBase::IsDead) {
+                return;
+            }
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->Database,
@@ -81,56 +88,118 @@ namespace NKikimr::NSqsTopic::V1 {
             return nullptr;
         }
 
-        // Requests dispatched via DoLocalRpc carry no RlPath, so the rate-limiter
-        // coordination node / resource path have to be resolved from the database
-        // user-attributes (Kafka-proxy does the same for its RU billing). The
-        // navigate is tagged with a distinct scheme-cache cookie so the shared
-        // TEvNavigateKeySetResult handler can tell it apart from the topic
-        // describe navigate (which uses the default cookie 0).
-        static constexpr ui64 RlPathNavigateCookie = 1;
-
-        void SendRlPathNavigate() {
-            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = NKikimr::SplitPath(this->Database);
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-            entry.SyncVersion = false;
-            request->ResultSet.emplace_back(std::move(entry));
-            request->DatabaseName = this->Database;
-            request->Cookie = RlPathNavigateCookie;
-            this->Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        void Bootstrap(const NActors::TActorContext& ctx) {
+            TBase::Bootstrap(ctx);
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
+            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
         }
 
-        static bool IsRlPathNavigateResponse(const TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            return ev->Get()->Request->Cookie == RlPathNavigateCookie;
+        void Die(const NActors::TActorContext& ctx) override {
+            if (QuoterActorId_) {
+                ctx.Send(QuoterActorId_, new NActors::TEvents::TEvPoison);
+                QuoterActorId_ = {};
+            }
+            TBase::Die(ctx);
         }
 
-        // Builds a rate-limiter context from the serverless_rt_* database
-        // attributes. Returns Nothing() when the attributes are absent, in which
-        // case the topic is simply not RU-metered and no quota is charged.
-        TMaybe<NPQ::TRlContext> ExtractRlContext(const TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) const {
-            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            if (result->ResultSet.empty()) {
-                return Nothing();
+        void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NPQ::NDescriber::TEvDescribeTopicsResponse, HandleDescribeTopicsResponse);
+                hFunc(NPQ::NRuQuoter::TEvChargeRequestUnitsResponse, HandleChargeRequestUnitsResponse);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleUnexpectedNavigate);
+                default:
+                    TBase::StateWork(ev);
             }
-            const auto& entry = result->ResultSet.front();
-            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-                return Nothing();
-            }
-
-            TString coordinationNode;
-            TString resourcePath;
-            if (const auto* value = entry.Attributes.FindPtr(TString(RL_COORDINATION_NODE_ATTR))) {
-                coordinationNode = *value;
-            }
-            if (const auto* value = entry.Attributes.FindPtr(TString(RL_TOPIC_RESOURCE_ATTR))) {
-                resourcePath = *value;
-            }
-            if (coordinationNode.empty() || resourcePath.empty()) {
-                return Nothing();
-            }
-
-            return NPQ::TRlContext(coordinationNode, resourcePath, this->Database, this->Request_->GetSerializedToken());
         }
+
+        // Invoked after the topic is described so that payload-metered methods can
+        // see fifo / PQ config. The returned amount is acquired as quota and written
+        // into the yds bill.
+        virtual ui64 GetRUCost() = 0;
+
+        TTopicDescribePolicy GetTopicDescribePolicy() const {
+            return ExistingQueuePolicy();
+        }
+
+        void OnTopicDescribed(const NPQ::NDescriber::TTopicInfo&) {
+        }
+
+        void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
+        }
+
+        void ChargeRequestUnits(const NActors::TActorContext& ctx) {
+            if (TBase::IsDead) {
+                return;
+            }
+            if (!ShouldBeCharged_) {
+                return static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+            }
+            const ui64 ru = this->GetRUCost();
+            if (ru == 0) {
+                return static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+            }
+            AFL_ENSURE(!QuoterActorId_);
+            QuoterActorId_ = this->RegisterWithSameMailbox(NPQ::NRuQuoter::CreateRequestUnitsQuoter(
+                this->SelfId(),
+                NPQ::NRuQuoter::TRequestUnitsQuoterSettings{
+                    .Database = this->Database,
+                    .Ru = ru,
+                    .Token = this->Request_->GetSerializedToken(),
+                }));
+        }
+
+        // Called after quota is granted (or skipped) and the bill is written.
+        void OnRequestUnitsCharged(const NActors::TActorContext&) {
+        }
+
+    protected:
+        bool ShouldBeCharged_ = false;
+
+    private:
+        void HandleDescribeTopicsResponse(NPQ::NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
+            const auto* topicInfo = TakeSingleTopic(*ev->Get());
+            if (!topicInfo) {
+                ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Failed to describe topic"));
+                return;
+            }
+            const TTopicDescribePolicy policy = static_cast<TDerived*>(this)->GetTopicDescribePolicy();
+            if (auto error = MapTopicInfoToSqsError(this->GetTopicPath(), *topicInfo, policy)) {
+                ReplyWithError(*error);
+                return;
+            }
+            static_cast<TDerived*>(this)->OnTopicDescribed(*topicInfo);
+        }
+
+        void HandleChargeRequestUnitsResponse(NPQ::NRuQuoter::TEvChargeRequestUnitsResponse::TPtr& ev) {
+            QuoterActorId_ = {};
+            if (TBase::IsDead) {
+                return;
+            }
+            const auto& ctx = TlsActivationContext->AsActorContext();
+            switch (ev->Get()->Status) {
+                case NPQ::NRuQuoter::EStatus::Success:
+                    static_cast<TDerived*>(this)->OnRequestUnitsCharged(ctx);
+                    return;
+                case NPQ::NRuQuoter::EStatus::Throttled:
+                    ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION,
+                        ev->Get()->Message.empty()
+                            ? NPQ::NRuQuoter::Description(ev->Get()->Status)
+                            : ev->Get()->Message));
+                    return;
+                case NPQ::NRuQuoter::EStatus::UnknownError:
+                    ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                        ev->Get()->Message.empty()
+                            ? NPQ::NRuQuoter::Description(ev->Get()->Status)
+                            : ev->Get()->Message));
+                    return;
+            }
+        }
+
+        // Do not forward leftover scheme-cache navigates to TPQSchemaBase::Handle():
+        // that would reply with PQ SCHEME_ERROR / ACCESS_DENIED instead of SQS codes.
+        void HandleUnexpectedNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&) {
+        }
+
+        NActors::TActorId QuoterActorId_;
     };
 }

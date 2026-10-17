@@ -2,7 +2,7 @@
 
 ## Обзор
 
-{{ ydb-short-name }} CLI поддерживает исполнение параметризованных запросов. Для работы с параметрами в тексте запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
+{{ ydb-short-name }} CLI поддерживает исполнение [параметризованных запросов](../../yql/reference/syntax/lexer.md#query-params). Для работы с параметрами в тексте запроса должны присутствовать их определения [командой YQL `DECLARE`](../../yql/reference/syntax/declare.md).
 
 Основной инструмент для выполнения параметризованных запросов в {{ ydb-short-name }} CLI — это команда [{{ ydb-cli }} sql](sql.md).
 
@@ -588,4 +588,5 @@ for i in $(seq 1 100000); do echo "$i";done | \
 
 ## См. также {#see-also}
 
+* [Параметризованные запросы и повторная компиляция](../../dev/optimization/parameterized-queries.md)
 * [Параметризованные запросы в {{ ydb-short-name }} SDK](../ydb-sdk/parameterized_queries.md)

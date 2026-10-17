@@ -1,0 +1,8 @@
+pragma config.flags("OptimizerFlags", "PushdownStructSubsetFieldsOverAggregate", "PropagateSomeTraitsUnusedColumns");
+
+$f = AGGREGATION_FACTORY("Some");
+$g = AggregateTransformOutput($f, ($x) -> (Just($x)));
+
+select a, b from (
+  select AGGREGATE_BY(TableRow(), $g) from as_table([<|a:1,b:2,c:3|>])
+) flatten columns;

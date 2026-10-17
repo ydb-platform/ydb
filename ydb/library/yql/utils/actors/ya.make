@@ -13,8 +13,6 @@ PEERDIR(
 
 END()
 
-IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
-    RECURSE_FOR_TESTS(
-        ut
-    )
-ENDIF()
+RECURSE_FOR_TESTS(
+    ut
+)

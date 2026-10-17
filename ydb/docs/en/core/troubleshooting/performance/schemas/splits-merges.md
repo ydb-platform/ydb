@@ -14,7 +14,7 @@ By default, {{ ydb-short-name }} splits a table partition when it reaches 2 GB i
 
 A [scheme shard](../../../concepts/glossary.md#scheme-shard) takes approximately 15 seconds to assess whether a data shard requires splitting. By default, the CPU usage threshold for splitting a data shard is set at 50%.
 
-When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. TThe corresponding data shards are also consolidated into a single data shard to manage the new partition.
+When {{ ydb-short-name }} merges adjacent partitions in a row-oriented table, they are replaced with a single partition that covers their range of primary keys. The corresponding data shards are also consolidated into a single data shard to manage the new partition.
 
 For merging to occur, data shards must have existed for at least 10 minutes, and their CPU usage over the last hour must not exceed 35%.
 
@@ -30,3 +30,5 @@ When configuring [table partitioning](../../../concepts/datamodel/table.md#parti
 If the user load on {{ ydb-short-name }} has not changed, consider adjusting the gap between the min and max limits for the number of table partitions to the recommended 20% difference. Use the [`ALTER TABLE table_name SET (key = value)`](../../../yql/reference/syntax/alter_table/set.md) YQL statement to update the [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) and [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](../../../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) parameters.
 
 If you want to avoid splitting and merging data shards, you can set the min limit to the max limit value or disable partitioning by load.
+
+When lowering `AUTO_PARTITIONING_PARTITION_SIZE_MB` below the current size of many partitions, this can queue many partitions for splitting and temporarily increase latencies. Operations in the queue run with limited concurrency. Prefer reducing the threshold gradually while monitoring metrics.

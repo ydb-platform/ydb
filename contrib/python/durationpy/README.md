@@ -17,6 +17,10 @@ $ pip install durationpy
 * `s` - second
 * `m` - minute
 * `h` - hour
+* `d` - day
+* `w` - week
+* `mm` - month
+* `y` - year
 
 ``` py
 # parse

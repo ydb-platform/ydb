@@ -565,8 +565,10 @@ template<class Type>
 typename boost::enable_if<is_static_open<Type>, bool>::type
 is_empty(const Type& object)
 {
-    return domain_less_equal<Type>(upper(object),                   lower(object) )
-        || domain_less_equal<Type>(upper(object), domain_next<Type>(lower(object)));
+    // we use ternary operator instead of || to prevent a codegen bug with GCC 10-11
+    return domain_less_equal<Type>(upper(object), lower(object))?
+        true:
+        domain_less_equal<Type>(upper(object), domain_next<Type>(lower(object)));
 }
 
 template<class Type>
@@ -576,8 +578,10 @@ is_empty(const Type& object)
     if(object.bounds() == interval_bounds::closed())
         return domain_less<Type>(upper(object), lower(object));
     else if(object.bounds() == interval_bounds::open())
-        return domain_less_equal<Type>(upper(object),                   lower(object) )
-            || domain_less_equal<Type>(upper(object), domain_next<Type>(lower(object)));
+        // we use ternary operator instead of || to prevent a codegen bug with GCC 10-11
+        return domain_less_equal<Type>(upper(object), lower(object))?
+            true:
+            domain_less_equal<Type>(upper(object), domain_next<Type>(lower(object)));
     else
         return domain_less_equal<Type>(upper(object), lower(object));
 }

@@ -1,0 +1,4 @@
+PRAGMA YqlSelect = 'force';
+
+$x = (SELECT * FROM plato.CONCAT(Input, Input1));
+SELECT * FROM $x;

@@ -13,9 +13,9 @@ struct Point3D {
     static constexpr std::string_view name {val};
     Point3D()
     {
-        x = (T)rand() / RAND_MAX;
-        y = (T)rand() / RAND_MAX;
-        z = (T)rand() / RAND_MAX;
+        x = (T)rand() / (T)RAND_MAX;
+        y = (T)rand() / (T)RAND_MAX;
+        z = (T)rand() / (T)RAND_MAX;
     }
     T distance()
     {

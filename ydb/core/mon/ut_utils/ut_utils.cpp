@@ -88,6 +88,7 @@ void TFakeTicketParserActor::Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& e
         {"database", ev->Get()->Database},
         {"entries", ev->Get()->Entries.size()});
     ++AuthorizeTicketRequests;
+    CapturedRequestId = ev->Get()->TraceContext.RequestId;
 
     if (ev->Get()->Ticket == ROOT_TOKEN) {
         return Success(ev);

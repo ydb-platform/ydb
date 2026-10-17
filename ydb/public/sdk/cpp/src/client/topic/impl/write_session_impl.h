@@ -275,6 +275,8 @@ private:
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
         TWriteContext WriteContext;
+        NThreading::TPromise<bool> FlushPromise;
+        std::shared_ptr<TGRpcConnectionsImpl> FlushPromiseConnections;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          TWriteContext&& writeContext = std::monostate{})
@@ -293,6 +295,31 @@ private:
             , MessageMeta(std::move(messageMeta))
             , WriteContext(std::move(writeContext))
         {}
+
+        TOriginalMessage(TOriginalMessage&&) noexcept = default;
+        TOriginalMessage& operator=(TOriginalMessage&&) noexcept = default;
+
+        ~TOriginalMessage() {
+            CompleteFlush(true);
+        }
+
+        void InitFlushPromise(const std::shared_ptr<TGRpcConnectionsImpl>& connections) {
+            FlushPromise = NThreading::NewPromise<bool>();
+            FlushPromiseConnections = connections;
+        }
+
+        void CompleteFlush(bool value) noexcept {
+            if (!FlushPromise.Initialized()) {
+                return;
+            }
+
+            NThreading::TPromise<bool> promise;
+            FlushPromise.Swap(promise);
+            auto connections = std::move(FlushPromiseConnections);
+            connections->PostToResponseQueue([promise = std::move(promise), value]() mutable {
+                promise.TrySetValue(value);
+            });
+        }
     };
 
     //! Block comparer, makes block with smallest offset (first sequence number) appear on top of the PackedMessagesToSend priority queue
@@ -352,6 +379,7 @@ public:
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
                                                   std::optional<size_t> maxEventsCount = std::nullopt);
     NThreading::TFuture<uint64_t> GetInitSeqNo();
+    NThreading::TFuture<bool> Flush();
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
@@ -415,9 +443,11 @@ private:
     void Connect(const TDuration& delay);
     void InitImpl();
     void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
+    void WriteToProcessorImpl(TClientMessage&& req, size_t requestMemoryUsage = 0); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
     void OnWriteDone(NYdbGrpc::TGrpcStatus&& status, size_t connectionGeneration);
+    void OnWriteRequestDone(size_t requestMemoryUsage);
+    bool TryIssueContinuationTokenImpl();
     TProcessSrvMessageResult ProcessServerMessageImpl();
     TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
     TBuffer CompressBufferImpl(std::vector<std::string_view>& data, ECodec codec, i32 level);
@@ -428,6 +458,7 @@ private:
     //std::string GetDebugIdentity() const;
     TClientMessage GetInitClientMessage();
     bool CleanupOnAcknowledgedImpl(uint64_t id);
+    void AbortFlushPromisesImpl();
     bool IsReadyToSendNextImpl() const;
     uint64_t GetNextIdImpl(const std::optional<uint64_t>& seqNo);
     uint64_t GetSeqNoImpl(uint64_t id);
@@ -491,6 +522,8 @@ private:
     IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
     bool FirstTokenSent = false;
+    // Queuing a protobuf can exceed the limit while a token is still outstanding.
+    bool ContinuationTokenIssued = false;
 
     TMessageBatch CurrentBatch;
 

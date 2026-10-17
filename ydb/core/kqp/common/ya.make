@@ -1,7 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     control.cpp
+    dynamic_function_registry.cpp
+    kqp.cpp
+    kqp.h
     kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
@@ -11,25 +14,23 @@ SRCS(
     kqp_resolve.h
     kqp_row_builder.cpp
     kqp_ru_calc.cpp
-    kqp_script_executions.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
-    kqp_tx_manager.cpp
     kqp_tx.cpp
+    kqp_tx_manager.cpp
     kqp_types.cpp
     kqp_types.h
     kqp_user_request_context.cpp
     kqp_user_request_context.h
     kqp_yql.cpp
     kqp_yql.h
-    kqp.cpp
-    kqp.h
 )
 
 PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
+    library/cpp/threading/hot_swap
     ydb/core/base
     ydb/core/engine
     ydb/core/grpc_services/cancelation
@@ -39,6 +40,7 @@ PEERDIR(
     ydb/core/kqp/common/simple
     ydb/core/kqp/expr_nodes
     ydb/core/kqp/provider
+    ydb/core/kqp/script_executions/common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/long_tx_service/public
@@ -53,11 +55,10 @@ PEERDIR(
     yql/essentials/core/dq_integration
     yql/essentials/core/issue
     yql/essentials/core/services
+    yql/essentials/minikql
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
@@ -68,7 +69,7 @@ END()
 RECURSE(
     compilation
     events
-    simple
     result_set_format
+    simple
     ut
 )

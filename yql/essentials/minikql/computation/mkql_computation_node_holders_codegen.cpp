@@ -387,13 +387,13 @@ private:
 // TNodeFactory
 //////////////////////////////////////////////////////////////////////////////
 TNodeFactory::TNodeFactory(TMemoryUsageInfo& memInfo, TComputationMutables& mutables)
-    : MemInfo(memInfo)
-    , Mutables(mutables)
+    : MemInfo_(memInfo)
+    , Mutables_(mutables)
 {
 }
 
 IComputationNode* TNodeFactory::CreateEmptyNode() const {
-    return new TEmptyNode(Mutables);
+    return new TEmptyNode(Mutables_);
 }
 
 IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const {
@@ -402,10 +402,10 @@ IComputationNode* TNodeFactory::CreateOptionalNode(IComputationNode* item) const
 
 IComputationNode* TNodeFactory::CreateArrayNode(TComputationNodePtrVector&& values) const {
     if (values.empty()) {
-        return new TEmptyNode(Mutables);
+        return new TEmptyNode(Mutables_);
     }
 
-    return new TArrayNode(Mutables, std::move(values));
+    return new TArrayNode(Mutables_, std::move(values));
 }
 
 IComputationNode* TNodeFactory::CreateDictNode(
@@ -413,22 +413,22 @@ IComputationNode* TNodeFactory::CreateDictNode(
     const TKeyTypes& types, bool isTuple, TType* encodedType,
     NUdf::IHash::TPtr hash, NUdf::IEquate::TPtr equate, NUdf::ICompare::TPtr compare, bool isSorted) const {
     if (items.empty()) {
-        return new TEmptyNode(Mutables);
+        return new TEmptyNode(Mutables_);
     }
 
-    return new TDictNode(Mutables, std::move(items), types, isTuple, encodedType, hash, equate, compare, isSorted);
+    return new TDictNode(Mutables_, std::move(items), types, isTuple, encodedType, hash, equate, compare, isSorted);
 }
 
 IComputationNode* TNodeFactory::CreateVariantNode(IComputationNode* item, ui32 index) const {
-    return new TVariantNode(Mutables, item, index);
+    return new TVariantNode(Mutables_, item, index);
 }
 
 IComputationNode* TNodeFactory::CreateTypeNode(TType* type) const {
-    return CreateImmutableNode(NUdf::TUnboxedValuePod(new TTypeHolder(&MemInfo, type)));
+    return CreateImmutableNode(NUdf::TUnboxedValuePod(new TTypeHolder(&MemInfo_, type)));
 }
 
 IComputationNode* TNodeFactory::CreateImmutableNode(NUdf::TUnboxedValue&& value) const {
-    return new TUnboxedImmutableCodegeneratorNode(&MemInfo, std::move(value));
+    return new TUnboxedImmutableCodegeneratorNode(&MemInfo_, std::move(value));
 }
 
 } // namespace NKikimr::NMiniKQL

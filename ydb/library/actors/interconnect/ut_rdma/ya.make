@@ -11,7 +11,8 @@ ENDIF()
 
 SRCS(
     port_manager.cpp
-    rdma_xdc_ut.cpp    
+    rdma_send_receive_ut.cpp
+    rdma_xdc_ut.cpp
     sync_actor_ut.cpp
 )
 

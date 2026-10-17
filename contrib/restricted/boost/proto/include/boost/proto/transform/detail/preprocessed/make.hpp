@@ -185,8 +185,8 @@
     
     
     template<typename Object , typename A0>
-    struct make<Object(A0...)>
-      : transform<make<Object(A0...)> >
+    struct make<Object(A0 , ...)>
+      : transform<make<Object(A0 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -309,8 +309,8 @@
     
     
     template<typename Object , typename A0 , typename A1>
-    struct make<Object(A0 , A1...)>
-      : transform<make<Object(A0 , A1...)> >
+    struct make<Object(A0 , A1 , ...)>
+      : transform<make<Object(A0 , A1 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -433,8 +433,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2>
-    struct make<Object(A0 , A1 , A2...)>
-      : transform<make<Object(A0 , A1 , A2...)> >
+    struct make<Object(A0 , A1 , A2 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -557,8 +557,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3>
-    struct make<Object(A0 , A1 , A2 , A3...)>
-      : transform<make<Object(A0 , A1 , A2 , A3...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -681,8 +681,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4>
-    struct make<Object(A0 , A1 , A2 , A3 , A4...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -805,8 +805,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4 , typename A5>
-    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -929,8 +929,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4 , typename A5 , typename A6>
-    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -1053,8 +1053,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4 , typename A5 , typename A6 , typename A7>
-    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -1177,8 +1177,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4 , typename A5 , typename A6 , typename A7 , typename A8>
-    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl
@@ -1301,8 +1301,8 @@
     
     
     template<typename Object , typename A0 , typename A1 , typename A2 , typename A3 , typename A4 , typename A5 , typename A6 , typename A7 , typename A8 , typename A9>
-    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , A9...)>
-      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , A9...)> >
+    struct make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , A9 , ...)>
+      : transform<make<Object(A0 , A1 , A2 , A3 , A4 , A5 , A6 , A7 , A8 , A9 , ...)> >
     {
         template<typename Expr, typename State, typename Data>
         struct impl

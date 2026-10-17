@@ -1,15 +1,15 @@
 #include "yql_pq_gateway.h"
 #include "yql_pq_session.h"
 
+#include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_deferred_publish_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_federated_topic_client.h>
 #include <ydb/library/yql/providers/pq/gateway/clients/external/yql_pq_topic_client.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
+#include <util/system/mutex.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/utils/log/context.h>
-
-#include <util/system/mutex.h>
 
 #include <memory>
 
@@ -21,7 +21,7 @@ using namespace NYdb;
 using namespace NYdb::NTopic;
 using namespace NYdb::NFederatedTopic;
 
-class TPqNativeGateway final : public IPqGateway {
+class TPqNativeGateway final: public IPqGateway {
 public:
     explicit TPqNativeGateway(const TPqGatewayServices& services)
         : Config(services.Config)
@@ -40,16 +40,9 @@ public:
     }
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) final {
-        with_lock (Mutex) {
-            auto [sessionIt, isNewSession] = Sessions.emplace(sessionId, MakeIntrusive<TPqSession>(
-                sessionId,
-                username,
-                CmConnections,
-                YdbDriver,
-                ClusterConfigs,
-                CredentialsFactory,
-                LocalTopicClientFactory
-            ));
+        with_lock(Mutex) {
+            auto [sessionIt, isNewSession] = Sessions.emplace(sessionId, MakeIntrusive<TPqSession>(sessionId, username, CmConnections, YdbDriver,
+                                                                             ClusterConfigs, CredentialsFactory, LocalTopicClientFactory));
             if (!isNewSession) {
                 YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
             }
@@ -58,27 +51,30 @@ public:
     }
 
     NThreading::TFuture<void> CloseSession(const TString& sessionId) final {
-        with_lock (Mutex) {
+        with_lock(Mutex) {
             Sessions.erase(sessionId);
         }
 
         return NThreading::MakeFuture();
     }
 
-    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final {
+    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(
+        const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final {
         return GetExistingSession(sessionId)->DescribePath(cluster, database, path, token);
     }
 
-    NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) final {
+    NThreading::TFuture<TListStreams> ListStreams(const TString& sessionId, const TString& cluster, const TString& database,
+        const TString& token, ui32 limit, const TString& exclusiveStartStreamName) final {
         return GetExistingSession(sessionId)->ListStreams(cluster, database, token, limit, exclusiveStartStreamName);
     }
 
-    TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final {
+    TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
+        const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final {
         return GetExistingSession(sessionId)->DescribeFederatedTopic(cluster, database, path, token);
     }
 
     void UpdateClusterConfigs(const TString& clusterName, const TString& endpoint, const TString& database, bool secure) final {
-        with_lock (Mutex) {
+        with_lock(Mutex) {
             const auto foundCluster = ClusterConfigs->find(clusterName);
             Y_ABORT_UNLESS(foundCluster != ClusterConfigs->end());
             auto& cluster = foundCluster->second;
@@ -100,14 +96,15 @@ public:
         (*ClusterConfigs)[cluster.GetName()] = cluster;
     }
 
-    ITopicClient::TPtr GetTopicClient(const TDriver& driver, const TTopicClientSettings& settings) final {
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(
+        const TString& stream, const TDriver& driver, const TTopicClientSettings& settings) final {
         const bool hasEndpoint = HasEndpoint(driver, settings);
         if (!hasEndpoint && LocalTopicClientFactory) {
-            return LocalTopicClientFactory->CreateTopicClient(settings);
+            return LocalTopicClientFactory->CreateTopicClient(stream, settings);
         }
 
         Y_VALIDATE(hasEndpoint, "Missing endpoint value for topic client and local topics are not allowed");
-        return CreateExternalTopicClient(driver, settings);
+        return CreateExternalTopicClient(stream, driver, settings);
     }
 
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings) final {
@@ -118,6 +115,16 @@ public:
 
         Y_VALIDATE(hasEndpoint, "Missing endpoint value for federated topic client and local topics are not allowed");
         return CreateExternalFederatedTopicClient(driver, settings);
+    }
+
+    IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) final {
+        const bool hasEndpoint = HasEndpoint(driver, settings);
+        if (!hasEndpoint && LocalTopicClientFactory) {
+            return LocalTopicClientFactory->CreateDeferredPublishClient(settings);
+        }
+
+        Y_VALIDATE(hasEndpoint, "Missing endpoint value for deferred publish client and local topics are not allowed");
+        return CreateExternalDeferredPublishClient(driver, settings);
     }
 
     TTopicClientSettings GetTopicClientSettings() const final {
@@ -157,7 +164,7 @@ private:
     }
 
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const {
-        with_lock (Mutex) {
+        with_lock(Mutex) {
             auto sessionIt = Sessions.find(sessionId);
             if (sessionIt == Sessions.end()) {
                 YQL_LOG_CTX_THROW yexception() << "PQ gateway session was not found: " << sessionId;
@@ -179,10 +186,10 @@ private:
     THashMap<TString, TPqSession::TPtr> Sessions;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {
     return MakeIntrusive<TPqNativeGateway>(services);
 }
 
-} // namespace NYql
+}   // namespace NYql

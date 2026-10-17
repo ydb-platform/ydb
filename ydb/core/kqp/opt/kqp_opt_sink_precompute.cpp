@@ -78,9 +78,32 @@ public:
                     return TStatus::Error;
                 }
 
-                // Make resultStages to contain only SELECT results without RETURNING.
-                for (const auto& [exprNodeRaw, _] : returningStages) {
-                    resultStages->erase(exprNodeRaw);
+                // Make resultStages contain only SELECT results without RETURNING
+                TNodeSet returningResultStages;
+                for (const auto& [resultStageRaw, resultStage] : *resultStages) {
+                    bool dependsOnReturning = false;
+                    TNodeSet visited;
+
+                    VisitStagesBackwards(resultStage,
+                        [&](const TDqStage& stage) mutable -> bool {
+                            if (dependsOnReturning || !visited.emplace(stage.Raw()).second) {
+                                return false;
+                            }
+                            if (returningStages.contains(stage.Raw())) {
+                                dependsOnReturning = true;
+                                return false;
+                            }
+                            return true;
+                        },
+                        [](const TDqStage&) {});
+
+                    if (dependsOnReturning) {
+                        returningResultStages.emplace(resultStageRaw);
+                    }
+                }
+
+                for (const auto* resultStage : returningResultStages) {
+                    resultStages->erase(resultStage);
                 }
 
                 markCommonStages(*resultStages, sinkStages, false);

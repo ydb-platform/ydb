@@ -54,10 +54,6 @@ IF (OPENSOURCE)
     TAG(ya:not_autocheck)
 ENDIF()
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
-
 PEERDIR(
     yql/essentials/providers/common/proto
     ydb/library/yql/providers/generic/connector/tests/utils
@@ -77,4 +73,3 @@ TEST_SRCS(
 )
 
 END()
-

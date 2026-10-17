@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -42,11 +44,12 @@ struct TSchemeShard::TTxTablePartitionsFormatSwitch : public TTransactionBase<TS
         PathStr = TPath::Init(PathId, Self).PathString();
         Status = Self->SwitchTablePartitionsFormat(db, PathId, ShardIdxFormat);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxTablePartitionsFormatSwitch: "
-            << " path " << PathStr << " " << PathId
-            << ", switch to format '" << (ShardIdxFormat ? "shardidx" : "position") << "'"
-            << ", result " << Status
-            << ", schemeshardId: " << Self->TabletID()
+        YDB_LOG_NOTICE_CTX(ctx, "TTxTablePartitionsFormatSwitch",
+            {"path", PathStr},
+            {"pathId", PathId},
+            {"format", ShardIdxFormat ? "shardidx" : "position"},
+            {"result", Status},
+            {"schemeshard", Self->TabletID()},
         );
 
         return true;
@@ -120,8 +123,7 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
 
         // Self-cancel if shardidx format support is disabled during the sweep.
         if (!AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TablePartitionsFormatSweep step:"
-                << " flag EnableTablePartitionsFormatShardIdx turned off during sweep, cancelling"
+            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep step: flag EnableTablePartitionsFormatShardIdx turned off during sweep, cancelling"
             );
             Self->CancelTablePartitionsFormatSweep(db);
             return true;
@@ -129,10 +131,10 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
 
         if (sweep.Queue.empty()) {
             Self->ClearTablePartitionsFormatSweep(db);
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TablePartitionsFormatSweep complete:"
-                << " done " << sweep.Done
-                << ", skipped " << sweep.Skipped
-                << ", schemeshardId: " << Self->TabletID()
+            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
+                {"doneCount", sweep.Done},
+                {"skippedCount", sweep.Skipped},
+                {"schemeshard", Self->TabletID()},
             );
             return true;
         }
@@ -161,19 +163,20 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
         }
 
         const auto pathStr = TPath::Init(pathId, Self).PathString();
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TablePartitionsFormatSweep step:"
-            << " path " << pathStr << " " << pathId
-            << ", switch to format '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-            << ", result " << status
-            << ", schemeshardId: " << Self->TabletID()
+        YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep step",
+            {"path", pathStr},
+            {"pathId", pathId},
+            {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+            {"result", status},
+            {"schemeshard", Self->TabletID()},
         );
 
         if (sweep.Queue.empty()) {
             Self->ClearTablePartitionsFormatSweep(db);
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TablePartitionsFormatSweep complete:"
-                << " done " << sweep.Done
-                << ", skipped " << sweep.Skipped
-                << ", schemeshardId: " << Self->TabletID()
+            YDB_LOG_NOTICE_CTX(ctx, "TablePartitionsFormatSweep complete",
+                {"doneCount", sweep.Done},
+                {"skippedCount", sweep.Skipped},
+                {"schemeshard", Self->TabletID()},
             );
         }
 
@@ -204,9 +207,8 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
     auto& sweep = TablePartitionsFormatSweep;
 
     if (!AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TablePartitionsFormatSweep start: cannot start as EnableTablePartitionsFormatShardIdx is disabled"
-            << ", schemeshardId: " << TabletID()
+        YDB_LOG_ERROR("TablePartitionsFormatSweep start: cannot start as EnableTablePartitionsFormatShardIdx is disabled",
+            {"schemeshard", TabletID()},
         );
         return;
     }
@@ -224,21 +226,19 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
     }
 
     if (sweep.Queue.empty()) {
-        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TablePartitionsFormatSweep start: no tables to process"
-            << ", schemeshardId: " << TabletID()
+        YDB_LOG_NOTICE("TablePartitionsFormatSweep start: no tables to process",
+            {"schemeshard", TabletID()},
         );
         sweep.Status = TTablePartitionsFormatSweepState::EStatus::Idle;
         sweep.Queue.clear();
         return;
     }
 
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TablePartitionsFormatSweep start:"
-        << " tables to process " << sweep.Queue.size()
-        << ", tables total " << Tables.size()
-        << ", switch to '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-        << ", schemeshardId: " << TabletID()
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep start",
+        {"tablesToProcessCount", sweep.Queue.size()},
+        {"tablesTotalCount", Tables.size()},
+        {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+        {"schemeshard", TabletID()},
     );
 
     db.Table<Schema::SysParams>().Key(Schema::SysParam_TablePartitionsFormatSweepStatus)
@@ -254,12 +254,11 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
 void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TablePartitionsFormatSweep pause:"
-        << " tables to process " << sweep.Queue.size()
-        << ", tables total " << Tables.size()
-        << ", switch to '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-        << ", schemeshardId: " << TabletID()
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep pause",
+        {"tablesToProcessCount", sweep.Queue.size()},
+        {"tablesTotalCount", Tables.size()},
+        {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+        {"schemeshard", TabletID()},
     );
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Paused;
@@ -272,12 +271,11 @@ void TSchemeShard::PauseTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
 void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TablePartitionsFormatSweep resume:"
-        << " tables to process " << sweep.Queue.size()
-        << ", tables total " << Tables.size()
-        << ", switch to '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-        << ", schemeshardId: " << TabletID()
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep resume",
+        {"tablesToProcessCount", sweep.Queue.size()},
+        {"tablesTotalCount", Tables.size()},
+        {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+        {"schemeshard", TabletID()},
     );
 
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Running;
@@ -292,12 +290,11 @@ void TSchemeShard::ResumeTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
 void TSchemeShard::CancelTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
     auto& sweep = TablePartitionsFormatSweep;
 
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TablePartitionsFormatSweep cancel:"
-        << " tables to process " << sweep.Queue.size()
-        << ", tables total " << Tables.size()
-        << ", switch to '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-        << ", schemeshardId: " << TabletID()
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep cancel",
+        {"tablesToProcessCount", sweep.Queue.size()},
+        {"tablesTotalCount", Tables.size()},
+        {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+        {"schemeshard", TabletID()},
     );
 
     ClearTablePartitionsFormatSweep(db);
@@ -352,12 +349,11 @@ void TSchemeShard::ContinueTablePartitionsFormatSweep() {
         return;
     }
 
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TablePartitionsFormatSweep continue:"
-        << " tables to process " << sweep.Queue.size()
-        << ", tables total " << Tables.size()
-        << ", switch to '" << (sweep.TargetIsShardIdx ? "shardidx" : "position") << "'"
-        << ", schemeshardId: " << TabletID()
+    YDB_LOG_NOTICE("TablePartitionsFormatSweep continue",
+        {"tablesToProcessCount", sweep.Queue.size()},
+        {"tablesTotalCount", Tables.size()},
+        {"format", sweep.TargetIsShardIdx ? "shardidx" : "position"},
+        {"schemeshard", TabletID()},
     );
 
     Send(SelfId(), new TEvPrivate::TEvProgressTablePartitionsFormatSweep);
@@ -399,3 +395,5 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxTablePartitionsFormatSw
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

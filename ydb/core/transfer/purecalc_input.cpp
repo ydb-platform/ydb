@@ -85,22 +85,17 @@ NYT::TNode CreateMessageScheme() {
 
 static const TVector<NYT::TNode> InputSchema{ CreateMessageScheme() };
 
+// String dict keys: same as GetDictionaryKeyTypes(TDataType::String). Do not call
+// TDictType::Create / TDataType::Create here — they Allocate() into TypeEnv and never intern.
+const TKeyTypes& AttrDictKeyTypes() {
+    static const TKeyTypes keyTypes{{NUdf::EDataSlot::String, false}};
+    return keyTypes;
+}
+
 struct TMessageWrapper {
     const TMessage& Message;
 
-    NYql::NUdf::TUnboxedValuePod GetAttributes(const THolderFactory& nodeFactory, const TTypeEnvironment& typeEnv) const {
-        auto type = TDictType::Create(
-                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
-                TDataType::Create(NUdf::TDataType<char*>::Id, typeEnv),
-                typeEnv
-            );
-
-        TKeyTypes keyTypes;
-        bool isTuple;
-        bool encoded;
-        bool useIHash;
-        GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded, useIHash);
-
+    NYql::NUdf::TUnboxedValuePod GetAttributes(const THolderFactory& nodeFactory) const {
         return nodeFactory.CreateDirectHashedDictHolder([&](TValuesDictHashMap& map) {
                 const auto& m = Message.Message.GetMessageMeta();
                 if (m) {
@@ -109,7 +104,7 @@ struct TMessageWrapper {
                     }
                 }
             },
-            keyTypes, false, true, nullptr, nullptr, nullptr);
+            AttrDictKeyTypes(), false, true, nullptr, nullptr, nullptr);
     }
 
     NYql::NUdf::TUnboxedValuePod GetCreateTimestamp() const {
@@ -161,7 +156,6 @@ struct TMessageWrapper {
 };
 
 class TInputConverter {
-protected:
     IWorker* Worker_;
     TPlainContainerCache Cache_;
 
@@ -171,16 +165,14 @@ public:
     {
     }
 
-public:
     void DoConvert(const TMessage* message, TUnboxedValue& result) {
         auto& holderFactory = Worker_->GetGraph().GetHolderFactory();
-        auto& typeEnv = Worker_->GetGraph().GetContext().TypeEnv;
         TUnboxedValue* items = nullptr;
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
         TMessageWrapper wrap {*message};
         // lex order by field name
-        items[0] = wrap.GetAttributes(holderFactory, typeEnv);
+        items[0] = wrap.GetAttributes(holderFactory);
         items[1] = wrap.GetCreateTimestamp();
         items[2] = wrap.GetData();
         items[3] = wrap.GetKey();
@@ -190,10 +182,6 @@ public:
         items[7] = wrap.GetProducerId();
         items[8] = wrap.GetSeqNo();
         items[9] = wrap.GetWriteTimestamp();
-    }
-
-    void ClearCache() {
-        Cache_.Clear();
     }
 };
 
@@ -205,7 +193,6 @@ private:
     mutable bool HasIterator_ = false;
     THolder<IStream<TMessage*>> Underlying_;
     TInputConverter Converter;
-    IWorker* Worker_;
     TScopedAlloc& ScopedAlloc_;
 
 public:
@@ -218,8 +205,7 @@ public:
         : TCustomListValue(memInfo)
         , Underlying_(std::move(underlying))
         , Converter(worker)
-        , Worker_(worker)
-        , ScopedAlloc_(Worker_->GetScopedAlloc())
+        , ScopedAlloc_(worker->GetScopedAlloc())
     {
     }
 
@@ -261,62 +247,6 @@ public:
 
         return true;
     }
-
-    EFetchStatus Fetch(TUnboxedValue& result) override {
-        if (Next(result)) {
-            return EFetchStatus::Ok;
-        } else {
-            return EFetchStatus::Finish;
-        }
-    }
-};
-
-class TMessageConsumerImpl final: public IConsumer<TMessage*> {
-private:
-    TWorkerHolder<IPushStreamWorker> WorkerHolder;
-    TInputConverter Converter;
-
-public:
-    TMessageConsumerImpl(
-        const TMessageInputSpec& /*inputSpec*/,
-        TWorkerHolder<IPushStreamWorker> worker
-    )
-        : WorkerHolder(std::move(worker))
-        , Converter(WorkerHolder.Get())
-    {
-    }
-
-    ~TMessageConsumerImpl() override {
-        with_lock(WorkerHolder->GetScopedAlloc()) {
-            Converter.ClearCache();
-        }
-    }
-
-public:
-    void OnObject(TMessage* message) override {
-        TBindTerminator bind(WorkerHolder->GetGraph().GetTerminator());
-
-        with_lock(WorkerHolder->GetScopedAlloc()) {
-            Y_DEFER {
-                // Clear cache after each object because
-                // values allocated on another allocator and should be released
-                Converter.ClearCache();
-                WorkerHolder->Invalidate();
-            };
-
-            TUnboxedValue result;
-            Converter.DoConvert(message, result);
-            WorkerHolder->Push(std::move(result));
-        }
-    }
-
-    void OnFinish() override {
-        TBindTerminator bind(WorkerHolder->GetGraph().GetTerminator());
-
-        with_lock(WorkerHolder->GetScopedAlloc()) {
-            WorkerHolder->OnFinish();
-        }
-    }
 };
 
 } // namespace
@@ -331,19 +261,6 @@ namespace NYql::NPureCalc {
 
 using namespace NKikimr::NReplication::NTransfer;
 
-using ConsumerType = TInputSpecTraits<TMessageInputSpec>::TConsumerType;
-
-void TInputSpecTraits<TMessageInputSpec>::PreparePullStreamWorker(
-    const TMessageInputSpec& inputSpec,
-    IPullStreamWorker* worker,
-    THolder<IStream<TMessage*>> stream
-) {
-    with_lock(worker->GetScopedAlloc()) {
-        worker->SetInput(
-            worker->GetGraph().GetHolderFactory().Create<TMessageListValue>(inputSpec, std::move(stream), worker), 0);
-    }
-}
-
 void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
     const TMessageInputSpec& inputSpec,
     IPullListWorker* worker,
@@ -353,13 +270,6 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
         worker->SetInput(
             worker->GetGraph().GetHolderFactory().Create<TMessageListValue>(inputSpec, std::move(stream), worker), 0);
     }
-}
-
-ConsumerType TInputSpecTraits<TMessageInputSpec>::MakeConsumer(
-    const TMessageInputSpec& inputSpec,
-    TWorkerHolder<IPushStreamWorker> worker
-) {
-    return MakeHolder<TMessageConsumerImpl>(inputSpec, std::move(worker));
 }
 
 } // namespace NYql::NPureCalc

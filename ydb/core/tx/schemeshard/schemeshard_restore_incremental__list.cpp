@@ -2,7 +2,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_restore_incremental_progress.h"
 
-#include <ydb/core/backup/impl/logging.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
 
 namespace NKikimr::NSchemeShard {
 
@@ -37,7 +37,9 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Reply",
+            {"record", Response->Record.ShortDebugString()},
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -45,7 +47,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Execute",
+            {"record", record.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvBackup::TEvListBackupCollectionRestoresResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -62,7 +66,7 @@ public:
         for (const auto& [restoreId, restoreState] : Self->IncrementalRestoreStates) {
             // Check if this restore belongs to the requested database
             TPath backupCollectionPath = TPath::Init(restoreState.BackupCollectionPathId, Self);
-            if (backupCollectionPath.IsResolved() && 
+            if (backupCollectionPath.IsResolved() &&
                 backupCollectionPath.GetPathIdForDomain() == domainPathId) {
                 restoreIds.push_back(restoreId);
             }
@@ -90,13 +94,13 @@ public:
         }
 
         ui64 endIdx = Min(skipCount + pageSize, static_cast<ui64>(restoreIds.size()));
-        
+
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
-        
+
         for (ui64 i = skipCount; i < endIdx; ++i) {
             ui64 restoreId = restoreIds[i];
             const auto& restoreState = Self->IncrementalRestoreStates.at(restoreId);
-            
+
             auto* entry = Response->Record.MutableEntries()->Add();
             Fill(*entry, restoreState);
         }
@@ -125,3 +129,5 @@ ITransaction* TSchemeShard::CreateTxListRestore(TEvBackup::TEvListBackupCollecti
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

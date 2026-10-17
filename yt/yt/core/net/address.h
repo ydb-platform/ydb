@@ -11,6 +11,8 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
+#include <library/cpp/yt/system/local_host.h>
+
 #include <util/generic/hash.h>
 
 #ifdef _WIN32
@@ -20,6 +22,7 @@
 #endif
 
 #include <array>
+#include <optional>
 
 namespace NYT::NNet {
 
@@ -192,8 +195,10 @@ public:
     /*!
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
+     *
+     *  When #options is set, it overrides the IPv4/IPv6 flags from the global config for this resolution.
      */
-    TFuture<TNetworkAddress> Resolve(TStringBuf address);
+    TFuture<TNetworkAddress> Resolve(TStringBuf address, std::optional<NDns::TDnsResolveOptions> options = {});
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();
@@ -266,7 +271,7 @@ private:
 
 // Expected format: sas1-5535-9d7.sas-test.yp.gencfg-c.yandex.net, or noqpmfiudzbb4hvs.man.yp-c.yandex.net.
 // YP pod id must not contain a '.' in its name.
-std::optional<TStringBuf> InferYPClusterFromHostNameRaw(TStringBuf hostName);
+using ::NYT::InferYPClusterFromHostNameRaw;
 std::optional<std::string> InferYPClusterFromHostName(TStringBuf hostName);
 
 ////////////////////////////////////////////////////////////////////////////////

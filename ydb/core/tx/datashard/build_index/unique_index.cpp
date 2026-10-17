@@ -337,3 +337,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateUniqueIndexRequest::TPtr& e
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

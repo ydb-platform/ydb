@@ -23,7 +23,7 @@
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
@@ -211,10 +211,10 @@ protected:
 
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ControlSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ControlSpinLock_);
     SOCKET ServerSocket_ = INVALID_SOCKET;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConnectionsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ConnectionsSpinLock_);
     THashSet<TConnectionPtr> Connections_;
     TPromise<void> AllConnectionsTerminatedPromise_;
 
@@ -295,7 +295,7 @@ protected:
                 clientSocket = AcceptSocket(ServerSocket_, &clientAddress);
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Error accepting client connection")
-                    .With(TError(ex));
+                    .With(ex);
                 break;
             }
 
@@ -384,11 +384,11 @@ protected:
                     CloseServerSocket();
 
                     THROW_ERROR_EXCEPTION(NRpc::EErrorCode::TransportError, TRuntimeFormat(errorMessage))
-                        << ex;
+                        .With(ex);
                 } else {
                     YT_TLOG_WARNING("Error binding socket, starting retry")
                         .With("Attempt", attempt + 1)
-                        .With(TError(ex));
+                        .With(ex);
                     Sleep(Config_->BindRetryBackoff);
                 }
             }
@@ -596,7 +596,7 @@ private:
         } catch (const std::exception& ex) {
             const auto& Logger = BusLogger();
             YT_TLOG_WARNING("Failed to update cert sensors")
-                .With(TError(ex));
+                .With(ex);
         }
     }
 };

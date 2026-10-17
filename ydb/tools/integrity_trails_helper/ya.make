@@ -1,5 +1,7 @@
 PROGRAM()
 
+YQL_LAST_ABI_VERSION()
+
 SRCS(
     main.cpp
 )

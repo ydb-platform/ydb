@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/path.h>
 
-
 namespace NKikimr::NWorkloadManager {
 
 namespace {
@@ -40,11 +39,9 @@ bool IsFullScanSource(const NKqpProto::TKqpReadRangesSource& source) {
     return true;
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-
-bool MatchesFullScan(const std::optional<NResourcePool::TRegexPredicate>& predicate,
-                   const NKqpProto::TKqpPhyQuery& phyQuery) {
+bool MatchesFullScan(const std::optional<NResourcePool::TRegexPredicate>& predicate, const NKqpProto::TKqpPhyQuery& phyQuery) {
     if (!predicate) {
         return true;
     }
@@ -78,4 +75,4 @@ bool MatchesFullScan(const std::optional<NResourcePool::TRegexPredicate>& predic
     return false;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

@@ -947,9 +947,7 @@ fail:
 }
 
 // Testing the utilities of the CPU dispatcher
-#ifndef NPY_DISABLE_OPTIMIZATION
-    #include "_umath_tests.dispatch.h"
-#endif
+#include "_umath_tests.dispatch.h"
 NPY_CPU_DISPATCH_DECLARE(extern const char *_umath_tests_dispatch_var)
 NPY_CPU_DISPATCH_DECLARE(const char *_umath_tests_dispatch_func, (void))
 NPY_CPU_DISPATCH_DECLARE(void _umath_tests_dispatch_attach, (PyObject *list))
@@ -968,28 +966,28 @@ UMath_Tests_test_dispatch(PyObject *NPY_UNUSED(dummy), PyObject *NPY_UNUSED(dumm
     if (dict == NULL) {
         return NULL;
     }
-    #line 709
+    #line 707
     item = PyUnicode_FromString(highest_func);
     if (item == NULL || PyDict_SetItemString(dict, "func", item) < 0) {
         goto err;
     }
     Py_DECREF(item);
     
-#line 709
+#line 707
     item = PyUnicode_FromString(highest_var);
     if (item == NULL || PyDict_SetItemString(dict, "var", item) < 0) {
         goto err;
     }
     Py_DECREF(item);
     
-#line 709
+#line 707
     item = PyUnicode_FromString(highest_func_xb);
     if (item == NULL || PyDict_SetItemString(dict, "func_xb", item) < 0) {
         goto err;
     }
     Py_DECREF(item);
     
-#line 709
+#line 707
     item = PyUnicode_FromString(highest_var_xb);
     if (item == NULL || PyDict_SetItemString(dict, "var_xb", item) < 0) {
         goto err;

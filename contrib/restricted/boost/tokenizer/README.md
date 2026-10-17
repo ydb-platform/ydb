@@ -8,7 +8,7 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 ## Properties
 
-* C++03
+* C++11
 * Header-Only
 
 ## Build Status

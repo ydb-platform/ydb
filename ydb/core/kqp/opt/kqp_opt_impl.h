@@ -10,6 +10,7 @@ namespace NKikimr::NKqp::NOpt {
 void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
     const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
 
+bool IsKqpPureExpr(const NYql::NNodes::TExprBase& expr, bool checkDqSources = false, bool checkIndexReads = false);
 bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
 bool IsKqpPureInputs(const NYql::NNodes::TExprList& inputs);
 
@@ -33,8 +34,7 @@ TIntrusivePtr<NYql::TKikimrTableMetadata> GetIndexMetadata(const NYql::NNodes::T
 
 TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildAffectedIndexTables(
     const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, const THashSet<TStringBuf>* filter,
-    const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,
+    const THashSet<TStringBuf>* filter, const std::function<NYql::NNodes::TExprBase (const NYql::TKikimrTableMetadata&,
         NYql::TPositionHandle, NYql::TExprContext&)>& tableBuilder);
 
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);

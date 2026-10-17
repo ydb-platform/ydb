@@ -33,7 +33,7 @@
 (let $25 (DqPhyStage '($22) (lambda '($38) (block '(
   (let $39 (Interval '10000))
   (let $40 (lambda '($50) $50))
-  (let $41 (MultiHoppingCore (FromFlow (NarrowMap (ToFlow $38) (lambda '($42 $43 $44) (AsStruct '('k $42) '('"t" $43) '('"v" $44))))) (lambda '($45) (Member $45 'k)) (lambda '($46) (SafeCast (Member $46 '"t") (OptionalType $17))) (Interval '5000) $39 $39 'true (lambda '($47) (AsStruct '('Sum0 (Member $47 '"v")))) (lambda '($48 $49) (AsStruct '('Sum0 (AggrAdd (Member $48 '"v") (Member $49 'Sum0))))) $40 $40 (lambda '($51 $52) (AsStruct '('Sum0 (AggrAdd (Member $51 'Sum0) (Member $52 'Sum0))))) (lambda '($53 $54 $55) (AsStruct '('Sum0 (Member $54 'Sum0)) '('"_yql_time" $55) '('k $53))) '0 '"_yql_time"))
+  (let $41 (MultiHoppingCore (FromFlow (NarrowMap (ToFlow $38) (lambda '($42 $43 $44) (AsStruct '('k $42) '('"t" $43) '('"v" $44))))) (lambda '($45) (Member $45 'k)) (lambda '($46) (SafeCast (Member $46 '"t") (OptionalType $17))) (Interval '5000) $39 $39 'true (lambda '($47) (AsStruct '('Sum0 (Member $47 '"v")))) (lambda '($48 $49) (AsStruct '('Sum0 (AggrAdd (Member $48 '"v") (Member $49 'Sum0))))) $40 $40 (lambda '($51 $52) (AsStruct '('Sum0 (AggrAdd (Member $51 'Sum0) (Member $52 'Sum0))))) (lambda '($53 $54 $55) (AsStruct '('Sum0 (Member $54 'Sum0)) '('"_yql_time" $55) '('k $53))) '0 '"_yql_time" (Void) (Void) (Void) (Void) 'true))
   (return (Map $41 (lambda '($56) (block '(
     (let $57 (ResourceType '"Yson2.Node"))
     (let $58 '($57 '"" '"1"))

@@ -433,7 +433,8 @@ struct adj_matrix_traversal_tag : public virtual adjacency_matrix_tag,
                                   public virtual vertex_list_graph_tag,
                                   public virtual incidence_graph_tag,
                                   public virtual adjacency_graph_tag,
-                                  public virtual edge_list_graph_tag
+                                  public virtual edge_list_graph_tag,
+                                  public virtual bidirectional_graph_tag
 {
 };
 
@@ -824,6 +825,27 @@ typename adjacency_matrix< D, VP, EP, GP, A >::degree_size_type in_degree(
     for (boost::tie(f, l) = in_edges(u, g); f != l; ++f)
         ++n;
     return n;
+}
+
+// O(N)
+template < typename VP, typename EP, typename GP, typename A >
+typename adjacency_matrix< directedS, VP, EP, GP, A >::degree_size_type
+degree(
+    typename adjacency_matrix< directedS, VP, EP, GP, A >::vertex_descriptor u,
+    const adjacency_matrix< directedS, VP, EP, GP, A >& g)
+{
+    return in_degree(u, g) + out_degree(u, g);
+}
+
+// O(N)
+template < typename VP, typename EP, typename GP, typename A >
+typename adjacency_matrix< undirectedS, VP, EP, GP, A >::degree_size_type
+degree(
+    typename adjacency_matrix< undirectedS, VP, EP, GP, A >::vertex_descriptor
+        u,
+    const adjacency_matrix< undirectedS, VP, EP, GP, A >& g)
+{
+    return out_degree(u, g);
 }
 
 //=========================================================================

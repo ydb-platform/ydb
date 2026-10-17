@@ -16,7 +16,7 @@ class ComposableAlwaysOnSamplerConfiguration : public ComposableSamplerConfigura
 {
 public:
   ComposableAlwaysOnSamplerConfiguration() = default;
-  void Accept(SamplerConfigurationVisitor *visitor) const override;
+  void Accept(ComposableSamplerConfigurationVisitor *visitor) const override;
 };
 
 }  // namespace configuration

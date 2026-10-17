@@ -1,9 +1,10 @@
-from abc import ABCMeta, abstractmethod
-from typing import Literal as L, Any
+from abc import ABC, abstractmethod
+from typing import Any
+from typing import Literal as L
 
 from numpy import ufunc
 
-__all__: list[str]
+__all__ = ["NDArrayOperatorsMixin"]
 
 # NOTE: `NDArrayOperatorsMixin` is not formally an abstract baseclass,
 # even though it's reliant on subclasses implementing `__array_ufunc__`
@@ -12,7 +13,9 @@ __all__: list[str]
 # completely dependent on how `__array_ufunc__` is implemented.
 # As such, only little type safety can be provided here.
 
-class NDArrayOperatorsMixin(metaclass=ABCMeta):
+class NDArrayOperatorsMixin(ABC):
+    __slots__ = ()
+
     @abstractmethod
     def __array_ufunc__(
         self,

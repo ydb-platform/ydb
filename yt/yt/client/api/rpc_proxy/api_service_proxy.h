@@ -144,6 +144,9 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFile,
         .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionFile);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadFilePartition,
+        .SetStreamingEnabled(true));
 
     // Journals
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadJournal,

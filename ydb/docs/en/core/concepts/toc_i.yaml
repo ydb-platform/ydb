@@ -5,11 +5,6 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
-- name: Stream processing
-  href: streaming-query/index.md
-  include:
-    path: streaming-query/toc_p.yaml
-    mode: link
 - name: Architecture
   href: architecture/index.md
   include:
@@ -50,3 +45,8 @@ items:
   when: feature_transfer
 - name: Streaming queries
   href: streaming-query.md
+- name: Stream processing
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link

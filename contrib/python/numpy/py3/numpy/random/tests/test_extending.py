@@ -1,17 +1,15 @@
-from importlib.util import spec_from_file_location, module_from_spec
 import os
-import pathlib
-import pytest
 import shutil
 import subprocess
 import sys
 import sysconfig
-import textwrap
 import warnings
+from importlib.util import module_from_spec, spec_from_file_location
+
+import pytest
 
 import numpy as np
-from numpy.testing import IS_WASM, IS_EDITABLE
-
+from numpy.testing import IS_EDITABLE, IS_WASM
 
 try:
     import cffi
@@ -56,6 +54,8 @@ else:
 )
 @pytest.mark.skipif(IS_WASM, reason="Can't start subprocess")
 @pytest.mark.skipif(cython is None, reason="requires cython")
+@pytest.mark.skipif(sysconfig.get_platform() == 'win-arm64',
+                    reason='Meson unable to find MSVC linker on win-arm64')
 @pytest.mark.slow
 def test_cython(tmp_path):
     import glob
@@ -65,14 +65,23 @@ def test_cython(tmp_path):
     build_dir = tmp_path / 'random' / '_examples' / 'cython'
     target_dir = build_dir / "build"
     os.makedirs(target_dir, exist_ok=True)
+    # Ensure we use the correct Python interpreter even when `meson` is
+    # installed in a different Python environment (see gh-24956)
+    native_file = str(build_dir / 'interpreter-native-file.ini')
+    with open(native_file, 'w') as f:
+        f.write("[binaries]\n")
+        f.write(f"python = '{sys.executable}'\n")
+        f.write(f"python3 = '{sys.executable}'")
     if sys.platform == "win32":
         subprocess.check_call(["meson", "setup",
-                               "--buildtype=release", 
-                               "--vsenv", str(build_dir)],
+                               "--buildtype=release",
+                               "--vsenv", "--native-file", native_file,
+                               str(build_dir)],
                               cwd=target_dir,
                               )
     else:
-        subprocess.check_call(["meson", "setup", str(build_dir)],
+        subprocess.check_call(["meson", "setup",
+                               "--native-file", native_file, str(build_dir)],
                               cwd=target_dir
                               )
     subprocess.check_call(["meson", "compile", "-vv"], cwd=target_dir)
@@ -83,12 +92,11 @@ def test_cython(tmp_path):
     g = glob.glob(str(target_dir / "*" / "extending.pyx.c"))
     with open(g[0]) as fid:
         txt_to_find = 'NumPy API declarations from "numpy/__init__'
-        for i, line in enumerate(fid):
+        for line in fid:
             if txt_to_find in line:
                 break
         else:
-            assert False, ("Could not find '{}' in C file, "
-                           "wrong pxd used".format(txt_to_find))
+            assert False, f"Could not find '{txt_to_find}' in C file, wrong pxd used"
     # import without adding the directory to sys.path
     suffix = sysconfig.get_config_var('EXT_SUFFIX')
 

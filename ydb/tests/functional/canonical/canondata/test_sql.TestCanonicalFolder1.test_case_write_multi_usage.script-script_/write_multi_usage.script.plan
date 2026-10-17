@@ -212,7 +212,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 6
+                                    }
+                                ],
                                 "Name": "Upsert",
                                 "Path": "/local/base_write_multi_usage_script_script/Temp",
                                 "SinkType": "KqpTableSink",
@@ -272,7 +276,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Delete",
                                 "Path": "/local/base_write_multi_usage_script_script/Input1",
                                 "SinkType": "KqpTableSink",

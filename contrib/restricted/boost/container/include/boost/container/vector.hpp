@@ -169,15 +169,15 @@ class vec_iterator
                              , nat>::type                                           nonconst_iterator;
 
    public:
-   inline
+   BOOST_CONTAINER_FORCEINLINE
       const Pointer &get_ptr() const BOOST_NOEXCEPT_OR_NOTHROW
    {  return   m_ptr;  }
 
-   inline
+   BOOST_CONTAINER_FORCEINLINE
       Pointer &get_ptr() BOOST_NOEXCEPT_OR_NOTHROW
    {  return   m_ptr;  }
 
-   inline explicit vec_iterator(Pointer ptr) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE explicit vec_iterator(Pointer ptr) BOOST_NOEXCEPT_OR_NOTHROW
       : m_ptr(ptr)
    {}
    #endif   //#ifndef BOOST_CONTAINER_DOXYGEN_INVOKED
@@ -185,93 +185,93 @@ class vec_iterator
    public:
 
    //Constructors
-   inline vec_iterator() BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator() BOOST_NOEXCEPT_OR_NOTHROW
       : m_ptr()   //Value initialization to achieve "null iterators" (N3644)
    {}
 
-   inline vec_iterator(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
       :  m_ptr(other.get_ptr())
    {}
 
-   inline vec_iterator(const nonconst_iterator &other) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator(const nonconst_iterator &other) BOOST_NOEXCEPT_OR_NOTHROW
       :  m_ptr(other.get_ptr())
    {}
 
-   inline vec_iterator & operator=(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator & operator=(const vec_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
    {  m_ptr = other.get_ptr();   return *this;  }
 
    //Pointer like operators
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       reference operator*()   const BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr);  return *m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       pointer operator->()  const BOOST_NOEXCEPT_OR_NOTHROW
    {  return m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       reference operator[](difference_type off) const BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr);  return m_ptr[off];  }
 
    //Increment / Decrement
-   inline vec_iterator& operator++() BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator& operator++() BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr); ++m_ptr;  return *this; }
 
-   inline vec_iterator operator++(int) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator operator++(int) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr); return vec_iterator(m_ptr++); }
 
-   inline vec_iterator& operator--() BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator& operator--() BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr); --m_ptr; return *this;  }
 
-   inline vec_iterator operator--(int) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator operator--(int) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(!!m_ptr); return vec_iterator(m_ptr--); }
 
    //Arithmetic
-   inline vec_iterator& operator+=(difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator& operator+=(difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(m_ptr || !off); m_ptr += off; return *this;   }
 
-   inline vec_iterator& operator-=(difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE vec_iterator& operator-=(difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(m_ptr || !off); m_ptr -= off; return *this;   }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend vec_iterator operator+(const vec_iterator &x, difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(x.m_ptr || !off); return vec_iterator(x.m_ptr+off);  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend vec_iterator operator+(difference_type off, vec_iterator right) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(right.m_ptr || !off); right.m_ptr += off;  return right; }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend vec_iterator operator-(vec_iterator left, difference_type off) BOOST_NOEXCEPT_OR_NOTHROW
    {  BOOST_ASSERT(left.m_ptr || !off); left.m_ptr -= off;  return left; }
 
    //Difference
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend difference_type operator-(const vec_iterator &left, const vec_iterator& right) BOOST_NOEXCEPT_OR_NOTHROW
    {  return left.m_ptr - right.m_ptr;   }
 
    //Comparison operators
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator==   (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr == r.m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator!=   (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr != r.m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator<    (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr < r.m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator<=   (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr <= r.m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator>    (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr > r.m_ptr;  }
 
-   BOOST_CONTAINER_NODISCARD inline
+   BOOST_CONTAINER_NODISCARD BOOST_CONTAINER_FORCEINLINE
       friend bool operator>=   (const vec_iterator& l, const vec_iterator& r) BOOST_NOEXCEPT_OR_NOTHROW
    {  return l.m_ptr >= r.m_ptr;  }
 };
@@ -282,7 +282,7 @@ struct vector_insert_ordered_cursor
    typedef typename iterator_traits<BiDirPosConstIt>::value_type  size_type;
    typedef typename iterator_traits<BiDirValueIt>::reference      reference;
 
-   inline vector_insert_ordered_cursor(BiDirPosConstIt posit, BiDirValueIt valueit)
+   BOOST_CONTAINER_FORCEINLINE vector_insert_ordered_cursor(BiDirPosConstIt posit, BiDirValueIt valueit)
       : last_position_it(posit), last_value_it(valueit)
    {}
 
@@ -296,10 +296,10 @@ struct vector_insert_ordered_cursor
       }
    }
 
-   inline size_type get_pos() const
+   BOOST_CONTAINER_FORCEINLINE size_type get_pos() const
    {  return *last_position_it;  }
 
-   inline reference get_val()
+   BOOST_CONTAINER_FORCEINLINE reference get_val()
    {  return *last_value_it;  }
 
    BiDirPosConstIt last_position_it;
@@ -307,11 +307,11 @@ struct vector_insert_ordered_cursor
 };
 
 template<class Pointer, bool IsConst>
-inline const Pointer &vector_iterator_get_ptr(const vec_iterator<Pointer, IsConst> &it) BOOST_NOEXCEPT_OR_NOTHROW
+BOOST_CONTAINER_FORCEINLINE const Pointer &vector_iterator_get_ptr(const vec_iterator<Pointer, IsConst> &it) BOOST_NOEXCEPT_OR_NOTHROW
 {  return   it.get_ptr();  }
 
 template<class Pointer, bool IsConst>
-inline Pointer &get_ptr(vec_iterator<Pointer, IsConst> &it) BOOST_NOEXCEPT_OR_NOTHROW
+BOOST_CONTAINER_FORCEINLINE Pointer &get_ptr(vec_iterator<Pointer, IsConst> &it) BOOST_NOEXCEPT_OR_NOTHROW
 {  return  it.get_ptr();  }
 
 struct initial_capacity_t {};
@@ -836,7 +836,7 @@ public:
    typedef T                                                                           value_type;
    typedef BOOST_CONTAINER_IMPDEF
       (typename real_allocator<T BOOST_MOVE_I A>::type)                                allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                        allocator_traits_t;
+   typedef boost::container::allocator_traits<allocator_type>                          allocator_traits_t;
    typedef typename   allocator_traits<allocator_type>::pointer                        pointer;
    typedef typename   allocator_traits<allocator_type>::const_pointer                  const_pointer;
    typedef typename   allocator_traits<allocator_type>::reference                      reference;
@@ -1196,7 +1196,7 @@ private:
    //!   throws or T's copy constructor throws.
    //!
    //! <b>Complexity</b>: Linear to the elements x contains.
-   vector(const vector &x, const allocator_type &a)
+   vector(const vector &x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  m_holder(vector_uninitialized_size, a, x.size())
    {
       #ifdef BOOST_CONTAINER_VECTOR_ALLOC_STATS
@@ -1214,7 +1214,7 @@ private:
    //! <b>Throws</b>: If allocation or T's copy constructor throws.
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
-   vector(BOOST_RV_REF(vector) x, const allocator_type &a)
+   vector(BOOST_RV_REF(vector) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  m_holder( vector_uninitialized_size, a
                  //In this allocator move constructor the allocator won't be propagated --v
                  , is_propagable_from<false>(x.get_stored_allocator(), x.m_holder.start(), a) ? 0 : x.size()
@@ -1938,9 +1938,13 @@ private:
    template<class ...Args>
    inline reference emplace_back(BOOST_FWD_REF(Args)...args)
    {
-      T* const p = this->priv_raw_end();
       if (BOOST_LIKELY(this->room_enough())){
-         //There is more memory, just construct a new object at the end
+         //There is more memory, just construct a new object at the end.
+         //Deriving the end pointer inside this branch (instead of before the
+         //room_enough() test, where the slow path would also use it) lets the
+         //optimizer fold 'start + size' into the store's addressing mode and
+         //keep size as the sole induction variable in append loops.
+         T* const p = this->priv_raw_end();
          allocator_traits_type::construct(this->m_holder.alloc(), p, ::boost::forward<Args>(args)...);
          ++this->m_holder.m_size;
          return *p;
@@ -1948,7 +1952,7 @@ private:
       else{
          typedef dtl::insert_emplace_proxy<allocator_type, Args...> proxy_t;
          return *this->priv_insert_forward_range_no_capacity
-            (p, 1, proxy_t(::boost::forward<Args>(args)...), alloc_version());
+            (this->priv_raw_end(), 1, proxy_t(::boost::forward<Args>(args)...), alloc_version());
       }
    }
 
@@ -1970,6 +1974,27 @@ private:
          ++this->m_holder.m_size;
       }
       return is_room_enough;
+   }
+
+   //! <b>Requires</b>: Before the call to this function size() < capacity() must be true.
+   //!   Otherwise, the behavior is undefined.
+   //!
+   //! <b>Effects</b>: Inserts an object of type T constructed with
+   //!   std::forward<Args>(args)... in the end of the vector.
+   //!
+   //! <b>Throws</b>: If the in-place constructor throws.
+   //!
+   //! <b>Complexity</b>: Constant time.
+   //!
+   //! <b>Note</b>: Non-standard extension.
+   template<class ...Args>
+   BOOST_CONTAINER_FORCEINLINE reference unchecked_emplace_back(BOOST_FWD_REF(Args)...args)
+   {
+      BOOST_ASSERT(this->size() < this->capacity());
+      T* const p = this->priv_raw_end();
+      allocator_traits_type::construct(this->m_holder.alloc(), p, ::boost::forward<Args>(args)...);
+      ++this->m_holder.m_size;
+      return *p;
    }
 
    //! <b>Requires</b>: position must be a valid iterator of *this.
@@ -1998,17 +2023,20 @@ private:
    BOOST_MOVE_TMPL_LT##N BOOST_MOVE_CLASS##N BOOST_MOVE_GT##N \
    inline reference emplace_back(BOOST_MOVE_UREF##N)\
    {\
-      T* const p = this->priv_raw_end();\
       if (BOOST_LIKELY(this->room_enough())){\
+         /*Derive the end pointer inside this branch so the optimizer can fold*/\
+         /*'start + size' into the store and keep size as the sole induction*/\
+         /*variable in append loops (the slow path recomputes it).*/\
+         T* const p = this->priv_raw_end();\
          allocator_traits_type::construct (this->m_holder.alloc()\
-            , this->priv_raw_end() BOOST_MOVE_I##N BOOST_MOVE_FWD##N);\
+            , p BOOST_MOVE_I##N BOOST_MOVE_FWD##N);\
          ++this->m_holder.m_size;\
          return *p;\
       }\
       else{\
          typedef dtl::insert_emplace_proxy_arg##N<allocator_type BOOST_MOVE_I##N BOOST_MOVE_TARG##N> proxy_t;\
          return *this->priv_insert_forward_range_no_capacity\
-            ( p, 1, proxy_t(BOOST_MOVE_FWD##N), alloc_version());\
+            ( this->priv_raw_end(), 1, proxy_t(BOOST_MOVE_FWD##N), alloc_version());\
       }\
    }\
    \
@@ -2022,6 +2050,17 @@ private:
          ++this->m_holder.m_size;\
       }\
       return is_room_enough;\
+   }\
+   \
+   BOOST_MOVE_TMPL_LT##N BOOST_MOVE_CLASS##N BOOST_MOVE_GT##N \
+   inline reference unchecked_emplace_back(BOOST_MOVE_UREF##N)\
+   {\
+      BOOST_ASSERT(this->size() < this->capacity());\
+      T* const p = this->priv_raw_end();\
+      allocator_traits_type::construct (this->m_holder.alloc()\
+         , p BOOST_MOVE_I##N BOOST_MOVE_FWD##N);\
+      ++this->m_holder.m_size;\
+      return *p;\
    }\
    \
    BOOST_MOVE_TMPL_LT##N BOOST_MOVE_CLASS##N BOOST_MOVE_GT##N \
@@ -2054,8 +2093,30 @@ private:
    //!
    //! <b>Complexity</b>: Amortized constant time.
    void push_back(T &&x);
+
+   //! <b>Requires</b>: Before the call to this function size() < capacity() must be true.
+   //!   Otherwise, the behavior is undefined.
+   //!
+   //! <b>Effects</b>: Inserts a copy of x at the end of the vector.
+   //!
+   //! <b>Throws</b>: If T's copy/move constructor throws.
+   //!
+   //! <b>Complexity</b>: Constant time.
+   void unchecked_push_back(const T &x);
+
+   //! <b>Requires</b>: Before the call to this function size() < capacity() must be true.
+   //!   Otherwise, the behavior is undefined.
+   //!
+   //! <b>Effects</b>: Constructs a new element in the end of the vector
+   //!   and moves the resources of x to this new element.
+   //!
+   //! <b>Throws</b>: If T's copy/move constructor throws.
+   //!
+   //! <b>Complexity</b>: Constant time.
+   void unchecked_push_back(T &&x);
    #else
    BOOST_MOVE_CONVERSION_AWARE_CATCH(push_back, T, void, priv_push_back)
+   BOOST_MOVE_CONVERSION_AWARE_CATCH(unchecked_push_back, T, void, priv_unchecked_push_back)
    #endif
 
    #if defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
@@ -2944,8 +3005,18 @@ private:
       this->emplace_back(::boost::forward<U>(u));
    }
 
+   template <class U>
+   BOOST_CONTAINER_FORCEINLINE void priv_unchecked_push_back(BOOST_FWD_REF(U) u)
+   {
+      this->unchecked_emplace_back(::boost::forward<U>(u));
+   }
+
    //Overload to support compiler errors that instantiate too much
    inline void priv_push_back(::boost::move_detail::nat)
+   {}
+
+   //Overload to support compiler errors that instantiate too much
+   inline void priv_unchecked_push_back(::boost::move_detail::nat)
    {}
 
    inline iterator priv_insert(const_iterator, ::boost::move_detail::nat)
@@ -3056,7 +3127,7 @@ private:
    #endif
 
    template <class InsertionProxy>
-   BOOST_CONTAINER_NOINLINE iterator priv_insert_forward_range_no_capacity
+   iterator priv_insert_forward_range_no_capacity
       (T *const raw_pos, const size_type n, const InsertionProxy insert_range_proxy, version_1)
    {
       const size_type new_cap = this->m_holder.template next_capacity<growth_factor_type>(n);
@@ -3271,8 +3342,12 @@ private:
       //There is enough memory
       T* const old_finish = this->priv_raw_end();
       allocator_type & a = this->m_holder.alloc();
+      //Number of trailing elements [raw_pos, old_finish). Expressing the shift
+      //length against the end pointer (n_after - 1) lets the compiler bound and
+      //fold a near-end shift to inline moves instead of an out-of-line memmove.
+      const size_type n_after = size_type(old_finish - raw_pos);
 
-      if (old_finish == raw_pos){
+      if (!n_after){
          insert_range_proxy.uninitialized_copy_n_and_update(a, old_finish, 1);
          ++this->m_holder.m_size;
       }
@@ -3284,7 +3359,7 @@ private:
          allocator_traits_type::construct(a, old_finish, ::boost::move(*before_old_finish));
          ++this->m_holder.m_size;
          //Copy previous to last objects to the initialized end
-         boost::container::move_backward(raw_pos, before_old_finish, old_finish);
+         boost::container::move_backward_n(before_old_finish, n_after - 1u, old_finish);
          //Insert new objects in the raw_pos
          insert_range_proxy.copy_n_and_update(a, raw_pos, 1);
       }
@@ -3377,10 +3452,16 @@ private:
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `vector` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InputIterator` and using the default allocator.
 template <typename InputIterator>
 vector(InputIterator, InputIterator) ->
    vector<typename iter_value<InputIterator>::type>;
 
+//! <b>Deduction guide</b>: allows a `vector` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the element type from the value type
+//! of `InputIterator` and taking the allocator type from the supplied allocator.
 template <typename InputIterator, typename Allocator>
 vector(InputIterator, InputIterator, Allocator const&) ->
    vector<typename iter_value<InputIterator>::type, Allocator>;
@@ -3421,7 +3502,7 @@ template <class T, class Allocator, class Options>
 struct has_trivial_destructor_after_move<boost::container::vector<T, Allocator, Options> >
 {
    typedef typename boost::container::vector<T, Allocator, Options>::allocator_type allocator_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::pointer pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::pointer pointer;
    BOOST_STATIC_CONSTEXPR bool value = ::boost::has_trivial_destructor_after_move<allocator_type>::value &&
                                                 ::boost::has_trivial_destructor_after_move<pointer>::value;
 };

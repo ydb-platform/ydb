@@ -1,6 +1,6 @@
 # hive_config
 
-[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} cluster configuration. Some configuration options are also available for editing through the [Hive web-viewer](../embedded-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
+[Hive](../../concepts/glossary.md#hive) is a YDB component responsible for launching [tablets](../../concepts/glossary.md#tablet). In various situations and under different load patterns, you might need to configure its behavior. Hive behavior is configured in the `hive_config` section of the {{ ydb-short-name }} cluster configuration. Some configuration options are also available for editing through the [Hive web-viewer](../ydb-ui/hive.md#settings) interface. Settings configured through the interface take priority over those specified in the configuration. Below are all available options, with the corresponding option name in the interface indicated if the option can be edited through the interface.
 
 ## Tablet Boot Options {#boot}
 

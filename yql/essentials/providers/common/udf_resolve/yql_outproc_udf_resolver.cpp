@@ -392,7 +392,6 @@ private:
         return !hasErrors;
     }
 
-private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
     TFileStoragePtr FileStorage_;

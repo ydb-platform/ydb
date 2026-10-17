@@ -557,6 +557,11 @@ TExprBase KqpApplyVectorTopKToReadTable(TExprBase node, TExprContext& ctx, const
         return node;
     }
 
+    if (settings.Sampling) {
+        // DataShard cannot combine sampling with vector top-k.
+        return node;
+    }
+
     if (settings.VectorTopKColumn) {
         return node; // already set
     }
@@ -810,6 +815,11 @@ TExprBase KqpApplyVectorTopKToStageWithSource(TExprBase node, TExprContext& ctx,
 
     auto sourceSettings = maybeSourceSettings.Cast();
     auto settings = TKqpReadTableSettings::Parse(sourceSettings.Settings());
+
+    if (settings.Sampling) {
+        // DataShard cannot combine sampling with vector top-k.
+        return node;
+    }
 
     // Skip if already has VectorTopK or not a full table scan
     if (settings.VectorTopKColumn || !TCoVoid::Match(sourceSettings.RangesExpr().Raw())) {

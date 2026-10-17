@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service_impl.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+#include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/testlib/test_client.h>
@@ -63,13 +65,166 @@ TVector<NKikimrKqp::TKqpProxyNodeResources> Transform(TVector<TSimpleResource> d
     return result;
 }
 
-TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, const TActorId& sender) {
-    runtime->Send(new IEventHandle(kqpProxy, sender, new TEvKqp::TEvCreateSessionRequest()));
+TString CreateSession(TTestActorRuntime* runtime, const TActorId& kqpProxy, const TActorId& sender,
+                      const TString& database = {}) {
+    auto request = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
+    request->Record.MutableRequest()->SetDatabase(database);
+    runtime->Send(new IEventHandle(kqpProxy, sender, request.Release()));
     auto reply = runtime->GrabEdgeEventRethrow<TEvKqp::TEvCreateSessionResponse>(sender);
     auto record = reply->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
     TString sessionId = record.GetResponse().GetSessionId();
     return sessionId;
+}
+
+class TWmStateReporter : public TActorBootstrapped<TWmStateReporter> {
+public:
+    TWmStateReporter(std::shared_ptr<NWorkloadManager::ISessionUpdater> updater,
+                     NWorkloadManager::ISessionUpdater::EState state, TActorId edge)
+        : Updater(std::move(updater))
+        , State(state)
+        , Edge(edge)
+    {}
+
+    void Bootstrap() {
+        Updater->SetRequestState(State, TActivationContext::Now());
+        Send(Edge, new TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> Updater;
+    NWorkloadManager::ISessionUpdater::EState State;
+    TActorId Edge;
+};
+
+void ReportWmState(TTestActorRuntime& runtime,
+                   const std::shared_ptr<NWorkloadManager::ISessionUpdater>& updater,
+                   NWorkloadManager::ISessionUpdater::EState state, ui32 nodeIndex = 0) {
+    const auto edge = runtime.AllocateEdgeActor(nodeIndex);
+    runtime.Register(new TWmStateReporter(updater, state, edge), nodeIndex);
+    UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(edge));
+}
+
+void CheckNoWmNotifications(TTestActorRuntime& runtime, const TActorId& recipient) {
+    // The runtime observer does not see deliveries to edge actors. Inspect the
+    // recipient queue up to a marker after the operation under test completes.
+    runtime.Send(new IEventHandle(recipient, {}, new TEvents::TEvWakeup()));
+    runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+        UNIT_ASSERT_C(event->GetTypeRewrite() != NWorkloadManager::TEvWmStateChanged::EventType,
+                      "Unexpected WM notification");
+        return event->GetTypeRewrite() == TEvents::TEvWakeup::EventType;
+    }, {recipient}, TDuration::Seconds(5));
+}
+
+THolder<TEvKqp::TEvQueryRequest> MakeWmQuery(const TString& sessionId, const TString& text,
+                                          ui64 timeoutMs = 10000) {
+    auto event = MakeHolder<TEvKqp::TEvQueryRequest>();
+    auto* request = event->Record.MutableRequest();
+    request->SetSessionId(sessionId);
+    request->SetDatabase("/Root");
+    request->SetPoolId("pool");
+    request->SetQuery(text);
+    request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request->SetKeepSession(true);
+    request->SetReportWmStateChanges(true);
+    request->SetTimeoutMs(timeoutMs);
+    request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    request->MutableTxControl()->set_commit_tx(true);
+    return event;
+}
+
+void CheckWmAdmissionResult(ui32 issueCode, bool cancel, bool delayed = false) {
+    namespace WM = NWorkloadManager;
+    using EState = WM::ISessionUpdater::EState;
+    TPortManager ports;
+    auto settings = Tests::TServerSettings(ports.GetPort());
+    settings.SetDomainName("Root");
+    settings.SetUseRealThreads(false);
+    Tests::TServer server(settings);
+    auto& runtime = *server.GetRuntime();
+    const auto service = runtime.AllocateEdgeActor();
+    const auto worker = runtime.AllocateEdgeActor();
+    const auto observer = runtime.AllocateEdgeActor();
+    runtime.RegisterService(WM::MakeServiceId(runtime.GetNodeId()), service);
+
+    NResourcePool::TPoolSettings pool;
+    pool.ConcurrentQueryLimit = 1;
+    pool.QueueSize = 10;
+    auto updater = std::make_shared<TWmSessionUpdater>();
+    updater->SetPoolContext("pool", "USER");
+    updater->SetStateObserver(observer, 101);
+    const auto handler = runtime.Register(WM::CreatePoolHandlerActor(
+        "/Root", "pool", pool, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    runtime.Send(new IEventHandle(service, worker,
+        new WM::TEvPlaceRequestIntoPool(1, "/Root", "session", "pool", nullptr, "SELECT 1;", updater)));
+    auto placement = runtime.GrabEdgeEvent<WM::TEvPlaceRequestIntoPool>(service);
+    runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvResolvePoolResponse(
+        Ydb::StatusIds::SUCCESS, pool, {}, false, std::move(placement))));
+    auto pending = runtime.GrabEdgeEvent<WM::TEvWmStateChanged>(observer);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending->Get()->State), static_cast<ui32>(EState::PENDING));
+
+    bool cancelHandled = false;
+    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType) {
+            // This test supplies table-operation responses explicitly.
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        if (event->GetTypeRewrite() == WM::TEvPrivate::TEvCancelRequest::EventType &&
+            event->GetRecipientRewrite() == handler) {
+            cancelHandled = true;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+    if (delayed) {
+        UNIT_ASSERT(cancel);
+        // Occupy the available slot to force a real FIFO placement. This sets
+        // CleanupRequired, so cancellation must wait for the cleanup response.
+        WM::TPoolStateDescription poolState;
+        poolState.RunningRequests = 1;
+        runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvRefreshPoolStateResponse(
+            Ydb::StatusIds::SUCCESS, poolState, {})));
+        runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvDelayRequestResponse(
+            Ydb::StatusIds::SUCCESS, "session", {})));
+        auto queued = runtime.GrabEdgeEvent<WM::TEvWmStateChanged>(observer);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(queued->Get()->State), static_cast<ui32>(EState::DELAYED));
+    }
+
+    if (cancel) {
+        runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvCancelRequest("session")), 0, true);
+    } else {
+        NYql::TIssues issues;
+        if (issueCode) {
+            NYql::TIssue issue("Disk space quota exceeded");
+            issue.SetCode(issueCode, NYql::TSeverityIds::S_ERROR);
+            issues.AddIssue(issue);
+        }
+        runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvDelayRequestResponse(
+            issueCode ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::OVERLOADED,
+            "session", issues)));
+    }
+    if (delayed) {
+        runtime.WaitFor("cancellation waits for FIFO cleanup", [&] { return cancelHandled; });
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(updater->GetState()), static_cast<ui32>(EState::DELAYED));
+        CheckNoWmNotifications(runtime, observer);
+        runtime.Send(new IEventHandle(handler, service, new WM::TEvPrivate::TEvCleanupRequestsResponse(
+            Ydb::StatusIds::SUCCESS, std::vector<TString>{"session"}, {})));
+    }
+    auto notification = runtime.GrabEdgeEvent<WM::TEvWmStateChanged>(observer);
+    UNIT_ASSERT_VALUES_EQUAL(notification->Cookie, 101);
+    UNIT_ASSERT_VALUES_EQUAL(notification->Get()->PoolId, "pool");
+    UNIT_ASSERT_VALUES_EQUAL(notification->Get()->ClassifiedBy, "USER");
+    const auto expected = issueCode ? EState::EXITED : EState::NONE;
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(notification->Get()->State), static_cast<ui32>(expected));
+    auto response = runtime.GrabEdgeEvent<WM::TEvContinueRequest>(worker);
+    const auto expectedAdmission = issueCode ? WM::TEvContinueRequest::EAdmissionResult::ContinueInPool
+                                            : WM::TEvContinueRequest::EAdmissionResult::Reject;
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(response->Get()->GetAdmissionResult()), static_cast<ui32>(expectedAdmission));
+    UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, cancel ? Ydb::StatusIds::CANCELLED :
+        (issueCode ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::OVERLOADED));
+    CheckNoWmNotifications(runtime, observer);
+    runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
 }
 
 class TDatabaseCacheTestActor : public TActorBootstrapped<TDatabaseCacheTestActor> {
@@ -158,6 +313,147 @@ private:
 }
 
 Y_UNIT_TEST_SUITE(KqpProxy) {
+    Y_UNIT_TEST(WmNotificationsAfterTimeoutCleanup) {
+        namespace WM = NWorkloadManager;
+        using EState = WM::ISessionUpdater::EState;
+        TPortManager ports;
+        auto settings = Tests::TServerSettings(ports.GetPort());
+        settings.SetDomainName("Root");
+        settings.SetUseRealThreads(false);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+        Tests::TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto proxy = MakeKqpProxyID(runtime.GetNodeId());
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto replacementSender = runtime.AllocateEdgeActor();
+        const auto workload = runtime.AllocateEdgeActor();
+        runtime.RegisterService(WM::MakeServiceId(runtime.GetNodeId()), workload);
+        const auto sessionId = CreateSession(&runtime, proxy, sender, "/Root");
+
+        runtime.Send(new IEventHandle(proxy, sender, MakeWmQuery(sessionId, "SELECT 1;").Release(), 0, 101));
+        auto placement = runtime.GrabEdgeEvent<WM::TEvPlaceRequestIntoPool>(workload);
+        auto oldUpdater = placement->Get()->WmSessionUpdater;
+        UNIT_ASSERT(oldUpdater);
+        ReportWmState(runtime, oldUpdater, EState::PENDING);
+        auto pending = runtime.GrabEdgeEvent<WM::TEvWmStateChanged>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(pending->Cookie, 101);
+
+        // Withhold the WM cleanup response: the session actor remains busy,
+        // while the proxy's timeout fallback marks its session IDLE.
+        auto cleanup = runtime.GrabEdgeEvent<WM::TEvCleanupRequest>(workload);
+        auto timeout = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(timeout->Cookie, 101);
+        UNIT_ASSERT_VALUES_EQUAL(timeout->Get()->Record.GetYdbStatus(), Ydb::StatusIds::TIMEOUT);
+
+        TAutoPtr<IEventHandle> heldBusy;
+        std::shared_ptr<WM::ISessionUpdater> replacementUpdater;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvKqp::TEvQueryRequest::EventType &&
+                event->GetRecipientRewrite() == placement->Sender) {
+                replacementUpdater = event->Get<TEvKqp::TEvQueryRequest>()->GetWmSessionUpdater();
+            }
+            if (event->GetTypeRewrite() == TEvKqp::TEvQueryResponse::EventType &&
+                event->Get<TEvKqp::TEvQueryResponse>()->Record.GetYdbStatus() == Ydb::StatusIds::SESSION_BUSY) {
+                heldBusy.Reset(event.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        runtime.Send(new IEventHandle(proxy, replacementSender,
+            MakeWmQuery(sessionId, "SELECT 2;").Release(), 0, 202));
+        runtime.WaitFor("replacement request rejected while cleanup is pending", [&] { return bool(heldBusy); });
+        UNIT_ASSERT(replacementUpdater);
+        UNIT_ASSERT(oldUpdater != replacementUpdater);
+        // Exercise delayed callbacks while Q2's SESSION_BUSY reply is in flight.
+        for (auto state : {EState::PENDING, EState::DELAYED, EState::EXITED}) {
+            ReportWmState(runtime, oldUpdater, state);
+        }
+        CheckNoWmNotifications(runtime, sender);
+        CheckNoWmNotifications(runtime, replacementSender);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(replacementUpdater->GetState()), static_cast<ui32>(EState::NONE));
+        UNIT_ASSERT_VALUES_EQUAL(oldUpdater->GetClassifiedBy(), "USER");
+        runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        runtime.Send(heldBusy.Release());
+        auto busy = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(replacementSender);
+        UNIT_ASSERT_VALUES_EQUAL(busy->Cookie, 202);
+        UNIT_ASSERT_VALUES_EQUAL(busy->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SESSION_BUSY);
+        runtime.Send(new IEventHandle(cleanup->Sender, workload, new WM::TEvCleanupResponse(Ydb::StatusIds::SUCCESS)));
+    }
+
+    Y_UNIT_TEST(WmNotificationsDisabledForRemoteSession) {
+        namespace WM = NWorkloadManager;
+        using EState = WM::ISessionUpdater::EState;
+        TPortManager ports;
+        auto settings = Tests::TServerSettings(ports.GetPort());
+        settings.SetDomainName("Root");
+        settings.SetNodeCount(2);
+        settings.SetUseRealThreads(false);
+        settings.AppConfig->MutableFeatureFlags()->SetEnableResourcePools(true);
+        Tests::TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto workload = runtime.AllocateEdgeActor(1);
+        runtime.RegisterService(WM::MakeServiceId(runtime.GetNodeId(1)), workload, 1);
+        const auto sessionId = CreateSession(&runtime, MakeKqpProxyID(runtime.GetNodeId(1)), sender, "/Root");
+        runtime.Send(new IEventHandle(MakeKqpProxyID(runtime.GetNodeId()), sender,
+            MakeWmQuery(sessionId, "SELECT 1;").Release(), 0, 101));
+        auto placement = runtime.GrabEdgeEvent<WM::TEvPlaceRequestIntoPool>(workload);
+        for (auto state : {EState::PENDING, EState::DELAYED, EState::NONE}) {
+            ReportWmState(runtime, placement->Get()->WmSessionUpdater, state, 1);
+        }
+        runtime.Send(new IEventHandle(placement->Sender, workload, new WM::TEvContinueRequest(
+            placement->Get()->QueryId, Ydb::StatusIds::OVERLOADED, "pool", {})), 1);
+        auto cleanup = runtime.GrabEdgeEvent<WM::TEvCleanupRequest>(workload);
+        runtime.Send(new IEventHandle(cleanup->Sender, workload, new WM::TEvCleanupResponse(Ydb::StatusIds::SUCCESS)), 1);
+        auto response = runtime.GrabEdgeEvent<TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 101);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::OVERLOADED);
+        CheckNoWmNotifications(runtime, sender);
+    }
+
+    Y_UNIT_TEST(WmAdmissionDiskQuotaNotification) {
+        CheckWmAdmissionResult(NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, false);
+        CheckWmAdmissionResult(NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE, false);
+    }
+
+    Y_UNIT_TEST(WmAdmissionRejectedNotification) {
+        CheckWmAdmissionResult(0, false);
+    }
+
+    Y_UNIT_TEST(WmAdmissionCancelledNotification) {
+        CheckWmAdmissionResult(0, true);
+    }
+
+    Y_UNIT_TEST(WmAdmissionDelayedCancelledNotification) {
+        CheckWmAdmissionResult(0, true, true);
+    }
+
+    Y_UNIT_TEST(WmAdmissionResult) {
+        using TResponse = NWorkloadManager::TEvContinueRequest;
+        using EResult = TResponse::EAdmissionResult;
+        const auto check = [](Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, EResult expected) {
+            const TResponse response(1, status, "pool", {}, issues);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(response.GetAdmissionResult()), static_cast<ui32>(expected));
+        };
+        check(Ydb::StatusIds::SUCCESS, {}, EResult::ContinueInPool);
+        check(Ydb::StatusIds::UNSUPPORTED, {}, EResult::ContinueWithoutPool);
+        for (auto status : {Ydb::StatusIds::OVERLOADED, Ydb::StatusIds::CANCELLED,
+                            Ydb::StatusIds::INTERNAL_ERROR, Ydb::StatusIds::PRECONDITION_FAILED}) {
+            check(status, {}, EResult::Reject);
+        }
+        for (auto code : {NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED,
+                          NYql::TIssuesIds::KIKIMR_DISK_GROUP_OUT_OF_SPACE}) {
+            NYql::TIssue issue("Disk space quota exceeded");
+            issue.SetCode(code, NYql::TSeverityIds::S_ERROR);
+            NYql::TIssues issues;
+            issues.AddIssue(issue);
+            check(Ydb::StatusIds::PRECONDITION_FAILED, issues, EResult::ContinueInPool);
+            check(Ydb::StatusIds::UNSUPPORTED, issues, EResult::ContinueWithoutPool);
+            issues.AddIssue(NYql::TIssue("Another error"));
+            check(Ydb::StatusIds::PRECONDITION_FAILED, issues, EResult::Reject);
+        }
+    }
+
     Y_UNIT_TEST(CalcPeerStats) {
         auto getActiveWorkers = [](const NKikimrKqp::TKqpProxyNodeResources& entry) {
             return entry.GetActiveWorkersCount();

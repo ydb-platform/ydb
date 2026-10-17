@@ -1,5 +1,6 @@
 #include "statestorage.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>

@@ -71,7 +71,7 @@ const TTag& TTagRegistry::Decode(TTagId tagId) const
 {
     if (tagId < 1 || static_cast<size_t>(tagId) > TagById_.size()) {
         THROW_ERROR_EXCEPTION("Invalid tag")
-            << TErrorAttribute("tag_id", tagId);
+            .With("tag_id", tagId);
     }
 
     return TagById_[tagId - 1];

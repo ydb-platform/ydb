@@ -276,6 +276,11 @@ INSTANTIATE_TEST_SUITE_P(
             },
             false),
         std::tuple(
+            ETableReplicaMode::SyncToAsync,
+            ETableReplicaState::Disabled,
+            std::vector<TReplicaHistoryItem>(),
+            false),
+        std::tuple(
             ETableReplicaMode::Async,
             ETableReplicaState::Enabled,
             std::vector<TReplicaHistoryItem>(),

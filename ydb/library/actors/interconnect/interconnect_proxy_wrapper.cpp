@@ -37,11 +37,18 @@ namespace NActors {
         }
     };
 
+    TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common,
+            TInterconnectSessionPoolMapping poolMapping, TInterconnectMock *mock) {
+        return [common = std::move(common), poolMapping = std::move(poolMapping), mock]
+                (TActorSystem *as, ui32 nodeId) -> TActorId {
+            return as->Register(new TInterconnectProxyWrapper(common, nodeId, mock), TMailboxType::HTSwap,
+                poolMapping.GetPoolId(nodeId));
+        };
+    }
+
     TProxyWrapperFactory CreateProxyWrapperFactory(TIntrusivePtr<TInterconnectProxyCommon> common, ui32 poolId,
             TInterconnectMock *mock) {
-        return [=](TActorSystem *as, ui32 nodeId) -> TActorId {
-            return as->Register(new TInterconnectProxyWrapper(common, nodeId, mock), TMailboxType::HTSwap, poolId);
-        };
+        return CreateProxyWrapperFactory(std::move(common), TInterconnectSessionPoolMapping({poolId}), mock);
     }
 
 } // NActors

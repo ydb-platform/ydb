@@ -159,7 +159,8 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
             .With("WrittenSize", writer->GetWrittenSize())
             .With("ReadUncompressedDataSize", dataStatistics.uncompressed_data_size())
             .With("ReadCompressedDataSize", dataStatistics.compressed_data_size())
-            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns());
+            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns())
+            .With("TimingStatistics", reader->GetTimingStatistics());
     });
 
     PipeReaderToWriterByBatches(
@@ -1291,11 +1292,11 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (Path.GetColumns()) {
         THROW_ERROR_EXCEPTION("Columns cannot be specified with table path, use \"column_names\" instead")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     if (Versioned && Options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
@@ -1437,7 +1438,7 @@ void TPullRowsCommand::DoExecute(ICommandContextPtr context)
 {
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     auto format = context->GetOutputFormat();
@@ -1960,6 +1961,7 @@ void TGetTabletInfosCommand::DoExecute(ICommandContextPtr context)
                         .Item().BeginMap()
                             .Item("total_row_count").Value(tablet.TotalRowCount)
                             .Item("trimmed_row_count").Value(tablet.TrimmedRowCount)
+                            .OptionalItem("flushed_row_count", tablet.FlushedRowCount)
                             .Item("delayed_lockless_row_count").Value(tablet.DelayedLocklessRowCount)
                             .Item("barrier_timestamp").Value(tablet.BarrierTimestamp)
                             .Item("last_write_timestamp").Value(tablet.LastWriteTimestamp)

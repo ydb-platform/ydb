@@ -91,6 +91,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSchemeshard(ui64* tenantSchemeShardId);
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
+    TCheckFunc ExtractTenantWasmCompileController(ui64* tenantWCCId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
     TCheckFunc ExtractChildren(TVector<TString>* children);
 
@@ -129,6 +130,9 @@ namespace NLs {
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc PartitionCount(ui32 count);
+    // Checks the explicit PartitionsCount field (unlike PartitionCount,
+    // which checks the size of the TablePartitions list)
+    TCheckFunc TablePartitionCount(ui64 count);
     TCheckFunc PartitionKeys(TVector<TString> lastShardKeys);
     // Checks if the serialized representation of an expected boundary is a prefix of the actual one.
     // Similar to PartitionKeys check, but does not require you to pass split boundaries in a serialized form.

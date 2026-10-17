@@ -7,6 +7,7 @@ RECURSE(
     public
     services
     tools
+    udfs
 )
 
 IF(NOT EXPORT_CMAKE)

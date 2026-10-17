@@ -136,7 +136,6 @@ PyArray_RawIterBaseInit(PyArrayIterObject *it, PyArrayObject *ao)
     nd = PyArray_NDIM(ao);
     /* The legacy iterator only supports 32 dimensions */
     assert(nd <= NPY_MAXDIMS_LEGACY_ITERS);
-    PyArray_UpdateFlags(ao, NPY_ARRAY_C_CONTIGUOUS);
     if (PyArray_ISCONTIGUOUS(ao)) {
         it->contiguous = 1;
     }
@@ -695,9 +694,23 @@ iter_subscript(PyArrayIterObject *self, PyObject *ind)
         obj = ind;
     }
 
-    /* Any remaining valid input is an array or has been turned into one */
     if (!PyArray_Check(obj)) {
-        goto fail;
+        PyArrayObject *tmp_arr = (PyArrayObject *) PyArray_FROM_O(obj);
+        if (tmp_arr == NULL) {
+            goto fail;
+        }
+
+        if (PyArray_SIZE(tmp_arr) == 0) {
+            PyArray_Descr *indtype = PyArray_DescrFromType(NPY_INTP);
+            Py_SETREF(obj, PyArray_FromArray(tmp_arr, indtype, NPY_ARRAY_FORCECAST));
+            Py_DECREF(tmp_arr);
+            if (obj == NULL) {
+                goto fail;
+            }
+        }
+        else {
+            Py_SETREF(obj, (PyObject *) tmp_arr);
+        }
     }
 
     /* Check for Boolean array */
@@ -943,7 +956,7 @@ iter_ass_subscript(PyArrayIterObject *self, PyObject *ind, PyObject *val)
     /* We can assume the newly allocated array is aligned */
     int is_aligned = IsUintAligned(self->ao);
     if (PyArray_GetDTypeTransferFunction(
-                is_aligned, itemsize, itemsize, type, type, 0,
+                is_aligned, itemsize, itemsize, PyArray_DESCR(arrval), type, 0,
                 &cast_info, &transfer_flags) < 0) {
         goto finish;
     }

@@ -17,4 +17,5 @@ message TActivationPercentage {
     repeated string ExcludeGroups = 8;
     repeated string IncludeRevisions = 9;
     repeated string ExcludeRevisions = 10;
+    optional string ActivationGroup = 11; // Named gateway activation group; mutually exclusive with direct activation fields.
 }

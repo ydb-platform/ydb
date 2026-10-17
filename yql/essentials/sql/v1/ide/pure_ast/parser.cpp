@@ -1,10 +1,13 @@
 #include "parser.h"
 
+#include "ansi.h"
 #include "parse_tree.h"
 
 #include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
+#include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Parser.h>
 
 #include <util/system/yassert.h>
 #include <util/charset/utf8.h>
@@ -109,13 +112,47 @@ public:
     }
 };
 
+class TGenericParser: public IParser {
+public:
+    IParseTree::TPtr Parse(TStringBuf text) const override {
+        bool isAnsi = IsAnsiQuery(TString(text));
+        return isAnsi ? Ansi_->Parse(text) : Default_->Parse(text);
+    }
+
+private:
+    IParser::TPtr Default_ = MakeParser(/*isAnsiLexer=*/false);
+    IParser::TPtr Ansi_ = MakeParser(/*isAnsiLexer=*/true);
+};
+
 } // namespace
 
 IParser::TPtr MakeParser(bool isAnsiLexer) {
     if (isAnsiLexer) {
-        return MakeHolder<TParser<true>>();
+        return new TParser</*IsAnsiLexer=*/true>();
     }
-    return MakeHolder<TParser<false>>();
+    return new TParser</*IsAnsiLexer=*/false>();
+}
+
+IParser::TPtr MakeParser() {
+    return new TGenericParser();
+}
+
+void ClearParserCache() {
+    NALADefaultAntlr4::SQLv1Antlr4Lexer(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALAAnsiAntlr4::SQLv1Antlr4Lexer(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALADefaultAntlr4::SQLv1Antlr4Parser(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
+
+    NALAAnsiAntlr4::SQLv1Antlr4Parser(nullptr)
+        .getInterpreter<antlr4::atn::ATNSimulator>()
+        ->clearDFA();
 }
 
 } // namespace NSQLPureAST

@@ -340,6 +340,8 @@ public:
 
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
 
+    bool GetInterruptInheritance() const;
+
     const TPartitioningSettings& GetPartitioningSettings() const;
 
     uint32_t GetTotalPartitionsCount() const;
@@ -395,6 +397,7 @@ private:
 
     std::string Owner_;
     NScheme::TVirtualTimestamp CreationTimestamp_;
+    bool InterruptInheritance_ = false;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
     std::optional<EMetricsLevel> MetricsLevel_;
@@ -1075,6 +1078,36 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 // Settings for commit offset request.
 struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {
     FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
+};
+
+// Settings for ResetOffset. Applies independently per partition (not atomic
+// across the topic) and drops any active read session for the consumer.
+struct TResetOffsetSettings : public TOperationRequestSettings<TResetOffsetSettings> {
+    TResetOffsetSettings& Earliest() {
+        Position_ = EPosition::Earliest;
+        return *this;
+    }
+
+    TResetOffsetSettings& Latest() {
+        Position_ = EPosition::Latest;
+        return *this;
+    }
+
+    TResetOffsetSettings& FromWrittenAt(TInstant writtenAt) {
+        Position_ = EPosition::FromWrittenAt;
+        FromWrittenAt_ = writtenAt;
+        return *this;
+    }
+
+    enum class EPosition {
+        Unspecified,
+        Earliest,
+        Latest,
+        FromWrittenAt,
+    };
+
+    EPosition Position_ = EPosition::Unspecified;
+    TInstant FromWrittenAt_ = TInstant::Zero();
 };
 
 }  // namespace NYdb::NTopic

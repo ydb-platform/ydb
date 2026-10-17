@@ -1,0 +1,53 @@
+name: Codecov C++ helper checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/actions/run_clang_codecov/**"
+      - ".github/scripts/codecov/**"
+      - ".github/workflows/cpp_codecov.yml"
+      - ".github/workflows/cpp_codecov_checks.yml"
+      - ".github/codecov.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/actions/run_clang_codecov/**"
+      - ".github/scripts/codecov/**"
+      - ".github/workflows/cpp_codecov.yml"
+      - ".github/workflows/cpp_codecov_checks.yml"
+      - ".github/codecov.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.repository == 'ydb-platform/ydb'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Test Python helpers
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/codecov/tests/test_helpers.py -v
+          python3 -m py_compile \
+            .github/scripts/codecov/codecov_suites.py \
+            .github/scripts/codecov/detect_codecov_matrix.py \
+            .github/scripts/codecov/export_coverage_lcov.py \
+            .github/scripts/codecov/generate_coverage_landing.py \
+            .github/scripts/codecov/tests/test_helpers.py
+
+      - name: Check shell syntax
+        run: bash -n .github/scripts/codecov/overlay_trusted_codecov_ci.sh
+
+      - name: Parse YAML
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: false) }' \
+            .github/actions/run_clang_codecov/action.yaml \
+            .github/workflows/cpp_codecov.yml \
+            .github/workflows/cpp_codecov_checks.yml \
+            .github/codecov.yml

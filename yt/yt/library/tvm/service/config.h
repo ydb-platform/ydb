@@ -74,4 +74,35 @@ DEFINE_REFCOUNTED_TYPE(TTvmServiceConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TUserTicketAuthenticationConfig
+    : public virtual NYTree::TYsonStruct
+{
+    bool CheckServiceTickets;
+
+    //! Services permitted to use UserTickets (requires an accompanying ServiceTicket).
+    THashSet<TTvmId> AllowedServiceTvmIds;
+
+    REGISTER_YSON_STRUCT(TUserTicketAuthenticationConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TUserTicketAuthenticationConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTvmServiceDynamicConfig
+    : public virtual NYTree::TYsonStruct
+{
+    TUserTicketAuthenticationConfigPtr UserTicketAuthentication;
+
+    REGISTER_YSON_STRUCT(TTvmServiceDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TTvmServiceDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NAuth

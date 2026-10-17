@@ -102,6 +102,10 @@ class ExternalAccountCredentials
       HTTPRequestContext* ctx, const Options& options,
       std::function<void(TString, grpc_error_handle)> cb) = 0;
 
+  virtual y_absl::string_view CredentialSourceType();
+
+  TString MetricsHeaderValue();
+
  private:
   // This method implements the common token fetch logic and it will be called
   // when grpc_oauth2_token_fetcher_credentials request a new access token.

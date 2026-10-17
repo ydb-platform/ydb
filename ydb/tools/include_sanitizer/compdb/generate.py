@@ -92,12 +92,14 @@ SHIM_TEMPLATE_RETRY_CC = """\
 import os as _yis_os
 _yis_cdb = _yis_os.environ.get("YDB_COMPDB_DIR")
 _yis_tt = _yis_os.environ.get("YDB_TIMETRACE_DIR")
-if cmd and (_yis_cdb or _yis_tt):
+_yis_ps = _yis_os.environ.get("YDB_PSTAT_DIR")
+_yis_pf = _yis_os.environ.get("YDB_PERF_DIR")
+if cmd and (_yis_cdb or _yis_tt or _yis_ps or _yis_pf):
     try:
         import sys as _yis_sys
         _yis_sys.path.insert(0, {pkg_parent!r})
         from {pkg_name}.compdb.record_cc import shim_handle as _yis_handle
-        cmd = _yis_handle(list(cmd), _yis_cdb, _yis_tt)
+        cmd = _yis_handle(list(cmd), _yis_cdb, _yis_tt, _yis_ps, _yis_pf)
     except Exception as _yis_e:
         import sys as _yis_sys
         print("ydb-include-sanitizer shim failure:", _yis_e, file=_yis_sys.stderr)
@@ -116,7 +118,7 @@ if cmd and (_yis_cdb or _yis_tt):
 SHIM_TEMPLATE_RETRY_CC_BIN = """\
 {begin}
 import os as _yis_os
-if cmd and (_yis_os.environ.get("YDB_COMPDB_DIR") or _yis_os.environ.get("YDB_TIMETRACE_DIR")):
+if cmd and (_yis_os.environ.get("YDB_COMPDB_DIR") or _yis_os.environ.get("YDB_TIMETRACE_DIR") or _yis_os.environ.get("YDB_PSTAT_DIR") or _yis_os.environ.get("YDB_PERF_DIR")):
     _yis_os.execv({recorder_bin!r}, [{recorder_bin!r}, "__shim"] + list(cmd))
 {end}
 """

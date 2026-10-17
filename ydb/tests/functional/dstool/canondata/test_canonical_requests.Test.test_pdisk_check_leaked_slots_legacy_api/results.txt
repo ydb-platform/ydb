@@ -1,0 +1,8 @@
+dstool -e <endpoint> --mon-port <mon_port> vdisk evict --ignore-degraded-group-check --ignore-failure-model-group-check --vdisk-ids [82000000:_:0:0:0]
+Exit Status: 0
+===== stderr =====
+success
+
+===== http_calls =====
+POST tablets/app?TabletID=72057594037932033&exec=1
+POST tablets/app?TabletID=72057594037932033&exec=1

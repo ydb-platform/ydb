@@ -80,7 +80,7 @@ void TSensorEncoder::OnLabelsEnd()
 
     if (SensorContext_->Name.empty()) {
         THROW_ERROR_EXCEPTION("Failed to find label with sensor name")
-            << TErrorAttribute("label", SensorNameLabel_);
+            .With("label", SensorNameLabel_);
     }
 
     auto* cube = Cubes_.FindPtr(SensorContext_->Name);
@@ -128,11 +128,11 @@ void TSensorEncoder::OnLabel(TStringBuf name, TStringBuf value)
     if (name == SensorNameLabel_) {
         if (!SensorContext_) {
             THROW_ERROR_EXCEPTION("Found label with sensor name among common labels")
-                << TErrorAttribute("label", SensorNameLabel_);
+                .With("label", SensorNameLabel_);
         }
         if (!SensorContext_->Name.empty()) {
             THROW_ERROR_EXCEPTION("Found label with sensor name multiple times")
-                << TErrorAttribute("label", SensorNameLabel_);
+                .With("label", SensorNameLabel_);
         }
         SensorContext_->Name = SensorNamePrefix_ + std::string{value};
         return;

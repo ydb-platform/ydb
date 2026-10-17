@@ -16,7 +16,7 @@
 #include "method/vptree_utils.h"
 #include "space.h"
 #include "method/vptree.h"
-#include "tune.h"
+#include <ydb/library/nmslib/include/tune.h>
 
 #include <vector>
 #include <iostream>

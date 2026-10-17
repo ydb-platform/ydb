@@ -167,7 +167,7 @@ public:
         SecurityToken = securityToken;
     }
 
-private:
+protected:
     TString SecurityToken;
 };
 
@@ -215,6 +215,11 @@ public:
         : TImpl(policy)
         , GRpcClient(new NGRpcProxy::TGRpcClient(clientConfig))
     {}
+
+    virtual void SetSecurityToken(const TString& securityToken) override {
+        TImpl::SetSecurityToken(securityToken);
+        GRpcClient->SetAuthToken(securityToken);
+    }
 
     template <typename RequestType, typename ResponseType = NMsgBusProxy::TBusResponse>
     NBus::EMessageStatus ExecuteGRpcRequest(
@@ -311,6 +316,9 @@ public:
         }
         config.Locator = newLocation;
         TAutoPtr<NGRpcProxy::TGRpcClient> gRpcClient = new NGRpcProxy::TGRpcClient(config);
+        if (!SecurityToken.empty()) {
+            gRpcClient->SetAuthToken(SecurityToken);
+        }
         gRpcClient.Swap(GRpcClient);
         // we cleanup later to avoid dead lock because we are still inside callback of current client
         return [gRpcClient]() {};

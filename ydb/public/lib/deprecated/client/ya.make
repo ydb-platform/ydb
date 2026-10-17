@@ -11,6 +11,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/messagebus
     ydb/public/lib/base
+    ydb/public/sdk/cpp/src/client/resources
 )
 
 END()

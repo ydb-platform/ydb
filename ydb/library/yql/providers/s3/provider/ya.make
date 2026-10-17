@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_s3_datasink.cpp
@@ -45,6 +45,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/provider
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/s3/actors
@@ -58,8 +59,6 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/threading
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

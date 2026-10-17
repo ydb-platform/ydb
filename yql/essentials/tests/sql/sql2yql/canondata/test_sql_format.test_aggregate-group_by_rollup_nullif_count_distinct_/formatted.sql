@@ -6,5 +6,7 @@ FROM (
         '2' AS b,
 ) AS y
 GROUP BY
-    ROLLUP (b)
+    ROLLUP (
+        b
+    )
 ;

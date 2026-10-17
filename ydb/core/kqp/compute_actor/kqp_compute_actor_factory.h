@@ -15,6 +15,7 @@
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
     class TNodeState;
+    class IQueryQuotaManager;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -24,6 +25,8 @@ private:
     YDB_ACCESSOR_DEF(std::vector<NActors::TActorId>, ActorIds);
     YDB_ACCESSOR_DEF(NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta, Meta);
 public:
+    NWilson::TTraceId TraceId;
+
     explicit TMetaScan(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta)
         : Meta(meta)
     {
@@ -32,10 +35,14 @@ public:
 
 class TComputeStageInfo {
 private:
-    YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaInfo);
+    std::deque<TMetaScan> MetaInfo;
     std::map<ui32, TMetaScan*> MetaWithIds;
 public:
     TComputeStageInfo() = default;
+
+    std::deque<TMetaScan>& MutableMetaInfo() {
+        return MetaInfo;
+    }
 
     bool GetMetaById(const ui32 metaId, NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& result) const {
         auto it = MetaWithIds.find(metaId);
@@ -130,6 +137,10 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<TNodeState> State = nullptr;
+        // the execution unit and the initial memory limit (external memory) of the task are returned to it when the
+        // compute actor terminates, see IQueryQuotaManager::FreeTasks
+        std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
+        ui64 InitialMemoryLimit = 0;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 

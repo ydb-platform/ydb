@@ -2,12 +2,19 @@
 
 #include "format.h"
 
-#include <yql/essentials/minikql/dom/node.h>
-
 #include <util/system/unaligned_mem.h>
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
+
+namespace NYql::NUdf {
+class TUnboxedValue;
+class IValueBuilder;
+} // namespace NYql::NUdf
+
+namespace NKikimr {
+namespace NUdf = ::NYql::NUdf;
+} // namespace NKikimr
 
 namespace NKikimr::NBinaryJson {
 
@@ -163,16 +170,16 @@ private:
     TMeta Meta_;
 };
 
-NUdf::TUnboxedValue ReadContainerToJsonDom(const TContainerCursor& cursor, const NUdf::IValueBuilder* valueBuilder);
+NYql::NUdf::TUnboxedValue ReadContainerToJsonDom(const TContainerCursor& cursor, const NYql::NUdf::IValueBuilder* valueBuilder);
 
-NUdf::TUnboxedValue ReadElementToJsonDom(const TEntryCursor& cursor, const NUdf::IValueBuilder* valueBuilder);
+NYql::NUdf::TUnboxedValue ReadElementToJsonDom(const TEntryCursor& cursor, const NYql::NUdf::IValueBuilder* valueBuilder);
 
 /**
  * @brief Reads whole BinaryJson into TUnboxedValue using DOM layout from `yql/library/dom` library
  */
-NUdf::TUnboxedValue ReadToJsonDom(const TBinaryJson& binaryJson, const NUdf::IValueBuilder* valueBuilder);
+NYql::NUdf::TUnboxedValue ReadToJsonDom(const TBinaryJson& binaryJson, const NYql::NUdf::IValueBuilder* valueBuilder);
 
-NUdf::TUnboxedValue ReadToJsonDom(TStringBuf binaryJson, const NUdf::IValueBuilder* valueBuilder);
+NYql::NUdf::TUnboxedValue ReadToJsonDom(TStringBuf binaryJson, const NYql::NUdf::IValueBuilder* valueBuilder);
 
 /**
  * @brief Serializes whole BinaryJson into textual JSON

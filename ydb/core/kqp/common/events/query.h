@@ -341,6 +341,10 @@ public:
         return Record.GetRequest().GetCollectDiagnostics();
     }
 
+    bool GetCollectAffectedRows() const {
+        return Record.GetRequest().GetCollectAffectedRows();
+    }
+
     ui32 CalculateSerializedSize() const override {
         PrepareRemote();
         return Record.ByteSize();
@@ -469,14 +473,6 @@ public:
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
     }
 
-    void SetGeneration(i64 generation) {
-        Generation = generation;
-    }
-
-    i64 GetGeneration() const {
-        return Generation;
-    }
-
     void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
         DisableDefaultTimeout = disableDefaultTimeout;
     }
@@ -519,7 +515,6 @@ private:
     std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    i64 Generation = 0;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
     std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
@@ -543,10 +538,12 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
     using TBaseEv = TEventPBWithArena<TEvQueryResponse, NKikimrKqp::TEvQueryResponse, TKqpEvents::EvQueryResponse> ;
     using TBaseEv::TEventPBBase;
 
-    TEvQueryResponse() = default;
-    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena)
-        : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
-    {}
+    TEvQueryResponse();
+    explicit TEvQueryResponse(TIntrusivePtr<NActors::TProtoArenaHolder> arena);
+    ~TEvQueryResponse() override;
+
+    // Local worker-to-session statistics when the client did not request them.
+    std::unique_ptr<NKqpProto::TKqpStatsQuery> WorkerStats;
 };
 
 } // namespace NKikimr::NKqp

@@ -32,9 +32,8 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
+#include <library/cpp/yt/system/count_down_latch.h>
 #include <library/cpp/yt/system/thread_id.h>
-
-#include <library/cpp/yt/threading/count_down_latch.h>
 
 #include <util/system/compiler.h>
 #include <util/system/thread.h>
@@ -1185,7 +1184,7 @@ TEST_W(TSchedulerTest, FutureUpdatedRaceInWaitFor_YT_18899)
             })
                 .AsyncVia(serializedInvoker)));
 
-        NThreading::TCountDownLatch latch{1};
+        TCountDownLatch latch{1};
 
         auto testResultFuture = BIND([&] {
             latch.CountDown();
@@ -1257,7 +1256,7 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
 
     std::vector<TFuture<void>> futures;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
 
     for (size_t id = 0; id < numWorkers; ++id) {
         auto invoker = threadPool->GetInvoker(Format("pool%v", id % numPools), Format("worker%v", id));
@@ -1298,8 +1297,10 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
                             }
                         }
 
-                        YT_LOG_DEBUG("Pools time: %v", pools);
-                        YT_LOG_DEBUG("Progresses time: %v", progresses);
+                        YT_TLOG_DEBUG("Measured pools time")
+                            .With("Pools", pools);
+                        YT_TLOG_DEBUG("Measured progresses time")
+                            .With("Progresses", progresses);
 
                         EXPECT_TRUE(ApproximatelyEqual(pools[poolId], minPool));
 
@@ -1371,7 +1372,7 @@ TEST_P(TFairShareSchedulerTest, Fairness)
 
     std::vector<TFuture<void>> futures;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
 
     for (size_t id = 0; id < numWorkers; ++id) {
         auto invoker = threadPool->GetInvoker(Format("worker%v", id));
@@ -1397,7 +1398,8 @@ TEST_P(TFairShareSchedulerTest, Fairness)
                     auto guard = Guard(lock);
 
                     if (numThreads == 1) {
-                        YT_LOG_DEBUG("Progresses time: %v", progresses);
+                        YT_TLOG_DEBUG("Measured progresses time")
+                            .With("Progresses", progresses);
 
                         auto minProgress = TDuration::Max();
                         for (size_t id = 0; id < numWorkers; ++id) {

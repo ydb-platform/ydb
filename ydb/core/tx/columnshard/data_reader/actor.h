@@ -15,7 +15,9 @@ private:
     YDB_READONLY_DEF(NActors::TActorId, TabletActorId);
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) = 0;
     virtual TConclusionStatus DoOnFinished() = 0;
-    virtual void DoOnError(const TString& errorMessage) = 0;
+    // Why the read stopped. ABORTED means the transaction's lock is broken and the read was cut short on
+    // purpose; anything else is a failure of the read itself.
+    virtual void DoOnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) = 0;
     virtual std::unique_ptr<TEvColumnShard::TEvInternalScan> DoBuildRequestInitiator() const = 0;
 
 public:
@@ -32,8 +34,8 @@ public:
         return DoOnFinished();
     }
 
-    void OnError(const TString& errorMessage) {
-        DoOnError(errorMessage);
+    void OnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) {
+        DoOnError(status, errorMessage);
     }
 
     std::unique_ptr<TEvColumnShard::TEvInternalScan> BuildRequestInitiator() const {

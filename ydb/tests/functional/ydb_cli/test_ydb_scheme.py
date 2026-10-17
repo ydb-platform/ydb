@@ -62,10 +62,14 @@ def create_external_table(session, external_table, external_data_source):
     )
 
 
-def create_secret(session, secret_name, value):
+def create_secret(session, secret_name, value, inherit_permissions):
+    inherit_permissions_sql_value = "TRUE" if inherit_permissions else "FALSE"
     session.execute_scheme(
         f"""
-        CREATE SECRET `{secret_name}` WITH ( value = '{value}' );
+        CREATE SECRET `{secret_name}` WITH (
+            value = '{value}',
+            inherit_permissions = {inherit_permissions_sql_value}
+        );
         """
     )
 
@@ -202,7 +206,7 @@ class TestSecretSchemeDescribe:
 
         # check the initial state
         with session_pool.checkout() as session:
-            create_secret(session, secret_name, self.secret_value_created)
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=False)
         self._assert_scheme_describe_secret_default(
             ydb_cluster,
             ydb_database,
@@ -228,7 +232,7 @@ class TestSecretSchemeDescribe:
 
         # check the initial state
         with session_pool.checkout() as session:
-            create_secret(session, secret_name, self.secret_value_created)
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=False)
         self._assert_scheme_describe_secret_proto_json_base64(
             ydb_cluster,
             ydb_database,
@@ -247,6 +251,40 @@ class TestSecretSchemeDescribe:
             absent_substrings=[self.secret_value_created, self.secret_value_altered],
             expected_version=1,
         )
+
+    @pytest.mark.parametrize(
+        "inherit_permissions",
+        [
+            pytest.param(False, id="inherit_permissions_false"),
+            pytest.param(True, id="inherit_permissions_true"),
+        ],
+    )
+    def test_describe_secret_permissions(
+        self,
+        ydb_cluster,
+        ydb_database,
+        ydb_client_session,
+        inherit_permissions,
+    ):
+        secret_name = f"cli_scheme_describe_secret_permissions_{str(inherit_permissions).lower()}"
+        session_pool = ydb_client_session(ydb_database)
+        interrupted_line = "Is permission inheritance interrupted: true"
+
+        with session_pool.checkout() as session:
+            create_secret(session, secret_name, self.secret_value_created, inherit_permissions=inherit_permissions)
+
+        describe_permissions = execute_ydb_cli_command(
+            ydb_cluster.nodes[1],
+            ydb_database,
+            ["scheme", "describe", "--permissions", secret_name],
+        )
+
+        assert "<secret>" in describe_permissions
+        assert "Version: 0" in describe_permissions
+        if not inherit_permissions:
+            assert interrupted_line in describe_permissions
+        else:
+            assert interrupted_line not in describe_permissions
 
 
 class TestViewSchemeDescribe:

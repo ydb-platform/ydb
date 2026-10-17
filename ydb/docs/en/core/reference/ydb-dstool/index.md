@@ -11,6 +11,7 @@ With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-n
 | pdisk remove-by-serial | Remove a PDisk from the set by serial number. |
 | pdisk set | Set PDisk parameters. |
 | pdisk list | List PDisks. |
+| [pdisk populate](pdisk-populate.md) | Place the same VDisks on another PDisk for device testing. |
 | vdisk evict | Move VDisks to different PDisks. |
 | vdisk remove-donor | Remove a donor VDisk. |
 | vdisk wipe | Wipe VDisks. |

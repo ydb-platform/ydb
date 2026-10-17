@@ -11,6 +11,7 @@ SRCS(
     create_topic.cpp
     describe_consumer.cpp
     describe_partition.cpp
+    describe_topic.cpp
     drop_topic.cpp
 )
 

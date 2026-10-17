@@ -19,7 +19,7 @@
 namespace NKikimr::TEvPersQueue {
     enum EEv {
         EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
-        EvUpdateConfig, //change config for all partitions and count of partitions
+        EvUpdateConfig, // reserved: TEvUpdateConfig removed
         EvUpdateConfigResponse,
         EvOffsets, //get offsets from all partitions in order 0..n-1 - it's for scheemeshard to change (TabletId,PartId) to Partition
         EvOffsetsResponse,
@@ -50,7 +50,7 @@ namespace NKikimr::TEvPersQueue {
         EvReportPartitionError,
         EvProposeTransaction,
         EvProposeTransactionResult,
-        EvCancelTransactionProposal,
+        EvCancelTransactionProposal, // reserved: TEvCancelTransactionProposal removed
         EvPeriodicTopicStats,
         EvGetPartitionsLocation,
         EvGetPartitionsLocationResponse,
@@ -87,15 +87,6 @@ namespace NKikimr::TEvPersQueue {
     struct TEvResponse: public TEventPB<TEvResponse,
             NKikimrClient::TResponse, EvResponse> {
         TEvResponse() {}
-    };
-
-    struct TEvUpdateConfig: public TEventPreSerializedPB<TEvUpdateConfig,
-            NKikimrPQ::TUpdateConfig, EvUpdateConfig> {
-            TEvUpdateConfig() {}
-    };
-
-    struct TEvUpdateConfigBuilder: public TEvUpdateConfig {
-        using TBase::Record;
     };
 
     struct TEvUpdateBalancerConfig: public TEventPB<TEvUpdateBalancerConfig,
@@ -254,14 +245,6 @@ namespace NKikimr::TEvPersQueue {
     };
 
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult, NKikimrPQ::TEvProposeTransactionResult, EvProposeTransactionResult> {
-    };
-
-    struct TEvCancelTransactionProposal : public TEventPB<TEvCancelTransactionProposal, NKikimrPQ::TEvCancelTransactionProposal, EvCancelTransactionProposal> {
-        TEvCancelTransactionProposal() = default;
-
-        explicit TEvCancelTransactionProposal(ui64 txId) {
-            Record.SetTxId(txId);
-        }
     };
 
     struct TEvPeriodicTopicStats : public TEventPB<TEvPeriodicTopicStats, NKikimrPQ::TEvPeriodicTopicStats, EvPeriodicTopicStats> {

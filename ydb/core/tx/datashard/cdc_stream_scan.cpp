@@ -113,6 +113,15 @@ void TCdcStreamScanManager::Complete(ui64 txId) {
     Complete(TxIdToPathId.at(txId));
 }
 
+void TCdcStreamScanManager::Fail(ui64 txId) {
+    Y_ENSURE(TxIdToPathId.contains(txId));
+    auto& info = Scans.at(TxIdToPathId.at(txId));
+    TxIdToPathId.erase(txId);
+    info.TxId = 0;
+    info.ScanId = 0;
+    info.ActorId = {};
+}
+
 bool TCdcStreamScanManager::IsCompleted(const TPathId& streamPathId) const {
     return CompletedScans.contains(streamPathId);
 }
@@ -522,7 +531,6 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EStatus status) override {
-        // TODO: https://github.com/ydb-platform/ydb/issues/18806
         if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
         } else {
@@ -744,3 +752,7 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

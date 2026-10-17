@@ -16,18 +16,27 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     ui32 RecordGeneration;
     ui32 PerGenerationCounter;
-    std::set<TMonotonic> WakeupScheduled;
 
     using TCollectKey = std::tuple<ui32, ui8>; // groupId, channel
+    struct TChunk {
+        ui64 RequestCookie = 0; // zero when no attempt is in flight
+        ui32 TryCounter = 0;
+        TBackoffTimer BackoffTimer{CollectorErrorInitialBackoffMs, CollectorErrorMaxBackoffMs};
+    };
     struct TCollectInfo {
         TVector<TLogoBlobID> Keep;
         TVector<TLogoBlobID> DoNotKeep;
-        ui32 TryCounter = 0;
-        bool RequestInFlight = false;
-        TMonotonic NextTryTimestamp;
-        TBackoffTimer BackoffTimer{CollectorErrorInitialBackoffMs, CollectorErrorMaxBackoffMs};
+        // Indexed by immutable chunk ID; entries stay in place after acknowledgment.
+        TVector<TChunk> Chunks;
+        size_t ChunksRemaining = 0;
     };
     THashMap<TCollectKey, TCollectInfo> Collects;
+    struct TRequestInfo {
+        TCollectKey Key;
+        size_t ChunkIndex;
+    };
+    THashMap<ui64, TRequestInfo> Requests;
+    ui64 LastRequestCookie = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -79,80 +88,117 @@ public:
             }
         }
 
-        Action();
+        if (Collects.empty()) {
+            return SendCompleteGCAndDie();
+        }
+        for (auto& [key, info] : Collects) {
+            const size_t chunkCount = Max<size_t>(1,
+                (info.Keep.size() + info.DoNotKeep.size() + CollectorMaxFlagsPerMessage - 1) /
+                    CollectorMaxFlagsPerMessage);
+            info.Chunks.resize(chunkCount);
+            info.ChunksRemaining = chunkCount;
+            // Send all flag chunks concurrently, reserving the final chunk for the barrier.
+            const size_t initialChunks = chunkCount - (CollectOperation->AdvanceBarrier && chunkCount > 1);
+            for (size_t chunkIndex = 0; chunkIndex < initialChunks; ++chunkIndex) {
+                SendChunk(key, info, chunkIndex);
+            }
+        }
         Become(&TThis::StateWait);
     }
 
-    void Action() {
-        const TMonotonic now = TActivationContext::Monotonic();
-        TMonotonic nextTryTimestamp = TMonotonic::Max();
-        for (auto& [key, value] : Collects) {
-            if (value.RequestInFlight) {
-                continue;
-            } else if (now < value.NextTryTimestamp) { // time hasn't come yet
-                nextTryTimestamp = Min(nextTryTimestamp, value.NextTryTimestamp);
-                continue;
-            }
+    static TVector<TLogoBlobID>* MakeChunk(const TVector<TLogoBlobID>& flags, size_t offset, size_t count) {
+        return count ? new TVector<TLogoBlobID>(flags.begin() + offset, flags.begin() + offset + count) : nullptr;
+    }
 
-            const auto [groupId, channel] = key;
-            const bool advanceBarrier = CollectOperation->AdvanceBarrier;
-            auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
-                PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
-                CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
-                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true,
-                TWriteSource::KeyValueGC);
-            YDB_LOG_DEBUG("Sending TEvCollectGarbage",
-                {"marker", "KVC00"},
-                {"tabletId", TabletInfo->TabletID},
-                {"groupId", groupId},
-                {"channel", (int)channel},
-                {"recordGeneration", RecordGeneration},
-                {"perGenerationCounter", PerGenerationCounter},
-                {"advanceBarrier", advanceBarrier},
-                {"collectGeneration", CollectOperation->Header.CollectGeneration},
-                {"collectStep", CollectOperation->Header.CollectStep},
-                {"keepSize", value.Keep.size()},
-                {"doNotKeepSize", value.DoNotKeep.size()});
-            SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
-            value.RequestInFlight = true;
-        }
-        if (nextTryTimestamp != TMonotonic::Max() && (WakeupScheduled.empty() || nextTryTimestamp < *WakeupScheduled.begin())) {
-            TActivationContext::Schedule(nextTryTimestamp, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
-                nullptr, nextTryTimestamp.GetValue()));
-            WakeupScheduled.insert(nextTryTimestamp);
-        }
-        if (Collects.empty()) {
-            SendCompleteGCAndDie();
-        }
+    void SendChunk(const TCollectKey& key, TCollectInfo& info, size_t chunkIndex) {
+        TChunk& chunk = info.Chunks[chunkIndex];
+        const auto [groupId, channel] = key;
+        const size_t offset = chunkIndex * CollectorMaxFlagsPerMessage;
+        const size_t keepOffset = Min(offset, info.Keep.size());
+        const size_t keepCount = Min<size_t>(info.Keep.size() - keepOffset, CollectorMaxFlagsPerMessage);
+        const size_t doNotKeepOffset = offset - keepOffset;
+        const size_t doNotKeepCount = Min<size_t>(info.DoNotKeep.size() - doNotKeepOffset,
+            CollectorMaxFlagsPerMessage - keepCount);
+        const bool advanceBarrier = CollectOperation->AdvanceBarrier && chunkIndex + 1 == info.Chunks.size();
+        Y_ABORT_UNLESS(!advanceBarrier || info.ChunksRemaining == 1);
+        Y_ABORT_UNLESS(!chunk.RequestCookie);
+        // Each attempt has its own cookie: replies can arrive out of order, including late replies to retries.
+        chunk.RequestCookie = ++LastRequestCookie;
+        Y_ABORT_UNLESS(chunk.RequestCookie);
+        Requests.emplace(chunk.RequestCookie, TRequestInfo{key, chunkIndex});
+
+        // Every chunk carries the same PerGenerationCounter: only the barrier-bearing command is sequence-checked.
+        auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
+            PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
+            CollectOperation->Header.CollectStep, MakeChunk(info.Keep, keepOffset, keepCount),
+            MakeChunk(info.DoNotKeep, doNotKeepOffset, doNotKeepCount), TInstant::Max(), true,
+            TWriteSource::KeyValueGC);
+        YDB_LOG_DEBUG("Sending TEvCollectGarbage",
+            {"marker", "KVC00"},
+            {"tabletId", TabletInfo->TabletID},
+            {"groupId", groupId},
+            {"channel", static_cast<int>(channel)},
+            {"recordGeneration", RecordGeneration},
+            {"perGenerationCounter", PerGenerationCounter},
+            {"advanceBarrier", advanceBarrier},
+            {"collectGeneration", CollectOperation->Header.CollectGeneration},
+            {"collectStep", CollectOperation->Header.CollectStep},
+            {"chunkIndex", chunkIndex},
+            {"requestCookie", chunk.RequestCookie},
+            {"keepSize", keepCount},
+            {"doNotKeepSize", doNotKeepCount},
+            {"keepLeft", info.Keep.size() - keepOffset - keepCount},
+            {"doNotKeepLeft", info.DoNotKeep.size() - doNotKeepOffset - doNotKeepCount});
+        SendToBSProxy(SelfId(), groupId, ev.release(), chunk.RequestCookie);
     }
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-        NKikimrProto::EReplyStatus status = ev->Get()->Status;
-
-        const TCollectKey key(ev->Cookie >> 8, static_cast<ui8>(ev->Cookie));
+        const auto requestIt = Requests.find(ev->Cookie);
+        if (requestIt == Requests.end()) {
+            // A completed attempt cannot acknowledge another chunk or a newer retry.
+            return;
+        }
+        const TRequestInfo request = requestIt->second;
+        const auto it = Collects.find(request.Key);
+        Y_ABORT_UNLESS(it != Collects.end());
+        TCollectInfo& info = it->second;
+        Y_ABORT_UNLESS(request.ChunkIndex < info.Chunks.size());
+        TChunk& chunk = info.Chunks[request.ChunkIndex];
+        if (!chunk.RequestCookie) {
+            // The failed attempt's mapping belongs to its retry timer. Ignore duplicate replies.
+            return;
+        }
+        Y_ABORT_UNLESS(chunk.RequestCookie == ev->Cookie);
+        chunk.RequestCookie = 0;
+        const NKikimrProto::EReplyStatus status = ev->Get()->Status;
 
         YDB_LOG_DEBUG("Receive TEvCollectGarbageResult",
             {"marker", "KVC11"},
             {"tabletId", TabletInfo->TabletID},
-            {"groupId", std::get<0>(key)},
-            {"channel", (int)std::get<1>(key)},
+            {"groupId", std::get<0>(request.Key)},
+            {"channel", static_cast<int>(std::get<1>(request.Key))},
+            {"chunkIndex", request.ChunkIndex},
+            {"requestCookie", ev->Cookie},
             {"status", status});
 
-        const auto it = Collects.find(key);
-        Y_ABORT_UNLESS(it != Collects.end());
-        TCollectInfo& info = it->second;
-        Y_ABORT_UNLESS(info.RequestInFlight);
-        info.RequestInFlight = false;
-
         if (status == NKikimrProto::OK) {
-            Collects.erase(it);
-        } else if (++info.TryCounter < CollectorMaxErrors) {
-            info.NextTryTimestamp = TActivationContext::Monotonic() + info.BackoffTimer.Next();
+            Requests.erase(requestIt);
+            Y_ABORT_UNLESS(info.ChunksRemaining);
+            if (--info.ChunksRemaining == 0) {
+                Collects.erase(it);
+                if (Collects.empty()) {
+                    SendCompleteGCAndDie();
+                }
+            } else if (CollectOperation->AdvanceBarrier && info.ChunksRemaining == 1) {
+                SendChunk(request.Key, info, info.Chunks.size() - 1);
+            }
+        } else if (++chunk.TryCounter < CollectorMaxErrors) {
+            // Keep the mapping until this chunk's timer fires, then assign the retry a fresh cookie.
+            TActivationContext::Schedule(TActivationContext::Monotonic() + chunk.BackoffTimer.Next(),
+                new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, ev->Cookie));
         } else {
-            return HandleErrorAndDie();
+            HandleErrorAndDie();
         }
-
-        Action();
     }
 
     void SendCompleteGCAndDie() {
@@ -172,9 +218,13 @@ public:
     }
 
     void HandleWakeup(STATEFN_SIG) {
-        const size_t numErased = WakeupScheduled.erase(TMonotonic::FromValue(ev->Cookie));
-        Y_ABORT_UNLESS(numErased == 1);
-        Action();
+        const auto requestIt = Requests.find(ev->Cookie);
+        Y_ABORT_UNLESS(requestIt != Requests.end());
+        const TRequestInfo request = requestIt->second;
+        Requests.erase(requestIt);
+        const auto it = Collects.find(request.Key);
+        Y_ABORT_UNLESS(it != Collects.end());
+        SendChunk(request.Key, it->second, request.ChunkIndex);
     }
 
     STATEFN(StateWait) {

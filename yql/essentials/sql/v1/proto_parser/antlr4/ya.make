@@ -7,6 +7,7 @@ PEERDIR(
 )
 
 SRCS(
+    parser_cache.cpp
     proto_parser.cpp
 )
 

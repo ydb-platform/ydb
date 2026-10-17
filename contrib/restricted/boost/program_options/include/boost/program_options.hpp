@@ -5,8 +5,8 @@
 
 //  See www.boost.org/libs/program_options for documentation.
 
-#ifndef PROGRAM_OPTIONS_VP_2003_05_19
-#define PROGRAM_OPTIONS_VP_2003_05_19
+#ifndef BOOST_PROGRAM_OPTIONS_VP_2003_05_19
+#define BOOST_PROGRAM_OPTIONS_VP_2003_05_19
 
 #if defined(_MSC_VER)
 #pragma once
@@ -22,4 +22,4 @@
 #include <boost/program_options/value_semantic.hpp>
 #include <boost/program_options/version.hpp>
 
-#endif
+#endif // BOOST_PROGRAM_OPTIONS_VP_2003_05_19

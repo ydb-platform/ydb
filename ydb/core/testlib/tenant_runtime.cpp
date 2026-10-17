@@ -15,6 +15,7 @@
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/sys_view/processor/processor.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -459,6 +460,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &NKikimr::CreatePersQueue, DataGroupErasure);
             } else if (type == TTabletTypes::StatisticsAggregator) {
                 bootstrapperActorId = Boot(ctx, type, &NStat::CreateStatisticsAggregator, DataGroupErasure);
+            } else if (type == TTabletTypes::WasmCompileController) {
+                bootstrapperActorId = Boot(ctx, type, &NUdfStore::CreateWasmCompileController, DataGroupErasure);
             } else {
                 status = NKikimrProto::ERROR;
             }

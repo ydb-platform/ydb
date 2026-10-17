@@ -26,3 +26,7 @@ END()
 RECURSE(
     flags
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

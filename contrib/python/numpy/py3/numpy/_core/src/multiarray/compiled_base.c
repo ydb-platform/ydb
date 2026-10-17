@@ -150,8 +150,12 @@ arr_bincount(PyObject *NPY_UNUSED(self), PyObject *const *args,
         }
         if (PyArray_SIZE(tmp1) > 0) {
             /* The input is not empty, so convert it to NPY_INTP. */
-            lst = (PyArrayObject *)PyArray_ContiguousFromAny((PyObject *)tmp1,
-                                                             NPY_INTP, 1, 1);
+            int flags = NPY_ARRAY_WRITEABLE | NPY_ARRAY_ALIGNED | NPY_ARRAY_C_CONTIGUOUS;
+            if (PyArray_ISINTEGER(tmp1)) {
+                flags = flags | NPY_ARRAY_FORCECAST;
+            }
+            PyArray_Descr* local_dtype = PyArray_DescrFromType(NPY_INTP);
+            lst = (PyArrayObject *)PyArray_FromAny((PyObject *)tmp1, local_dtype, 1, 1, flags, NULL);
             Py_DECREF(tmp1);
             if (lst == NULL) {
                 /* Failed converting to NPY_INTP. */
@@ -177,7 +181,13 @@ arr_bincount(PyObject *NPY_UNUSED(self), PyObject *const *args,
     }
 
     if (lst == NULL) {
-        lst = (PyArrayObject *)PyArray_ContiguousFromAny(list, NPY_INTP, 1, 1);
+        int flags = NPY_ARRAY_WRITEABLE | NPY_ARRAY_ALIGNED | NPY_ARRAY_C_CONTIGUOUS;
+        if (PyArray_Check((PyObject *)list) &&
+            PyArray_ISINTEGER((PyArrayObject *)list)) {
+            flags = flags | NPY_ARRAY_FORCECAST;
+        }
+        PyArray_Descr* local_dtype = PyArray_DescrFromType(NPY_INTP);
+        lst = (PyArrayObject *)PyArray_FromAny(list, local_dtype, 1, 1, flags, NULL);
         if (lst == NULL) {
             goto fail;
         }
@@ -185,15 +195,12 @@ arr_bincount(PyObject *NPY_UNUSED(self), PyObject *const *args,
     len = PyArray_SIZE(lst);
 
     /*
-     * This if/else if can be removed by changing the argspec to O|On above,
-     * once we retire the deprecation
+     * This if/else if can be removed by changing the argspec above,
      */
     if (mlength == Py_None) {
-        /* NumPy 1.14, 2017-06-01 */
-        if (DEPRECATE("0 should be passed as minlength instead of None; "
-                      "this will error in future.") < 0) {
-            goto fail;
-        }
+        PyErr_SetString(PyExc_TypeError,
+             "use 0 instead of None for minlength");
+        goto fail;
     }
     else if (mlength != NULL) {
         minlength = PyArray_PyIntAsIntp(mlength);
@@ -913,11 +920,11 @@ fail:
     return NULL;
 }
 
-static const char *EMPTY_SEQUENCE_ERR_MSG = "indices must be integral: the provided " \
+static const char EMPTY_SEQUENCE_ERR_MSG[] = "indices must be integral: the provided " \
     "empty sequence was inferred as float. Wrap it with " \
     "'np.array(indices, dtype=np.intp)'";
 
-static const char *NON_INTEGRAL_ERROR_MSG = "only int indices permitted";
+static const char NON_INTEGRAL_ERROR_MSG[] = "only int indices permitted";
 
 /* Convert obj to an ndarray with integer dtype or fail */
 static PyArrayObject *
@@ -1458,7 +1465,7 @@ arr_add_docstring(PyObject *NPY_UNUSED(dummy), PyObject *const *args, Py_ssize_t
     PyObject *obj;
     PyObject *str;
     const char *docstr;
-    static char *msg = "already has a different docstring";
+    static const char msg[] = "already has a different docstring";
 
     /* Don't add docstrings */
 #if PY_VERSION_HEX > 0x030b0000
@@ -1613,8 +1620,7 @@ pack_inner(const char *inptr,
             bb[1] = npyv_tobits_b8(npyv_cmpneq_u8(v1, v_zero));
             bb[2] = npyv_tobits_b8(npyv_cmpneq_u8(v2, v_zero));
             bb[3] = npyv_tobits_b8(npyv_cmpneq_u8(v3, v_zero));
-            if(out_stride == 1 && 
-                (!NPY_ALIGNMENT_REQUIRED || isAligned)) {
+            if(out_stride == 1 && isAligned) {
                 npy_uint64 *ptr64 = (npy_uint64*)outptr;
             #if NPY_SIMD_WIDTH == 16
                 npy_uint64 bcomp = bb[0] | (bb[1] << 16) | (bb[2] << 32) | (bb[3] << 48);

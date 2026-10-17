@@ -8,15 +8,15 @@ TForwardingLogBackend::TForwardingLogBackend(TAutoPtr<TLogBackend> child)
 }
 
 void TForwardingLogBackend::WriteData(const TLogRecord& rec) {
-    return Child_->WriteData(rec);
+    Child_->WriteData(rec);
 }
 
 void TForwardingLogBackend::ReopenLog() {
-    return Child_->ReopenLog();
+    Child_->ReopenLog();
 }
 
 void TForwardingLogBackend::ReopenLogNoFlush() {
-    return Child_->ReopenLogNoFlush();
+    Child_->ReopenLogNoFlush();
 }
 
 ELogPriority TForwardingLogBackend::FiltrationLevel() const {

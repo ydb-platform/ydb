@@ -349,4 +349,3 @@ Y_UNIT_TEST_SUITE(TLegacy) {
 } // namspace NTable
 } // namespace NKikimr
 
-

@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
@@ -56,6 +57,9 @@ namespace TEvPrivate {
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
+        EvPeriodicTableStatsParsed,
+        EvRevisitSplitMerge,
+        EvExportCompletionUploadResult,
         EvEnd
     };
 
@@ -189,6 +193,20 @@ namespace TEvPrivate {
         {}
     };
 
+    struct TEvExportCompletionUploadResult: public TEventLocal<TEvExportCompletionUploadResult, EvExportCompletionUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx; // Max<ui32>() denotes the operation marker.
+        const bool Success;
+        const TString Error;
+
+        TEvExportCompletionUploadResult(ui64 exportId, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(exportId)
+            , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
     struct TEvServerlessStorageBilling: public TEventLocal<TEvServerlessStorageBilling, EvServerlessStorageBilling> {
         TEvServerlessStorageBilling()
         {}
@@ -267,6 +285,12 @@ namespace TEvPrivate {
 
     struct TEvPersistTableStats: public TEventLocal<TEvPersistTableStats, EvPersistTableStats> {
         TEvPersistTableStats() = default;
+    };
+
+    // Self-event: a split/merge slot may have freed -- re-evaluate deferred candidates fairly
+    // (round-robin across tables). At most one is in flight (coalesced via SplitMergeRevisitScheduled).
+    struct TEvRevisitSplitMerge: public TEventLocal<TEvRevisitSplitMerge, EvRevisitSplitMerge> {
+        TEvRevisitSplitMerge() = default;
     };
 
     struct TEvPersistTopicStats: public TEventLocal<TEvPersistTopicStats, EvPersistTopicStats> {
@@ -376,6 +400,18 @@ namespace TEvPrivate {
             , NewBindings(std::move(newBindings))
             , HttpSender(httpSender)
             , HiveReply(std::move(hiveReply))
+        {}
+    };
+
+    // Sent by TStatsParserActor back to the schemeshard after it parsed a raw
+    // TEvDataShard::TEvPeriodicTableStats. Carries the same handle (not just the record) so the
+    // original datashard Sender survives for VerifySplitAndRequestStats, and the schemeshard's
+    // Get() is a cache hit rather than a second parse.
+    struct TEvPeriodicTableStatsParsed : public TEventLocal<TEvPeriodicTableStatsParsed, EvPeriodicTableStatsParsed> {
+        TEvDataShard::TEvPeriodicTableStats::TPtr Ev;
+
+        explicit TEvPeriodicTableStatsParsed(TEvDataShard::TEvPeriodicTableStats::TPtr&& ev)
+            : Ev(std::move(ev))
         {}
     };
 

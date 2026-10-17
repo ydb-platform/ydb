@@ -1,6 +1,6 @@
 # admin cluster config generate
 
-With the `admin cluster config generate` command, you can generate a [dynamic configuration](../../../../../maintenance/manual/dynamic-config.md) file based on the [static configuration](../../../../../reference/configuration/index.md) file on the {{ ydb-short-name }} cluster.
+With the `admin cluster config generate` command, you can generate a [dynamic configuration](../../../../../devops/configuration-management/configuration-v1/dynamic-config.md) file based on the [static configuration](../../../../../reference/configuration/index.md) file on the {{ ydb-short-name }} cluster.
 The dynamic configuration uses the format of an extended static configuration; the command automates the conversion process.
 
 General command syntax:

@@ -79,9 +79,6 @@ public:
             } else {
                 db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
-            // reset usage impact estimate on each tablet restart
-            tablet->UsageImpact = 0;
-            db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(0.);
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || BootingSuppressed && External) {
@@ -137,7 +134,7 @@ public:
                 }
             }
             // if anything wrong - attempt to restart the tablet
-            if (tablet->InitiateStop(SideEffects)) {
+            if (tablet->InitiateStop(SideEffects, EHiveEventReason::StartFailed)) {
                 if (tablet->IsLeader()) {
                     YDB_LOG_NOTICE("THive::TTxStartTablet::Execute jump-starting tablet after failed boot",
                         {"logPrefix", GetLogPrefix()},

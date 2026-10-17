@@ -318,6 +318,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         proto.mutable_storage_settings()->set_external_data_channels_count(*count);
     }
 
+    if (const auto level = metadata->TableSettings.MetricsLevel) {
+        proto.mutable_metrics_settings()->set_metrics_level(*level);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -366,7 +370,6 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (cMeta.IsDefaultFromExpression()) {
             auto& generated = *columnDesc.MutableDefaultFromExpression();
             generated.SetExprText(cMeta.DefaultExpression->ExprText);
-            generated.SetContext(cMeta.DefaultExpression->Context);
             generated.SetStored(cMeta.DefaultExpression->Stored);
             for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
                 generated.AddDependencyColumnNames(dependency);
@@ -408,6 +411,8 @@ bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
         for (const auto& type : statistics.Types) {
             if (type == "COUNT_MIN_SKETCH") {
                 statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else if (type == "EQ_HEIGHT_HISTOGRAM") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
             } else {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
@@ -773,6 +778,9 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
             tierProto->SetApplyAfterSeconds(tier.ApplyAfter.Seconds());
             if (tier.StorageName) {
                 tierProto->MutableEvictToExternalStorage()->SetStorage(*tier.StorageName);
+                if (tier.ObjectKeyPrefix) {
+                    tierProto->MutableEvictToExternalStorage()->SetObjectKeyPrefix(*tier.ObjectKeyPrefix);
+                }
             } else {
                 tierProto->MutableDelete();
             }
@@ -961,8 +969,8 @@ public:
             return result;
         }
 
-        if (settings.SchemeLimits) {
-            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+        if (settings.SchemeLimits || settings.TablesMetricsLevel) {
+            NSchemeHelpers::FillAlterDatabaseSettings(modifyScheme, basename, settings);
 
             TGenericResult result;
             result.SetSuccess();
@@ -995,7 +1003,7 @@ public:
                 if (settings.Owner) {
                     *schemeOp.MutableModifyPermissions() = modifyScheme;
                 }
-                if (settings.SchemeLimits) {
+                if (settings.SchemeLimits || settings.TablesMetricsLevel) {
                     *schemeOp.MutableAlterDatabase() = modifyScheme;
                 }
 
@@ -2364,6 +2372,27 @@ public:
         }
     }
 
+    TFuture<TGenericResult> KillSession(const TString& cluster, const TString& sessionId, bool isParameter) override {
+        CHECK_PREPARED_DDL(KillSession);
+        if (!IsPrepare()) {
+            // Closing a session is a runtime effect, never a compilation side effect.
+            return Gateway->KillSession(cluster, sessionId, isParameter);
+        }
+        if (!Gateway->HasCluster(cluster)) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        auto* operation = phyTx.MutableSchemeOperation()->MutableKillSession();
+        if (isParameter) {
+            operation->SetSessionIdParameter(sessionId);
+        } else {
+            operation->SetSessionId(sessionId);
+        }
+        return PrepareSuccess<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) override {
         CHECK_PREPARED_DDL(CreateGroup);
 
@@ -3587,6 +3616,7 @@ public:
 
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            analyzeTx.SetSampleRate(settings.SampleRate);
             for (const auto& column: settings.Columns) {
                 *analyzeTx.AddColumns() = column;
             }

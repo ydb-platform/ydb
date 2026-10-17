@@ -1,27 +1,43 @@
 #include "kqp_rules_include.h"
 
-#include <ydb/core/kqp/opt/rbo/map_renames.h>
+#include "decorrelation/dependent_join_pushdown.h"
 
 namespace {
 
 using namespace NKikimr::NKqp;
-using namespace NKikimr::NKqp::NMapRenames;
 
-bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfoUnit>& columns) {
-    auto itemType = input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    for (const auto & column : columns) {
-        auto columnType = itemType->FindItemType(column.GetFullName());
-        if (columnType->IsOptionalOrNull()) {
-            return false;
-        }
+// The null of the Bool type, which the three valued result of an IN needs as a value and not only
+// as the absence of a row.
+TExprNode::TPtr MakeNullBoolNode(TPositionHandle pos, TExprContext& ctx) {
+    auto boolType = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, "Bool")});
+    return ctx.NewCallable(pos, "Nothing", {ctx.NewCallable(pos, "OptionalType", {boolType})});
+}
+
+void AddDomainColumn(TUnorderedIUs& domain, TInfoUnitId iu) {
+    if (!domain.Contains(iu)) {
+        domain.Add(iu);
     }
-    return true;
 }
 
 }
 
 namespace NKikimr {
 namespace NKqp {
+
+bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+    if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
+        return false;
+    }
+
+    for (const auto& iu : input->GetSubplanIUs(props.Subplans)) {
+        const auto type = props.Subplans.At(iu).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter;
@@ -34,16 +50,13 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
 
     // Check that the filter lambda contains at least one in/exists subplan
     auto filter = CastOperator<TOpFilter>(input);
-    auto subplanIUs = filter->FilterExpr.GetInputIUs(true, false);
-    TVector<TInfoUnit> inOrExistsSubplans;
+    TVector<TInfoUnitId> inOrExistsSubplans;
 
-    for (auto subplanIU : subplanIUs) {
-        if(props.Subplans.PlanMap.contains(subplanIU)) {
-            auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
-            if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || subplanEntry.Type == ESubplanType::EXISTS) {
-                inOrExistsSubplans.push_back(subplanIU);
-            }
-        } 
+    for (const auto& subplanIU : filter->GetSubplanIUs(props.Subplans)) {
+        const auto type = props.Subplans.At(subplanIU).Type;
+        if (type == ESubplanType::IN_SUBPLAN || type == ESubplanType::EXISTS) {
+            inOrExistsSubplans.push_back(subplanIU);
+        }
     }
 
     if (inOrExistsSubplans.empty()) {
@@ -55,136 +68,226 @@ TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(
     // so the current iu is no longer marked as SubplanIU
 
     auto subplanIU = inOrExistsSubplans[0];
-    auto subplanEntry = props.Subplans.PlanMap.at(subplanIU);
-    TIntrusivePtr<IOperator> join;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> extraJoinKeys;
-    auto uncorrSubplan = CastOperator<IOperator>(subplanEntry.Plan);
-    const auto subPlanKind = uncorrSubplan->Kind;
-    TVector<TExpression> joinFilters;
+    const auto& subplanEntry = props.Subplans.At(subplanIU);
+    TIntrusivePtr<IOperator> newFilterInput;
+    auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
 
+    const bool useDependentJoin = HasFreeCorrelation(subplan, subplanEntry.DependentIUs);
+    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || useDependentJoin) {
+        TIntrusivePtr<IOperator> leftInput = filter->GetInput();
+        auto rightInput = subplan;
+        const auto outerIUs = leftInput->GetOutputIUs();
+        TVector<TInfoUnitId> originalPlanIUs;
+        if (subplanEntry.ResultIU) {
+            originalPlanIUs.push_back(*subplanEntry.ResultIU);
+        }
 
-    // If its a correlated subplan with filters pulled up, build join conditions from the pulled up filter
-    if (subPlanKind == EOperator::Filter && CastOperator<TOpFilter>(uncorrSubplan)->GetInput()->Kind == EOperator::AddDependencies) {
-        auto subplanFilter = CastOperator<TOpFilter>(subplanEntry.Plan);
-        auto addDeps = CastOperator<TOpAddDependencies>(subplanFilter->GetInput());
-        uncorrSubplan = addDeps->GetInput();
-        auto subplanConjuncts = subplanFilter->FilterExpr.SplitConjunct();
+        TUnorderedIUs domain;
+        if (useDependentJoin) {
+            for (const auto& iu : subplanEntry.DependentIUs) {
+                AddDomainColumn(domain, iu);
+            }
+        } else {
+            for (const auto& iu : subplanEntry.Tuple.Items()) {
+                AddDomainColumn(domain, iu);
+            }
+        }
 
-        for (const auto& conj : subplanConjuncts) {
-            if (conj.MaybeEquiJoinCondition()) {
+        Y_ENSURE(!domain.Empty(), "Cannot decorrelate in/exists subplan without correlated columns");
+        for (const auto& iu : domain) {
+            Y_ENSURE(outerIUs.Contains(iu),
+                     TStringBuilder() << "Correlation column " << props.InfoUnitRegistry.GetDebugName(iu) << " is not produced by the outer plan");
+        }
 
-                auto jc = TEquiJoinCondition(conj);
-                if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetLeftIU()) != addDeps->Dependencies.end()) {
-                    extraJoinKeys.push_back(std::make_pair(jc.GetLeftIU(), jc.GetRightIU()));
-                } else if (std::find(addDeps->Dependencies.begin(), addDeps->Dependencies.end(), jc.GetRightIU()) != addDeps->Dependencies.end()) {
-                    extraJoinKeys.push_back(std::make_pair(jc.GetRightIU(), jc.GetLeftIU()));
-                } else {
-                    Y_ENSURE(false, "Correlated filter missing join condition");
-                }
+        // For exists we can emulate a mkrk join with 2 values output(true, false).
+        bool markMissingAsFalse = subplanEntry.Type == ESubplanType::EXISTS;
+        if (!markMissingAsFalse) {
+            markMissingAsFalse = true;
+            for (size_t i = 0; i < subplanEntry.Tuple.Items().size() && markMissingAsFalse; i++) {
+                markMissingAsFalse = !IsNullableIU(leftInput, subplanEntry.Tuple.Items()[i], ctx.ExprCtx) && !IsNullableIU(rightInput, originalPlanIUs[i], ctx.ExprCtx);
+            }
+        }
+
+        Y_ENSURE(subplanEntry.Type == ESubplanType::EXISTS || (subplanEntry.Type == ESubplanType::IN_SUBPLAN && subplanEntry.Tuple.Items().size() == 1 && subplanEntry.ResultIU));
+        // For in we have to emulate three value result (true, false, null).
+        const bool threeValued = !markMissingAsFalse && subplanEntry.Type == ESubplanType::IN_SUBPLAN && subplanEntry.Tuple.Items().size() == 1;
+
+        // The mark join and the domain read leftInput through a Replicate, the domain under fresh IDs.
+        auto subplanDomain = MakeSubplanDomain(leftInput, domain, filter->Pos, props);
+        const TSubstitutions domainColumns(subplanDomain.Keys.Items().begin(), subplanDomain.Keys.Items().end());
+
+        TUnorderedIUs markColumns = subplanDomain.Keys.Right();
+        TJoinIUs domainJoinKeys = subplanDomain.Keys;
+        TJoinIUs tupleJoinKeys;
+
+        TIntrusivePtr<IOperator> statsSource;
+        TUnorderedIUs statsKeys;
+        TJoinIUs statsJoinKeys;
+        TInfoUnitId compareResultIU = 0;
+
+        TIntrusivePtr<IOperator> matchSource;
+        if (useDependentJoin) {
+            matchSource = std::move(subplanDomain).Bind(rightInput, filter->Pos);
+
+            for (size_t i = 0; i < subplanEntry.Tuple.Items().size(); i++) {
+                AddDomainColumn(markColumns, originalPlanIUs[i]);
+                tupleJoinKeys.Add(subplanEntry.Tuple.Items()[i], originalPlanIUs[i]);
+            }
+
+            if (threeValued) {
+                compareResultIU = originalPlanIUs[0];
+            }
+        } else {
+            // The match join and the statistics read the subplan through a Replicate.
+            if (threeValued) {
+                auto hub = TReplicate::Create(rightInput, filter->Pos, props.InfoUnitRegistry);
+                rightInput = hub->AddOutput();
+                statsSource = hub->AddOutput();
+            }
+
+            TJoinIUs joinKeys;
+            const auto& planIUs = originalPlanIUs;
+            for (size_t i = 0; i < subplanEntry.Tuple.Items().size(); i++) {
+                joinKeys.Add(domainColumns.At(subplanEntry.Tuple.Items()[i]), planIUs[i]);
+            }
+            matchSource = MakeIntrusive<TOpJoin>(subplanDomain.Input, rightInput, input->Pos, "Inner", joinKeys);
+
+            if (threeValued) {
+                compareResultIU = CastOperator<TOpReplicate>(statsSource)->GetRebindings().At(planIUs[0]);
+            }
+        }
+
+        TIntrusivePtr<IOperator> matchedDomain = MakeDomainProjection(matchSource, markColumns, filter->Pos);
+        if (!statsSource && threeValued) {
+            // The mark join and the statistics read the matched domain through a Replicate.
+            auto hub = TReplicate::Create(matchedDomain, filter->Pos, props.InfoUnitRegistry);
+            matchedDomain = hub->AddOutput();
+            auto stats = hub->AddOutput();
+            compareResultIU = stats->GetRebindings().At(compareResultIU);
+            for (const auto& key : domainJoinKeys.Items()) {
+                statsKeys.Add(stats->GetRebindings().At(key.second));
+                statsJoinKeys.Add(key.first, stats->GetRebindings().At(key.second));
+            }
+            statsSource = stats;
+        }
+
+        // Here we want to emulate a mark join, rewriting it into:
+        // coalesce(leftjoin(left input, map(true, (dependent join(...)), false).
+        // So as result we will get true for columns which survive dependent join and false for rest.
+        auto markIU = props.InfoUnitRegistry.AddGenerated("in_mark");
+        TMapIUs markElements;
+        markElements.Add(markIU, MakeConstant("Bool", "true", filter->Pos, &ctx.ExprCtx));
+        auto markMap = MakeIntrusive<TOpMap>(matchedDomain, filter->Pos, markElements);
+        TIntrusivePtr<IOperator> markRight = markMap;
+        auto markJoinKeys = useDependentJoin ? MakeNullSafeJoinKeys(leftInput, markRight, domainJoinKeys, filter->Pos, ctx, props) : domainJoinKeys;
+        for (const auto& key : tupleJoinKeys.Items()) {
+            markJoinKeys.Add(key);
+        }
+
+        TIntrusivePtr<IOperator> markJoin =
+            MakeIntrusive<TOpJoin>(leftInput, markRight, filter->Pos, "Left", markJoinKeys);
+
+        auto column = [&](TInfoUnitId iu) { return MakeColumnAccess(iu, filter->Pos, &ctx.ExprCtx, &props); };
+        auto falseConst = MakeConstant("Bool", "false", filter->Pos, &ctx.ExprCtx);
+        auto matched = MakeBinaryPredicate("Coalesce", column(markIU), falseConst);
+
+        TIntrusivePtr<IOperator> resultInput = markJoin;
+        TMapIUs resultElements;
+
+        if (markMissingAsFalse) {
+            resultElements.Add(subplanIU, matched);
+        } else if (threeValued) {
+            // This one is an attempt to emulate three value result. For projection column we need to know does it contain null or not for each binding. So we have a special
+            // pipeline with aggregation lets call it statistics. We will count(1) as num_rows, count(projection column) as num_rows_not_null group by domain columns. 
+            // Has null if (num_rows > num_rows_not_null).
+            auto rowIU = props.InfoUnitRegistry.AddGenerated("row");
+            TMapIUs rowElements;
+            rowElements.Add(rowIU, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx));
+            auto rowMap = MakeIntrusive<TOpMap>(statsSource, filter->Pos, rowElements);
+
+            auto valueCountIU = props.InfoUnitRegistry.AddGenerated("value_count");
+            auto rowCountIU = props.InfoUnitRegistry.AddGenerated("row_count");
+
+            // count(projection), count(1)
+            TAggregationIUs statsTraits;
+            statsTraits.Add(valueCountIU, TOpAggregationTraits{compareResultIU, "count"});
+            statsTraits.Add(rowCountIU, TOpAggregationTraits{rowIU, "count"});
+            auto statsAggregate = MakeIntrusive<TOpAggregate>(rowMap, statsTraits, TOrderedIUs<>(statsKeys.begin(), statsKeys.end()), EOpPhase::Undefined, /*distinctAll=*/false, filter->Pos);
+
+            auto hasNullIU = props.InfoUnitRegistry.AddGenerated("in_has_null");
+            auto nonEmptyIU = props.InfoUnitRegistry.AddGenerated("in_non_empty");
+            TMapIUs statsElements;
+            // Does it have null columns?.
+            statsElements.Add(hasNullIU, MakeBinaryPredicate(">", column(rowCountIU), column(valueCountIU)));
+            if (statsKeys.Empty()) {
+                statsElements.Add(nonEmptyIU, MakeBinaryPredicate(">", column(rowCountIU), MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx)));
             } else {
-                joinFilters.push_back(conj);
+                // Always has some rows.
+                statsElements.Add(nonEmptyIU, MakeConstant("Bool", "true", filter->Pos, &ctx.ExprCtx));
+            }
+            auto statsMap = MakeIntrusive<TOpMap>(statsAggregate, filter->Pos, statsElements);
+
+            TIntrusivePtr<IOperator> statsLeft = markJoin;
+            TIntrusivePtr<IOperator> statsRight = statsMap;
+            statsJoinKeys = MakeNullSafeJoinKeys(statsLeft, statsRight, statsJoinKeys, filter->Pos, ctx, props);
+
+            resultInput = MakeIntrusive<TOpJoin>(statsLeft, statsRight, filter->Pos, statsKeys.Empty() ? "Cross" : "Left", statsJoinKeys);
+
+            TVector<TExpression> unknownTerms;
+            unknownTerms.push_back(MakeBinaryPredicate("Coalesce", column(hasNullIU), falseConst));
+
+            // This emulates a three value semantis if lookup column is null.
+            if (IsNullableIU(leftInput, subplanEntry.Tuple.Items()[0], ctx.ExprCtx)) {
+                auto lookupColumn = column(subplanEntry.Tuple.Items()[0]);
+                auto lookupIsNull = MakeNegation(MakeBinaryPredicate("Coalesce", MakeBinaryPredicate("==", lookupColumn, lookupColumn), falseConst));
+                unknownTerms.push_back(MakeBinaryPredicate("And", lookupIsNull, MakeBinaryPredicate("Coalesce", column(nonEmptyIU), falseConst)));
             }
 
-        }
-    }
-
-    // If we have a correlated subplan where pull up didn't succeed, throw an exception
-    else if (subPlanKind == EOperator::Filter && subplanEntry.DependentIUs.size()) {
-        Y_ENSURE(false, "Decorrelation via filter pull up didn't succeed");
-    }
-
-    // We build an inner join when processing IN subplan or a correlated EXISTS subplan
-    // Then we compute the count of rows in this inner join and left join the result with the main
-    // plan. The final column is thus nullable, so we wrap it in a coalesce
-
-    auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
-
-    if (subplanEntry.Type == ESubplanType::IN_SUBPLAN || !extraJoinKeys.empty()) {
-        auto leftInput = filter->GetInput();
-        auto rightInput = uncorrSubplan;
-
-        const auto commonIUs = IUSetIntersect(leftInput->GetOutputIUs(), rightInput->GetOutputIUs());
-        const auto rightRenamings = MakeRenameMap(commonIUs, props.InternalVarIdx);
-        if (!rightRenamings.empty()) {
-            rightInput = MakeMapFromRenames(rightInput, rightRenamings, filter->Pos, ctx.ExprCtx, props);
-            extraJoinKeys = RemapRightJoinKeys(extraJoinKeys, rightRenamings);
-            for (auto& joinFilter : joinFilters) {
-                joinFilter = joinFilter.ApplyRenames(rightRenamings);
+            auto unknown = unknownTerms[0];
+            for (size_t i = 1; i < unknownTerms.size(); i++) {
+                unknown = MakeBinaryPredicate("Or", unknown, unknownTerms[i]);
             }
+
+            auto nullBool = TExpression(MakeNullBoolNode(filter->Pos, ctx.ExprCtx), &ctx.ExprCtx, &props);
+            resultElements.Add(subplanIU, MakeBinaryPredicate("Or", matched, MakeBinaryPredicate("And", unknown, nullBool)));
+        } else {
+            resultElements.Add(subplanIU, column(markIU));
         }
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        auto planIUs = rightInput->GetOutputIUs();
-
-        for (size_t i = 0; i < subplanEntry.Tuple.size(); i++) {
-            joinKeys.push_back(std::make_pair(subplanEntry.Tuple[i], planIUs[i]));
-        }
-
-        // Fetch keys
-        auto keyColumns = leftInput->Props.Metadata->KeyColumns;
-        Y_ENSURE(!keyColumns.empty(), "Cannot inline a join filter because key columns are missing");
-        Y_ENSURE(CheckNonNullKeys(leftInput, keyColumns), "Key columns cannot be optional when decorrelating generic IN/EXISTS");
-
-        // Build the join
-        joinKeys.insert(joinKeys.begin(), extraJoinKeys.begin(), extraJoinKeys.end());
-        join = MakeIntrusive<TOpJoin>(leftInput, rightInput, input->Pos, "Inner", joinKeys, joinFilters);
-
-        // Build the counting aggregate and use a map operator to compute count > 0
-        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        TOpAggregationTraits aggFunction(keyColumns[0], "count", countResult);
-        TVector<TOpAggregationTraits> aggs = {aggFunction};
-        auto agg = MakeIntrusive<TOpAggregate>(join, aggs, keyColumns, EOpPhase::Final, false, filter->Pos);
-
-        // create a map that computes count > 0 and assigns is to the subplan output variable
-        auto comparePredicate = MakeBinaryPredicate(">", MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
-        TVector<TMapElement> mapElements;
-        mapElements.emplace_back(subplanIU, comparePredicate);
-        auto compareResMap = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, false);
-
-        // make a left join with the main plan on the keys of the plan
-        // fail if the keys don't exist or some are nullable
-
-        auto topCommonIUs = IUSetIntersect(filter->GetInput()->GetOutputIUs(), compareResMap->GetOutputIUs());
-
-        auto renamings = MakeRenameMap(topCommonIUs, props.InternalVarIdx);
-
-        TVector<std::pair<TInfoUnit, TInfoUnit>> newJoinKeys;
-        for (const auto & column : keyColumns) {
-            newJoinKeys.push_back(std::make_pair(column, column));
-        }
-
-        join = MakeJoinWithRightRenames(filter->GetInput(), compareResMap, filter->Pos, "Left", newJoinKeys, {}, renamings, ctx.ExprCtx, props);
-
+        newFilterInput = MakeIntrusive<TOpMap>(resultInput, filter->Pos, resultElements);
     }
     // uncorrelated EXISTS
     else {
-        auto limit = MakeIntrusive<TOpLimit>(uncorrSubplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
+        auto zero = MakeConstant("Uint64", "0", filter->Pos, &ctx.ExprCtx);
+        auto limit = MakeIntrusive<TOpLimit>(subplan, filter->Pos, MakeConstant("Uint64", "1", filter->Pos, &ctx.ExprCtx), EOpPhase::Undefined);
 
-        auto countResult = TInfoUnit("_rbo_arg_" + std::to_string(props.InternalVarIdx++), true);
-        TVector<TMapElement> countMapElements;
-        countMapElements.emplace_back(countResult, zero);
-        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements, true);
+        // The counted rows and their count are distinct IUs.
+        auto countInput = props.InfoUnitRegistry.AddGenerated("row");
+        auto countResult = props.InfoUnitRegistry.AddGenerated("row_count");
+        TMapIUs countMapElements;
+        countMapElements.Add(countInput, zero);
+        auto countMap = MakeIntrusive<TOpMap>(limit, filter->Pos, countMapElements);
 
-        TOpAggregationTraits aggFunction(countResult, "count", countResult);
-        TVector<TOpAggregationTraits> aggs = {aggFunction};
-        TVector<TInfoUnit> keyColumns;
+        TAggregationIUs aggs;
+        aggs.Add(countResult, TOpAggregationTraits{countInput, "count"});
+        TOrderedIUs<> keyColumns;
 
         auto agg = MakeIntrusive<TOpAggregate>(countMap, aggs, keyColumns, EOpPhase::Final, false, filter->Pos);
 
         auto comparePredicate = MakeBinaryPredicate("!=", MakeColumnAccess(countResult, filter->Pos, &ctx.ExprCtx, &props), zero);
-        TVector<TMapElement> mapElements;
-        mapElements.emplace_back(subplanIU, comparePredicate);
+        TMapIUs mapElements;
+        mapElements.Add(subplanIU, comparePredicate);
 
-        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements, true);
+        auto map = MakeIntrusive<TOpMap>(agg, filter->Pos, mapElements);
 
-        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
-        join = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys, joinFilters);
+        TJoinIUs joinKeys;
+        newFilterInput = MakeIntrusive<TOpJoin>(filter->GetInput(), map, filter->Pos, "Cross", joinKeys);
     }
 
     props.Subplans.Remove(subplanIU);
 
     // Otherwise, we need to pack the remaining conjuncts back into the filter
-    return MakeIntrusive<TOpFilter>(join, filter->Pos, TExpression(filter->FilterExpr.GetLambda(), &ctx.ExprCtx, &props));
+    return MakeIntrusive<TOpFilter>(newFilterInput, filter->Pos, TExpression(filter->GetFilterExpression().GetLambda(), &ctx.ExprCtx, &props));
 }
 }
 }

@@ -44,8 +44,8 @@ void TDynamicTableLogWriterConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->LowBacklogWeightWatermark > config->HighBacklogWeightWatermark) {
             THROW_ERROR_EXCEPTION("Value of \"low_backlog_weight_watermark\" cannot be greater than \"high_backlog_weight_watermark\"")
-                << TErrorAttribute("low_backlog_weight_watermark", config->LowBacklogWeightWatermark)
-                << TErrorAttribute("high_backlog_weight_watermark", config->HighBacklogWeightWatermark);
+                .With("low_backlog_weight_watermark", config->LowBacklogWeightWatermark)
+                .With("high_backlog_weight_watermark", config->HighBacklogWeightWatermark);
         }
     });
 }

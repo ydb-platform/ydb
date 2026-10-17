@@ -183,14 +183,14 @@ void TPullQueueCommand::DoExecute(ICommandContextPtr context)
 
     ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
         BuildYsonMapFragmentFluently(consumer)
-            .Item("start_offset").Value(result->GetStartOffset());
+            .Item("start_offset").Value(result.Rowset->GetStartOffset());
     });
 
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
-    auto writer = CreateSchemafulWriterForFormat(format, result->GetSchema(), output);
+    auto writer = CreateSchemafulWriterForFormat(format, result.Rowset->GetSchema(), output);
 
-    Y_UNUSED(writer->Write(result->GetRows()));
+    Y_UNUSED(writer->Write(result.Rowset->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();
@@ -264,14 +264,14 @@ void TPullQueueConsumerCommand::DoExecute(ICommandContextPtr context)
 
     ProduceResponseParameters(context, [&] (IYsonConsumer* consumer) {
         BuildYsonMapFragmentFluently(consumer)
-            .Item("start_offset").Value(result->GetStartOffset());
+            .Item("start_offset").Value(result.Rowset->GetStartOffset());
     });
 
     auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
-    auto writer = CreateSchemafulWriterForFormat(format, result->GetSchema(), output);
+    auto writer = CreateSchemafulWriterForFormat(format, result.Rowset->GetSchema(), output);
 
-    Y_UNUSED(writer->Write(result->GetRows()));
+    Y_UNUSED(writer->Write(result.Rowset->GetRows()));
 
     WaitFor(writer->Close())
         .ThrowOnError();
@@ -440,13 +440,13 @@ void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
     struct TPushQueueProducerBufferTag
     { };
 
-    auto insertRowsFormatConfig = ConvertTo<TInsertRowsFormatConfigPtr>(context->GetInputFormat().Attributes());
+    auto formatConfig = ConvertTo<TPushQueueProducerFormatConfigPtr>(context->GetInputFormat().Attributes());
     auto typeConversionConfig = ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes());
     // Parse input data.
     TBuildingValueConsumer valueConsumer(
         queueTableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer],
         WithCommandTag(Logger, context),
-        insertRowsFormatConfig->EnableNullToYsonEntityConversion,
+        formatConfig->EnableNullToYsonEntityConversion,
         typeConversionConfig);
     valueConsumer.SetTreatMissingAsNull(true);
 

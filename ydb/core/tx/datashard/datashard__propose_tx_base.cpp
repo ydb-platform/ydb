@@ -7,6 +7,8 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
@@ -32,8 +34,8 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
 bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
                                                            const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Execute at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Execute",
+        {"tabletId", Self->TabletID()});
 
     if (!Acked) {
         // Ack event on the first execute (this will schedule the next event if any)
@@ -52,8 +54,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
                 return false;
 
             if (status != NKikimrTxDataShard::TError::OK) {
-                LOG_LOG_S_THROTTLE(Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute), ctx, NActors::NLog::PRI_ERROR, NKikimrServices::TX_DATASHARD,
-                    "Errors while proposing transaction txid " << TxId << " at tablet " << Self->TabletID() << " status: " << status << " error: " << errMessage);
+                if (Self->GetLogThrottler(TDataShard::ELogThrottlerType::TxProposeTransactionBase_Execute).Kick()) {
+                    YDB_LOG_ERROR_CTX(ctx, "Errors while proposing transaction",
+                        {"txId", TxId},
+                        {"tabletId", Self->TabletID()},
+                        {"status", status},
+                        {"error", errMessage});
+                }
 
                 auto kind = static_cast<NKikimrTxDataShard::ETransactionKind>(Kind);
                 auto result = MakeHolder<TEvDataShard::TEvProposeTransactionResult>(kind, Self->TabletID(), TxId, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
@@ -144,15 +151,17 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException &) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
+            {"step", 0},
+            {"txId", TxId},
+            {"tabletId", Self->TabletID()});
         return false;
     }
 }
 
 void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "TTxProposeTransactionBase::Complete at " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TTxProposeTransactionBase::Complete",
+        {"tabletId", Self->TabletID()});
 
     if (Op) {
         Y_ENSURE(!Op->GetExecutionPlan().empty());
@@ -184,3 +193,7 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

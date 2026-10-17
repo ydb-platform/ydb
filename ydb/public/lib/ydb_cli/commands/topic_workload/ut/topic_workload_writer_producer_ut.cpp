@@ -163,6 +163,17 @@ namespace NTests {
             producer.WaitForContinuationToken(TDuration::Zero());
         }
 
+        Y_UNIT_TEST_F(Close_ShouldReleaseWriteSession, TFixture) {
+            auto producer = CreateProducer();
+            std::weak_ptr<MockWriteSession> session = WriteSession;
+            EXPECT_CALL(*WriteSession, Close(TDuration::Zero())).WillOnce(testing::Return(false));
+            WriteSession.reset();
+
+            producer->Close();
+            UNIT_ASSERT(session.expired());
+            producer->Close();
+        }
+
         Y_UNIT_TEST_F(HandleAckEvent_ShouldSaveStatistics, TFixture) {
             auto producer = CreateProducer();
             auto mockNow = TInstant::MilliSeconds(1730111051000);

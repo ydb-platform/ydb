@@ -11,12 +11,14 @@ using namespace NYTree;
 struct TMockCoreDumper
     : public ICoreDumper
 {
-    virtual TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/)
+    TCoreDump WriteCoreDump(
+        const std::vector<std::string>& /*notes*/,
+        TStringBuf /*reason*/) override
     {
         THROW_ERROR_EXCEPTION("Coredumper library is not available under this build configuration");
     }
 
-    virtual const NYTree::IYPathServicePtr& CreateOrchidService() const
+    const NYTree::IYPathServicePtr& CreateOrchidService() const override
     {
         static const NYTree::IYPathServicePtr EmptyMapNode = GetEphemeralNodeFactory()->CreateMap();
         return EmptyMapNode;

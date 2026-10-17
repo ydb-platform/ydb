@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 FORK_TEST_FILES()
@@ -34,7 +36,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
     yql/essentials/udfs/common/python/python3_small
 )
 

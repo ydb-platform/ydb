@@ -106,8 +106,8 @@ private:
                 clockClusterTag != responseClockClusterTag)
             {
                 THROW_ERROR_EXCEPTION(NTransactionClient::EErrorCode::ClockClusterTagMismatch, "Clock cluster tag mismatch")
-                    << TErrorAttribute("request_clock_cluster_tag", clockClusterTag)
-                    << TErrorAttribute("response_clock_cluster_tag", responseClockClusterTag);
+                    .With("request_clock_cluster_tag", clockClusterTag)
+                    .With("response_clock_cluster_tag", responseClockClusterTag);
             }
 
             return responseTimestamp;

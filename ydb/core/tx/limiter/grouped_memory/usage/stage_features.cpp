@@ -21,18 +21,21 @@ TString TStageFeatures::DebugString() const {
 }
 
 TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit,
-    const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters)
+    const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters, const std::optional<ui64>& unrestrictedSoft)
     : Name(name)
     , Limit(limit.value_or(DEFAULT_LIMIT))
     , HardLimit(hardLimit)
+    , UnrestrictedSoft(unrestrictedSoft)
     , Owner(owner)
     , Counters(counters)
-    , UseLimitFromConfig(limit.has_value()) {
+    , UseLimitFromConfig(limit.has_value())
+    , UseHardLimitFromConfig(hardLimit.has_value()) {
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 
@@ -145,6 +148,34 @@ bool TStageFeatures::IsAllocatable(const ui64 volume, const ui64 additional) con
     return true;
 }
 
+bool TStageFeatures::IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const {
+    if (GetUnrestrictedLimit() < additional + Usage.Val() + volume) {
+        return false;
+    }
+    if (Owner) {
+        return Owner->IsAllocatableUnrestricted(volume, additional);
+    }
+    return true;
+}
+
+std::optional<bool> TStageFeatures::CanEverFitUnrestricted(const ui64 volume) const {
+    if (Owner) {
+        if (GetUnrestrictedLimit() < volume) {
+            return false;
+        }
+        return Owner->CanEverFitUnrestricted(volume);
+    }
+    if (!UnrestrictedSoft) {
+        return std::nullopt;
+    }
+    return volume <= GetUnrestrictedLimit();
+}
+
+ui64 TStageFeatures::GetEffectiveUnrestrictedLimit() const {
+    const ui64 own = GetUnrestrictedLimit();
+    return Owner ? std::min(own, Owner->GetEffectiveUnrestrictedLimit()) : own;
+}
+
 void TStageFeatures::Add(const ui64 volume, const bool allocated) {
     if (Counters) {
         Counters->Add(volume, allocated);
@@ -184,25 +215,44 @@ void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& count
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 
-void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased) {
-    if (UseLimitFromConfig) {
+void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased,
+    const std::optional<ui64>& unrestrictedSoft) {
+    // A configured hard limit keeps its band from construction; a configured soft limit alone still takes the band.
+    if (UseLimitFromConfig && (!unrestrictedSoft || UseHardLimitFromConfig)) {
         isLimitIncreased = false;
         return;
     }
+    if (UseLimitFromConfig) {
+        const ui64 oldBand = UnrestrictedSoft.value_or(0);
+        const ui64 oldHard = HardLimit.value_or(0);
+        HardLimit = hardLimit;
+        UnrestrictedSoft = unrestrictedSoft;
+        isLimitIncreased = *unrestrictedSoft > oldBand || hardLimit.value_or(0) > oldHard;
+        if (Counters) {
+            if (HardLimit) {
+                Counters->ValueHardLimit->Set(*HardLimit);
+            }
+            Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
+        }
+        return;
+    }
 
-    isLimitIncreased = limit > Limit;
+    isLimitIncreased = limit > Limit || unrestrictedSoft.value_or(0) > UnrestrictedSoft.value_or(0) || hardLimit.value_or(0) > HardLimit.value_or(0);
 
     Limit = limit;
     HardLimit = hardLimit;
+    UnrestrictedSoft = unrestrictedSoft;
 
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 

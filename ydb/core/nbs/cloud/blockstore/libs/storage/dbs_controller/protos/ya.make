@@ -7,6 +7,7 @@ EXCLUDE_TAGS(
 
 SRCS(
     dbs_controller.proto
+    dbs_controller_db.proto
 )
 
 PEERDIR(

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <atomic>
 #include <mutex>
@@ -141,6 +141,7 @@ private:
 #if OPENTELEMETRY_ABI_VERSION_NO < 2
   std::atomic<bool> is_enabled_{false};
 #endif
+  nostd::shared_ptr<opentelemetry::trace::Span> noop_span_;
 };
 }  // namespace trace
 }  // namespace sdk

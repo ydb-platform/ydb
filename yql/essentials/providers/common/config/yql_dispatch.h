@@ -430,17 +430,19 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {}, bool strictConfigValidation = false)
         : ProviderName_(providerName)
         , QContext_(qContext)
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <NPrivate::StringContainer TContainer>
-    explicit TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters, bool strictConfigValidation = false)
         : ValidClusters(validClusters.begin(), validClusters.end())
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
@@ -501,6 +503,16 @@ public:
         }
     }
 
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TString& cluster, const TContainer& clusterValues, const TActivationPolicy& activationPolicy) {
+        using TAttribute = typename TContainer::value_type;
+
+        TString activationLabel = TStringBuilder() << ProviderName_ << "_" << cluster;
+        const auto flags = activationPolicy.template SelectAndSave<TAttribute>(
+            activationLabel, QContext_, clusterValues, !ProviderName_.empty());
+        Dispatch(cluster, flags);
+    }
+
     template <NPrivate::ConfigFeatureList TContainer, NPrivate::AttributeFilter<TContainer> TFilter>
     void Dispatch(const TContainer& globalValues, const TFilter& filter) {
         Dispatch(ALL_CLUSTERS, globalValues, filter);
@@ -509,6 +521,11 @@ public:
     template <NPrivate::ConfigFeatureList TContainer>
     void Dispatch(const TContainer& globalValues) {
         Dispatch(ALL_CLUSTERS, globalValues);
+    }
+
+    template <NPrivate::ConfigFeatureList TContainer, typename TActivationPolicy>
+    void DispatchWithActivationPolicy(const TContainer& globalValues, const TActivationPolicy& activationPolicy) {
+        DispatchWithActivationPolicy(ALL_CLUSTERS, globalValues, activationPolicy);
     }
 
     void FreezeDefaults();
@@ -527,6 +544,7 @@ protected:
 
     const TString ProviderName_;
     const TQContext QContext_;
+    bool StrictConfigValidation_ = false;
 };
 
 } // namespace NYql::NCommon

@@ -21,7 +21,7 @@
 
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 #include <util/random/shuffle.h>
 
@@ -216,7 +216,7 @@ private:
 
     const TPromise<void> PeersSetPromise_ = NewPromise<void>();
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     bool Terminated_ = false;
     TDiscoverySessionPtr CurrentDiscoverySession_;
     TDelayedExecutorCookie RediscoveryCookie_;
@@ -278,7 +278,7 @@ private:
         std::atomic<bool> Finished_ = false;
         std::atomic<bool> Success_ = false;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
         THashSet<std::string> RequestedAddresses_;
         THashSet<std::string> RequestingAddresses_;
 
@@ -481,9 +481,9 @@ private:
                 FinishedPromise_.Set();
             } else {
                 auto error = owner->MakeNoAlivePeersError()
-                    << GetPeerDiscoveryErrors();
+                    .With(GetPeerDiscoveryErrors());
                 if (!globalDiscoveryError.IsOK()) {
-                    error <<= globalDiscoveryError;
+                    error.Add(globalDiscoveryError);
                 }
                 YT_TLOG_DEBUG("Error performing peer discovery")
                     .With(error);
@@ -631,8 +631,8 @@ private:
                 return TError(
                     NRpc::EErrorCode::TransportError,
                     "Channel terminated")
-                    << *EndpointAttributes_
-                    << TerminationError_;
+                    .With(*EndpointAttributes_)
+                    .With(TerminationError_);
             }
 
             if (CurrentDiscoverySession_) {
@@ -666,7 +666,7 @@ private:
         auto guard = ReaderGuard(SpinLock_);
         if (PeerDiscoveryError_.IsOK()) {
             return TError(NRpc::EErrorCode::Unavailable, "No alive peers found")
-                << *EndpointAttributes_;
+                .With(*EndpointAttributes_);
         } else {
             return PeerDiscoveryError_;
         }
@@ -675,14 +675,14 @@ private:
     TError MakePeerDownError(const std::string& address)
     {
         return TError("Peer %v is down", address)
-            << *EndpointAttributes_;
+            .With(*EndpointAttributes_);
     }
 
     TError MakePeerDiscoveryFailedError(const std::string& address, const TError& error)
     {
         return TError("Discovery request failed for peer %v", address)
-            << *EndpointAttributes_
-            << error;
+            .With(*EndpointAttributes_)
+            .With(error);
     }
 
     void OnPeersSet(const TError& /*error*/)
@@ -876,7 +876,7 @@ private:
 
         if (!LastGlobalDiscoveryError_.IsOK()) {
             return LastGlobalDiscoveryError_
-                << std::move(error);
+                .With(std::move(error));
         }
         return error;
     }

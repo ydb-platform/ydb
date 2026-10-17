@@ -3,6 +3,7 @@
 # files with source copies of this package and derivative works is **REQUIRED** as specified by the Apache License.
 # See https://github.com/kislyuk/argcomplete for more info.
 
+from collections.abc import Iterable
 from shlex import quote
 
 bashcode = r"""#compdef %(executables)s
@@ -135,7 +136,13 @@ Register-ArgumentCompleter -Native -CommandName %(executable)s -ScriptBlock {
 shell_codes = {"bash": bashcode, "tcsh": tcshcode, "fish": fishcode, "powershell": powershell_code}
 
 
-def shellcode(executables, use_defaults=True, shell="bash", complete_arguments=None, argcomplete_script=None):
+def shellcode(
+    executables: Iterable[str],
+    use_defaults: bool = True,
+    shell: str = "bash",
+    complete_arguments: Iterable[str] | None = None,
+    argcomplete_script: str | None = None,
+) -> str:
     """
     Provide the shell code required to register a python executable for use with the argcomplete module.
 

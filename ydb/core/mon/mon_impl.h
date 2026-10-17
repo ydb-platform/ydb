@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mon.h"
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/library/services/services.pb.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/page.h>
@@ -168,6 +169,7 @@ public:
     TMon::TRequestAuthorizer Authorizer;
     TMon::EAuthMode AuthMode;
     TString MonServiceName;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
 };
 
 inline TString GetPageFullPath(const NMonitoring::IMonPage* page) {

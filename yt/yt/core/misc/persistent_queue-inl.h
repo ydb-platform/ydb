@@ -11,6 +11,45 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T, size_t ChunkSize>
+TPersistentQueueChunk<T, ChunkSize>::TPersistentQueueChunk()
+{
+    // A user-provided constructor keeps value-initialization from zeroing the storage.
+}
+
+template <class T, size_t ChunkSize>
+TPersistentQueueChunk<T, ChunkSize>::~TPersistentQueueChunk()
+{
+    while (ConstructedSize_ > 0) {
+        std::destroy_at(std::addressof(GetElement(ConstructedSize_ - 1)));
+        --ConstructedSize_;
+    }
+}
+
+template <class T, size_t ChunkSize>
+void TPersistentQueueChunk<T, ChunkSize>::Append(T&& value)
+{
+    YT_ASSERT(ConstructedSize_ < ChunkSize);
+    std::construct_at(reinterpret_cast<T*>(Storage_[ConstructedSize_]), std::move(value));
+    ++ConstructedSize_;
+}
+
+template <class T, size_t ChunkSize>
+T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index)
+{
+    YT_ASSERT(index < ConstructedSize_);
+    return *std::launder(reinterpret_cast<T*>(Storage_[index]));
+}
+
+template <class T, size_t ChunkSize>
+const T& TPersistentQueueChunk<T, ChunkSize>::GetElement(size_t index) const
+{
+    YT_ASSERT(index < ConstructedSize_);
+    return *std::launder(reinterpret_cast<const T*>(Storage_[index]));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T, size_t ChunkSize>
 TPersistentQueueIterator<T, ChunkSize>::TPersistentQueueIterator()
 {  }
 
@@ -40,13 +79,13 @@ TPersistentQueueIterator<T, ChunkSize> TPersistentQueueIterator<T, ChunkSize>::o
 template <class T, size_t ChunkSize>
 const T& TPersistentQueueIterator<T, ChunkSize>::operator*() const
 {
-    return CurrentChunk_->Elements[CurrentIndex_];
+    return CurrentChunk_->GetElement(CurrentIndex_);
 }
 
 template <class T, size_t ChunkSize>
 const T* TPersistentQueueIterator<T, ChunkSize>::operator->() const
 {
-    return &CurrentChunk_->Elements[CurrentIndex_];
+    return &CurrentChunk_->GetElement(CurrentIndex_);
 }
 
 template <class T, size_t ChunkSize>
@@ -124,7 +163,8 @@ void TPersistentQueue<T, ChunkSize>::Enqueue(T value)
         head.CurrentIndex_ = tail.CurrentIndex_ = 0;
     }
 
-    head.CurrentChunk_->Elements[head.CurrentIndex_++] = std::move(value);
+    head.CurrentChunk_->Append(std::move(value));
+    ++head.CurrentIndex_;
     ++size;
 
     if (head.CurrentIndex_ == ChunkSize) {
@@ -144,7 +184,8 @@ T TPersistentQueue<T, ChunkSize>::Dequeue()
 
     YT_ASSERT(size != 0);
 
-    auto result = std::move(tail.CurrentChunk_->Elements[tail.CurrentIndex_++]);
+    auto result = std::move(tail.CurrentChunk_->GetElement(tail.CurrentIndex_));
+    ++tail.CurrentIndex_;
     --size;
 
     if (tail.CurrentIndex_ == ChunkSize) {
@@ -247,7 +288,7 @@ const T& TIndexedPersistentQueue<T, ChunkSize>::operator[](int index) const
     auto shiftedIndex = index + Shift_;
     auto chunkIndex = shiftedIndex / ChunkSize;
     auto indexInChunk = shiftedIndex % ChunkSize;
-    return Chunks_[chunkIndex]->Elements[indexInChunk];
+    return Chunks_[chunkIndex]->GetElement(indexInChunk);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -12,6 +12,7 @@ pkgs: attrs: with pkgs; with attrs; rec {
 
   patches = [
     ./disable-arc4random.patch
+    ./fix-wasm-frexp-libcall-signatures.patch
   ];
 
   cmakeFlags = attrs.cmakeFlags ++ [

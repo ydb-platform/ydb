@@ -128,7 +128,7 @@ public:
         promise.OnCanceled(BIND_NO_PROPAGATE([=, cookie = std::move(cookie)] (const TError& error) {
             TDelayedExecutor::Cancel(cookie);
             promise.TrySet(TError(NYT::EErrorCode::Canceled, "Delayed callback canceled")
-                << error);
+                .With(error));
         }));
 
         return promise;
@@ -226,7 +226,7 @@ private:
         }
 
     private:
-        const TIntrusivePtr<NThreading::TEventCount> EventCount_ = New<NThreading::TEventCount>();
+        const TIntrusivePtr<TEventCount> EventCount_ = New<TEventCount>();
 
         std::atomic<bool> NotificationScheduled_ = false;
 

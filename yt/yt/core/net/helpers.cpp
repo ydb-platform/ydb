@@ -31,7 +31,7 @@ std::vector<int> AllocateFreePorts(
             socket = CreateTcpServerSocket();
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error while creating a socket for preliminary port bind")
-                << ex;
+                .With(ex);
         }
 
         YT_VERIFY(socket != INVALID_SOCKET);
@@ -46,7 +46,7 @@ std::vector<int> AllocateFreePorts(
             YT_TLOG_DEBUG("Error while trying making a preliminary port bind, skipping it")
                 .With("Port", port)
                 .With("Socket", socket)
-                .With(TError(ex));
+                .With(ex);
             continue;
         }
 

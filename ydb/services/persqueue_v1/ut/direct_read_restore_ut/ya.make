@@ -11,6 +11,8 @@ CFLAGS(
 SIZE(MEDIUM)
 TIMEOUT(600)
 
+ENV(PQ_EXPERIMENTAL_DIRECT_READ="1")
+
 PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/future

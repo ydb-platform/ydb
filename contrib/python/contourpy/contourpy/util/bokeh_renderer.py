@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from bokeh.core.enums import OutputBackendType
     from bokeh.models import GridPlot
     from bokeh.palettes import Palette
+    from bokeh.plotting.glyph_api import MultiLineArgs
     from numpy.typing import ArrayLike
     from selenium.webdriver.remote.webdriver import WebDriver
 
@@ -148,7 +149,7 @@ class BokehRenderer(Renderer):
         x, y = self._grid_as_2d(x, y)
         xs = list(x) + list(x.T)
         ys = list(y) + list(y.T)
-        kwargs = {"line_color": color, "alpha": alpha}
+        kwargs: MultiLineArgs = {"line_color": color, "alpha": alpha}
         fig.multi_line(xs, ys, **kwargs)
         if quad_as_tri_alpha > 0:
             # Assumes no quad mask.

@@ -15,6 +15,12 @@ namespace NActors {
     // synchronous (same-mailbox) calls through it. Implementations are also actors; SessionActor()
     // provides the bridge required by IActor::InvokeOtherActor.
     struct IInterconnectSession {
+        enum class ERdmaState {
+            None,
+            Present,
+            Active,
+        };
+
         virtual ~IInterconnectSession() = default;
 
         // bridge to the underlying actor object (both implementations derive from TActor<>)
@@ -28,8 +34,7 @@ namespace NActors {
         virtual void StartHandshake() = 0;
         virtual void ReestablishConnectionWithHandshake(TDisconnectReason reason) = 0;
         virtual void CloseInputSession() = 0;
-        virtual bool IsRdmaInUse() = 0;
-        virtual bool HasRdmaState() const = 0;
+        virtual ERdmaState GetRdmaState() const = 0;
 
         // Whether this session type supports resuming over consecutive TCP connections (continuation).
         // TInterconnectSessionTCP returns true; TInterconnectSessionTCPv2 returns false.

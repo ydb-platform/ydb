@@ -652,6 +652,18 @@ bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
     return GetArrowMetadataYTType(schemaField) == YTTypeMetadataValueYson;
 }
 
+void ValidateYsonValue(TStringBuf value)
+{
+    try {
+        ValidateAnyValue(value);
+    } catch (const std::exception& ex) {
+        THROW_ERROR_EXCEPTION("Value of a column with metadata %Qv=%Qv is not a valid YSON",
+            YTTypeMetadataKey,
+            YTTypeMetadataValueYson)
+            .With(ex);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArraySimpleVisitor
@@ -1028,6 +1040,7 @@ private:
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
             if (HasYsonTypeInMetadata(SchemaField_)) {
+                ValidateYsonValue(value);
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);
@@ -1562,8 +1575,8 @@ private:
                     ThrowOnError(listValue->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow type \"list\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
                 Writer_->WriteItemSeparator();
             }
@@ -1605,8 +1618,8 @@ private:
                     ThrowOnError(keyList->type()->Accept(&keyVisitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow key field of type \"map\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1616,8 +1629,8 @@ private:
                     ThrowOnError(valueList->type()->Accept(&valueVisitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow value field type \"map\"")
-                        << TErrorAttribute("offset", offset)
-                        << ex;
+                        .With("offset", offset)
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1654,8 +1667,8 @@ private:
             } else {
                 if (std::ssize(structFields) != array->num_fields()) {
                     THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
-                        << TErrorAttribute("arrow_field_count", array->num_fields())
-                        << TErrorAttribute("yt_field_count", std::ssize(structFields));
+                        .With("arrow_field_count", array->num_fields())
+                        .With("yt_field_count", std::ssize(structFields));
                 }
             }
 
@@ -1670,7 +1683,7 @@ private:
                     ThrowOnError(arrowField->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Failed to parse arrow struct field %Qv", field.Name)
-                        << ex;
+                        .With(ex);
                 }
 
                 Writer_->WriteItemSeparator();
@@ -1695,7 +1708,7 @@ private:
             }
             if (array->num_fields() != 1) {
                 THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
-                    << TErrorAttribute("arrow_field_count", array->num_fields());
+                    .With("arrow_field_count", array->num_fields());
             }
 
             const auto& arrowField = array->field(0);
@@ -1704,7 +1717,7 @@ private:
                 ThrowOnError(arrowField->type()->Accept(&visitor));
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Failed to parse arrow struct field for the YT \"optional\" type")
-                    << ex;
+                    .With(ex);
             }
 
             Writer_->WriteItemSeparator();
@@ -1944,7 +1957,8 @@ void PrepareArray(
                     columnId);
 
             case ELogicalMetatype::Tagged:
-                // Denullified type should not contain tagged type.
+            case ELogicalMetatype::AggregateState:
+                // Denullified type should not contain tagged types.
                 YT_ABORT();
                 break;
         }
@@ -2031,7 +2045,7 @@ public:
                     Options_.MaxAllocationBytes);
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("Failed to parse column %Qv", columnName)
-                    << ex;
+                    .With(ex);
             }
         }
 

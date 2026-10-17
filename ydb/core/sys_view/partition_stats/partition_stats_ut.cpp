@@ -2,6 +2,7 @@
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/sys_view/common/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -202,6 +203,108 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         auto result = runtime.GrabEdgeEvent<TEvSysView::TEvGetPartitionStatsResult>(handle);
 
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetOverloaded(), true);
+    }
+
+    template <typename TPartition>
+    const TPartition& FindPartition(const google::protobuf::RepeatedPtrField<TPartition>& partitions, ui64 tabletId, ui32 followerId) {
+        for (const auto& partition : partitions) {
+            if (partition.GetTabletId() == tabletId && partition.GetFollowerId() == followerId) {
+                return partition;
+            }
+        }
+        UNIT_FAIL("No partition for tablet " << tabletId << " follower " << followerId);
+        Y_UNREACHABLE();
+    }
+
+    Y_UNIT_TEST(CollectorOverloadedFollowerLaggingLeader) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(MakeEgg());
+        runtime.GetAppData().UsePartitionStatsCollectorForTests = true;
+
+        auto pipeCache = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCache);
+
+        auto collector = CreatePartitionStatsCollector();
+        auto collectorId = runtime.Register(collector.Release());
+        runtime.EnableScheduleForActor(collectorId);
+        WaitForBootstrap(runtime);
+
+        const ui64 schemeShardId = 1;
+        auto domainKey = TPathId(schemeShardId, 1);
+        auto pathId = TPathId(schemeShardId, 2);
+        auto laggingShard = TShardIdx(schemeShardId, 0);
+        auto upToDateShard = TShardIdx(schemeShardId, 1);
+
+        runtime.Send(new IEventHandle(collectorId, TActorId(),
+            new TEvSysView::TEvInitPartitionStatsCollector(domainKey, 1)));
+
+        auto setPartitioning = MakeHolder<TEvSysView::TEvSetPartitioning>(domainKey, pathId, "/Root/Table");
+        setPartitioning->ShardIndices.push_back(laggingShard);
+        setPartitioning->ShardIndices.push_back(upToDateShard);
+        runtime.Send(new IEventHandle(collectorId, TActorId(), setPartitioning.Release()));
+
+        auto sendStats = [&](TShardIdx shardIdx, ui64 tabletId, ui32 followerId, double cpuCores, ui64 dataSize) {
+            auto ev = MakeHolder<TEvSysView::TEvSendPartitionStats>(domainKey, pathId, shardIdx);
+            ev->Stats.SetTabletId(tabletId);
+            ev->Stats.SetFollowerId(followerId);
+            ev->Stats.SetCPUCores(cpuCores);
+            ev->Stats.SetLocksBroken(1);
+            ev->Stats.SetDataSize(dataSize);
+            ev->Stats.SetRowCount(dataSize);
+            ev->Stats.SetIndexSize(dataSize);
+            runtime.Send(new IEventHandle(collectorId, TActorId(), ev.Release()));
+        };
+
+        const ui64 laggingTabletId = 100;
+        const ui64 upToDateTabletId = 200;
+        const ui32 leader = 0;
+        const ui32 follower = 1;
+        const double leaderCpuCores = 0.5;
+        const double followerCpuCores = 1.0;
+        const ui64 leaderDataSize = 1000;
+        const ui64 followerDataSize = 10;
+
+        // Follower stats arrive before any stats from the leader
+        sendStats(laggingShard, laggingTabletId, follower, followerCpuCores, followerDataSize);
+
+        sendStats(upToDateShard, upToDateTabletId, leader, leaderCpuCores, leaderDataSize);
+        sendStats(upToDateShard, upToDateTabletId, follower, followerCpuCores, followerDataSize);
+
+        auto forward = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(forward->Get()->Ev->Type(), (ui32)TEvSysView::EvSendTopPartitions);
+        const auto& top = static_cast<TEvSysView::TEvSendTopPartitions*>(forward->Get()->Ev.Get())->Record;
+
+        UNIT_ASSERT_VALUES_EQUAL(top.PartitionsByCpuSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(top.PartitionsByTliSize(), 3);
+
+        {
+            // Size fields are empty until the leader reports
+            const auto& byCpu = FindPartition(top.GetPartitionsByCpu(), laggingTabletId, follower);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetPath(), "/Root/Table");
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetCPUCores(), followerCpuCores);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetDataSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetRowCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetIndexSize(), 0);
+
+            const auto& byTli = FindPartition(top.GetPartitionsByTli(), laggingTabletId, follower);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetLocksBroken(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetDataSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetRowCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetIndexSize(), 0);
+        }
+
+        {
+            // Size fields of a follower are taken from the leader
+            const auto& byCpu = FindPartition(top.GetPartitionsByCpu(), upToDateTabletId, follower);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetDataSize(), leaderDataSize);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetRowCount(), leaderDataSize);
+            UNIT_ASSERT_VALUES_EQUAL(byCpu.GetIndexSize(), leaderDataSize);
+
+            const auto& byTli = FindPartition(top.GetPartitionsByTli(), upToDateTabletId, follower);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetDataSize(), leaderDataSize);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetRowCount(), leaderDataSize);
+            UNIT_ASSERT_VALUES_EQUAL(byTli.GetIndexSize(), leaderDataSize);
+        }
     }
 
 }

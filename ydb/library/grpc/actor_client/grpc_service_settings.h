@@ -15,6 +15,7 @@ struct TGrpcClientSettings {
     ui64 RequestTimeoutMs = 10000; // 10 seconds
     std::unordered_map<TString, TString> Headers;
     TString SslTargetNameOverride;
+    TString UserAgentPrefix;
 };
 
 } // namespace NGrpcActorClient

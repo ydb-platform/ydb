@@ -196,11 +196,11 @@ template <class T>
 ////////////////////////////////////////////////////////////////////////////////
 
 #define HANDLE_RPC_CALL(mockType, method, capture, body) \
-    ::testing::Invoke(PP_DEPAREN(capture) ( \
+    PP_DEPAREN(capture) ( \
         [[maybe_unused]] mockType::TReq##method* request, \
         [[maybe_unused]] mockType::TRsp##method* response, \
         [[maybe_unused]] mockType::TCtx##method##Ptr context) \
-    body)
+    body
 
 ////////////////////////////////////////////////////////////////////////////////
 

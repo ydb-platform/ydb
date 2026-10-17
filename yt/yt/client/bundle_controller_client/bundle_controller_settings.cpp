@@ -56,8 +56,8 @@ void TInstanceResources::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->NetBits.has_value() && config->NetBytes.has_value() && *config->NetBits != *config->NetBytes * 8) {
             THROW_ERROR_EXCEPTION("Net parameters are not equal")
-                << TErrorAttribute("net_bytes", config->NetBytes)
-                << TErrorAttribute("net_bits", config->NetBits);
+                .With("net_bytes", config->NetBytes)
+                .With("net_bits", config->NetBits);
         }
 
         config->CanonizeNet();
@@ -155,8 +155,8 @@ void TBundleResourceQuota::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->NetworkBits != 0 && config->NetworkBytes != 0 && config->NetworkBits != config->NetworkBytes * 8) {
             THROW_ERROR_EXCEPTION("Network parameters are not equal")
-                << TErrorAttribute("network_bytes", config->NetworkBytes)
-                << TErrorAttribute("network_bits", config->NetworkBits);
+                .With("network_bytes", config->NetworkBytes)
+                .With("network_bits", config->NetworkBits);
         }
 
         // COMPAT(grachevkirill)

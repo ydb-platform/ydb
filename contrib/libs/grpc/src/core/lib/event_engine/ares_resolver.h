@@ -39,6 +39,7 @@
 #include <grpc/support/log.h>
 
 #include "src/core/lib/event_engine/grpc_polled_fd.h"
+#include "src/core/lib/event_engine/ref_counted_dns_resolver_interface.h"
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/sync.h"
 
@@ -54,7 +55,7 @@ extern grpc_core::TraceFlag grpc_trace_ares_resolver;
     }                                                                          \
   } while (0)
 
-class AresResolver : public grpc_core::InternallyRefCounted<AresResolver> {
+class AresResolver : public RefCountedDNSResolverInterface {
  public:
   static y_absl::StatusOr<grpc_core::OrphanablePtr<AresResolver>>
   CreateAresResolver(y_absl::string_view dns_server,
@@ -67,15 +68,13 @@ class AresResolver : public grpc_core::InternallyRefCounted<AresResolver> {
   ~AresResolver() override;
   void Orphan() override Y_ABSL_LOCKS_EXCLUDED(mutex_);
 
-  void LookupHostname(y_absl::string_view name, y_absl::string_view default_port,
-                      EventEngine::DNSResolver::LookupHostnameCallback callback)
-      Y_ABSL_LOCKS_EXCLUDED(mutex_);
-  void LookupSRV(y_absl::string_view name,
-                 EventEngine::DNSResolver::LookupSRVCallback callback)
-      Y_ABSL_LOCKS_EXCLUDED(mutex_);
-  void LookupTXT(y_absl::string_view name,
-                 EventEngine::DNSResolver::LookupTXTCallback callback)
-      Y_ABSL_LOCKS_EXCLUDED(mutex_);
+  void LookupHostname(EventEngine::DNSResolver::LookupHostnameCallback callback,
+                      y_absl::string_view name, y_absl::string_view default_port)
+      Y_ABSL_LOCKS_EXCLUDED(mutex_) override;
+  void LookupSRV(EventEngine::DNSResolver::LookupSRVCallback callback,
+                 y_absl::string_view name) Y_ABSL_LOCKS_EXCLUDED(mutex_) override;
+  void LookupTXT(EventEngine::DNSResolver::LookupTXTCallback callback,
+                 y_absl::string_view name) Y_ABSL_LOCKS_EXCLUDED(mutex_) override;
 
  private:
   // A FdNode saves (not owns) a live socket/fd which c-ares creates, and owns a

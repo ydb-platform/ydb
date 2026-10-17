@@ -128,8 +128,8 @@ TError ParseYTError(
         ParseJson(&errorStringInput, buildingConsumer.get());
     } catch (const std::exception& ex) {
         return TError("Failed to parse error from response")
-            << TErrorAttribute("source", source)
-            << ex;
+            .With("source", source)
+            .With(ex);
     }
     return buildingConsumer->Finish();
 }
@@ -199,6 +199,7 @@ static const auto HeadersWhitelist = JoinSeq(", ", std::vector<std::string>{
     "X-YT-Request-Format-Options",
     "X-YT-Response-Format-Options",
     "X-YT-Request-Id",
+    "X-YT-Start-Time",
     "X-YT-Error",
     "X-YT-Response-Code",
     "X-YT-Response-Message",
@@ -238,6 +239,7 @@ static const std::vector<std::string> KnownHeaders = {
     RequestFormatOptionsHeaderName,
     RequestIdHeaderName,
     ResponseFormatOptionsHeaderName,
+    StartTimeHeaderName,
     UserNameHeaderName,
     UserTagHeaderName,
     XYTErrorHeaderName,
@@ -467,7 +469,7 @@ std::optional<std::pair<i64, i64>> FindBytesRange(const THeadersPtr& headers)
     const std::string bytesPrefix = "bytes=";
     if (!range->starts_with(bytesPrefix)) {
         THROW_ERROR_EXCEPTION("Invalid range header format")
-            << TErrorAttribute("range", *range);
+            .With("range", *range);
     }
 
     auto indices = range->substr(bytesPrefix.size());

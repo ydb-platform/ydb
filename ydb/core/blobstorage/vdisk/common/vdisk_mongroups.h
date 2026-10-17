@@ -67,6 +67,26 @@ public:                                                                         
 
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TLsmCompactionRankGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TLsmCompactionRankGroup : public TBase {
+        public:
+            // Gauges are expressed in percent: a rank of 1.0 is reported as 100.
+            static constexpr ui64 RankScale = 100;
+
+            GROUP_CONSTRUCTOR(TLsmCompactionRankGroup)
+            {
+                COUNTER_INIT(Rank0, false);
+                COUNTER_INIT(Rank1_16, false);
+                Rank17Plus_ = GroupCounters->GetCounter("Rank17_", false);
+            }
+
+            COUNTER_DEF(Rank0);
+            COUNTER_DEF(Rank1_16);
+            COUNTER_DEF(Rank17Plus);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TLsmHullGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmHullGroup : public TBase {
@@ -236,28 +256,6 @@ public:                                                                         
             COUNTER_DEF(CapacityAlertOrange);
             COUNTER_DEF(CapacityAlertRed);
             COUNTER_DEF(CapacityAlertBlack);
-        };
-
-        ///////////////////////////////////////////////////////////////////////////////////
-        // TCostGroup
-        ///////////////////////////////////////////////////////////////////////////////////
-        class TCostGroup : public TBase {
-        public:
-            GROUP_CONSTRUCTOR(TCostGroup)
-            {
-                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableNs, false);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontUserCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontInternalCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(DefragCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(CompactionCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(ScrubCostNs, true);
-            }
-            COUNTER_DEF(DiskTimeAvailableNs);
-            COUNTER_DEF(SkeletonFrontUserCostNs);
-            COUNTER_DEF(SkeletonFrontInternalCostNs);
-            COUNTER_DEF(DefragCostNs);
-            COUNTER_DEF(CompactionCostNs);
-            COUNTER_DEF(ScrubCostNs);
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -472,6 +470,8 @@ public:                                                                         
                     VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
                 }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
+                COUNTER_INIT(HeapAllocatorSizeClass, false);
+                COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
@@ -485,6 +485,18 @@ public:                                                                         
             }
 
             COUNTER_DEF(VDiskLocalRecoveryState);
+            COUNTER_DEF(HeapAllocatorSizeClass);
+            COUNTER_DEF(HeapAllocatorStripe);
+
+            void SetHeapAllocatorStripe(bool stripe) {
+                HeapAllocatorSizeClass() = stripe ? 0 : 1;
+                HeapAllocatorStripe() = stripe ? 1 : 0;
+            }
+
+            void ClearHeapAllocatorMode() {
+                HeapAllocatorSizeClass() = 0;
+                HeapAllocatorStripe() = 0;
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -862,22 +874,49 @@ public:                                                                         
         ///////////////////////////////////////////////////////////////////////////////////
         class TCostTrackerGroup : public TBase {
         public:
-            GROUP_CONSTRUCTOR(TCostTrackerGroup)
+            class TDiskCostGroup : public TBase {
+            public:
+                GROUP_CONSTRUCTOR(TDiskCostGroup)
+                {
+                    COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
+                    COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                }
+
+                COUNTER_DEF(UserDiskCost);
+                COUNTER_DEF(CompactionDiskCost);
+                COUNTER_DEF(ScrubDiskCost);
+                COUNTER_DEF(DefragDiskCost);
+                COUNTER_DEF(InternalDiskCost);
+            };
+
+            TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                    const TString& name, const TString& value)
+                : TBase(counters, name, value)
+                , ReadDiskCost(GroupCounters, "operation", "read")
+                , WriteDiskCost(GroupCounters, "operation", "write")
             {
-                COUNTER_INIT_IF_EXTENDED(UserDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(CompactionDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(ScrubDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(DefragDiskCost, true);
-                COUNTER_INIT_IF_EXTENDED(InternalDiskCost, true);
+                InitCounters();
+            }
+
+            TCostTrackerGroup(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
+                : TBase(counters)
+                , ReadDiskCost(GroupCounters, "operation", "read")
+                , WriteDiskCost(GroupCounters, "operation", "write")
+            {
+                InitCounters();
+            }
+
+            void InitCounters() {
                 COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableCtr, false);
                 COUNTER_INIT_IF_EXTENDED(DiskTimeFairShareNs, false);
             }
 
-            COUNTER_DEF(UserDiskCost);
-            COUNTER_DEF(CompactionDiskCost);
-            COUNTER_DEF(ScrubDiskCost);
-            COUNTER_DEF(DefragDiskCost);
-            COUNTER_DEF(InternalDiskCost);
+            TDiskCostGroup ReadDiskCost;
+            TDiskCostGroup WriteDiskCost;
+
             COUNTER_DEF(DiskTimeAvailableCtr);
             COUNTER_DEF(DiskTimeFairShareNs);
         };
@@ -945,6 +984,7 @@ public:                                                                         
                 COUNTER_INIT(BlobsBalanceLevel, true);
                 COUNTER_INIT(BlobsBalanceFull, true);
                 COUNTER_INIT(BlobsFreeSpace, true);
+                COUNTER_INIT(BlobsEmergency, true);
                 COUNTER_INIT(BlobsSqueeze, true);
 
                 COUNTER_INIT(BlocksPromoteSsts, true);
@@ -963,6 +1003,7 @@ public:                                                                         
             COUNTER_DEF(BlobsBalanceLevel);
             COUNTER_DEF(BlobsBalanceFull);
             COUNTER_DEF(BlobsFreeSpace);
+            COUNTER_DEF(BlobsEmergency);
             COUNTER_DEF(BlobsSqueeze);
 
             COUNTER_DEF(BlocksPromoteSsts);

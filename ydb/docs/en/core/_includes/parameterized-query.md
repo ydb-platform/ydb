@@ -1,7 +1,7 @@
 A brief help is provided below. For a detailed description with examples, see [{#T}](../reference/ydb-cli/parameterized-queries-cli.md).
 
 | Name | Description |
----|---
+|---|---|
 | `-p, --param` | The value of a single parameter of a YQL query, in the format: `$name=value`, where `$name` is the parameter name and `value` is its value (a valid [JSON value](https://www.json.org/json-ru.html)). |
 | `--param-file` | Name of the file in [JSON](https://en.wikipedia.org/wiki/JSON) format and in [UTF-8](https://en.wikipedia.org/wiki/UTF-8) encoding that specifies values of the parameters matched against the YQL query parameters by key names. |
 | `--input-format` | Format of parameter values. Applies to all the methods of parameter transmission (among command parameters, in a file or using `stdin`).<br/>Acceptable values:<ul><li>`json-unicode` (default):[JSON](https://en.wikipedia.org/wiki/JSON).</li><li>`json-base64`: [JSON](https://en.wikipedia.org/wiki/JSON) format in which values of binary string parameters (`DECLARE $par AS String`) are [Base64](https://en.wikipedia.org/wiki/Base64)-encoded.</li></ul> |

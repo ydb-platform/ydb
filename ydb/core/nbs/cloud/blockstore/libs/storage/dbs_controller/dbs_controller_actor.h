@@ -67,12 +67,22 @@ private:
         const TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleGetNodesForPartitionRequest(
-        const TEvDbsControllerPrivate::TEvGetNodesForPartitionRequest::TPtr& ev,
+    void HandleRemoveTabletDDiskMapRequest(
+        const TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleGetPartitionsForNodeRequest(
         const TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleNodeMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleDiskMaintenancePermissionRequest(
+        const TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest::
+            TPtr& ev,
         const NActors::TActorContext& ctx);
 
     BLOCKSTORE_DBS_CONTROLLER_TRANSACTIONS(

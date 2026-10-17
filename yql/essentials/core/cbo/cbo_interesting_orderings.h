@@ -126,11 +126,7 @@ public:
         {
         }
 
-        TBaseColumn(const TBaseColumn& other)
-            : Relation(other.Relation)
-            , Column(other.Column)
-        {
-        }
+        TBaseColumn(const TBaseColumn& other) = default;
 
         TBaseColumn& operator=(const TBaseColumn& other);
 
@@ -156,7 +152,6 @@ public:
 private:
     TString GetBaseTableByAlias(const TString& alias);
 
-private:
     THashMap<TString, TString> TableByAlias_;
     THashMap<TString, TBaseColumn> BaseColumnByRename_;
 };
@@ -195,7 +190,7 @@ public:
         TFunctionalDependency::EType type,
         TTableAliasMap* tableAliases = nullptr);
 
-public: // deprecated section, use the section below instead of this
+    // deprecated section, use the section below instead of this
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
@@ -203,7 +198,6 @@ public: // deprecated section, use the section below instead of this
         bool alwaysActive = false,
         TTableAliasMap* tableAliases = nullptr);
 
-public:
     std::size_t AddConstant(
         const TJoinColumn& constantColumn,
         bool alwaysActive,
@@ -235,7 +229,6 @@ public: // deprecated section, use the section below instead of this
         TOrdering::EType type,
         TTableAliasMap* tableAliases = nullptr);
 
-public:
     std::size_t FindSorting(
         const TSorting&,
         TTableAliasMap* tableAliases = nullptr);
@@ -252,7 +245,6 @@ public:
         const TShuffling&,
         TTableAliasMap* tableAliases = nullptr);
 
-public:
     TVector<TJoinColumn> GetInterestingOrderingsColumnNamesByIdx(std::size_t interestingOrderingIdx) const;
 
     TSorting GetInterestingSortingByOrderingIdx(std::size_t interestingOrderingIdx) const;
@@ -261,7 +253,6 @@ public:
     // look at the IsNatural field at the Ordering struct
     void ApplyNaturalOrderings();
 
-public:
     std::vector<TFunctionalDependency> FDs;
     std::vector<TOrdering> InterestingOrderings;
 
@@ -291,7 +282,6 @@ private:
         bool isNatural,
         TTableAliasMap* tableAliases);
 
-private:
     THashMap<TString, std::size_t> IdxByColumn_;
     std::vector<TJoinColumn> ColumnByIdx_;
     std::size_t IdCounter_ = 0;
@@ -347,7 +337,7 @@ public:
         {
         }
 
-    public: // API
+        // API
         bool ContainsShuffle(i64 orderingIdx);
         bool ContainsSorting(i64 orderingIdx);
         void InduceNewOrderings(const TFDSet& fds);
@@ -360,7 +350,6 @@ public:
         i64 GetState() const;
         i64 GetInitOrderingIdx() const;
 
-    public:
         bool HasState();
         bool HasState() const;
         bool IsInitialized();
@@ -369,7 +358,6 @@ public:
     private:
         bool IsSubset(const std::bitset<MaxNFSMStates>& lhs, const std::bitset<MaxNFSMStates>& rhs);
 
-    private:
         TDFSM* Dfsm_ = nullptr;
         /* we can have different args in hash shuffle function, so shuffles can be incompitable in this case */
         i64 ShuffleHashFuncArgsCount_ = -1;
@@ -384,7 +372,6 @@ public:
     TLogicalOrderings CreateState() const;
     TLogicalOrderings CreateState(i64 orderingIdx) const;
 
-public:
     TOrderingsStateMachine() = default;
 
     explicit TOrderingsStateMachine(
@@ -403,7 +390,6 @@ public:
         Build(fds, interestingOrderings);
     }
 
-public:
     TFDStorage FDStorage;
     bool IsBuilt() const;
     TFDSet GetFDSet(i64 fdIdx);
@@ -415,7 +401,6 @@ private:
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings);
 
-private:
     /*
      * Non-Deterministic Finite State Machine (NFSM) for ordering transformations.
      *
@@ -477,7 +462,6 @@ private:
             const std::vector<TOrdering>& interesting,
             const std::vector<TItemInfo>& itemInfo);
 
-    private:
         std::vector<TNode> Nodes_;
         std::vector<TEdge> Edges_;
     };
@@ -539,7 +523,6 @@ private:
             const TNFSM& nfsm,
             const std::vector<TFunctionalDependency>& fds);
 
-    private:
         std::vector<TNode> Nodes_;
         std::vector<TEdge> Edges_;
 
@@ -565,7 +548,6 @@ private:
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings);
 
-private:
     TNFSM Nfsm_;
     TSimpleSharedPtr<TDFSM> Dfsm_; // it is important to have sharedptr here, otherwise all logicalorderings will invalidate after copying of FSM
 

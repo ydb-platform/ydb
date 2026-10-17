@@ -495,7 +495,7 @@ std::pair<TVector<TCoAtom>, TVector<TCoAtom>> GetJoinKeys(const TDqJoin& join, T
 }
 
 TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, const TExprBase& rightInput,
-    TExprContext& ctx, bool useGraceCore)
+    TExprContext& ctx, bool useGraceCore, bool useScalarHashJoin)
 {
     static const std::set<std::string_view> supportedTypes = {"Inner"sv, "Left"sv, "LeftOnly"sv, "LeftSemi"sv};
     auto joinType = join.JoinType().Value();
@@ -520,7 +520,20 @@ TDqJoinBase DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, co
     auto leftFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), leftInput, leftFilterKeys);
     auto rightFilteredInput = BuildSkipNullKeys(ctx, join.Pos(), rightInput, rightFilterKeys);
 
-    if (useGraceCore) {
+    if (useScalarHashJoin) {
+        return Build<TDqPhyScalarHashJoin>(ctx, join.Pos())
+            .LeftInput(leftFilteredInput)
+            .LeftLabel(join.LeftLabel())
+            .RightInput(rightFilteredInput)
+            .RightLabel(join.RightLabel())
+            .JoinType(join.JoinType())
+            .JoinKeys(join.JoinKeys())
+            .LeftJoinKeyNames(join.LeftJoinKeyNames())
+            .RightJoinKeyNames(join.RightJoinKeyNames())
+            .Settings()
+            .Build()
+            .Done();
+    } else if (useGraceCore) {
         auto flags = Build<TCoAtomList>(ctx, join.Pos())
             .Add<TCoAtom>().Value("Broadcast").Build()
             .Done();
@@ -830,7 +843,88 @@ TExprBase DqRewriteLeftPureJoin(const TExprBase node, TExprContext& ctx, const T
         .Done();
 }
 
-TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage) {
+namespace {
+
+const TTypeAnnotationNode* SkipTagged(const TTypeAnnotationNode* type) {
+    while (type->GetKind() == ETypeAnnotationKind::Tagged) {
+        type = type->Cast<TTaggedExprType>()->GetBaseType();
+    }
+    return type;
+}
+
+// Tz types are packed as tuples, but their values are embedded scalars
+bool IsScalarConverterDataType(const TTypeAnnotationNode* type) {
+    return type->GetKind() == ETypeAnnotationKind::Data
+        && !(NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).Features & NUdf::TzDateType);
+}
+
+// Only flat columns are safe in the scalar layout converter: it drops the null state
+// of optional tuples, misplaces fields after strings in tuples and loses nested optionals.
+// Pg on the nullable side becomes Optional<Pg>, which is a nested optional too
+bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type, bool nullableSide) {
+    type = SkipTagged(type);
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::Data:
+            return IsScalarConverterDataType(type);
+        case ETypeAnnotationKind::Optional:
+            return IsScalarConverterDataType(SkipTagged(type->Cast<TOptionalExprType>()->GetItemType()));
+        case ETypeAnnotationKind::Pg:
+            return !nullableSide;
+        default:
+            return false;
+    }
+}
+
+} // anonymous namespace
+
+bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
+    const auto joinType = join.JoinType().Value();
+    if (joinType != "Inner"sv && joinType != "Left"sv && joinType != "LeftSemi"sv && joinType != "LeftOnly"sv) {
+        return false;
+    }
+    if (join.JoinKeys().Empty()) {
+        return false;
+    }
+
+    const auto* leftItemType = GetSequenceItemType(join.LeftInput(), false);
+    const auto* rightItemType = GetSequenceItemType(join.RightInput(), false);
+    if (!leftItemType || !rightItemType
+        || leftItemType->GetKind() != ETypeAnnotationKind::Struct
+        || rightItemType->GetKind() != ETypeAnnotationKind::Struct)
+    {
+        return false;
+    }
+    const auto* leftStructType = leftItemType->Cast<TStructExprType>();
+    const auto* rightStructType = rightItemType->Cast<TStructExprType>();
+
+    for (const auto* item : leftStructType->GetItems()) {
+        if (!IsSupportedByScalarConverter(item->GetItemType(), false)) {
+            return false;
+        }
+    }
+    const bool rightNullable = joinType == "Left"sv;
+    for (const auto* item : rightStructType->GetItems()) {
+        if (!IsSupportedByScalarConverter(item->GetItemType(), rightNullable)) {
+            return false;
+        }
+    }
+
+    const auto [leftJoinKeys, rightJoinKeys] = GetJoinKeys(join, ctx);
+    for (size_t i = 0; i < leftJoinKeys.size(); ++i) {
+        const auto* leftKeyType = leftStructType->FindItemType(leftJoinKeys[i].Value());
+        const auto* rightKeyType = rightStructType->FindItemType(rightJoinKeys[i].Value());
+        if (!leftKeyType || !rightKeyType) {
+            return false;
+        }
+        bool hasOptional = false;
+        if (!JoinDryKeyType(leftKeyType, rightKeyType, hasOptional, ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& ctx, IOptimizationContext& optCtx, bool useGraceCoreForMap, bool buildCollectStage, bool useScalarHashJoinForMap) {
     static const std::set<std::string_view> supportedTypes = {
         "Inner"sv,
         "Left"sv,
@@ -990,7 +1084,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
 
     TMaybeNode<TExprBase> phyJoin;
     if (join.JoinType().Value() != "Cross"sv) {
-        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap);
+        phyJoin = DqMakePhyMapJoin(join, leftInputArg, joinRightInput, ctx, useGraceCoreForMap, useScalarHashJoinForMap);
     } else {
         YQL_ENSURE(join.JoinKeys().Empty());
 
@@ -1374,6 +1468,58 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
         .Seal().Build();
 }
 
+} // namespace
+
+TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
+    TPositionHandle pos,
+    EJoinAlgoType joinAlgo,
+    TExprContext& ctx)
+{
+    TVector<TCoNameValueTuple> joinSettings;
+    if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+        joinSettings.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("BuildSide")
+                .Value<TCoAtom>().Build("Left")
+                .Done());
+    }
+    return joinSettings;
+}
+
+bool BlocksBlockHashJoin(const TTypeAnnotationNode* type) {
+    while (type && (type->GetKind() == ETypeAnnotationKind::Tagged || type->GetKind() == ETypeAnnotationKind::Optional)) {
+        if (type->GetKind() == ETypeAnnotationKind::Tagged) {
+            type = type->Cast<TTaggedExprType>()->GetBaseType();
+        } else {
+            type = type->Cast<TOptionalExprType>()->GetItemType();
+        }
+    }
+    if (!type) {
+        return true;
+    }
+    switch (type->GetKind()) {
+        case ETypeAnnotationKind::List:
+        case ETypeAnnotationKind::Dict:
+        case ETypeAnnotationKind::Variant:
+        case ETypeAnnotationKind::Resource:
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(item->GetItemType())) {
+                    return true;
+                }
+            }
+            return false;
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* element : type->Cast<TTupleExprType>()->GetItems()) {
+                if (BlocksBlockHashJoin(element)) {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
 }
 
 TExprBase DqBuildHashJoin(
@@ -1402,6 +1548,13 @@ TExprBase DqBuildHashJoin(
 
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
+
+    for (const auto* item : leftStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
+    for (const auto* item : rightStructType->GetItems()) {
+        useBlockHashJoin = useBlockHashJoin && !BlocksBlockHashJoin(item->GetItemType());
+    }
 
     const auto& leftItems = leftStructType->GetItems();
     const auto& rightItems = rightStructType->GetItems();
@@ -1757,14 +1910,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                TVector<TCoNameValueTuple> joinSettings;
-                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
-                    joinSettings.push_back(
-                        Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("BuildSide")
-                            .Value<TCoAtom>().Build("Left")
-                            .Done());
-                }
+                const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)
@@ -2190,20 +2336,20 @@ TDqLookupSourceWrap LookupSourceFromRead(TDqReadWrap read, TExprContext& ctx, TT
 }
 
 // Recursively walk join tree and replace right-side of StreamLookupJoin
-ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool& changed) {
+ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, TTypeAnnotationContext& typeCtx, bool& changed, std::function<TExprNode::TPtr(const TExprBase&, TExprContext&)> lookupFromExtra) {
     // recursion depth O(args.size())
     Y_ENSURE(idx < args.size());
 
     // handle left side
     if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
-        idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed);
+        idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed, lookupFromExtra);
     } else {
         ++idx;
     }
 
     // handle right side
     if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
-        return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed);
+        return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, typeCtx, changed, lookupFromExtra);
     }
 
     Y_ENSURE(idx < args.size());
@@ -2223,6 +2369,7 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
         lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
     } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
         lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx, typeCtx).Ptr();
+    } else if (lookupFromExtra && (lookupSourceWrap = lookupFromExtra(rightList, ctx))) {
     } else {
         return idx + 1;
     }
@@ -2239,13 +2386,13 @@ ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEqui
 
 } // anonymous namespace
 
-TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+TExprBase DqRewriteStreamEquiJoinWithLookup(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx, std::function<TExprNode::TPtr(const TExprBase&, TExprContext&)> lookupFromExtra) {
     const auto equiJoin = node.Cast<TCoEquiJoin>();
     auto argCount = equiJoin.ArgCount();
     const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();
     std::vector<TExprNode::TPtr> args(argCount);
     bool changed = false;
-    auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, typeCtx, changed);
+    auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, typeCtx, changed, lookupFromExtra);
     Y_ENSURE(rightIdx + 2 == argCount);
 
     if (!changed) {

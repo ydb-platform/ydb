@@ -22,6 +22,7 @@ TExprNode::TPtr BuildJsonParse(const TExprNode::TPtr& jsonExpr, TExprContext& ct
         ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{})
     });
 
+    // clang-format off
     auto parse = Build<TCoUdf>(ctx, jsonPos)
         .MethodName()
             .Build("Json2.Parse")
@@ -29,13 +30,16 @@ TExprNode::TPtr BuildJsonParse(const TExprNode::TPtr& jsonExpr, TExprContext& ct
             .Build()
         .UserType(ExpandType(jsonPos, *udfArgumentsType, ctx))
         .Done().Ptr();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoApply>(ctx, jsonPos)
         .Callable(parse)
         .FreeArgs()
             .Add(jsonExpr)
             .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr GetJsonDocumentOrParseJson(const TExprNode::TPtr& jsonExpr, TExprContext& ctx, EDataSlot& argumentDataSlot) {
@@ -71,6 +75,7 @@ TExprNode::TPtr BuildJsonCompilePath(const TCoJsonQueryBase& jsonExpr, TExprCont
         ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{})
     });
 
+    // clang-format off
     auto compilePath = Build<TCoUdf>(ctx, jsonPathPos)
         .MethodName()
             .Build("Json2.CompilePath")
@@ -78,13 +83,16 @@ TExprNode::TPtr BuildJsonCompilePath(const TCoJsonQueryBase& jsonExpr, TExprCont
             .Build()
         .UserType(ExpandType(jsonPathPos, *udfArgumentsType, ctx))
         .Done().Ptr();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoApply>(ctx, jsonPathPos)
         .Callable(compilePath)
         .FreeArgs()
             .Add(jsonExpr.JsonPath())
             .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildJsonSerialize(const TExprNode::TPtr& resourceExpr, TExprContext& ctx) {
@@ -100,6 +108,7 @@ TExprNode::TPtr BuildJsonSerialize(const TExprNode::TPtr& resourceExpr, TExprCon
         ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{})
     });
 
+    // clang-format off
     auto parse = Build<TCoUdf>(ctx, resourcePos)
         .MethodName()
             .Build("Json2.Serialize")
@@ -107,13 +116,16 @@ TExprNode::TPtr BuildJsonSerialize(const TExprNode::TPtr& resourceExpr, TExprCon
             .Build()
         .UserType(ExpandType(resourcePos, *udfArgumentsType, ctx))
         .Done().Ptr();
+    // clang-format on
 
+    // clang-format off
     return Build<TCoApply>(ctx, resourcePos)
         .Callable(parse)
         .FreeArgs()
             .Add(resourceExpr)
             .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 } // namespace
@@ -219,6 +231,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
             ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{})
         });
 
+        // clang-format off
         auto sqlValue = Build<TCoUdf>(ctx, jsonValuePos)
             .MethodName()
                 .Build(sqlValueUdfName)
@@ -226,7 +239,9 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
                 .Build()
             .UserType(ExpandType(jsonValuePos, *udfArgumentsType, ctx))
             .Done().Ptr();
+        // clang-format on
 
+        // clang-format off
         sqlValueExpr = Build<TCoApply>(ctx, jsonValuePos)
             .Callable(sqlValue)
             .FreeArgs()
@@ -235,6 +250,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
                 .Add(jsonValue.Variables())
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     auto makeCastOrValue = [&](TPositionHandle pos, const TExprNode::TPtr& source, const TExprNode::TPtr& onCastFail) {
@@ -250,6 +266,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
             return Nothing(<resultType>)
         */
         TExprNode::TPtr returnTypeNode = ExpandType(pos, *returnTypeAnn, ctx);
+        // clang-format off
         return Build<TCoIf>(ctx, pos)
             .Predicate<TCoExists>()
                 .Optional(source)
@@ -271,9 +288,11 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
                 .OptionalType(returnTypeNode)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     };
 
     auto makeThrow = [&](TPositionHandle pos, const TExprNode::TPtr& message) {
+        // clang-format off
         return Build<TCoEnsure>(ctx, pos)
             .Value<TCoNothing>()
                 .OptionalType(ExpandType(pos, *returnTypeAnn, ctx))
@@ -284,6 +303,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
                 .Build()
             .Message(message)
         .Done().Ptr();
+        // clang-format on
     };
 
     auto makeHandler = [&](EJsonValueHandlerMode mode, const TExprNode::TPtr& node, const TExprNode::TPtr& errorMessage, const TExprNode::TPtr& onCastFail) -> TExprNode::TPtr {
@@ -294,18 +314,22 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
 
         // Convert NULL to Nothing(<resultType>)
         if (IsNull(*node)) {
+            // clang-format off
             return Build<TCoNothing>(ctx, pos)
                     .OptionalType(ExpandType(pos, *returnTypeAnn, ctx))
                     .Done().Ptr();
+            // clang-format on
         }
 
         // If type is not Optional, wrap expression in Just call
         TExprNode::TPtr result = node;
         const auto typeAnn = node->GetTypeAnn();
         if (typeAnn->GetKind() != ETypeAnnotationKind::Optional) {
+            // clang-format off
             result = Build<TCoJust>(ctx, pos)
                 .Input(result)
                 .Done().Ptr();
+            // clang-format on
         }
 
         // Perform CAST to <resultType> or return onCastFail
@@ -318,19 +342,23 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
         const auto onError = jsonValue.OnError();
         const auto throwCastError = makeThrow(
             onError.Pos(),
+            // clang-format off
             Build<TCoString>(ctx, onError.Pos())
                 .Literal()
                     .Build(TStringBuilder() << "Failed to cast default value from ON ERROR clause to target type " << FormatType(returnTypeAnn))
             .Done().Ptr()
         );
+            // clang-format on
 
         return makeHandler(onErrorMode, onError.Ptr(), errorMessage, throwCastError);
     };
     auto makeOnEmptyHandler = [&](const TExprNode::TPtr& errorMessage) {
+        // clang-format off
         const auto onEmptyDefaultCastError = Build<TCoString>(ctx, jsonValue.OnEmpty().Pos())
             .Literal()
                 .Build(TStringBuilder() << "Failed to cast default value from ON EMPTY clause to target type " << FormatType(returnTypeAnn))
         .Done().Ptr();
+        // clang-format on
         return makeHandler(onEmptyMode, jsonValue.OnEmpty().Ptr(), errorMessage, makeOnErrorHandler(onEmptyDefaultCastError));
     };
 
@@ -346,6 +374,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
     }
     */
     auto errorTupleArgument = ctx.NewArgument(jsonValuePos, "errorTuple");
+    // clang-format off
     auto sqlValueMessage = Build<TCoNth>(ctx, jsonValuePos)
         .Tuple(errorTupleArgument)
         .Index()
@@ -369,32 +398,40 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
             .ElseValue(makeOnErrorHandler(sqlValueMessage))
             .Build()
         .Done().Ptr();
+    // clang-format on
 
     // Lambda for handling second type of variant
     TExprNode::TPtr sqlValueResultLambda;
     if (needCast) {
+        // clang-format off
         const auto errorMessage = Build<TCoString>(ctx, jsonValuePos)
             .Literal()
                 .Build(TStringBuilder() << "Failed to cast extracted JSON value to target type " << FormatType(returnTypeAnn))
             .Done().Ptr();
+        // clang-format on
         const auto inputArgument = ctx.NewArgument(jsonValuePos, "sqlValueResult");
+        // clang-format off
         sqlValueResultLambda = Build<TCoLambda>(ctx, jsonValuePos)
             .Args(TExprNode::TListType{inputArgument})
             .Body(makeCastOrValue(jsonValuePos, inputArgument, makeOnErrorHandler(errorMessage)))
             .Done().Ptr();
+        // clang-format on
     } else {
         /*
         ($sqlValueResult) -> {
             return $sqlValueResult;
         }
         */
+        // clang-format off
         sqlValueResultLambda = Build<TCoLambda>(ctx, jsonValuePos)
             .Args({"sqlValueResult"})
             .Body("sqlValueResult")
             .Done().Ptr();
+        // clang-format on
     }
 
     // Visit call to get the result
+    // clang-format off
     const auto visitResult = Build<TCoVisit>(ctx, jsonValuePos)
         .Input(sqlValueExpr)
         .FreeArgs()
@@ -406,6 +443,7 @@ TExprNode::TPtr ExpandJsonValue(const TExprNode::TPtr& node, TExprContext& ctx) 
             .Add(sqlValueResultLambda)
             .Build()
         .Done().Ptr();
+    // clang-format on
 
     return visitResult;
 }
@@ -467,6 +505,7 @@ TExprNode::TPtr ExpandJsonExists(const TExprNode::TPtr& node, TExprContext& ctx)
     });
 
     const auto jsonExistsPos = jsonExists.Pos();
+    // clang-format off
     auto sqlExists = Build<TCoUdf>(ctx, jsonExistsPos)
         .MethodName()
             .Build(sqlExistsUdfName)
@@ -474,8 +513,10 @@ TExprNode::TPtr ExpandJsonExists(const TExprNode::TPtr& node, TExprContext& ctx)
             .Build()
         .UserType(ExpandType(jsonExistsPos, *udfArgumentsType, ctx))
         .Done().Ptr();
+    // clang-format on
 
     if (needThrow) {
+        // clang-format off
         return Build<TCoApply>(ctx, jsonExistsPos)
             .Callable(sqlExists)
             .FreeArgs()
@@ -484,8 +525,10 @@ TExprNode::TPtr ExpandJsonExists(const TExprNode::TPtr& node, TExprContext& ctx)
                 .Add(jsonExists.Variables())
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoApply>(ctx, jsonExistsPos)
         .Callable(sqlExists)
         .FreeArgs()
@@ -495,6 +538,7 @@ TExprNode::TPtr ExpandJsonExists(const TExprNode::TPtr& node, TExprContext& ctx)
             .Add(jsonExists.OnError().Cast())
             .Build()
         .Done().Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
@@ -574,10 +618,12 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
     });
 
     auto buildShouldThrow = [&](EJsonQueryHandler handler, TPositionHandle pos) {
+        // clang-format off
         return Build<TCoBool>(ctx, pos)
                 .Literal()
                     .Build(handler == EJsonQueryHandler::Error ? "true" : "false")
                 .Done().Ptr();
+        // clang-format on
     };
 
     auto buildHandler = [&](EJsonQueryHandler handler, TPositionHandle pos) {
@@ -585,28 +631,35 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
             case EJsonQueryHandler::Error:
             case EJsonQueryHandler::Null: {
                 // Nothing(Resource<JsonNode>)
+                // clang-format off
                 return Build<TCoNothing>(ctx, pos)
                         .OptionalType(ExpandType(pos, *optionalJsonResourceType, ctx))
                         .Done().Ptr();
+                // clang-format on
             }
             case EJsonQueryHandler::EmptyArray: {
+                // clang-format off
                 auto value = Build<TCoJson>(ctx, pos)
                     .Literal()
                         .Build("[]")
                     .Done().Ptr();
+                // clang-format on
                 return BuildJsonParse(value, ctx);
             }
             case EJsonQueryHandler::EmptyObject: {
+                // clang-format off
                 auto value = Build<TCoJson>(ctx, pos)
                     .Literal()
                         .Build("{}")
                     .Done().Ptr();
+                // clang-format on
                 return BuildJsonParse(value, ctx);
             }
         }
     };
 
     const auto jsonQueryPos = jsonQuery.Pos();
+    // clang-format off
     auto sqlQuery = Build<TCoUdf>(ctx, jsonQueryPos)
         .MethodName()
             .Build(sqlQueryUdfName)
@@ -614,12 +667,14 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Build()
         .UserType(ExpandType(jsonQueryPos, *udfArgumentsType, ctx))
         .Done().Ptr();
+    // clang-format on
 
     const auto onEmpty = FromString<EJsonQueryHandler>(jsonQuery.OnEmpty().Ref().Content());
     const auto onError = FromString<EJsonQueryHandler>(jsonQuery.OnError().Ref().Content());
     const auto onEmptyPos = jsonQuery.OnEmpty().Pos();
     const auto onErrorPos = jsonQuery.OnError().Pos();
 
+    // clang-format off
     auto sqlQueryApply = Build<TCoApply>(ctx, jsonQueryPos)
         .Callable(sqlQuery)
         .FreeArgs()
@@ -632,6 +687,7 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Add(buildHandler(onError, onErrorPos))
             .Build()
         .Done().Ptr();
+    // clang-format on
 
     // In this case we need to serialize Resource<JsonNode> to Json type
     if (!typesCtx.JsonQueryReturnsJsonDocument) {
@@ -656,6 +712,7 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
         if (typesCtx.JsonQueryReturnsJsonDocument) {
             serializeUdfName = "Json2.SerializeToJsonDocument";
         }
+        // clang-format off
         auto parse = Build<TCoUdf>(ctx, resourcePos)
             .MethodName()
                 .Build(serializeUdfName)
@@ -663,13 +720,16 @@ TExprNode::TPtr ExpandJsonQuery(const TExprNode::TPtr& node, TExprContext& ctx, 
                 .Build()
             .UserType(ExpandType(resourcePos, *udfArgumentsType, ctx))
             .Done().Ptr();
+        // clang-format on
 
+        // clang-format off
         return Build<TCoApply>(ctx, resourcePos)
             .Callable(parse)
             .FreeArgs()
                 .Add(sqlQueryApply)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 };
 

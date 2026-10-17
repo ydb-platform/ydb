@@ -16,6 +16,8 @@ public:
         bool quad_as_tri, ZInterp z_interp, index_t x_chunk_size, index_t y_chunk_size,
         index_t n_threads);
 
+    virtual const char* get_name() const override;
+
     index_t get_thread_count() const;
 
 private:

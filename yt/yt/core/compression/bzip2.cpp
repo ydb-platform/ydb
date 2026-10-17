@@ -117,7 +117,7 @@ void Bzip2Decompress(TSource* source, TBlob* output)
             result = BZ2_bzDecompress(&bzStream);
             if (result != BZ_OK && result != BZ_STREAM_END) {
                 THROW_ERROR_EXCEPTION("BZip2 decompression failed: BZ2_bzDecompress returned an error")
-                    << TErrorAttribute("error", result);
+                    .With("error", result);
             }
 
             ActualizeOutputBlobSize(output, &bzStream);

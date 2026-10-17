@@ -4,34 +4,28 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
-#include <util/system/types.h>
-#include <util/string/builder.h>
 #include <util/generic/set.h>
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
+#include <util/system/types.h>
 
 namespace NYql::NDq {
 
 template <typename TPartitionKey>
 class TDqSourceWatermarkTracker {
 public:
-    TDqSourceWatermarkTracker(
-        TDuration granularity,
-        bool idlePartitionsEnabled,
-        TDuration lateArrivalDelay,
-        TDuration idleTimeout,
-        const TString& logPrefix,
-        const ::NMonitoring::TDynamicCounterPtr& counters = {})
+    TDqSourceWatermarkTracker(TDuration granularity, bool idlePartitionsEnabled, TDuration lateArrivalDelay, TDuration idleTimeout,
+        const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {})
         : Granularity_(granularity)
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
         , IdleTimeout_(idleTimeout)
         , Impl_(logPrefix, counters)
-    {}
+    {
+        Y_ENSURE(Granularity_, "Watermark granularity must be positive");
+    }
 
-    [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
-        const TPartitionKey& partitionKey,
-        TInstant partitionTime,
-        TInstant systemTime
-    ) {
+    [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(const TPartitionKey& partitionKey, TInstant partitionTime, TInstant systemTime) {
         const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
         return Impl_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
     }
@@ -85,4 +79,4 @@ private:
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

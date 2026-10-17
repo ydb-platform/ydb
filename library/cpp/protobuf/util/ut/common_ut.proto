@@ -1,3 +1,4 @@
+import "google/protobuf/any.proto";
 import "google/protobuf/descriptor.proto";
 import "library/cpp/protobuf/util/proto/merge.proto";
 
@@ -61,6 +62,10 @@ message TMergeTest {
 
 message TTextTest {
     optional uint32 Foo = 1;
+}
+
+message TTextAnyTest {
+    optional google.protobuf.Any Any = 1;
 }
 
 message TTextEnumTest {

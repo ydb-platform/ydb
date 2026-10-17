@@ -50,7 +50,7 @@ When choosing a table name, follow the general [naming rules for schema objects]
 
 ### IF NOT EXISTS
 
-If a table with the specified name already exists, the statement execution is completely skipped — no checks or schema comparison are performed, and no error occurs. Note that the existing table may differ in structure from the one you intended to create with this query — no comparison or equivalence check is performed.
+If a table with the specified name already exists, the statement execution is completely skipped — no checks or schema matching are performed, and no error occurs. Note that the existing table may differ in structure from the one you intended to create with this query — no comparison or equivalence check is performed.
 
 ### column_name
 
@@ -66,12 +66,13 @@ Data type of the column. The full list of data types supported by {{ ydb-short-n
 
 ### INDEX
 
-Defining an index on the table. Supported types:
+Index definition on the table. Supported:
 
 * [secondary indexes](secondary_index.md),
 * [vector indexes](vector_index.md),
 * [full-text indexes](fulltext_index.md),
 * [Bloom indexes](bloom_skip_index.md),
+* [min-max index](min_max_index.md),
 * [JSON indexes](json_index.md).
 
 ### PRIMARY KEY
@@ -134,7 +135,7 @@ Creating and populating a table based on the results of the `SELECT` query. For 
 
 {% list tabs %}
 
-- Creating a row-oriented table
+- Creating a row table
 
   {% if feature_column_container_type %}
 
@@ -216,7 +217,7 @@ Creating and populating a table based on the results of the `SELECT` query. For 
 
   {% endif %}
 
-  Example of creating a row table with partitioning options:
+  Example of creating a row table using partitioning options:
 
 
   ```yql
@@ -338,10 +339,9 @@ When creating row tables, you can specify:
 * [Additional parameters](with.md).
 * [Creating and populating a table based on query results](as_select.md).
 
-For column tables, when creating them, you can specify:
+When creating column tables, you can specify:
 
 * [Bloom index](bloom_skip_index.md).
-* [Column groups](family.md).
 * [Additional parameters](with.md).
 * [Creating and populating a table based on query results](as_select.md).
 

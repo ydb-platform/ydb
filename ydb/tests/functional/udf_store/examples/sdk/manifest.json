@@ -1,0 +1,5 @@
+{
+  "module_name": "sdk",
+  "module_type": "library",
+  "module_kind": "wasm"
+}

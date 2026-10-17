@@ -6,7 +6,7 @@
 
 #include <yt/yt/core/misc/shutdown_priorities.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
@@ -233,19 +233,15 @@ private:
             return;
         }
 
-        YT_LOG_EVENT(
-            GrpcInternalLogger,
-            level,
-            "%v (File: %v, Line: %v)",
-            args->message,
-            args->file,
-            args->line);
+        YT_TLOG_EVENT(GrpcInternalLogger, level, args->message)
+            .With("File", args->file)
+            .With("Line", args->line);
     }
 
     std::atomic<bool> Initialized_ = false;
     std::atomic<NLogging::ELogLevel> InternalMinLogLevel_ = NLogging::ELogLevel::Maximum;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, ConfigLock_);
     TDispatcherConfigPtr Config_ = New<TDispatcherConfig>();
 
     TWeakPtr<TGrpcLibraryLock> LibraryLock_;

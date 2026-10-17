@@ -219,16 +219,36 @@ namespace WAVM { namespace IR {
 		if(Stream::isInput) { globalType.isMutable = isMutable != 0; }
 	}
 
-	template<typename Stream> void serialize(Stream& stream, ExceptionType& exceptionType)
+	template<typename Stream>
+	void serialize(Stream& stream, ExceptionType& exceptionType, const Module& module)
 	{
 		U8 attribute = 0;
 		serializeVarUInt7(stream, attribute);
-		if (attribute != 0) {
-			throw FatalSerializationException("tag attribute must be 0");
-		}
+		if(attribute != 0) { throw FatalSerializationException("tag attribute must be 0"); }
 
-		U32 index = 0;
-		serializeVarUInt7(stream, index);
+		U32 typeIndex = 0;
+		if(!Stream::isInput)
+		{
+			for(; typeIndex < module.types.size(); ++typeIndex)
+			{
+				const FunctionType& type = module.types[typeIndex];
+				if(type.callingConvention() == CallingConvention::wasm && !type.results().size()
+				   && type.params() == exceptionType.params)
+				{ break; }
+			}
+			if(typeIndex == module.types.size())
+			{ throw FatalSerializationException("tag has no matching function type"); }
+		}
+		serializeVarUInt32(stream, typeIndex);
+		if(Stream::isInput)
+		{
+			if(typeIndex >= module.types.size())
+			{ throw FatalSerializationException("invalid tag function type index"); }
+			const FunctionType& type = module.types[typeIndex];
+			if(type.callingConvention() != CallingConvention::wasm || type.results().size())
+			{ throw FatalSerializationException("tag function type must have no results"); }
+			exceptionType.params = type.params();
+		}
 	}
 
 	static void serialize(InputStream& stream, ExternKind& kind)
@@ -315,9 +335,10 @@ namespace WAVM { namespace IR {
 		serialize(stream, globalDef.initializer);
 	}
 
-	template<typename Stream> void serialize(Stream& stream, ExceptionTypeDef& exceptionTypeDef)
+	template<typename Stream>
+	void serialize(Stream& stream, ExceptionTypeDef& exceptionTypeDef, const Module& module)
 	{
-		serialize(stream, exceptionTypeDef.type);
+		serialize(stream, exceptionTypeDef.type, module);
 	}
 
 	template<typename Stream> void serialize(Stream& stream, ElemSegment& elemSegment)
@@ -482,7 +503,7 @@ enum class SectionID : U8
 	code = 10,
 	data = 11,
 	dataCount = 12,
-	exceptionType = 0x7f,
+	exceptionType = 13,
 };
 
 static void serialize(InputStream& stream, SectionID& sectionID)
@@ -1027,7 +1048,8 @@ static void serializeFunctionBody(OutputStream& sectionStream,
 static void serializeFunctionBody(InputStream& sectionStream,
 								  Module& module,
 								  FunctionDef& functionDef,
-								  const ModuleSerializationState& moduleState)
+								  const ModuleSerializationState& moduleState,
+								  const U8* codeSectionBegin)
 {
 	Uptr numBodyBytes = 0;
 	serializeVarUInt32(sectionStream, numBodyBytes);
@@ -1047,12 +1069,19 @@ static void serializeFunctionBody(InputStream& sectionStream,
 		{ functionDef.nonParameterLocalTypes.push_back(localSet.type); }
 	}
 
+	functionDef.operatorCodeSectionOffsets.clear();
+
 	// Deserialize the function code, validate it, and re-encode it in the IR format.
 	ArrayOutputStream irCodeByteStream;
 	OperatorEncoderStream irEncoderStream(irCodeByteStream);
 	CodeValidationStream codeValidationStream(*moduleState.validationState, functionDef);
 	while(bodyStream.capacity())
 	{
+		// Record Code-section-relative PC of this opcode (WebAssembly DWARF addresses).
+		WAVM_ASSERT(codeSectionBegin);
+		functionDef.operatorCodeSectionOffsets.push_back(
+			U32(bodyStream.peek(1) - codeSectionBegin));
+
 		Opcode opcode;
 		serializeOpcode(bodyStream, opcode);
 		switch(U16(opcode))
@@ -1237,9 +1266,8 @@ template<typename Stream> void serializeImportSection(Stream& moduleStream, Modu
 				}
 				case ExternKind::exceptionType: {
 					ExceptionType exceptionType;
-					serialize(sectionStream, exceptionType);
+					serialize(sectionStream, exceptionType, module);
 					kindIndex = module.exceptionTypes.imports.size();
-					exceptionType.params = TypeTuple({ValueType::i64});
 					module.exceptionTypes.imports.push_back(
 						{exceptionType, std::move(moduleName), std::move(exportName)});
 					break;
@@ -1301,7 +1329,7 @@ template<typename Stream> void serializeImportSection(Stream& moduleStream, Modu
 					serialize(sectionStream, exceptionTypeImport.moduleName);
 					serialize(sectionStream, exceptionTypeImport.exportName);
 					serialize(sectionStream, kind);
-					serialize(sectionStream, exceptionTypeImport.type);
+					serialize(sectionStream, exceptionTypeImport.type, module);
 					break;
 				}
 
@@ -1365,7 +1393,10 @@ template<typename Stream> void serializeGlobalSection(Stream& moduleStream, Modu
 template<typename Stream> void serializeExceptionTypeSection(Stream& moduleStream, Module& module)
 {
 	serializeSection(moduleStream, SectionID::exceptionType, [&module](Stream& sectionStream) {
-		serialize(sectionStream, module.exceptionTypes.defs);
+		serializeArray(sectionStream, module.exceptionTypes.defs,
+					   [&module](Stream& stream, ExceptionTypeDef& def) {
+						   serialize(stream, def, module);
+					   });
 	});
 }
 
@@ -1396,6 +1427,10 @@ static void serializeCodeSection(InputStream& moduleStream,
 {
 	serializeSection(
 		moduleStream, SectionID::code, [&module, &moduleState](InputStream& sectionStream) {
+			// Base of the Code section payload (DWARF code addresses are relative to this).
+			const U8* codeSectionBegin
+				= sectionStream.capacity() ? sectionStream.peek(1) : nullptr;
+
 			Uptr numFunctionBodies = module.functions.defs.size();
 			serializeVarUInt32(sectionStream, numFunctionBodies);
 			if(numFunctionBodies != module.functions.defs.size())
@@ -1404,7 +1439,10 @@ static void serializeCodeSection(InputStream& moduleStream,
 					"function and code sections have mismatched function counts");
 			}
 			for(FunctionDef& functionDef : module.functions.defs)
-			{ serializeFunctionBody(sectionStream, module, functionDef, moduleState); }
+			{
+				serializeFunctionBody(
+					sectionStream, module, functionDef, moduleState, codeSectionBegin);
+			}
 		});
 }
 

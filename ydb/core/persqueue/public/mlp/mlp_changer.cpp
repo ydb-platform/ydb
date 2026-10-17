@@ -2,9 +2,6 @@
 
 #include <util/generic/overloaded.h>
 
-#define Service TBase::Service
-#define LogBuilder TBase::LogBuilder
-
 namespace NKikimr::NPQ::NMLP {
 
 template<>

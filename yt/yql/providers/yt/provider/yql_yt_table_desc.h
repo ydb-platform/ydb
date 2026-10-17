@@ -30,6 +30,9 @@ enum class TYtTableIntent: ui32 {
     Drop        = 1 << 5,
     Flush       = 1 << 6, // Untransactional write
     Replace     = 1 << 7,
+    SymlinkCreate = 1 << 8, // CREATE SYMLINK destination: lock the link path itself, not its target.
+    Referenced  = 1 << 9, // CREATE SYMLINK target: lock it to protect from removal; combined with Read for metadata loading.
+    SymlinkDrop = 1 << 10, // DROP SYMLINK operand: lock the link itself, not its target.
 };
 
 Y_DECLARE_FLAGS(TYtTableIntents, TYtTableIntent);
@@ -37,6 +40,10 @@ Y_DECLARE_OPERATORS_FOR_FLAGS(TYtTableIntents);
 
 inline bool HasReadIntents(TYtTableIntents intents) {
     return intents & (TYtTableIntent::Read | TYtTableIntent::View);
+}
+
+inline bool HasSymlinkIntents(TYtTableIntents intents) {
+    return intents & (TYtTableIntent::SymlinkCreate | TYtTableIntent::SymlinkDrop);
 }
 
 inline bool HasModifyIntents(TYtTableIntents intents) {
@@ -73,6 +80,8 @@ struct TYtTableDescriptionBase {
     bool ForceInferSchema = false;
     bool FailOnInvalidSchema = true;
     bool HasWriteLock = false;
+    bool HasSymlinkLock = false;
+    bool HasReferenceLock = false;
     bool IgnoreTypeV3 = false;
 
     bool Fill(const TString& provider, const TString& cluster, const TString& table, const TStructExprType* type,

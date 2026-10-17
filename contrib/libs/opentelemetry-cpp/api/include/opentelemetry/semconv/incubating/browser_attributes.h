@@ -66,6 +66,131 @@ static constexpr const char *kBrowserMobile = "browser.mobile";
  */
 static constexpr const char *kBrowserPlatform = "browser.platform";
 
+/**
+  The delta between the current value and the last-reported value. See <a
+  href="https://github.com/GoogleChrome/web-vitals?tab=readme-ov-file#report-only-the-delta-of-changes">delta</a>.
+ */
+static constexpr const char *kBrowserWebVitalDelta = "browser.web_vital.delta";
+
+/**
+  A unique ID representing this particular metric instance.
+ */
+static constexpr const char *kBrowserWebVitalId = "browser.web_vital.id";
+
+/**
+  Name of the web vital.
+ */
+static constexpr const char *kBrowserWebVitalName = "browser.web_vital.name";
+
+/**
+  The type of navigation, as reported by the <a
+  href="https://developer.mozilla.org/docs/Web/API/PerformanceNavigationTiming/type">Navigation
+  Timing API</a>, with additional values reported by the web-vitals library.
+ */
+static constexpr const char *kBrowserWebVitalNavigationType = "browser.web_vital.navigation_type";
+
+/**
+  The rating of the web vital value against the "good", "needs improvement", and "poor" thresholds
+  defined for the metric.
+ */
+static constexpr const char *kBrowserWebVitalRating = "browser.web_vital.rating";
+
+/**
+  Value of the web vital.
+ */
+static constexpr const char *kBrowserWebVitalValue = "browser.web_vital.value";
+
+namespace BrowserWebVitalNameValues
+{
+/**
+  Cumulative Layout Shift. See <a href="https://web.dev/articles/cls">cls</a>.
+ */
+static constexpr const char *kCls = "cls";
+
+/**
+  Largest Contentful Paint. See <a href="https://web.dev/articles/lcp">lcp</a>.
+ */
+static constexpr const char *kLcp = "lcp";
+
+/**
+  First Contentful Paint. See <a href="https://web.dev/articles/fcp">fcp</a>.
+ */
+static constexpr const char *kFcp = "fcp";
+
+/**
+  Interaction to Next Paint. See <a href="https://web.dev/articles/inp">inp</a>.
+ */
+static constexpr const char *kInp = "inp";
+
+/**
+  Time to First Byte. See <a href="https://web.dev/articles/ttfb">ttfb</a>.
+ */
+static constexpr const char *kTtfb = "ttfb";
+
+/**
+  First Input Delay. See <a href="https://web.dev/articles/fid">fid</a>.
+
+  @deprecated
+  {"note": "Replaced by Interaction to Next Paint (@code inp @endcode), which became a Core Web
+  Vital in March 2024. See <a href="https://web.dev/articles/inp">inp</a>.", "reason": "obsoleted"}
+ */
+OPENTELEMETRY_DEPRECATED static constexpr const char *kFid = "fid";
+
+}  // namespace BrowserWebVitalNameValues
+
+namespace BrowserWebVitalNavigationTypeValues
+{
+/**
+  Navigation started by clicking a link, entering a URL, form submission, or a script operation.
+ */
+static constexpr const char *kNavigate = "navigate";
+
+/**
+  Navigation through a reload operation or a @code Location.reload() @endcode call.
+ */
+static constexpr const char *kReload = "reload";
+
+/**
+  Navigation through the browser's history traversal (e.g. back/forward buttons).
+ */
+static constexpr const char *kBackForward = "back-forward";
+
+/**
+  Navigation restoring a page from the back/forward cache (bfcache).
+ */
+static constexpr const char *kBackForwardCache = "back-forward-cache";
+
+/**
+  Navigation to a page that was prerendered.
+ */
+static constexpr const char *kPrerender = "prerender";
+
+/**
+  Navigation restoring a page that was previously discarded by the browser.
+ */
+static constexpr const char *kRestore = "restore";
+
+}  // namespace BrowserWebVitalNavigationTypeValues
+
+namespace BrowserWebVitalRatingValues
+{
+/**
+  The metric value is within the "good" threshold.
+ */
+static constexpr const char *kGood = "good";
+
+/**
+  The metric value is within the "needs improvement" threshold.
+ */
+static constexpr const char *kNeedsImprovement = "needs-improvement";
+
+/**
+  The metric value is within the "poor" threshold.
+ */
+static constexpr const char *kPoor = "poor";
+
+}  // namespace BrowserWebVitalRatingValues
+
 }  // namespace browser
 }  // namespace semconv
 OPENTELEMETRY_END_NAMESPACE

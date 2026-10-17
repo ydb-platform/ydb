@@ -236,14 +236,10 @@ public:
                         auto plan = execStats->GetPlan();
                         if (plan) {
                             {
-                                TPlanVisualizer pv;
+                                NPlan2Svg::TPlanVisualizer pv;
                                 TFileOutput out(currentPlanWithStatsFileName);
-                                try {
-                                    pv.LoadPlans(TString(*execStats->GetPlan()));
-                                    out << pv.PrintSvg();
-                                } catch (std::exception& e) {
-                                    out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
-                                }
+                                pv.LoadPlansSafe(TString(*execStats->GetPlan()));
+                                out << pv.PrintSvgSafe();
                             }
                             {
                                 TFileOutput out(currentPlanWithStatsFileNameJson);
@@ -603,7 +599,9 @@ bool CompareValue(IOutputStream& errStream, const NYdb::TValue& v, TStringBuf vE
         vp.OpenOptional();
         if (vp.IsNull()) {
             return vExpected == "";
-        } else if (vExpected == "") {
+        } else if (vExpected.empty() &&
+            (vp.GetKind() != TTypeParser::ETypeKind::Primitive ||
+             !IsIn({EPrimitiveType::String, EPrimitiveType::Utf8}, vp.GetPrimitiveType()))) {
             return false;
         }
     }

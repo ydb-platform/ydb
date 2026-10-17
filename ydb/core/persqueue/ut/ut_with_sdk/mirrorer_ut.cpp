@@ -8,22 +8,51 @@
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
+#include <ydb/core/persqueue/pqtablet/partition/mirrorer/mirrorer.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
 
+#include <deque>
+
 namespace NKikimr::NPersQueueTests {
+
+namespace {
+
+std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> InstallMirrorReaderFactory(NPersQueue::TTestServer& server) {
+    const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+    auto fabric = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>();
+    fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
+    for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+        server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+    }
+    return fabric;
+}
+
+// Fabric is declared before Server so ~TTestServer runs while the factory is still alive.
+struct TMirrorTestServer {
+    std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> Fabric;
+    NPersQueue::TTestServer Server;
+
+    explicit TMirrorTestServer(const Tests::TServerSettings& settings)
+        : Server(settings)
+    {
+        Fabric = InstallMirrorReaderFactory(Server);
+    }
+
+    TMirrorTestServer()
+        : TMirrorTestServer(NPersQueueTests::PQSettings())
+    {
+    }
+};
+
+}
 
 Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
     Y_UNIT_TEST(TestBasicRemote) {
-        NPersQueue::TTestServer server;
-        const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
-
-        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
-        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
-        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
-            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
-        }
+        TMirrorTestServer env;
+        auto& server = env.Server;
 
         ui32 partitionsCount = 2;
         TString srcTopic = "topic2";
@@ -48,7 +77,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetEndpointPort(server.GrpcPort);
         mirrorFrom.SetTopic(srcTopic);
         mirrorFrom.SetConsumer("some_user");
-        mirrorFrom.SetSyncWriteTime(true);
         //mirrorFrom.SetDatabase("/Root");
         //mirrorFrom.MutableCredentials()->SetOauthToken("test_user@" BUILTIN_ACL_DOMAIN);
 
@@ -275,22 +303,19 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         auto pqSettings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
         NPQ::NTest::EnableTopicBatching(pqSettings);
 
+        // Declared before setup so the factory outlives TTestServer inside it.
+        std::shared_ptr<NPQ::TPersQueueMirrorReaderFactory> fabric;
         NYdb::NTopic::NTests::TTopicSdkTestSetup setup("MirrorKafkaBatchesAsBatches", pqSettings, false);
         auto& server = setup.GetServer();
-        const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
-
-        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
-        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
-        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
-            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
-        }
+        fabric = InstallMirrorReaderFactory(server);
+        Y_UNUSED(fabric);
 
         const TString srcTopic = "batch_source";
         const TString dstTopic = "batch_mirror";
         const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
         const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
         const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
-        const TString dstTopicPath = "/Root/" + dstTopicFullName;
+        const TString dstTopicPath = "/Root/PQ/" + dstTopicFullName;
         const TString mirrorConsumer = "mirror_user";
         const TString readerConsumer = "reader";
 
@@ -398,6 +423,63 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
     }
 
+    Y_UNIT_TEST(StopsPackingOnOffsetGap) {
+        using TCompressedMessage = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage;
+        using TMessageInformation = NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessageInformation;
+
+        auto makeMessage = [](ui64 offset, ui64 seqNo) {
+            auto meta = MakeIntrusive<NYdb::NTopic::TWriteSessionMeta>();
+            auto messageMeta = MakeIntrusive<NYdb::NTopic::TMessageMeta>();
+            const TString data = "payload";
+            TMessageInformation info(
+                offset,
+                "producer",
+                seqNo,
+                TInstant::MilliSeconds(1000),
+                TInstant::MilliSeconds(2000),
+                meta,
+                messageMeta,
+                data.size(),
+                "producer"
+            );
+            return TCompressedMessage(NYdb::NTopic::ECodec::RAW, data, std::move(info), nullptr);
+        };
+
+        auto fillWriteRequest = [](NKikimrClient::TPersQueuePartitionRequest& request, std::deque<TCompressedMessage>& queue) {
+            bool incorrectRequest = false;
+            ui64 nextOffset = 0;
+            size_t packed = 0;
+            while (!queue.empty() && NPQ::AppendToWriteRequest(request, queue.front(), incorrectRequest, nextOffset)) {
+                queue.pop_front();
+                ++packed;
+            }
+            UNIT_ASSERT(!incorrectRequest);
+            return packed;
+        };
+
+        std::deque<TCompressedMessage> queue;
+        queue.push_back(makeMessage(0, 1));
+        queue.push_back(makeMessage(1, 2));
+        queue.push_back(makeMessage(3, 3));
+
+        NKikimrClient::TPersQueuePartitionRequest prefix;
+        UNIT_ASSERT_VALUES_EQUAL(fillWriteRequest(prefix, queue), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWriteOffset(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.CmdWriteSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWrite(0).GetSeqNo(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(prefix.GetCmdWrite(1).GetSeqNo(), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(queue.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(queue.front().GetOffset(), 3u);
+
+        NKikimrClient::TPersQueuePartitionRequest rest;
+        UNIT_ASSERT_VALUES_EQUAL(fillWriteRequest(rest, queue), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(rest.GetCmdWriteOffset(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rest.CmdWriteSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rest.GetCmdWrite(0).GetSeqNo(), 3);
+        UNIT_ASSERT(queue.empty());
+    }
+
     Y_UNIT_TEST(ValidStartStream) {
         using namespace NYdb::NTopic;
 
@@ -479,14 +561,8 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         pqSettings.PQConfig.MutableCompactionConfig()->SetBlobsSize(8_MB);
         pqSettings.PQConfig.MutableMirrorConfig()->SetRewindCommitDelaySeconds(3);
 
-        NPersQueue::TTestServer server(pqSettings);
-
-        const auto& mirrorSettings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
-        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
-        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), mirrorSettings);
-        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
-            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
-        }
+        TMirrorTestServer env(pqSettings);
+        auto& server = env.Server;
         server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_MIRRORER, NKikimrServices::PERSQUEUE});
 
         constexpr ui32 nMsg = 1000;
@@ -582,7 +658,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetEndpointPort(server.GrpcPort);
         mirrorFrom.SetTopic(srcTopic);
         mirrorFrom.SetConsumer(mirrorConsumer);
-        mirrorFrom.SetSyncWriteTime(true);
         mirrorFrom.SetReadFromTimestampsMs(readFromTs.MilliSeconds());
 
         if (dstTopicPrefillSize) {

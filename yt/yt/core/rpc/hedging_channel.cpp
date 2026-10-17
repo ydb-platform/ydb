@@ -139,8 +139,8 @@ public:
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
-                    << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())
-                    << TErrorAttribute("request_id", Request_->GetRequestId()),
+                    .With(BackupFailedKey, Request_->GetRequestId())
+                    .With("request_id", Request_->GetRequestId()),
                     address);
                 return;
             }
@@ -173,7 +173,7 @@ public:
             .With("RequestId", Request_->GetRequestId());
 
         if (backup) {
-            error <<= TErrorAttribute(BackupFailedKey, true);
+            error.Add(BackupFailedKey, true);
         }
         responseHandler->HandleError(std::move(error), address);
     }
@@ -210,7 +210,7 @@ private:
 
     TDelayedExecutorCookie DeadlineCookie_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     bool Acknowledged_ = false;
     bool Responded_ = false;
     bool PrimaryCanceled_ = false;
@@ -223,7 +223,7 @@ private:
         RequestControls_.push_back(std::move(requestControl));
     }
 
-    void CancelSentRequests(TGuard<NThreading::TSpinLock>&& guard)
+    void CancelSentRequests(TGuard<TSpinLock>&& guard)
     {
         TCompactVector<IClientRequestControlPtr, 2> requestControls;
         std::swap(RequestControls_, requestControls);

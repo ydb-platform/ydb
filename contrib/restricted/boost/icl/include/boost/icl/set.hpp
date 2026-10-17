@@ -10,13 +10,7 @@ Copyright (c) 2007-2011: Joachim Faulhaber
 
 #include <boost/icl/impl_config.hpp>
 
-#if defined(ICL_USE_BOOST_MOVE_IMPLEMENTATION)
-#   include <boost/container/set.hpp>
-#elif defined(ICL_USE_STD_IMPLEMENTATION)
-#   include <set>
-#else 
-#   include <set>
-#endif
+#include ICL_IMPL_PATH(set)
 
 #include <boost/icl/associative_element_container.hpp>
 #include <boost/icl/functors.hpp>

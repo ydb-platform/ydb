@@ -3,6 +3,7 @@
 #include "batch_builder/builder.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -11,6 +12,8 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
+
+#include <library/cpp/lwtrace/all.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -29,16 +32,19 @@ TWriteOperation::TWriteOperation(const TUnifiedPathId& pathId, const TOperationW
 {
 }
 
-void TWriteOperation::Start(
-    TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context) {
+void TWriteOperation::Start(TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source,
+    const NOlap::TWritingContext& context, const std::shared_ptr<NLWTrace::TOrbit>& orbit, const ui64 txId, const TMonotonic orbitStartInstant) {
     Y_ABORT_UNLESS(Status == EOperationStatus::Draft);
 
-    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>(
-        (ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(), context.GetWritingCounters()->GetWriteFlowCounters());
+    auto writeMeta = std::make_shared<NEvWrite::TWriteMeta>((ui64)WriteId, PathId, source, GranuleShardingVersionId, GetIdentifier(),
+        context.GetWritingCounters()->GetWriteFlowCounters(), orbit, context.GetTabletId(), Cookie, txId, orbitStartInstant);
     writeMeta->SetModificationType(ModificationType);
     writeMeta->SetBulk(IsBulk());
     auto writingAction = owner.StoragesManager->GetInsertOperator()->StartWritingAction(NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR);
     writingAction->SetBulk(IsBulk());
+    writingAction->SetCacheAfterWrite(NBlobCache::ShouldCacheAfterWrite(context.GetActualSchema()->GetIndexInfo().GetCacheBlobsAfterWrite(),
+        NOlap::NBlobOperations::EConsumer::WRITING_OPERATOR, (ui64)owner.Settings.CacheDataAfterIndexing != 0,
+        (ui64)owner.Settings.CacheDataAfterCompaction != 0));
     NEvWrite::TWriteData writeData(writeMeta, data, owner.TablesManager.GetPrimaryIndex()->GetReplaceKey(), std::move(writingAction));
     std::shared_ptr<NConveyor::ITask> task = std::make_shared<NOlap::TBuildBatchesTask>(std::move(writeData), context);
     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);

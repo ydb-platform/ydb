@@ -47,6 +47,7 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry, TKernelFamily
     RegisterAbs(registry);
     RegisterAbs(kernelFamilyMap);
     RegisterConvert(registry);
+    RegisterToString(kernelFamilyMap);
     RegisterConcat(registry);
     RegisterSubstring(registry);
     RegisterFind(registry);

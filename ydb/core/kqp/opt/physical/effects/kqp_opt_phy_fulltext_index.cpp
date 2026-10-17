@@ -59,8 +59,8 @@ TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExpr
     NFulltext::EIndexMode mode = NFulltext::EIndexMode::Invalid;
 
     if (indexDesc->Type == TIndexDescription::EType::GlobalJson) {
-        YQL_ENSURE(indexDesc->KeyColumns.size() == 1, "Expected single key column in JSON index");
-        textColumn = indexDesc->KeyColumns.at(0);
+        YQL_ENSURE(indexDesc->KeyColumns.size() >= 1, "Expected at least one key column in JSON index");
+        textColumn = indexDesc->KeyColumns.back();
 
         auto columnType = table.GetColumnType(textColumn);
         YQL_ENSURE(columnType, "Failed to get column type for JSON index column");

@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(50)
@@ -11,10 +13,6 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/tests/tools/datastreams_helpers
     ydb/tests/tools/fq_runner
-)
-
-DEPENDS(
-    ydb/tests/tools/pq_read
 )
 
 PY_SRCS(

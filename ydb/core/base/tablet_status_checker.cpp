@@ -1,5 +1,6 @@
 #include "tablet.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -23,7 +24,7 @@ private:
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
             LightYellowMoveGroups.push_back(ev->Cookie);
         }
-        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+        if (msg->StatusFlags.Check(StopWritingStatusFlag(DataKindByTabletType(Info->TabletType)))) {
             YellowStopGroups.push_back(ev->Cookie);
         }
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {

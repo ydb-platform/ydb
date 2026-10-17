@@ -542,7 +542,7 @@ int TCommandPermissionList::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     NScheme::TSchemeEntry entry = result.GetEntry();
     Cout << Endl;
-    PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions);
+    PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions, entry.InterruptInheritance);
     return EXIT_SUCCESS;
 }
 

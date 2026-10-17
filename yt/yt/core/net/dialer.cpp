@@ -44,8 +44,8 @@ public:
 
         Promise_.OnCanceled(BIND([this, this_ = MakeStrong(this)] (const TError& error) {
             Promise_.TrySet(TError(NYT::EErrorCode::Canceled, "Dial canceled")
-                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
-                << error);
+                .With("remote_address", ToString(RemoteAddress_))
+                .With(error));
         }));
 
         return Promise_.ToFuture();
@@ -62,8 +62,8 @@ private:
     {
         if (!fdOrError.IsOK()) {
             Promise_.TrySet(TError("Dial failed")
-                << TErrorAttribute("remote_address", ToString(RemoteAddress_))
-                << fdOrError);
+                .With("remote_address", ToString(RemoteAddress_))
+                .With(fdOrError));
             return;
         }
 
@@ -214,7 +214,7 @@ private:
     const TGuid Id_;
     const NLogging::TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     SOCKET Socket_ = INVALID_SOCKET;
     bool Dialed_ = false;
     bool Finished_ = false;
@@ -262,7 +262,7 @@ private:
         YT_UNUSED_FUTURE(Poller_->Unregister(pollable));
     }
 
-    void Connect(TGuard<NThreading::TSpinLock>& guard)
+    void Connect(TGuard<TSpinLock>& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -335,7 +335,7 @@ private:
             OnFinished_(socket);
         } else {
             auto error = TError(NRpc::EErrorCode::TransportError, "Connect error")
-                << TError::FromSystem(socketError);
+                .With(TError::FromSystem(socketError));
             CloseSocket();
             guard.Release();
             OnFinished_(error);
@@ -379,8 +379,9 @@ private:
 
         if (TInstant::Now() >= Deadline_) {
             auto error = TError(NRpc::EErrorCode::TransportError, "Connect timeout")
-                << TErrorAttribute("timeout", Config_->ConnectTimeout);
-            YT_LOG_ERROR(error);
+                .With("timeout", Config_->ConnectTimeout);
+            YT_TLOG_ERROR("Dialer session timed out")
+                .With(error);
             Finished_ = true;
             guard.Release();
             OnFinished_(error);

@@ -70,7 +70,7 @@ TFuture<TTimestamp> TTimestampProviderBase::OnGenerateTimestamps(
     const TErrorOr<TTimestamp>& timestampOrError)
 {
     if (!timestampOrError.IsOK()) {
-        auto error = TError("Error generating fresh timestamps") << timestampOrError;
+        auto error = TError("Error generating fresh timestamps").With(timestampOrError);
         YT_TLOG_ERROR("Error generating fresh timestamps")
             .With(timestampOrError);
         return MakeFuture<TTimestamp>(error);

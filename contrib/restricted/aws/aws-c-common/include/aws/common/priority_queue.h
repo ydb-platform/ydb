@@ -51,7 +51,7 @@ AWS_EXTERN_C_BEGIN
 
 /**
  * Initializes a priority queue struct for use. This mode will grow memory automatically (exponential model)
- * Default size is the inital size of the queue
+ * Default size is the initial size of the queue
  * item_size is the size of each element in bytes. Mixing items types is not supported by this API.
  * pred is the function that will be used to determine priority.
  */

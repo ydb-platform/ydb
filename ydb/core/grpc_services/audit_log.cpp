@@ -6,6 +6,8 @@
 #include "base/base.h"
 #include "audit_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -27,12 +29,11 @@ void AuditLogConn(const IRequestProxyCtx* ctx, const TString& database, const TS
     );
 
     // and transitional, to be removed, output to the common log
-    LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_SERVER, "AUDIT: "
-        << "request name: " << ctx->GetRequestName()
-        << ", database: " << database
-        << ", peer: " << ctx->GetPeerName()
-        << ", subject: " << (userSID ? userSID : "no subject")
-    );
+    YDB_LOG_NOTICE("AUDIT: request",
+        {"name", ctx->GetRequestName()},
+        {"database", database},
+        {"peer", ctx->GetPeerName()},
+        {"subject", (userSID ? userSID : "no subject")});
 }
 
 void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
@@ -59,8 +60,13 @@ void AuditLog(std::optional<ui32> status, const TAuditLogParts& parts)
     );
 }
 
-void AuditLogConnectDbAccessDenied(const IRequestProxyCtx* ctx, const TString& database, const TString& userSID, const TString& sanitizedToken)
-{
+void AuditLogConnectDbAccessDenied(
+    const IRequestProxyCtx* ctx,
+    const TString& database,
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& reason
+) {
     if (::NKikimr::NAudit::AUDIT_LOG_ENABLED.load()) {
         AuditLog(Ydb::StatusIds::UNAUTHORIZED, {
             {"remote_address", NKikimr::NAddressClassifier::ExtractAddress(ctx->GetPeerName())},
@@ -68,7 +74,7 @@ void AuditLogConnectDbAccessDenied(const IRequestProxyCtx* ctx, const TString& d
             {"sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EmptyValue)},
             {"database", database},
             {"operation", ctx->GetRequestName()},
-            {"reason", "No permission to connect to the database"},
+            {"reason", reason},
         });
     }
 }

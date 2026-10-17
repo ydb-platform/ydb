@@ -1,8 +1,12 @@
 #include "decoder.h"
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
+
 #include <ydb/library/actors/core/log.h>
+
+#include <contrib/libs/protobuf/src/google/protobuf/text_format.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT 0
 
 namespace NKikimr::NMetadata::NInternal {
 
@@ -71,7 +75,8 @@ bool TDecoderBase::Read(const i32 columnIdx, TDuration& result, const Ydb::Value
     }
     const TString& s = r.items()[columnIdx].bytes_value();
     if (!TDuration::TryParse(s, result)) {
-        ALS_WARN(0) << "cannot parse duration for tiering: " << s;
+        YDB_LOG_WARN("Cannot parse duration",
+            {"tiering", s});
         return false;
     }
     return true;
@@ -85,7 +90,7 @@ bool TDecoderBase::Read(const i32 columnIdx, bool& result, const Ydb::Value& r) 
     if (pValue.has_bool_value()) {
         result = pValue.bool_value();
     } else {
-        ALS_WARN(0) << "incorrect type for instant seconds parsing";
+        YDB_LOG_WARN("Incorrect type for instant seconds parsing");
         return false;
     }
     return true;
@@ -105,7 +110,7 @@ bool TDecoderBase::Read(const i32 columnIdx, TInstant& result, const Ydb::Value&
     } else if (pValue.has_int32_value()) {
         result = TInstant::Seconds(pValue.int32_value());
     } else {
-        ALS_WARN(0) << "incorrect type for instant seconds parsing";
+        YDB_LOG_WARN("Incorrect type for instant seconds parsing");
         return false;
     }
     return true;
@@ -121,11 +126,12 @@ bool TDecoderBase::ReadJson(const i32 columnIdx, NJson::TJsonValue& result, cons
     } else if (r.items()[columnIdx].has_text_value()) {
         jsonString = &r.items()[columnIdx].text_value();
     } else {
-        ALS_ERROR(0) << "no data for json string";
+        YDB_LOG_ERROR("No data for json string");
         return false;
     }
     if (!NJson::ReadJsonFastTree(*jsonString, &result)) {
-        ALS_ERROR(0) << "cannot parse json string: " << *jsonString;
+        YDB_LOG_ERROR("Cannot parse json",
+            {"string", *jsonString});
         return false;
     }
     return true;
@@ -141,14 +147,15 @@ bool TDecoderBase::ReadDebugProto(const i32 columnIdx, ::google::protobuf::Messa
     } else if (r.items()[columnIdx].has_text_value()) {
         jsonString = &r.items()[columnIdx].text_value();
     } else {
-        ALS_ERROR(0) << "no data for debug proto string";
+        YDB_LOG_ERROR("No data for debug proto string");
         return false;
     }
     if (!::google::protobuf::TextFormat::ParseFromString(*jsonString, &result)) {
-        ALS_ERROR(0) << "cannot parse proto string: " << *jsonString;
+        YDB_LOG_ERROR("Cannot parse proto",
+            {"string", *jsonString});
         return false;
     }
     return true;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

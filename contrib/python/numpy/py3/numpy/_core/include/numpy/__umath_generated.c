@@ -10,6 +10,7 @@
 #include "matmul.h"
 #include "clip.h"
 #include "dtypemeta.h"
+#include "dispatching.h"
 #include "_umath_doc_generated.h"
 
 static PyUFuncGenericFunction _arg_functions[] = {CFLOAT__arg, CDOUBLE__arg, CLONGDOUBLE__arg};
@@ -204,6 +205,9 @@ static const char logical_xor_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_
 static PyUFuncGenericFunction matmul_functions[] = {BOOL_matmul, BYTE_matmul, UBYTE_matmul, SHORT_matmul, USHORT_matmul, INT_matmul, UINT_matmul, LONG_matmul, ULONG_matmul, LONGLONG_matmul, ULONGLONG_matmul, HALF_matmul, FLOAT_matmul, DOUBLE_matmul, LONGDOUBLE_matmul, CFLOAT_matmul, CDOUBLE_matmul, CLONGDOUBLE_matmul, OBJECT_matmul};
 static void * matmul_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char matmul_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
+static PyUFuncGenericFunction matvec_functions[] = {BOOL_matvec, BYTE_matvec, UBYTE_matvec, SHORT_matvec, USHORT_matvec, INT_matvec, UINT_matvec, LONG_matvec, ULONG_matvec, LONGLONG_matvec, ULONGLONG_matvec, HALF_matvec, FLOAT_matvec, DOUBLE_matvec, LONGDOUBLE_matvec, CFLOAT_matvec, CDOUBLE_matvec, CLONGDOUBLE_matvec, OBJECT_matvec};
+static void * matvec_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
+static const char matvec_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
 static PyUFuncGenericFunction maximum_functions[] = {BOOL_logical_or, BYTE_maximum, UBYTE_maximum, SHORT_maximum, USHORT_maximum, INT_maximum, UINT_maximum, LONG_maximum, ULONG_maximum, LONGLONG_maximum, ULONGLONG_maximum, HALF_maximum, FLOAT_maximum, DOUBLE_maximum, LONGDOUBLE_maximum, CFLOAT_maximum, CDOUBLE_maximum, CLONGDOUBLE_maximum, TIMEDELTA_maximum, DATETIME_maximum, NULL};
 static void * maximum_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char maximum_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_TIMEDELTA, NPY_TIMEDELTA, NPY_TIMEDELTA, NPY_DATETIME, NPY_DATETIME, NPY_DATETIME, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
@@ -285,10 +289,9 @@ static const char trunc_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, 
 static PyUFuncGenericFunction vecdot_functions[] = {BOOL_vecdot, BYTE_vecdot, UBYTE_vecdot, SHORT_vecdot, USHORT_vecdot, INT_vecdot, UINT_vecdot, LONG_vecdot, ULONG_vecdot, LONGLONG_vecdot, ULONGLONG_vecdot, HALF_vecdot, FLOAT_vecdot, DOUBLE_vecdot, LONGDOUBLE_vecdot, CFLOAT_vecdot, CDOUBLE_vecdot, CLONGDOUBLE_vecdot, OBJECT_vecdot};
 static void * vecdot_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char vecdot_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
-/* Returns a borrowed ref of the second value in the matching info tuple */
-PyObject *
-get_info_no_cast(PyUFuncObject *ufunc, PyArray_DTypeMeta *op_dtype,
-                 int ndtypes);
+static PyUFuncGenericFunction vecmat_functions[] = {BOOL_vecmat, BYTE_vecmat, UBYTE_vecmat, SHORT_vecmat, USHORT_vecmat, INT_vecmat, UINT_vecmat, LONG_vecmat, ULONG_vecmat, LONGLONG_vecmat, ULONGLONG_vecmat, HALF_vecmat, FLOAT_vecmat, DOUBLE_vecmat, LONGDOUBLE_vecmat, CFLOAT_vecmat, CDOUBLE_vecmat, CLONGDOUBLE_vecmat, OBJECT_vecmat};
+static void * vecmat_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
+static const char vecmat_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
 
 static int
 InitOperators(PyObject *dictionary) {
@@ -822,9 +825,7 @@ InitOperators(PyObject *dictionary) {
     trunc_functions[17] = PyUFunc_O_O;
     trunc_data[17] = (void *) npy_ObjectTrunc;
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_logical.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("absolute", "??");
     NPY_CPU_DISPATCH_CALL_XB(absolute_functions[0] = BOOL_absolute);
@@ -866,9 +867,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(multiply_functions[0] = BOOL_logical_and);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_autovec.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("absolute", "bb");
     NPY_CPU_DISPATCH_CALL_XB(absolute_functions[1] = BYTE_absolute);
@@ -1549,9 +1548,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(subtract_functions[9] = ULONGLONG_subtract);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_unary_fp.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("absolute", "ff");
     NPY_CPU_DISPATCH_CALL_XB(absolute_functions[12] = FLOAT_absolute);
@@ -1602,9 +1599,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(trunc_functions[13] = DOUBLE_trunc);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_unary_complex.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("absolute", "Ff");
     NPY_CPU_DISPATCH_CALL_XB(absolute_functions[16] = CFLOAT_absolute);
@@ -1613,9 +1608,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(absolute_functions[17] = CDOUBLE_absolute);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_arithm_fp.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("add", "fff");
     NPY_CPU_DISPATCH_CALL_XB(add_functions[12] = FLOAT_add);
@@ -1672,12 +1665,70 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(subtract_functions[15] = CDOUBLE_subtract);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
-    #include "loops_umath_fp.dispatch.h"
-    #endif
+    #include "loops_half.dispatch.h"
     
     NPY_CPU_DISPATCH_TRACE("arccos", "ee");
     NPY_CPU_DISPATCH_CALL_XB(arccos_functions[0] = HALF_arccos);
+    
+    NPY_CPU_DISPATCH_TRACE("arccosh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(arccosh_functions[0] = HALF_arccosh);
+    
+    NPY_CPU_DISPATCH_TRACE("arcsin", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(arcsin_functions[0] = HALF_arcsin);
+    
+    NPY_CPU_DISPATCH_TRACE("arcsinh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(arcsinh_functions[0] = HALF_arcsinh);
+    
+    NPY_CPU_DISPATCH_TRACE("arctan", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(arctan_functions[0] = HALF_arctan);
+    
+    NPY_CPU_DISPATCH_TRACE("arctanh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(arctanh_functions[0] = HALF_arctanh);
+    
+    NPY_CPU_DISPATCH_TRACE("cbrt", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(cbrt_functions[0] = HALF_cbrt);
+    
+    NPY_CPU_DISPATCH_TRACE("cos", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(cos_functions[0] = HALF_cos);
+    
+    NPY_CPU_DISPATCH_TRACE("cosh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(cosh_functions[0] = HALF_cosh);
+    
+    NPY_CPU_DISPATCH_TRACE("exp", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(exp_functions[0] = HALF_exp);
+    
+    NPY_CPU_DISPATCH_TRACE("exp2", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(exp2_functions[0] = HALF_exp2);
+    
+    NPY_CPU_DISPATCH_TRACE("expm1", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(expm1_functions[0] = HALF_expm1);
+    
+    NPY_CPU_DISPATCH_TRACE("log", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(log_functions[0] = HALF_log);
+    
+    NPY_CPU_DISPATCH_TRACE("log10", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(log10_functions[0] = HALF_log10);
+    
+    NPY_CPU_DISPATCH_TRACE("log1p", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(log1p_functions[0] = HALF_log1p);
+    
+    NPY_CPU_DISPATCH_TRACE("log2", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(log2_functions[0] = HALF_log2);
+    
+    NPY_CPU_DISPATCH_TRACE("sin", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(sin_functions[0] = HALF_sin);
+    
+    NPY_CPU_DISPATCH_TRACE("sinh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(sinh_functions[0] = HALF_sinh);
+    
+    NPY_CPU_DISPATCH_TRACE("tan", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(tan_functions[0] = HALF_tan);
+    
+    NPY_CPU_DISPATCH_TRACE("tanh", "ee");
+    NPY_CPU_DISPATCH_CALL_XB(tanh_functions[0] = HALF_tanh);
+    
+    
+    #include "loops_umath_fp.dispatch.h"
     
     NPY_CPU_DISPATCH_TRACE("arccos", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arccos_functions[1] = FLOAT_arccos);
@@ -1685,17 +1736,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("arccos", "dd");
     NPY_CPU_DISPATCH_CALL_XB(arccos_functions[2] = DOUBLE_arccos);
     
-    NPY_CPU_DISPATCH_TRACE("arccosh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(arccosh_functions[0] = HALF_arccosh);
-    
     NPY_CPU_DISPATCH_TRACE("arccosh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arccosh_functions[1] = FLOAT_arccosh);
     
     NPY_CPU_DISPATCH_TRACE("arccosh", "dd");
     NPY_CPU_DISPATCH_CALL_XB(arccosh_functions[2] = DOUBLE_arccosh);
-    
-    NPY_CPU_DISPATCH_TRACE("arcsin", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(arcsin_functions[0] = HALF_arcsin);
     
     NPY_CPU_DISPATCH_TRACE("arcsin", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arcsin_functions[1] = FLOAT_arcsin);
@@ -1703,17 +1748,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("arcsin", "dd");
     NPY_CPU_DISPATCH_CALL_XB(arcsin_functions[2] = DOUBLE_arcsin);
     
-    NPY_CPU_DISPATCH_TRACE("arcsinh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(arcsinh_functions[0] = HALF_arcsinh);
-    
     NPY_CPU_DISPATCH_TRACE("arcsinh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arcsinh_functions[1] = FLOAT_arcsinh);
     
     NPY_CPU_DISPATCH_TRACE("arcsinh", "dd");
     NPY_CPU_DISPATCH_CALL_XB(arcsinh_functions[2] = DOUBLE_arcsinh);
-    
-    NPY_CPU_DISPATCH_TRACE("arctan", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(arctan_functions[0] = HALF_arctan);
     
     NPY_CPU_DISPATCH_TRACE("arctan", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arctan_functions[1] = FLOAT_arctan);
@@ -1727,17 +1766,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("arctan2", "ddd");
     NPY_CPU_DISPATCH_CALL_XB(arctan2_functions[2] = DOUBLE_arctan2);
     
-    NPY_CPU_DISPATCH_TRACE("arctanh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(arctanh_functions[0] = HALF_arctanh);
-    
     NPY_CPU_DISPATCH_TRACE("arctanh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(arctanh_functions[1] = FLOAT_arctanh);
     
     NPY_CPU_DISPATCH_TRACE("arctanh", "dd");
     NPY_CPU_DISPATCH_CALL_XB(arctanh_functions[2] = DOUBLE_arctanh);
-    
-    NPY_CPU_DISPATCH_TRACE("cbrt", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(cbrt_functions[0] = HALF_cbrt);
     
     NPY_CPU_DISPATCH_TRACE("cbrt", "ff");
     NPY_CPU_DISPATCH_CALL_XB(cbrt_functions[1] = FLOAT_cbrt);
@@ -1745,23 +1778,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("cbrt", "dd");
     NPY_CPU_DISPATCH_CALL_XB(cbrt_functions[2] = DOUBLE_cbrt);
     
-    NPY_CPU_DISPATCH_TRACE("cos", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(cos_functions[0] = HALF_cos);
-    
-    NPY_CPU_DISPATCH_TRACE("cosh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(cosh_functions[0] = HALF_cosh);
-    
     NPY_CPU_DISPATCH_TRACE("cosh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(cosh_functions[1] = FLOAT_cosh);
     
     NPY_CPU_DISPATCH_TRACE("cosh", "dd");
     NPY_CPU_DISPATCH_CALL_XB(cosh_functions[2] = DOUBLE_cosh);
-    
-    NPY_CPU_DISPATCH_TRACE("exp", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(exp_functions[0] = HALF_exp);
-    
-    NPY_CPU_DISPATCH_TRACE("exp2", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(exp2_functions[0] = HALF_exp2);
     
     NPY_CPU_DISPATCH_TRACE("exp2", "ff");
     NPY_CPU_DISPATCH_CALL_XB(exp2_functions[1] = FLOAT_exp2);
@@ -1769,20 +1790,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("exp2", "dd");
     NPY_CPU_DISPATCH_CALL_XB(exp2_functions[2] = DOUBLE_exp2);
     
-    NPY_CPU_DISPATCH_TRACE("expm1", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(expm1_functions[0] = HALF_expm1);
-    
     NPY_CPU_DISPATCH_TRACE("expm1", "ff");
     NPY_CPU_DISPATCH_CALL_XB(expm1_functions[1] = FLOAT_expm1);
     
     NPY_CPU_DISPATCH_TRACE("expm1", "dd");
     NPY_CPU_DISPATCH_CALL_XB(expm1_functions[2] = DOUBLE_expm1);
-    
-    NPY_CPU_DISPATCH_TRACE("log", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(log_functions[0] = HALF_log);
-    
-    NPY_CPU_DISPATCH_TRACE("log10", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(log10_functions[0] = HALF_log10);
     
     NPY_CPU_DISPATCH_TRACE("log10", "ff");
     NPY_CPU_DISPATCH_CALL_XB(log10_functions[1] = FLOAT_log10);
@@ -1790,17 +1802,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("log10", "dd");
     NPY_CPU_DISPATCH_CALL_XB(log10_functions[2] = DOUBLE_log10);
     
-    NPY_CPU_DISPATCH_TRACE("log1p", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(log1p_functions[0] = HALF_log1p);
-    
     NPY_CPU_DISPATCH_TRACE("log1p", "ff");
     NPY_CPU_DISPATCH_CALL_XB(log1p_functions[1] = FLOAT_log1p);
     
     NPY_CPU_DISPATCH_TRACE("log1p", "dd");
     NPY_CPU_DISPATCH_CALL_XB(log1p_functions[2] = DOUBLE_log1p);
-    
-    NPY_CPU_DISPATCH_TRACE("log2", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(log2_functions[0] = HALF_log2);
     
     NPY_CPU_DISPATCH_TRACE("log2", "ff");
     NPY_CPU_DISPATCH_CALL_XB(log2_functions[1] = FLOAT_log2);
@@ -1814,20 +1820,11 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("power", "ddd");
     NPY_CPU_DISPATCH_CALL_XB(power_functions[12] = DOUBLE_power);
     
-    NPY_CPU_DISPATCH_TRACE("sin", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(sin_functions[0] = HALF_sin);
-    
-    NPY_CPU_DISPATCH_TRACE("sinh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(sinh_functions[0] = HALF_sinh);
-    
     NPY_CPU_DISPATCH_TRACE("sinh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(sinh_functions[1] = FLOAT_sinh);
     
     NPY_CPU_DISPATCH_TRACE("sinh", "dd");
     NPY_CPU_DISPATCH_CALL_XB(sinh_functions[2] = DOUBLE_sinh);
-    
-    NPY_CPU_DISPATCH_TRACE("tan", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(tan_functions[0] = HALF_tan);
     
     NPY_CPU_DISPATCH_TRACE("tan", "ff");
     NPY_CPU_DISPATCH_CALL_XB(tan_functions[1] = FLOAT_tan);
@@ -1835,13 +1832,8 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_TRACE("tan", "dd");
     NPY_CPU_DISPATCH_CALL_XB(tan_functions[2] = DOUBLE_tan);
     
-    NPY_CPU_DISPATCH_TRACE("tanh", "ee");
-    NPY_CPU_DISPATCH_CALL_XB(tanh_functions[0] = HALF_tanh);
     
-    
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_comparison.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("bitwise_xor", "???");
     NPY_CPU_DISPATCH_CALL_XB(bitwise_xor_functions[0] = BOOL_not_equal);
@@ -1886,9 +1878,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(not_equal_functions[15] = DOUBLE_not_equal);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_trigonometric.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("cos", "ff");
     NPY_CPU_DISPATCH_CALL_XB(cos_functions[1] = FLOAT_cos);
@@ -1903,9 +1893,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(sin_functions[2] = DOUBLE_sin);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_modulo.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("divmod", "bbbb");
     NPY_CPU_DISPATCH_CALL_XB(divmod_functions[0] = BYTE_divmod);
@@ -1998,9 +1986,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(remainder_functions[9] = ULONGLONG_remainder);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_exponent_log.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("exp", "ff");
     NPY_CPU_DISPATCH_CALL_XB(exp_functions[1] = FLOAT_exp);
@@ -2027,9 +2013,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(log_functions[2] = DOUBLE_log);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_arithmetic.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("floor_divide", "bbb");
     NPY_CPU_DISPATCH_CALL_XB(floor_divide_functions[0] = BYTE_divide);
@@ -2062,9 +2046,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(floor_divide_functions[9] = ULONGLONG_divide);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_minmax.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("fmax", "fff");
     NPY_CPU_DISPATCH_CALL_XB(fmax_functions[12] = FLOAT_fmax);
@@ -2163,9 +2145,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(minimum_functions[14] = LONGDOUBLE_minimum);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_unary_fp_le.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("isfinite", "f?");
     NPY_CPU_DISPATCH_CALL_XB(isfinite_functions[12] = FLOAT_isfinite);
@@ -2192,9 +2172,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(signbit_functions[2] = DOUBLE_signbit);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_unary.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("negative", "bb");
     NPY_CPU_DISPATCH_CALL_XB(negative_functions[0] = BYTE_negative);
@@ -2236,9 +2214,7 @@ InitOperators(PyObject *dictionary) {
     NPY_CPU_DISPATCH_CALL_XB(negative_functions[13] = LONGDOUBLE_negative);
     
     
-    #ifndef NPY_DISABLE_OPTIMIZATION
     #include "loops_hyperbolic.dispatch.h"
-    #endif
     
     NPY_CPU_DISPATCH_TRACE("tanh", "ff");
     NPY_CPU_DISPATCH_CALL_XB(tanh_functions[1] = FLOAT_tanh);
@@ -2534,6 +2510,24 @@ InitOperators(PyObject *dictionary) {
     }
     
     PyDict_SetItemString(dictionary, "_rstrip_whitespace", f);
+    Py_DECREF(f);
+    identity = NULL;
+    if (0 && identity == NULL) {
+        return -1;
+    }
+    f = PyUFunc_FromFuncAndDataAndSignatureAndIdentity(
+        NULL, NULL, NULL, 0,
+        4, 1, PyUFunc_None, "_slice",
+        DOC_NUMPY__CORE_UMATH__SLICE, 0, NULL, identity
+    );
+    if (0) {
+        Py_DECREF(identity);
+    }
+    if (f == NULL) {
+        return -1;
+    }
+    
+    PyDict_SetItemString(dictionary, "_slice", f);
     Py_DECREF(f);
     identity = NULL;
     if (0 && identity == NULL) {
@@ -5474,6 +5468,25 @@ InitOperators(PyObject *dictionary) {
     ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
     PyDict_SetItemString(dictionary, "matmul", f);
     Py_DECREF(f);
+    identity = NULL;
+    if (0 && identity == NULL) {
+        return -1;
+    }
+    f = PyUFunc_FromFuncAndDataAndSignatureAndIdentity(
+        matvec_functions, matvec_data, matvec_signatures, 19,
+        2, 1, PyUFunc_None, "matvec",
+        DOC_NUMPY__CORE_UMATH_MATVEC, 0, "(m,n),(n)->(m)", identity
+    );
+    if (0) {
+        Py_DECREF(identity);
+    }
+    if (f == NULL) {
+        return -1;
+    }
+    
+    ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
+    PyDict_SetItemString(dictionary, "matvec", f);
+    Py_DECREF(f);
     identity = (Py_INCREF(Py_None), Py_None);
     if (1 && identity == NULL) {
         return -1;
@@ -7529,6 +7542,25 @@ InitOperators(PyObject *dictionary) {
     
     ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
     PyDict_SetItemString(dictionary, "vecdot", f);
+    Py_DECREF(f);
+    identity = NULL;
+    if (0 && identity == NULL) {
+        return -1;
+    }
+    f = PyUFunc_FromFuncAndDataAndSignatureAndIdentity(
+        vecmat_functions, vecmat_data, vecmat_signatures, 19,
+        2, 1, PyUFunc_None, "vecmat",
+        DOC_NUMPY__CORE_UMATH_VECMAT, 0, "(n),(n,m)->(m)", identity
+    );
+    if (0) {
+        Py_DECREF(identity);
+    }
+    if (f == NULL) {
+        return -1;
+    }
+    
+    ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
+    PyDict_SetItemString(dictionary, "vecmat", f);
     Py_DECREF(f);
 
     return 0;

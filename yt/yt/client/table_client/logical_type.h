@@ -41,7 +41,20 @@ DEFINE_ENUM(ELogicalMetatype,
     (Tagged)
 
     (Decimal)
+
+    (AggregateState)
 );
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EAggregateFunction,
+    (Sum)
+    (Avg)
+    (Min)
+    (Max)
+);
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TLogicalType
     : public virtual TRefCounted
@@ -70,6 +83,8 @@ public:
     Y_FORCE_INLINE const TDictLogicalType& UncheckedAsDictTypeRef() const;
     const TTaggedLogicalType& AsTaggedTypeRef() const;
     Y_FORCE_INLINE const TTaggedLogicalType& UncheckedAsTaggedTypeRef() const;
+    const TAggregateStateLogicalType& AsAggregateStateTypeRef() const;
+    Y_FORCE_INLINE const TAggregateStateLogicalType& UncheckedAsAggregateStateTypeRef() const;
 
     virtual i64 GetMemoryUsage() const = 0;
     virtual i64 GetMemoryUsage(i64 threshold) const = 0;
@@ -87,19 +102,19 @@ public:
     // Logical type MUST have appropriate metatype otherwise abort() will be called.
 
     //
-    // Return underlying element for Optional,List,Tagged.
+    // Return underlying element for Optional, List, Tagged, AggregateState.
     const TLogicalTypePtr& GetElement() const;
 
     //
-    // Return elements for Tuple,VariantTuple
+    // Return elements for Tuple, VariantTuple.
     const std::vector<TLogicalTypePtr>& GetElements() const;
 
     //
-    // Return fields for Struct,VariantStruct
+    // Return fields for Struct, VariantStruct.
     const std::vector<TStructField>& GetFields() const;
 
     //
-    // Return stable names of removed fields for Struct,VariantStruct
+    // Return stable names of removed fields for Struct, VariantStruct.
     const std::vector<std::string>& GetRemovedFieldStableNames() const;
 
 private:
@@ -150,6 +165,7 @@ EValueType GetWireType(const TLogicalTypePtr& logicalType);
 TLogicalTypePtr DenullifyLogicalType(const TLogicalTypePtr& logicalType);
 
 // Returns copy of the logical type with all tagged types replaces with its elements.
+// NB: AggregateStateType is considered as tagged type for this function.
 TLogicalTypePtr DetagLogicalType(const TLogicalTypePtr& logicalType);
 
 void ToProto(NProto::TLogicalType* protoLogicalType, const TLogicalTypePtr& logicalType);
@@ -158,6 +174,9 @@ void FromProto(TLogicalTypePtr* logicalType, const NProto::TLogicalType& protoLo
 bool IsComparable(const TLogicalTypePtr& type);
 
 bool IsTzType(const TLogicalTypePtr& logicalType);
+
+bool HasAggregateStateType(const TLogicalTypePtr& logicalType);
+bool HasAggregateStateType(const NProto::TLogicalType& logicalType);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -296,6 +315,7 @@ public:
     TComplexTypeFieldDescriptor DictKey() const;
     TComplexTypeFieldDescriptor DictValue() const;
     TComplexTypeFieldDescriptor TaggedElement() const;
+    TComplexTypeFieldDescriptor AggregateStateElement() const;
 
     TComplexTypeFieldDescriptor Detag() const;
 
@@ -460,6 +480,34 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TAggregateStateLogicalType
+    : public TLogicalType
+{
+public:
+    TAggregateStateLogicalType(
+        EAggregateFunction function,
+        TLogicalTypePtr argumentType,
+        TLogicalTypePtr element = nullptr);
+
+    Y_FORCE_INLINE EAggregateFunction GetFunction() const;
+    Y_FORCE_INLINE const TLogicalTypePtr& GetArgumentType() const;
+    Y_FORCE_INLINE const TLogicalTypePtr& GetElement() const;
+
+    i64 GetMemoryUsage() const override;
+    i64 GetMemoryUsage(i64 threshold) const override;
+    int GetTypeComplexity() const override;
+    void ValidateNode(const TWalkContext& context) const override;
+
+    bool IsNullable() const override;
+
+private:
+    const EAggregateFunction Function_;
+    const TLogicalTypePtr ArgumentType_;
+    const TLogicalTypePtr Element_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TLogicalTypePtr SimpleLogicalType(ESimpleLogicalValueType element);
 TLogicalTypePtr DecimalLogicalType(int precision, int scale);
 TLogicalTypePtr OptionalLogicalType(TLogicalTypePtr element);
@@ -476,6 +524,10 @@ TLogicalTypePtr VariantTupleLogicalType(std::vector<TLogicalTypePtr> elements);
 
 TLogicalTypePtr DictLogicalType(TLogicalTypePtr key, TLogicalTypePtr value);
 TLogicalTypePtr TaggedLogicalType(std::string tag, TLogicalTypePtr element);
+TLogicalTypePtr AggregateStateLogicalType(
+    EAggregateFunction function,
+    TLogicalTypePtr argumentType,
+    TLogicalTypePtr elementType = nullptr);
 TLogicalTypePtr NullLogicalType();
 
 TLogicalTypePtr MakeOptionalIfNot(TLogicalTypePtr element);

@@ -1,0 +1,1 @@
+SELECT AdvEngineID, COUNT(*) as cnt FROM `/Root/hits` WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY cnt DESC;

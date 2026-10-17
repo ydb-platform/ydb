@@ -734,8 +734,15 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
         ui32 disksInDomain = 1u;
         TConfiguration Conf(TAllPDisksConfiguration::MkManyTmp(1, 512u << 10u, 16ull << 30ull, "ROT"),
                             domainsNum, disksInDomain, NKikimr::TBlobStorageGroupType::ErasureNone);
+
         TFastVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);
+
+        if (Conf.AppData->FeatureFlags.GetEnableTinyDisks()) {
+            // TODO: rewrite test for new huge blob sizes
+            return;
+        }
+
         TTestReplDataWriteAndSync testLoad(&dataSet);
         bool success1 = Conf.Run<TTestReplDataWriteAndSync>(&testLoad, TIMEOUT);
         UNIT_ASSERT(success1);

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_factory.h
@@ -41,7 +41,5 @@ PEERDIR(
     yql/essentials/providers/common/schema/expr
     yql/essentials/parser/pg_catalog
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

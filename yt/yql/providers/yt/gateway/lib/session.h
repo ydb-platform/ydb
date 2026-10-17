@@ -14,6 +14,7 @@ struct TSessionBase: public TThrRefBase {
         TIntrusivePtr<IRandomProvider> randomProvider,
         TIntrusivePtr<ITimeProvider> timeProvider,
         const TYqlOperationOptions& operationOptions,
+        TCredentials::TPtr credentials,
         const TOperationProgressWriter& progressWriter,
         const TSecureTmpStatePtr& useSecureTmp
     );
@@ -27,6 +28,7 @@ struct TSessionBase: public TThrRefBase {
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
     TString SessionId_;
     const TYqlOperationOptions OperationOptions_;
+    const TCredentials::TPtr Credentials_;
     const TOperationProgressWriter ProgressWriter_;
     const TSecureTmpStatePtr UseSecureTmp_;
 };

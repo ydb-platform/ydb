@@ -1,5 +1,6 @@
 #include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/tools/yqlrun/lib/yqlrun_lib.h>
+#include <yql/tools/yqlrun/lib/yqlrun_lib_spark.h>
 #include <yql/tools/yqlrun/http/yql_server.h>
 
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
@@ -129,6 +130,7 @@ int RunUI(int argc, const char* argv[])
     TString gatewaysCfgFile;
     TString fsCfgFile;
     TString pgExtConfig;
+    std::shared_ptr<NSparkTool::TSparkSettings> sparkSettings;
 
     THashMap<TString, TString> clusterMapping;
     clusterMapping["plato"] = YtProviderName;
@@ -150,12 +152,15 @@ int RunUI(int argc, const char* argv[])
     opts.AddLongOption("fs-cfg", "fs configuration file").Optional().RequiredArgument("FILE").StoreResult(&fsCfgFile);
     opts.AddLongOption("pg-ext", "pg extensions config file").StoreResult(&pgExtConfig);
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&sqlFlags, ',');
+    InitSparkSettings(sparkSettings);
+    AddSparkOptions(opts, sparkSettings, /*withSyntax=*/false);
 
     TServerConfig config;
     config.SetAssetsPath("http/www");
     config.InitCliOptions(opts);
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
     config.ParseFromCli(res);
+    ValidateSparkSettings(sparkSettings);
 
     TUserDataTable userData;
     for (auto& s : filesMappingList) {
@@ -285,12 +290,17 @@ int RunUI(int argc, const char* argv[])
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CoreEval, NLog::ELevel::DEBUG);
     NLog::YqlLogger().SetComponentLevel(NLog::EComponent::CorePeepHole, NLog::ELevel::DEBUG);
 
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry;
+    AddSparkTranslator(translatorsRegistry, sparkSettings);
+
     auto server = CreateYqlServer(config,
                 funcRegistry.Get(), udfIndex, ctx.NextUniqueId,
                 userData,
                 std::move(gatewaysConfig),
                 sqlFlags,
-                moduleResolver, udfResolver, fileStorage);
+                moduleResolver, udfResolver, fileStorage, std::move(translatorsRegistry),
+                Nothing()
+    );
     server->Start();
     server->Wait();
 

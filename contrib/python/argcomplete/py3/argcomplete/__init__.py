@@ -9,5 +9,5 @@ from .io import debug, mute_stderr, warn
 from .lexers import split_line
 from .shell_integration import shellcode
 
-autocomplete = CompletionFinder()
+autocomplete: CompletionFinder = CompletionFinder()
 autocomplete.__doc__ = """ Use this to access argcomplete. See :meth:`argcomplete.CompletionFinder.__call__()`. """

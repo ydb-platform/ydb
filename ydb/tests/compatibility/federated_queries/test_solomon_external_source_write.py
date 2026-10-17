@@ -7,7 +7,11 @@ import time
 
 from ydb.library.yql.tools.solomon_emulator.client.client import cleanup_solomon, get_solomon_metrics
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+)
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
@@ -36,9 +40,7 @@ class SolomonExternalSourceWriteTestBase:
             query_service_config={
                 "available_external_data_sources": ["Solomon"],
             },
-            additional_log_configs={
-                'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTER': LogLevels.DEBUG},
+            additional_log_configs={'KQP_PROXY': LogLevels.DEBUG, 'KQP_EXECUTER': LogLevels.DEBUG},
         )
 
     def create_external_data_source(self):
@@ -54,7 +56,9 @@ class SolomonExternalSourceWriteTestBase:
                 );
             """
             session_pool.execute_with_retries(query)
-        self.output_object = f"`{self.SOURCE_NAME}`.`{self.SOLOMON_PROJECT}/{self.SOLOMON_CLUSTER}/{self.SOLOMON_SERVICE}`"
+        self.output_object = (
+            f"`{self.SOURCE_NAME}`.`{self.SOLOMON_PROJECT}/{self.SOLOMON_CLUSTER}/{self.SOLOMON_SERVICE}`"
+        )
 
     def do_test_part(self, sensor_value: int):
         logger.debug(f"write data to solomon with sensor={sensor_value}")
@@ -86,7 +90,9 @@ class TestSolomonExternalSourceWriteMixedCluster(SolomonExternalSourceWriteTestB
         self.do_test_part(sensor_value=43)
 
 
-class TestSolomonExternalSourceWriteRestartToAnotherVersion(SolomonExternalSourceWriteTestBase, RestartToAnotherVersionFixture):
+class TestSolomonExternalSourceWriteRestartToAnotherVersion(
+    SolomonExternalSourceWriteTestBase, RestartToAnotherVersionFixture
+):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()
@@ -98,7 +104,9 @@ class TestSolomonExternalSourceWriteRestartToAnotherVersion(SolomonExternalSourc
         self.do_test_part(sensor_value=43)
 
 
-class TestSolomonExternalSourceWriteRollingUpgradeAndDowngrade(SolomonExternalSourceWriteTestBase, RollingUpgradeAndDowngradeFixture):
+class TestSolomonExternalSourceWriteRollingUpgradeAndDowngrade(
+    SolomonExternalSourceWriteTestBase, RollingUpgradeAndDowngradeFixture
+):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()

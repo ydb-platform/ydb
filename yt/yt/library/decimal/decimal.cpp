@@ -789,7 +789,7 @@ static void ValidateDecimalBinaryValueImpl(TStringBuf binaryDecimal, int precisi
         precision,
         scale,
         textDecimal)
-        << TErrorAttribute("binary_value", HexEncode(binaryDecimal));
+        .With("binary_value", HexEncode(binaryDecimal));
 }
 
 void TDecimal::ValidateBinaryValue(TStringBuf binaryDecimal, int precision, int scale)

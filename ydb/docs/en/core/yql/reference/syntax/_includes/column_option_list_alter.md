@@ -1,5 +1,11 @@
 ### FAMILY <family_name> (column setting)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 Specifies that this column belongs to the specified column group. For more information, see [{#T}](../create_table/family.md).
 
 ### DEFAULT <default_value>
@@ -17,14 +23,16 @@ Sets a default value for the column. If no value is specified for this column wh
 
 ### NOT NULL
 
-There are two operations:
+The following operations are available:
 
+{% if feature_alter_column_not_null == true %}
 * `SET NOT NULL` — sets the `NOT NULL` constraint for the column.
+{% endif %}
 * `DROP NOT NULL` — removes the `NOT NULL` constraint from the column, again allowing `NULL` values.
 
-For more information about how these operations work, see [here](../alter_table/not_null.md).
+For details, see [Changing the `NOT NULL` constraint](../alter_table/not_null.md).
 
-### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
+### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -39,7 +47,7 @@ The following compression parameters can be set for columns:
 
 If `COMPRESSION()` is specified without parameters, the default compression is used for the column. Currently this is `lz4`; future versions will allow configuring default compression at the cluster or table level.
 
-### ENCODING([OFF|DICT])
+### ENCODING([OFF|DICT]) {#encoding}
 
 {% if oss == true and backend_name == "YDB" %}
 

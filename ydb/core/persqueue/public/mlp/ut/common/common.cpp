@@ -105,7 +105,7 @@ void WriteViaMlp(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topic, co
     // Longer timeout: under UseRealThreads=false MLP consumer may flood the mailbox.
     auto response = GetWriteResponse(runtime, TDuration::Seconds(30));
     UNIT_ASSERT(response);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
 }
@@ -116,7 +116,7 @@ ui64 GetTabletId(std::shared_ptr<TMlpPipeSetup>& setup, const TString& database,
     CreateDescriberActor(setup->GetRuntime(), database, topic);
     auto result = GetDescriberResponse(setup->GetRuntime(), TDuration::Seconds(30));
     UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::Success);
     return result->Topics[topic].Info->PartitionGraph->GetPartition(partitionId)->TabletId;
 }
 
@@ -380,21 +380,21 @@ void WriteManyGroups(const std::shared_ptr<TTopicSdkTestSetup>& setup, const std
     };
     CreateWriterActor(runtime, std::move(settings));
     auto response = GetWriteResponse(runtime);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), messageCount);
 }
 
 ui64 GetTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {
     CreateDescriberActor(setup->GetRuntime(), database, topic);
     auto result = GetDescriberResponse(setup->GetRuntime());
-    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::Success);
     return result->Topics[topic].Info->PartitionGraph->GetPartition(partitionId)->TabletId;
 }
 
 ui64 GetPQRBTabletId(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic) {
     CreateDescriberActor(setup->GetRuntime(), database, topic);
     auto result = GetDescriberResponse(setup->GetRuntime());
-    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::Success);
     return result->Topics[topic].Info->Description.GetBalancerTabletID();
 }
 

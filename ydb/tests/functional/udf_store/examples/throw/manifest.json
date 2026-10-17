@@ -1,0 +1,16 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Throw",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "functions": [
+    {
+      "name": "fail",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

@@ -11,6 +11,7 @@
 | pdisk remove-by-serial | Удалить PDisk из набора по серийному номеру. |
 | pdisk set | Задать параметры PDisk'а. |
 | pdisk list | Вывести список PDisk'ов. |
+| [pdisk populate](pdisk-populate.md) | Разместить те же VDisk'и на другом PDisk для тестирования устройства. |
 | vdisk evict | Переместить VDisk'и на другие PDisk'и. |
 | vdisk remove-donor | Удалить VDisk-донор. |
 | vdisk wipe | Очистить VDisk'и |

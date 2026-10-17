@@ -472,7 +472,7 @@ void TKafkaReadSessionActor::AuthAndFindBalancers(const TActorContext& ctx) {
     }
 
     ctx.Register(new NGRpcProxy::V1::TReadInitAndAuthActor(
-        ctx, ctx.SelfID, GroupId, Cookie, Session, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeSchemeCacheID(), nullptr, Context->UserToken, TopicsToConverter,
+        ctx, ctx.SelfID, GroupId, Cookie, Session, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), MakeSchemeCacheID(), nullptr, Context->Token.UserToken, TopicsToConverter,
         topicHandler->GetLocalCluster(), false));
 }
 

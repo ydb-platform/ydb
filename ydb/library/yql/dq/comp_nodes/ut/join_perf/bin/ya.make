@@ -1,5 +1,8 @@
 PROGRAM(join_perf)
 
+# Benchmark tool, intended for manual runs only.
+TAG(ya:manual)
+
 YQL_LAST_ABI_VERSION()
 
 IF (MKQL_RUNTIME_VERSION)

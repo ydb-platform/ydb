@@ -52,8 +52,6 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     case TWorkloadParams::ECommandType::Import:
         ConfigureCommonOpts(opts);
         ConfigureIndexOpts(opts);
-        opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
-            .DefaultValue(IndexType).StoreResult(&IndexType);
         opts.AddLongOption("kmeans-tree-covering", "Index is covering")
             .DefaultValue(0).StoreResult(&KmeansTreeCovering);
         opts.AddLongOption("kmeans-tree-prefixed", "Index is prefixed")
@@ -85,6 +83,8 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
+    opts.AddLongOption("index-type", "Type of index. Possible values: 'None', 'KmeansTree'")
+        .DefaultValue(IndexType).StoreResult(&IndexType);
     opts.AddLongOption("distance", "Distance/similarity function. "
             "Possible values: 'inner_product', 'cosine', 'euclidean', 'manhattan'")
         .DefaultValue("inner_product").StoreResult(&Distance);

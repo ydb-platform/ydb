@@ -1,15 +1,9 @@
-import sys
-import fractions
 import decimal
-from typing import Any
+import fractions
+from typing import Any, assert_type
 
 import numpy as np
 import numpy.typing as npt
-
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
 
 c16 = np.complex128()
 f8 = np.float64()

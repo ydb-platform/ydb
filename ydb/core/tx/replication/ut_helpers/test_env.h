@@ -3,6 +3,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -167,6 +168,18 @@ public:
     template <typename... Args>
     auto CreateTable(Args&&... args) {
         return Client.CreateTable(std::forward<Args>(args)...);
+    }
+
+    void ConfigureTableProfiles(const NKikimrConfig::TTableProfilesConfig& profiles) {
+        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
+        auto& item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
+        item.MutableConfig()->MutableTableProfilesConfig()->CopyFrom(profiles);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
+        const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     }
 
     template <typename... Args>

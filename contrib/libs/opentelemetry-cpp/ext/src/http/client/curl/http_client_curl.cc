@@ -184,19 +184,29 @@ void Session::SendRequest(
 
     if (stream != Z_OK)
     {
+      // zs.msg points into the stream deflateEnd() releases.
+      const std::string reason = (nullptr != zs.msg) ? zs.msg : "";
+      deflateEnd(&zs);
+
+      // The handler may start another request on this session or drop the last reference to it,
+      // so nothing below this point may touch the session.
+      is_session_active_.store(false, std::memory_order_release);
+
       if (callback)
       {
-        callback->OnEvent(opentelemetry::ext::http::client::SessionState::CreateFailed,
-                          zs.msg ? zs.msg : "");
+        callback->OnEvent(opentelemetry::ext::http::client::SessionState::CreateFailed, reason);
       }
-      is_session_active_.store(false, std::memory_order_release);
+
+      // deflateInPlace() rewrote part of the body before reporting that it would not fit, and no
+      // Content-Encoding header describes what is left. The request does not go out.
+      return;
     }
 
     deflateEnd(&zs);
 #else
     OTEL_INTERNAL_LOG_ERROR(
-        "[HTTP Client Curl] Set WITH_OTLP_HTTP_COMPRESSION=ON to use gzip compression with the "
-        "OTLP HTTP Exporter");
+        "[HTTP Client Curl] Set OTELCPP_WITH_OTLP_HTTP_COMPRESSION=ON to use gzip compression with "
+        "the OTLP HTTP Exporter");
 #endif  // ENABLE_OTLP_COMPRESSION_PREVIEW
   }
 
@@ -207,12 +217,8 @@ void Session::SendRequest(
                         http_request_->is_log_enabled_, http_request_->retry_policy_));
   bool success =
       CURLE_OK == curl_operation_->SendAsync(this, [this, callback](HttpOperation &operation) {
-        if (operation.WasAborted())
-        {
-          // Manually cancelled
-          callback->OnEvent(opentelemetry::ext::http::client::SessionState::Cancelled, "");
-        }
-
+        // Both can hold at once: cancelling only raises a flag, and the transfer may already
+        // have been answered. A request that was answered is reported as answered.
         if (operation.GetSessionState() == opentelemetry::ext::http::client::SessionState::Response)
         {
           // we have a http response
@@ -221,6 +227,11 @@ void Session::SendRequest(
           response->body_        = operation.GetResponseBody();
           response->status_code_ = operation.GetResponseCode();
           callback->OnResponse(*response);
+        }
+        else if (operation.WasAborted())
+        {
+          // Manually cancelled
+          callback->OnEvent(opentelemetry::ext::http::client::SessionState::Cancelled, "");
         }
         is_session_active_.store(false, std::memory_order_release);
       });
@@ -883,8 +894,12 @@ bool HttpClient::doRetrySessions(bool /* report_all */)
 void HttpClient::resetMultiHandle()
 {
   std::list<std::shared_ptr<Session>> sessions;
-  std::lock_guard<std::mutex> session_lock_guard{sessions_m_};
   {
+    // Only the snapshot needs these. CancelSession and doRemoveSessions below both take
+    // sessions_m_ again, and it is not recursive, so holding it across them stops the IO
+    // thread here for good. Cleanup also runs the caller's handler, which this lock was
+    // never meant to cover.
+    std::lock_guard<std::mutex> session_lock_guard{sessions_m_};
     std::lock_guard<std::recursive_mutex> session_id_lock_guard{session_ids_m_};
     for (auto &session : sessions_)
     {

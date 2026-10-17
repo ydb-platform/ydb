@@ -197,6 +197,8 @@ message BootstrapClusterRequest {
     // This field used to make this request indempotent
     // Must be set to arbitrary **unique** string
     string self_assembly_uuid = 2;
+
+    bool allow_unknown_fields = 3;
 }
 
 message BootstrapClusterResponse {

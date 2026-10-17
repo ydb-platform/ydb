@@ -802,5 +802,118 @@ TEST(TVariantStructsTest, TestRemovingFields)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TAggregateStateTest, TestCompatibility)
+{
+    // The same aggregation state.
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, Int32()),
+            AggregateState(EAggregateFunction::Sum, Int32())));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, Int32()),
+            AggregateState(EAggregateFunction::Sum, Int64())));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Avg, Int16()),
+            AggregateState(EAggregateFunction::Avg, Int32())));
+
+    // Altering the state losslessly.
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int32()),
+            AggregateState(EAggregateFunction::Min, Int64())));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Max, Utf8()),
+            AggregateState(EAggregateFunction::Max, String())));
+
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int64()),
+            AggregateState(EAggregateFunction::Min, Int32())));
+
+    // Tags are transparent.
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int32()),
+            Tagged("tag", AggregateState(EAggregateFunction::Min, Int32()))));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            Tagged("tag", AggregateState(EAggregateFunction::Min, Int32())),
+            AggregateState(EAggregateFunction::Min, Int32())));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int32()),
+            Tagged("tag", Optional(Int32()))));
+
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            Tagged("tag", AggregateState(EAggregateFunction::Min, Int32())),
+            Optional(Int32())));
+
+    // Argument types unsupported by the function are rejected by the type validation,
+    // but the compatibility check must not crash on them.
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, String()),
+            AggregateState(EAggregateFunction::Sum, String())));
+
+    // Promoting to underlying type.
+    EXPECT_EQ(ESchemaCompatibility::FullyCompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int32()),
+            Optional(Int32())));
+
+    EXPECT_EQ(ESchemaCompatibility::RequireValidation,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, Int32()),
+            Int32()));
+
+    EXPECT_EQ(ESchemaCompatibility::RequireValidation,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Avg, Int32()),
+            Struct("sum", Int32(), "count", Int32())));
+
+    // Incompatible cases.
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, Int32()),
+            AggregateState(EAggregateFunction::Avg, Int32())));
+
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Min, Int64()),
+            AggregateState(EAggregateFunction::Max, Int64())));
+
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            AggregateState(EAggregateFunction::Sum, Int32()),
+            String()));
+
+    // From underlying state type to AggregateState.
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            Int64(),
+            AggregateState(EAggregateFunction::Sum, Int32())));
+
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            Optional(Int64()),
+            AggregateState(EAggregateFunction::Min, Int64())));
+
+    EXPECT_EQ(ESchemaCompatibility::Incompatible,
+        CheckTypeCompatibilitySimple(
+            Struct("sum", Int64(), "count", Int64()),
+            AggregateState(EAggregateFunction::Avg, Int32())));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT::NTableClient

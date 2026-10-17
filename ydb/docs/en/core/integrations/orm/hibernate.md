@@ -165,7 +165,7 @@ ALTER TABLE Groups
     ON (GroupName);
 ```
 
-If you evolve the Group entity by adding the `deparment` field:
+If you evolve the Group entity by adding the `department` field:
 
 {% list tabs group=lang %}
 

@@ -14,9 +14,10 @@ private:
     std::vector<ISnapshotSchema::TPtr> Schemas;
 
 public:
-    TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas)
+    TDataSourceConstructor(const ui64 tabletId, std::vector<ISnapshotSchema::TPtr>&& schemas, const ESourcesSorting sourcesSorting)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.front()->GetIndexInfo().GetPresetId(), schemas.front()->GetVersion()),
-              TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()))
+              TSchemaAdapter::GetPKSimpleRow(tabletId, schemas.back()->GetIndexInfo().GetPresetId(), schemas.back()->GetVersion()),
+              sourcesSorting)
         , Schemas(std::move(schemas))
     {
         if (Schemas.size() > 1) {
@@ -44,6 +45,6 @@ private:
 
 public:
     TConstructor(const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-        const ERequestSorting sorting);
+        const ESourcesSorting sourcesSorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas

@@ -1,13 +1,14 @@
-import numpy as np
 import pytest
+
+import numpy as np
 
 info = np.__array_namespace_info__()
 
 
 def test_capabilities():
     caps = info.capabilities()
-    assert caps["boolean indexing"] == True
-    assert caps["data-dependent shapes"] == True
+    assert caps["boolean indexing"] is True
+    assert caps["data-dependent shapes"] is True
 
     # This will be added in the 2024.12 release of the array API standard.
 

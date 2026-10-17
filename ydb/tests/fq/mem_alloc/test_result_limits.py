@@ -10,7 +10,6 @@ from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimrConfig
 
 import ydb.public.api.protos.draft.fq_pb2 as fq
 
-
 # Quota per cloud
 QUOTA_ANALYTICS_COUNT_LIMIT = "yq.analyticsQuery.count"
 QUOTA_STREAMING_COUNT_LIMIT = "yq.streamingQuery.count"
@@ -92,7 +91,7 @@ SELECT ListReplicate("A", 10000000);
         client.wait_query_status(query_id, fq.QueryMeta.FAILED, timeout=600)
         issue = client.describe_query(query_id).result.query.issue[0]
         assert "LIMIT_EXCEEDED" in issue.message, "Incorrect issue " + issue.message
-        assert "Can not write Row[0] with size" in issue.issues[0].message and "(> 10_MB)" in issue.issues[0].message, (
+        assert "Cannot write Row[0] with size" in issue.issues[0].message and "(> 10_MB)" in issue.issues[0].message, (
             "Incorrect issue " + issue.issues[0].message
         )
 

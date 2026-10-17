@@ -35,12 +35,15 @@ def test(suite, case, cfg, kqp_run):
 
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     providers = get_supported_providers(config)
-    assert not ("pq" in providers and "pq-shared" in providers), \
-        f"providers pq and pq-shared are mutually exclusive, on file: {program_sql}"
+    assert not (
+        "pq" in providers and "pq-shared" in providers
+    ), f"providers pq and pq-shared are mutually exclusive, on file: {program_sql}"
     shared_reading = str("pq-shared" in providers).upper()
-    kqp_run.replace_scheme(lambda scheme: scheme
-                           .replace("${PQ_SHARED_READING}", shared_reading)
-                           .replace("${KQPRUN_ENDPOINT}", f"localhost:{kqp_run.grpc_port}"))
+    kqp_run.replace_scheme(
+        lambda scheme: scheme.replace("${PQ_SHARED_READING}", shared_reading).replace(
+            "${KQPRUN_ENDPOINT}", f"localhost:{kqp_run.grpc_port}"
+        )
+    )
 
     kqp_run.add_query(sql_query)
     result = kqp_run.yql_exec(
@@ -50,5 +53,5 @@ def test(suite, case, cfg, kqp_run):
 
     return {
         "Ast": yatest.common.canonical_file(result.opt_file, local=True, diff_tool=ASTDIFF_PATH),
-        "Plan": yatest.common.canonical_file(result.plan_file, local=True)
+        "Plan": yatest.common.canonical_file(result.plan_file, local=True),
     }

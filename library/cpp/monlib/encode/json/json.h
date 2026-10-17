@@ -8,6 +8,9 @@ class IOutputStream;
 
 namespace NMonitoring {
 
+    class TJsonEncodeError: public yexception {
+    };
+
     class TJsonDecodeError: public yexception {
     };
 

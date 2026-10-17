@@ -89,13 +89,13 @@ class set
    typedef Compare                                                                        key_compare;
    typedef key_compare                                                                    value_compare;
    typedef typename base_t::allocator_type                                                allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::pointer         pointer;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::const_pointer   const_pointer;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::reference       reference;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::const_reference const_reference;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::size_type       size_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::difference_type difference_type;
+   typedef boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
+   typedef typename boost::container::allocator_traits<allocator_type>::pointer         pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::const_pointer   const_pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::reference       reference;
+   typedef typename boost::container::allocator_traits<allocator_type>::const_reference const_reference;
+   typedef typename boost::container::allocator_traits<allocator_type>::size_type       size_type;
+   typedef typename boost::container::allocator_traits<allocator_type>::difference_type difference_type;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::stored_allocator_type)                 stored_allocator_type;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::iterator)                              iterator;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::const_iterator)                        const_iterator;
@@ -343,7 +343,7 @@ class set
    //! <b>Effects</b>: Copy constructs a set using the specified allocator.
    //!
    //! <b>Complexity</b>: Linear in x.size().
-   inline set(const set& x, const allocator_type &a)
+   inline set(const set& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(static_cast<const base_t&>(x), a)
    {}
 
@@ -351,7 +351,7 @@ class set
    //!                 Constructs *this using x's resources.
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
-   inline set(BOOST_RV_REF(set) x, const allocator_type &a)
+   inline set(BOOST_RV_REF(set) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(BOOST_MOVE_BASE(base_t, x), a)
    {}
 
@@ -656,10 +656,12 @@ class set
    template <class K>
    inline BOOST_CONTAINER_DOC1ST
       ( iterator
-      , typename dtl::enable_if_transparent< key_compare
-                                             BOOST_MOVE_I K
-                                             BOOST_MOVE_I iterator
-                                           >::type)  //transparent
+      , typename dtl::enable_if_c<
+         dtl::is_transparent<key_compare>::value &&                  //transparent
+         !dtl::is_convertible<K BOOST_MOVE_I iterator>::value &&     //not convertible to iterator
+         !dtl::is_convertible<K BOOST_MOVE_I const_iterator>::value  //not convertible to const_iterator
+         BOOST_MOVE_I iterator
+         >::type)
       insert(const_iterator p, K &&x)
    {  return this->base_t::insert_unique_hint_convertible(p, boost::forward<K>(x)); }
 
@@ -1030,10 +1032,17 @@ inline typename set<K, C, A, O>::size_type erase_if(set<K, C, A, O>& c, Pred pre
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key type from the value type of
+//! `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 set(InputIterator, InputIterator) ->
    set< it_based_value_type_t<InputIterator> >;
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key type from `InputIterator`. The
+//! trailing argument is used as the allocator if it is an allocator type, otherwise
+//! it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
     set(InputIterator, InputIterator, AllocatorOrCompare const&) ->
     set< it_based_value_type_t<InputIterator>
@@ -1049,6 +1058,9 @@ template < typename InputIterator, typename AllocatorOrCompare>
                 >::type
             >;
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key type from `InputIterator` and taking
+//! the comparator and allocator types from the supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1057,11 +1069,18 @@ set(InputIterator, InputIterator, Compare const&, Allocator const&) ->
            , Compare
            , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 set(ordered_unique_range_t, InputIterator, InputIterator) ->
    set< it_based_value_type_t<InputIterator>>;
 
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
     set(ordered_unique_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
     set< it_based_value_type_t<InputIterator>
@@ -1077,6 +1096,10 @@ template < typename InputIterator, typename AllocatorOrCompare>
                 >::type
             >;
 
+//! <b>Deduction guide</b>: allows a `set` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1147,13 +1170,13 @@ class multiset
    typedef Compare                                                                        key_compare;
    typedef key_compare                                                                    value_compare;
    typedef typename base_t::allocator_type                                                allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::pointer         pointer;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::const_pointer   const_pointer;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::reference       reference;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::const_reference const_reference;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::size_type       size_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::difference_type difference_type;
+   typedef boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
+   typedef typename boost::container::allocator_traits<allocator_type>::pointer         pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::const_pointer   const_pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::reference       reference;
+   typedef typename boost::container::allocator_traits<allocator_type>::const_reference const_reference;
+   typedef typename boost::container::allocator_traits<allocator_type>::size_type       size_type;
+   typedef typename boost::container::allocator_traits<allocator_type>::difference_type difference_type;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::stored_allocator_type)                 stored_allocator_type;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::iterator)                              iterator;
    typedef typename BOOST_CONTAINER_IMPDEF(base_t::const_iterator)                        const_iterator;
@@ -1318,12 +1341,12 @@ class multiset
    {}
 
    //! @copydoc ::boost::container::set::set(const set &, const allocator_type &)
-   inline multiset(const multiset& x, const allocator_type &a)
+   inline multiset(const multiset& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(static_cast<const base_t&>(x), a)
    {}
 
    //! @copydoc ::boost::container::set::set(set &&, const allocator_type &)
-   inline multiset(BOOST_RV_REF(multiset) x, const allocator_type &a)
+   inline multiset(BOOST_RV_REF(multiset) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(BOOST_MOVE_BASE(base_t, x), a)
    {}
 
@@ -1702,11 +1725,18 @@ inline typename multiset<K, C, A, O>::size_type erase_if(multiset<K, C, A, O>& c
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key type from the value type of
+//! `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 multiset(InputIterator, InputIterator) ->
    multiset< it_based_value_type_t<InputIterator> >;
 
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key type from `InputIterator`. The
+//! trailing argument is used as the allocator if it is an allocator type, otherwise
+//! it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 multiset(InputIterator, InputIterator, AllocatorOrCompare const&) ->
     multiset < it_based_value_type_t<InputIterator>
@@ -1722,6 +1752,9 @@ multiset(InputIterator, InputIterator, AllocatorOrCompare const&) ->
                       >::type
                   >;
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key type from `InputIterator` and
+//! taking the comparator and allocator types from the supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1730,10 +1763,17 @@ multiset(InputIterator, InputIterator, Compare const&, Allocator const&) ->
            , Compare
            , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 multiset(ordered_range_t, InputIterator, InputIterator) ->
    multiset< it_based_value_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 multiset(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
     multiset < it_based_value_type_t<InputIterator>
@@ -1749,6 +1789,10 @@ multiset(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare const
                       >::type
                   >;
 
+//! <b>Deduction guide</b>: allows a `multiset` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key type from
+//! `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>

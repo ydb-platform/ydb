@@ -34,6 +34,8 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.17, 2026-08-07](#version-1417-2026-08-07)
+  * [Version 1.4.16, 2026-08-06](#version-1416-2026-08-06)
   * [Version 1.4.15, 2026-07-26](#version-1415-2026-07-26)
   * [Version 1.4.14, 2026-07-25](#version-1414-2026-07-25)
   * [Version 1.4.13, 2026-07-23](#version-1413-2026-07-23)
@@ -390,6 +392,16 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.17, 2026-08-07
+
+- Allow `auth_fn` to be any callable.
+
+
+### Version 1.4.16, 2026-08-06
+
+- Encapsulate `auth_fn` with `AuthFn`, a class that parses the output.
+
 
 ### Version 1.4.15, 2026-07-26
 

@@ -59,7 +59,7 @@ public:
 
 }   // namespace
 
-void TTester::Setup(TTestActorRuntime& runtime) {
+void TTester::Setup(TTestActorRuntime& runtime, TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
     //    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
@@ -83,7 +83,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetTxAllocatorTabletIds(ids);
 
     app.AddDomain(domain.Release());
-    SetupTabletServices(runtime, &app);
+    const bool mockDisk = !dsProxies.empty();
+    SetupTabletServices(runtime, &app, mockDisk, {}, nullptr, false, std::move(dsProxies));
 
     // No LongTxService actor is created in this basic test runtime, so install a stand-in registry with a
     // live OldestCollectionTime; otherwise TRegistryScanSnapshotGuard sees a frozen Zero freshness and
@@ -311,6 +312,20 @@ TPlanStep ProposeCommit(
         UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
         UNIT_ASSERT_LE(res.GetMinStep(), res.GetMaxStep());
     });
+}
+
+std::optional<TPlanStep> TryProposeCommit(
+    TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    std::optional<TPlanStep> planStep;
+    const auto result = ProposeCommitCheck(runtime, sender, TTestTxConfig::TxTablet0, txId, writeIds, lockId, [&](auto& res) {
+        if (res.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED) {
+            planStep = TPlanStep(res.GetMinStep());
+        } else {
+            UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        }
+    });
+    Y_UNUSED(result);
+    return planStep;
 }
 
 void ProposeCommitFail(
@@ -553,6 +568,32 @@ ui64 CountLocalDbTableRows(
     return NClient::TValue::Create(result)[0]["List"].Size();
 }
 
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (return (AsList
+                (EraseRow '%s key)
+            ))
+        )
+    )", keySpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (let values %s)
+            (return (AsList
+                (UpdateRow '%s key values)
+            ))
+        )
+    )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
     const auto result = LocalMiniKQL(runtime, tabletId, R"(
         (
@@ -639,16 +680,16 @@ NTxUT::TPlanStep SetupSchema(
     using namespace NTxUT;
     TString txBody;
     auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-    if (table.InStore) {
-        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
-    } else {
+    if (table.Standalone) {
         txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
+    } else {
+        txBody = TTestSchema::CreateInitShardTxBody(pathId, false, table.Schema, table.Pk, specials);
     }
     return SetupSchema(runtime, sender, txBody, txId);
 }
 
-NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema,
+    const ui32 keySize, const bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -656,7 +697,7 @@ NTxUT::TPlanStep PrepareTablet(
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    TestTableDescription tableDescription;
+    TestTableDescription tableDescription{ .Standalone = standalone };
     tableDescription.Schema = schema;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {
@@ -665,18 +706,6 @@ NTxUT::TPlanStep PrepareTablet(
     }
     TActorId sender = runtime.AllocateEdgeActor();
     return SetupSchema(runtime, sender, tableId, tableDescription);
-}
-
-NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody) {
-    using namespace NTxUT;
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    return SetupSchema(runtime, sender, schemaTxBody, 100);
 }
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(

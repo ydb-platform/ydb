@@ -9,7 +9,7 @@ TString TDebugItem::ToString() const {
     result += "Query: " + Query + "\n";
     result += "Plan: " + Plan + "\n";
     result += "Ast: " + Ast + "\n";
-    for (const auto& param: Params.GetValues()) {
+    for (const auto& param : Params.GetValues()) {
         result += "Params: " + param.first + ", " + param.second.GetType().ToString() + "\n";
     }
     result += "Error: " + Error + "\n";
@@ -18,15 +18,10 @@ TString TDebugItem::ToString() const {
 
 size_t TDebugItem::GetByteSize() const {
     size_t paramsSize = 0;
-    for (const auto& [key, value]: Params.GetValues()) {
+    for (const auto& [key, value] : Params.GetValues()) {
         paramsSize += key.size() + NYdb::TProtoAccessor::GetProto(value).ByteSizeLong();
     }
-    return sizeof(*this)
-            + Query.size()
-            + paramsSize
-            + Plan.size()
-            + Ast.size()
-            + Error.size();
+    return sizeof(*this) + Query.size() + paramsSize + Plan.size() + Ast.size() + Error.size();
 }
 
-} // namespace NFq
+}   // namespace NFq

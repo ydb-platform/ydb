@@ -15,9 +15,7 @@ from ydb.tests.tools.fq_runner.kikimr_utils import yq_all, YQ_STATS_FULL
 
 class TestS3Formats:
     def create_bucket_and_upload_file(self, filename, s3, kikimr):
-        s3_helpers.create_bucket_and_upload_file(
-            filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data"
-        )
+        s3_helpers.create_bucket_and_upload_file(filename, s3.s3_url, "fbucket", "ydb/tests/fq/s3/test_format_data")
         kikimr.control_plane.wait_bootstrap(1)
 
     def create_bucket_and_upload_file_body(
@@ -173,10 +171,7 @@ Pear,15,33'''
         describe_result = client.describe_query(query_id).result
         logging.debug("Describe result: {}".format(describe_result))
         describe_string = "{}".format(describe_result)
-        assert (
-            "Unknown format: invalid_type_format. Use one of: "
-            in describe_string
-        )
+        assert "Unknown format: invalid_type_format. Use one of: " in describe_string
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -636,7 +631,7 @@ Pear,15
             WITH (format=parquet, SCHEMA (
                 Fruit String,
                 Price Int,
-                ZZZZZ String
+                ZZZZZ String NOT NULL
             ));
             '''
 
@@ -647,6 +642,70 @@ Pear,15
         issues = describe_result.query.issue[0].issues
         assert '''Error while reading file test.parquet''' in issues[0].message
         assert "Missing field: ZZZZZ" in issues[0].issues[0].message
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_missing_optional_column_in_parquet(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT Fruit, Price, ZZZZZ, Missing
+            FROM `{storage_connection_name}`.`test.parquet`
+            WITH (format=parquet, SCHEMA (
+                Fruit String NOT NULL,
+                Price Int NOT NULL,
+                ZZZZZ String?,
+                Missing Json?
+            ))
+            ORDER BY Price;
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.columns) == 4
+        assert result_set.columns[2].name == "ZZZZZ"
+        assert result_set.columns[2].type.optional_type.item.type_id == ydb.Type.STRING
+        assert result_set.columns[3].name == "Missing"
+        assert result_set.columns[3].type.optional_type.item.type_id == ydb.Type.JSON
+        assert len(result_set.rows) == 3
+        assert result_set.rows[0].items[0].bytes_value == b"Apple"
+        assert result_set.rows[0].items[1].int32_value == 2
+        assert result_set.rows[1].items[0].bytes_value == b"Banana"
+        assert result_set.rows[1].items[1].int32_value == 3
+        assert result_set.rows[2].items[0].bytes_value == b"Pear"
+        assert result_set.rows[2].items[1].int32_value == 15
+        for row in result_set.rows:
+            assert row.items[2].HasField("null_flag_value")
+            assert row.items[3].HasField("null_flag_value")
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_only_missing_optional_columns_in_parquet(self, kikimr, s3, client, unique_prefix):
+        self.create_bucket_and_upload_file("test.parquet", s3, kikimr)
+        storage_connection_name = unique_prefix + "fruitbucket"
+        client.create_storage_connection(storage_connection_name, "fbucket")
+
+        sql = f'''
+            SELECT COUNT(*) AS cnt, COUNT(Missing) AS cnt_missing
+            FROM `{storage_connection_name}`.`test.parquet`
+            WITH (format=parquet, SCHEMA (
+                Missing String?
+            ));
+            '''
+
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
+        data = client.get_result_data(query_id)
+        result_set = data.result.result_set
+        logging.debug(str(result_set))
+        assert len(result_set.rows) == 1
+        assert result_set.rows[0].items[0].uint64_value == 3
+        assert result_set.rows[0].items[1].uint64_value == 0
 
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)

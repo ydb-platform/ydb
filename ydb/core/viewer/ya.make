@@ -887,6 +887,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
+    ydb/services/workload_manager
 )
 
 YQL_LAST_ABI_VERSION()

@@ -95,34 +95,10 @@ YQL_LIBRARY()
 SRCS(
     defs.h
     operation_queue_timer.h
-    schemeshard.cpp
-    schemeshard__background_cleaning.cpp
-    schemeshard__background_compaction.cpp
-    schemeshard__backup_collection_common.cpp
-    schemeshard__borrowed_compaction.cpp
-    schemeshard__clean_pathes.cpp
-    schemeshard__conditional_erase.cpp
-    schemeshard__delete_tablet_reply.cpp
-    schemeshard__describe_scheme.cpp
-    schemeshard__find_subdomain_path_id.cpp
-    schemeshard__fix_bad_paths.cpp
-    schemeshard__init.cpp
-    schemeshard__init_populator.cpp
-    schemeshard__init_root.cpp
-    schemeshard__init_schema.cpp
-    schemeshard__list_users.cpp
-    schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
-    schemeshard__login.cpp
-    schemeshard__make_access_database_no_inheritable.cpp
-    schemeshard__monitoring.cpp
     schemeshard__monitoring.h
-    schemeshard__notify.cpp
     schemeshard__op_traits.h
-    schemeshard__operation.cpp
-    schemeshard_operation_registry.cpp
     schemeshard__operation.h
-    schemeshard__op_traits.cpp
     schemeshard__operation_alter_bsv.cpp
     schemeshard__operation_alter_cdc_stream.cpp
     schemeshard__operation_alter_continuous_backup.cpp
@@ -231,64 +207,10 @@ SRCS(
     schemeshard__operation_split_merge.cpp
     schemeshard__operation_truncate_table.cpp
     schemeshard__operation_upgrade_subdomain.cpp
-    schemeshard__pq_stats.cpp
-    schemeshard__publish_to_scheme_board.cpp
-    schemeshard__root_shred_manager.cpp
-    schemeshard__serverless_storage_billing.cpp
-    schemeshard__state_changed_reply.cpp
-    schemeshard__storage_space.cpp
-    schemeshard__sync_update_tenants.cpp
-    schemeshard__table_partitions_format.cpp
-    schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
-    schemeshard__tenant_shred_manager.cpp
-    schemeshard__unmark_restore_tables.cpp
-    schemeshard__upgrade_access_database.cpp
-    schemeshard__upgrade_schema.cpp
-    schemeshard_audit_log.cpp
-    schemeshard_audit_log_fragment.cpp
-    schemeshard_backup.cpp
-    schemeshard_full_backup.cpp
-    schemeshard_full_backup__progress.cpp
-    schemeshard_full_backup__get.cpp
-    schemeshard_full_backup__list.cpp
-    schemeshard_full_backup__forget.cpp
-    schemeshard_backup_incremental__forget.cpp
-    schemeshard_backup_incremental__get.cpp
-    schemeshard_backup_incremental__list.cpp
-    schemeshard_backup_incremental__progress.cpp
-    schemeshard_forced_compaction__cancel.cpp
-    schemeshard_forced_compaction__create.cpp
-    schemeshard_forced_compaction__forget.cpp
-    schemeshard_forced_compaction__get.cpp
-    schemeshard_forced_compaction__list.cpp
-    schemeshard_forced_compaction__progress.cpp
-    schemeshard_forced_compaction.cpp
-    schemeshard_restore_incremental__forget.cpp
-    schemeshard_restore_incremental__get.cpp
-    schemeshard_restore_incremental__list.cpp
-    schemeshard_bg_tasks__list.cpp
-    schemeshard_billing_helpers.cpp
-    schemeshard_cdc_stream_common.cpp
-    schemeshard_cdc_stream_scan.cpp
-    schemeshard_continuous_backup_cleaner.cpp
-    schemeshard_incremental_restore_scan.cpp
-    schemeshard_domain_links.cpp
     schemeshard_domain_links.h
-    schemeshard_effective_acl.cpp
     schemeshard_effective_acl.h
-    schemeshard_scheme_builders.cpp
     schemeshard_scheme_builders.h
-    schemeshard_export.cpp
-    schemeshard_export__cancel.cpp
-    schemeshard_export__create.cpp
-    schemeshard_export__forget.cpp
-    schemeshard_export__get.cpp
-    schemeshard_export__list.cpp
-    schemeshard_export_helpers.cpp
-    schemeshard_export_flow_proposals.cpp
-    schemeshard_identificators.cpp
-    schemeshard_impl.cpp
     schemeshard_impl.h
     schemeshard_import.cpp
     schemeshard_import_helpers.cpp
@@ -301,42 +223,164 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types.h
-    schemeshard_path.cpp
     schemeshard_path.h
-    schemeshard_path_describer.cpp
-    schemeshard_path_element.cpp
-    schemeshard_path_db_ref.cpp
     schemeshard_path_element.h
-    schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
     schemeshard_schema.h
-    schemeshard_self_pinger.cpp
     schemeshard_self_pinger.h
-    schemeshard_set_column_constraint.cpp
     schemeshard_set_column_constraint.h
+    schemeshard_shard_deleter.h
+    schemeshard_subop_state_types.h
+    schemeshard_subop_types.h
+    schemeshard_svp_migration.h
+    schemeshard_system_names.h
+    schemeshard_tx_infly.h
+    schemeshard_types.h
+    schemeshard_user_attr_limits.h
+)
+
+JOIN_SRCS(
+    all_schemeshard_01.cpp
+    schemeshard.cpp
+    schemeshard__background_cleaning.cpp
+    schemeshard__background_compaction.cpp
+    schemeshard__backup_collection_common.cpp
+    schemeshard__borrowed_compaction.cpp
+    schemeshard__clean_pathes.cpp
+    schemeshard__conditional_erase.cpp
+    schemeshard__delete_tablet_reply.cpp
+    schemeshard__describe_scheme.cpp
+    schemeshard__find_subdomain_path_id.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_02.cpp
+    schemeshard__fix_bad_paths.cpp
+    schemeshard__init.cpp
+    schemeshard__init_populator.cpp
+    schemeshard__init_root.cpp
+    schemeshard__init_schema.cpp
+    schemeshard__list_users.cpp
+    schemeshard__local_index_migration.cpp
+    schemeshard__login.cpp
+    schemeshard__make_access_database_no_inheritable.cpp
+    schemeshard__monitoring.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_03.cpp
+    schemeshard__notify.cpp
+    schemeshard__operation.cpp
+    schemeshard_operation_registry.cpp
+    schemeshard__op_traits.cpp
+    schemeshard__pq_stats.cpp
+    schemeshard__publish_to_scheme_board.cpp
+    schemeshard__root_shred_manager.cpp
+    schemeshard__serverless_storage_billing.cpp
+    schemeshard__state_changed_reply.cpp
+    schemeshard__storage_space.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_04.cpp
+    schemeshard__sync_update_tenants.cpp
+    schemeshard__table_partitions_format.cpp
+    schemeshard__table_stats.cpp
+    schemeshard__tenant_shred_manager.cpp
+    schemeshard__unmark_restore_tables.cpp
+    schemeshard__upgrade_access_database.cpp
+    schemeshard__upgrade_schema.cpp
+    schemeshard_audit_log.cpp
+    schemeshard_audit_log_fragment.cpp
+    schemeshard_backup.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_05.cpp
+    schemeshard_full_backup.cpp
+    schemeshard_full_backup__progress.cpp
+    schemeshard_full_backup__get.cpp
+    schemeshard_full_backup__list.cpp
+    schemeshard_full_backup__forget.cpp
+    schemeshard_backup_incremental__forget.cpp
+    schemeshard_backup_incremental__get.cpp
+    schemeshard_backup_incremental__list.cpp
+    schemeshard_backup_incremental__progress.cpp
+    schemeshard_forced_compaction__cancel.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_06.cpp
+    schemeshard_forced_compaction__create.cpp
+    schemeshard_forced_compaction__forget.cpp
+    schemeshard_forced_compaction__get.cpp
+    schemeshard_forced_compaction__list.cpp
+    schemeshard_forced_compaction__progress.cpp
+    schemeshard_forced_compaction.cpp
+    schemeshard_restore_incremental__forget.cpp
+    schemeshard_restore_incremental__get.cpp
+    schemeshard_restore_incremental__list.cpp
+    schemeshard_bg_tasks__list.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_07.cpp
+    schemeshard_billing_helpers.cpp
+    schemeshard_cdc_stream_common.cpp
+    schemeshard_cdc_stream_scan.cpp
+    schemeshard_continuous_backup_cleaner.cpp
+    schemeshard_incremental_restore_scan.cpp
+    schemeshard_domain_links.cpp
+    schemeshard_effective_acl.cpp
+    schemeshard_scheme_builders.cpp
+    schemeshard_export.cpp
+    schemeshard_export__cancel.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_08.cpp
+    schemeshard_export__create.cpp
+    schemeshard_export__forget.cpp
+    schemeshard_export__get.cpp
+    schemeshard_export__list.cpp
+    schemeshard_export_helpers.cpp
+    schemeshard_export_flow_proposals.cpp
+    schemeshard_identificators.cpp
+    schemeshard_impl.cpp
+    schemeshard_path.cpp
+    schemeshard_path_describer.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_09.cpp
+    schemeshard_path_element.cpp
+    schemeshard_path_db_ref.cpp
+    schemeshard_pq_helpers.cpp
+    schemeshard_self_pinger.cpp
+    schemeshard_set_column_constraint.cpp
     schemeshard_set_column_constraint__cancel.cpp
     schemeshard_set_column_constraint__create.cpp
     schemeshard_set_column_constraint__forget.cpp
     schemeshard_set_column_constraint__get.cpp
     schemeshard_set_column_constraint__list.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_10.cpp
     schemeshard_set_column_constraint__progress.cpp
     schemeshard_shard_deleter.cpp
-    schemeshard_shard_deleter.h
     schemeshard_subop_state_types.cpp
-    schemeshard_subop_state_types.h
     schemeshard_subop_types.cpp
-    schemeshard_subop_types.h
     schemeshard_svp_migration.cpp
-    schemeshard_svp_migration.h
     schemeshard_system_names.cpp
-    schemeshard_system_names.h
     schemeshard_sysviews_update.cpp
     schemeshard_tx_infly.cpp
-    schemeshard_tx_infly.h
     schemeshard_types.cpp
-    schemeshard_types.h
-    schemeshard_user_attr_limits.h
     schemeshard_validate_ttl.cpp
+)
+
+JOIN_SRCS(
+    all_schemeshard_11.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
 )

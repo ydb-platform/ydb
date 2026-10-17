@@ -2440,7 +2440,9 @@ FROM `{table_name}`"""
 
     @pytest.mark.parametrize("local_topics", [False])
     @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
-    def test_read_topic_shared_reading_variant_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+    def test_read_topic_shared_reading_variant_parsing(
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
             f"variant_json{local_topics!s:.1}",
@@ -2506,14 +2508,18 @@ FROM `{table_name}`"""
         expected_data = [*map(lambda x: x.replace('{longstr}', longstr), expected_data)]
 
         self.write_stream(data, endpoint=endpoint)
-        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
+            expected_data
+        )
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name))
 
     @pytest.mark.parametrize("local_topics", [False])
     @pytest.mark.parametrize("kikimr", [{"enable_shared_reading_structured_json_parsing": True}], indirect=["kikimr"])
-    def test_read_topic_shared_reading_nested_variant_parsing(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+    def test_read_topic_shared_reading_nested_variant_parsing(
+        self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool
+    ) -> None:
         inp, out, endpoint = self.get_io_names(
             kikimr,
             f"nested_variant_json{local_topics!s:.1}",
@@ -2607,7 +2613,9 @@ FROM `{table_name}`"""
         ]
 
         self.write_stream(data, endpoint=endpoint)
-        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(expected_data)
+        assert sorted(self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint)) == sorted(
+            expected_data
+        )
 
         sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         kikimr.ydb_client.query(sql.format(query_name=query_name))

@@ -229,10 +229,30 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             break;
         }
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            if (owner.TablesManager.IsStoreTablet()) {
+                return TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TRUNCATE is not supported for tables in a table store");
+            }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+            if (!internalPathId) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
+            }
+            AFL_VERIFY(owner.TablesManager.HasTable(*internalPathId));
+            const auto& table = owner.TablesManager.GetTable(*internalPathId);
+            if (table.IsReadOnly(schemeShardLocalPathId)) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                    TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
+            }
+            if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
+                if (!ttl->GetUsedTiers().empty()) {
+                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Cannot truncate column table with tiering");
+                }
+            }
+            // The planned queue orders prepared commits with TRUNCATE. Earlier commits finish first;
+            // conflicting read locks are broken at TRUNCATE execution before later sync commits vote.
             owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
-            break;
-        }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }
@@ -360,10 +380,20 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             owner.TablesManager.CopyTablePropose(srcSchemeShardLocalPathId);
         } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            AFL_VERIFY(!owner.TablesManager.IsStoreTablet());
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+            AFL_VERIFY(internalPathId);
+            AFL_VERIFY(owner.TablesManager.HasTable(*internalPathId));
+            {
+                const auto& table = owner.TablesManager.GetTable(*internalPathId);
+                AFL_VERIFY(!table.IsReadOnly(schemeShardLocalPathId));
+                if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
+                    AFL_VERIFY(ttl->GetUsedTiers().empty());
+                }
+            }
             owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
-            break;
-        }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
             break;
     }

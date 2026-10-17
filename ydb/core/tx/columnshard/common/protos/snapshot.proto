@@ -1,5 +1,9 @@
 package NKikimrColumnShardProto;
 
+message TTruncateSnapshots {
+    repeated TSnapshot Snapshots = 1;
+}
+
 message TSnapshot {
     optional uint64 PlanStep = 1;
     optional uint64 TxId = 2;

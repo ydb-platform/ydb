@@ -25,7 +25,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         {"event", "TTxWriteIndex::Execute"},
         {"changeType", changes->TypeString()},
         {"details", changes->DebugString()});
-    if (Ev->Get()->GetPutStatus() == NKikimrProto::OK) {
+    const bool cancelled = changes->IsCancelled(Self->MutableIndexAs<NOlap::TColumnEngineForLogs>());
+    if (Ev->Get()->GetPutStatus() == NKikimrProto::OK && !cancelled) {
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
@@ -45,23 +46,35 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         TBlobGroupSelector dsGroupSelector(Self->Info());
         NOlap::TBlobManagerDb blobsDb(txc.DB);
         changes->MutableBlobsAction().OnExecuteTxAfterAction(*Self, blobsDb, false);
+        const TString errorMessage =
+            cancelled ? "index changes cancelled by table truncate"
+                      : "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage;
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             const auto* portion = changes->GetWritePortionInfo(i);
-            YDB_LOG_WARN("blob cannot apply",
+            YDB_LOG_WARN("cannot apply index changes",
                 {"step", "write"},
                 {"tabletTxNo", TabletTxNo},
                 {"changes", changes->TypeString()},
                 {"portion", portion->DebugString()},
+                {"reason", errorMessage},
                 {"tabletId", Self->TabletID()});
         }
-        NOlap::TChangesFinishContext context(
-            "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
+        NOlap::TChangesFinishContext context(errorMessage);
         changes->Abort(*Self, context);
-        YDB_LOG_ERROR("cannot write index blobs",
-            {"step", "write"},
-            {"tabletTxNo", TabletTxNo},
-            {"changes", changes->TypeString()},
-            {"tabletId", Self->TabletID()});
+        if (cancelled) {
+            YDB_LOG_NOTICE("index changes cancelled by table truncate",
+                {"step", "write"},
+                {"tabletTxNo", TabletTxNo},
+                {"changes", changes->TypeString()},
+                {"tabletId", Self->TabletID()});
+        } else {
+            YDB_LOG_ERROR("cannot write index blobs",
+                {"step", "write"},
+                {"tabletTxNo", TabletTxNo},
+                {"changes", changes->TypeString()},
+                {"reason", errorMessage},
+                {"tabletId", Self->TabletID()});
+        }
     }
 
     Self->EnqueueProgressTx(ctx);
@@ -90,7 +103,7 @@ void TTxWriteIndex::Complete(const TActorContext& ctx) {
     }
 
     Self->EnqueueBackgroundActivities(false);
-    changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, Ev->Get()->GetPutStatus() == NKikimrProto::OK);
+    changes->MutableBlobsAction().OnCompleteTxAfterAction(*Self, !changes->IsAborted());
     NYDBTest::TControllers::GetColumnShardController()->OnWriteIndexComplete(*changes, *Self);
 }
 

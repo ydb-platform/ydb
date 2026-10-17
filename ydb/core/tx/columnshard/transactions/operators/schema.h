@@ -126,6 +126,9 @@ public:
     }
 
     virtual bool ProgressOnComplete(TColumnShard& owner, const TActorContext& ctx) override {
+        if (SchemaTxBody.HasTruncateTable()) {
+            owner.TablesManager.TruncateTableOnComplete(TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable()));
+        }
         if (!!TxAddSharding) {
             TxAddSharding->Complete(ctx);
         }

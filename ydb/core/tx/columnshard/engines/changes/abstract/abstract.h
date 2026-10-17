@@ -305,6 +305,10 @@ protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& context) = 0;
 
 public:
+    virtual bool IsCancelled(const TColumnEngineForLogs& /*engine*/) const {
+        return false;
+    }
+
     void SetStage(const NChanges::EStage stage);
 
     bool IsActive() const {

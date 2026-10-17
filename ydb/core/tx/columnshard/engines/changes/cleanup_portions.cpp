@@ -23,12 +23,13 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
     AFL_VERIFY(FetchedDataAccessors);
     PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
 
-    THashSet<TInternalPathId> pathIds;
     if (!self) {
         return;
     }
-    THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
-    auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();
+    NIceDb::TNiceDb db(*context.DB);
+    for (const auto& [pathId, snapshots] : TruncatesToRemove) {
+        self->TablesManager.RemoveTruncateSnapshotsOnExecute(pathId, snapshots, db);
+    }
 
     THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
 
@@ -36,7 +37,6 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
         const auto& accessor = FetchedDataAccessors->GetPortionAccessorVerified(p->GetPortionId());
         accessor.RemoveFromDatabase(context.DBWrapper);
         accessor.FillBlobIdsByStorage(blobIdsByStorage, context.EngineLogs.GetVersionedIndex());
-        pathIds.emplace(p->GetPathId());
     }
     for (auto&& i : blobIdsByStorage) {
         auto action = BlobsAction.GetRemoving(i.first);
@@ -47,7 +47,6 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnExecute(NColumnShard::TC
 
     if (PortionsToDrop.size() && self->LastCleanupSnapshot < MinSnapshotForNewReads) {
         self->LastCleanupSnapshot = MinSnapshotForNewReads;
-        NIceDb::TNiceDb db(*context.DB);
         NColumnShard::Schema::SaveSpecialValue(
             db, NColumnShard::Schema::EValueIds::LastCleanupSnapshotStep, self->LastCleanupSnapshot.GetPlanStep());
         NColumnShard::Schema::SaveSpecialValue(
@@ -65,6 +64,9 @@ void TCleanupPortionsColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::T
         }
     }
     if (self) {
+        for (const auto& [pathId, snapshots] : TruncatesToRemove) {
+            self->TablesManager.RemoveTruncateSnapshotsOnComplete(pathId, snapshots);
+        }
         self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_PORTIONS_ERASED, PortionsToDrop.size());
         for (auto&& p : PortionsToDrop) {
             self->Counters.GetTabletCounters()->OnDropPortionEvent(p->GetTotalRawBytes(), p->GetTotalBlobBytes(), p->GetRecordsCount());
@@ -76,7 +78,17 @@ void TCleanupPortionsColumnEngineChanges::DoStart(NColumnShard::TColumnShard& se
     self.BackgroundController.StartCleanupPortions();
 }
 
-void TCleanupPortionsColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& /*context*/) {
+void TCleanupPortionsColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) {
+    if (!context.FinishedSuccessfully) {
+        auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
+        for (const auto& portion : PortionsToDrop) {
+            engine.AddCleanupPortion(portion);
+        }
+        for (const auto& [pathId, _] : TruncatesToRemove) {
+            // An aborted task has not changed canonical history; restore only GC indexes.
+            engine.ApplyTruncateSnapshots(pathId);
+        }
+    }
     self.BackgroundController.FinishCleanupPortions();
 }
 

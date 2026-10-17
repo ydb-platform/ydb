@@ -316,6 +316,16 @@ TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IEx
     return externalSourceFactory->GetOrCreate(*DatabaseType)->GetName();
 }
 
+NKikimrSchemeOp::TExternalDataSourceDescription TExternalDataSource::GetConnectionDescription() const {
+    NKikimrSchemeOp::TExternalDataSourceDescription result;
+    result.SetSourceType(ToStringDatabaseType(DatabaseType));
+    result.SetLocation(Location);
+    result.SetInstallation(Installation);
+    *result.MutableAuth() = Auth.GetConfig();
+    *result.MutableProperties() = Properties;
+    return result;
+}
+
 bool TExternalDataSource::IsYdb() const {
     return DatabaseType == EDatabaseType::Ydb;
 }

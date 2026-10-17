@@ -93,6 +93,24 @@ bool TryParseStartup(TString& buffer, TStartupMessage& message, TString& error) 
     return true;
 }
 
+bool TryParseMessage(TString& buffer, TClientMessage& message, TString& error) {
+    if (buffer.size() < 5) {
+        return false;
+    }
+    const ui32 length = ReadBe32(buffer.data() + 1);
+    if (length < 4 || length > 16 * 1024 * 1024) {
+        error = "invalid message length";
+        return true;
+    }
+    if (buffer.size() < 1 + length) {
+        return false;
+    }
+    message.Type = buffer[0];
+    message.Payload = buffer.substr(5, length - 4);
+    buffer.remove(0, 1 + length);
+    return true;
+}
+
 TString MakeAuthenticationOk() {
     TString payload;
     AppendBe32(payload, 0);

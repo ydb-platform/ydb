@@ -16,9 +16,15 @@ struct TStartupMessage {
     THashMap<TString, TString> Parameters;
 };
 
+struct TClientMessage {
+    char Type = 0;
+    TString Payload;
+};
+
 // Consumes one startup message from the front of buffer.
 // Returns false when more bytes are required. On a malformed message, error is set.
 bool TryParseStartup(TString& buffer, TStartupMessage& message, TString& error);
+bool TryParseMessage(TString& buffer, TClientMessage& message, TString& error);
 
 TString MakeAuthenticationOk();
 TString MakeParameterStatus(TStringBuf name, TStringBuf value);

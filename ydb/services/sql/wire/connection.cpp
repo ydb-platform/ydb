@@ -47,8 +47,7 @@ private:
             }
             if (written == -EAGAIN || written == -EWOULDBLOCK) {
                 Outbox.append(data);
-                RequestRead();
-                return false;
+                return true;
             }
             PassAway();
             return false;
@@ -101,7 +100,13 @@ private:
             PassAway();
             return;
         }
-        if (HandleInbox()) {
+        if (CurrentStateFunc() == &TSqlConnection::StateStartup) {
+            if (HandleInbox()) {
+                RequestRead();
+            }
+            return;
+        }
+        if (CurrentStateFunc() == &TSqlConnection::StateQuery && HandleQueries()) {
             RequestRead();
         }
     }
@@ -116,7 +121,10 @@ private:
             Fail("08P01", error);
             return false;
         }
-        if (message.SslRequest || message.CancelRequest) {
+        if (message.SslRequest) {
+            return Write(TStringBuf("N", 1)) && HandleInbox();
+        }
+        if (message.CancelRequest) {
             PassAway();
             return false;
         }
@@ -153,7 +161,31 @@ private:
         const ui32 backendPid = static_cast<ui32>(SelfId().LocalId());
         const ui32 secret = SelfId().Hint() ^ 0x53514c;
         Write(MakeHandshake(backendPid, secret));
-        Become(&TSqlConnection::StateReady);
+        Become(&TSqlConnection::StateQuery);
+        RequestRead();
+    }
+
+    bool HandleQueries() {
+        for (;;) {
+            TString error;
+            TClientMessage message;
+            if (!TryParseMessage(Inbox, message, error)) {
+                return true;
+            }
+            if (error) {
+                Fail("08P01", error);
+                return false;
+            }
+            if (message.Type == 'X') {
+                PassAway();
+                return false;
+            }
+            TString reply = MakeErrorResponse("0A000", "not supported");
+            reply.append(MakeReadyForQuery());
+            if (!Write(reply)) {
+                return false;
+            }
+        }
     }
 
     void HandleRegister(NActors::TEvPollerRegisterResult::TPtr& ev) {
@@ -169,7 +201,8 @@ private:
                 return;
             }
         }
-        if (ev->Get()->Read && CurrentStateFunc() == &TSqlConnection::StateStartup) {
+        const auto state = CurrentStateFunc();
+        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery)) {
             ReadSocket();
         }
     }
@@ -190,7 +223,7 @@ private:
         }
     }
 
-    STATEFN(StateReady) {
+    STATEFN(StateQuery) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvPollerReady, HandleReady);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);

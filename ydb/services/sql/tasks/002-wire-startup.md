@@ -1,7 +1,7 @@
 # Startup до ReadyForQuery
 
-status: pending
-commit:
+status: done
+commit: b9b6ff9dfe11acd4bdad7c467fb8820271eff030
 id: wire-startup
 depends: scaffold
 

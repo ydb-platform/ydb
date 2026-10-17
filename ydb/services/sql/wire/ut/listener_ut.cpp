@@ -115,6 +115,62 @@ TString ReadReply(TInet6StreamSocket& socket) {
     return data;
 }
 
+TString ReadAtLeast(TInet6StreamSocket& socket, size_t bytes) {
+    TString data;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (data.size() < bytes && TInstant::Now() < deadline) {
+        pollfd pfd;
+        pfd.fd = static_cast<int>(static_cast<SOCKET>(socket));
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        if (poll(&pfd, 1, 200) <= 0) {
+            continue;
+        }
+        char buf[64];
+        const ssize_t received = socket.Recv(buf, sizeof(buf));
+        if (received > 0) {
+            data.append(buf, received);
+            continue;
+        }
+        break;
+    }
+    return data;
+}
+
+TString QueryMessage(TStringBuf sql) {
+    TString payload(sql);
+    payload.push_back('\0');
+    TString message;
+    message.push_back('Q');
+    AppendBe32(message, static_cast<ui32>(4 + payload.size()));
+    message.append(payload);
+    return message;
+}
+
+TString SslRequest() {
+    TString message;
+    AppendBe32(message, 8);
+    AppendBe32(message, 80877103);
+    return message;
+}
+
+TString CancelRequest() {
+    TString message;
+    AppendBe32(message, 16);
+    AppendBe32(message, 80877102);
+    AppendBe32(message, 1);
+    AppendBe32(message, 1);
+    return message;
+}
+
+TServerSettings SqlSettings(ui16 busPort, ui16 sqlPort) {
+    TServerSettings settings(busPort);
+    settings.AppConfig->MutableSqlConfig()->SetEnable(true);
+    settings.AppConfig->MutableSqlConfig()->SetListeningPort(sqlPort);
+    settings.AppConfig->MutableSqlConfig()->SetListeningAddress("::");
+    return settings;
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SqlListener) {
@@ -168,5 +224,61 @@ Y_UNIT_TEST_SUITE(SqlListener) {
             UNIT_ASSERT_C(!HasReadyForQuery(reply), "unknown database reached ReadyForQuery");
             UNIT_ASSERT_C(reply.Contains("3D000"), "unknown database did not return SQLSTATE 3D000");
         }
+    }
+
+    Y_UNIT_TEST(UnsupportedQueryKeepsSession) {
+        TPortManager ports;
+        const ui16 sqlPort = ports.GetTcpPort();
+        TServer server(SqlSettings(ports.GetTcpPort(), sqlPort));
+        const TString database = "/" + server.GetSettings().DomainName;
+
+        auto session = Open(sqlPort);
+        UNIT_ASSERT(session);
+        UNIT_ASSERT(SendAll(*session, StartupMessage(database)));
+        UNIT_ASSERT(HasReadyForQuery(ReadReply(*session)));
+
+        for (int query = 0; query < 2; ++query) {
+            UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT 1")));
+            const TString reply = ReadReply(*session);
+            UNIT_ASSERT_C(reply.Contains("0A000"), "query " << query << " did not return SQLSTATE 0A000");
+            UNIT_ASSERT_C(reply.Contains("not supported"), "query " << query << " did not return the unsupported text");
+            UNIT_ASSERT_C(HasReadyForQuery(reply), "query " << query << " did not return ReadyForQuery");
+        }
+
+        auto extended = Open(sqlPort);
+        UNIT_ASSERT(extended);
+        UNIT_ASSERT(SendAll(*extended, StartupMessage(database)));
+        UNIT_ASSERT(HasReadyForQuery(ReadReply(*extended)));
+        TString parse;
+        parse.push_back('P');
+        AppendBe32(parse, 4);
+        UNIT_ASSERT(SendAll(*extended, parse));
+        const TString extendedReply = ReadReply(*extended);
+        UNIT_ASSERT(extendedReply.Contains("0A000"));
+        UNIT_ASSERT(HasReadyForQuery(extendedReply));
+
+        auto ssl = Open(sqlPort);
+        UNIT_ASSERT(ssl);
+        UNIT_ASSERT(SendAll(*ssl, SslRequest()));
+        const TString sslReply = ReadAtLeast(*ssl, 1);
+        UNIT_ASSERT_C(!sslReply.empty() && sslReply[0] == 'N', "SSL request was not refused with N");
+        UNIT_ASSERT(SendAll(*ssl, StartupMessage(database)));
+        UNIT_ASSERT(HasReadyForQuery(ReadReply(*ssl)));
+
+        auto cancel = Open(sqlPort);
+        UNIT_ASSERT(cancel);
+        UNIT_ASSERT(SendAll(*cancel, CancelRequest()));
+        const TString cancelReply = ReadReply(*cancel);
+        UNIT_ASSERT(!HasReadyForQuery(cancelReply));
+
+        UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT 2")));
+        const TString afterCancel = ReadReply(*session);
+        UNIT_ASSERT(afterCancel.Contains("0A000"));
+        UNIT_ASSERT(HasReadyForQuery(afterCancel));
+
+        auto again = Open(sqlPort);
+        UNIT_ASSERT_C(again, "listener died after Cancel");
+        UNIT_ASSERT(SendAll(*again, StartupMessage(database)));
+        UNIT_ASSERT(HasReadyForQuery(ReadReply(*again)));
     }
 }

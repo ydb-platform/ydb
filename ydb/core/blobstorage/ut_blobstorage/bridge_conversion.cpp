@@ -375,6 +375,8 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy) {
                 const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
                 if (info && info->IsInlinePileView() && info->GroupID == TGroupId::FromValue(groupId)) {
+                    UNIT_ASSERT(info->Group);
+                    UNIT_ASSERT(info->Group->HasBridgeGroupState());
                     inlineViewConfigured = true;
                 }
             } else if (holdStopBatching && ev->Sender == dsProxyId && ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {

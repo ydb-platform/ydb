@@ -686,10 +686,8 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other,
     , BridgePileId(other.BridgePileId)
 {
     // keep BridgeProxyGroupId, so the DS proxy treats this group as an ordinary pile one accessible only through the
-    // bridge proxy
-    if (Group) {
-        Group->ClearBridgeGroupState();
-    }
+    // bridge proxy. Keep BridgeGroupState in the protobuf as well: queues retain this protobuf and may send it back
+    // through a VDisk to NodeWarden, which needs it to recognize the inline pile.
 }
 
 TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::MakeInlinePileView() const {

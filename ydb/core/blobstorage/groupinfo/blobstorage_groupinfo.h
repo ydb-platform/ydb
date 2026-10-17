@@ -489,6 +489,8 @@ public:
     const TBlobStorageGroupType Type;
     // the size to match PDisk.SlotSizeInUnits
     ui32 GroupSizeInUnits;
+    bool EnableSingleDcMode = false;
+    std::optional<ui32> SurvivingDc;
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id

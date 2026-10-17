@@ -516,9 +516,19 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "EnableSingleDcMode",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "SurvivingDc",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 109,
@@ -575,7 +585,9 @@
                     15,
                     16,
                     17,
+                    18,
                     106,
+                    19,
                     109,
                     110,
                     111,

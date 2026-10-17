@@ -6,6 +6,25 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TVDiskEventsToString) {
 
+        Y_UNIT_TEST(SingleDcSettingsInGenerationChange) {
+            for (ui32 realm = 0; realm < 3; ++realm) {
+                auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1u, 3u, 3u);
+                info->EnableSingleDcMode = true;
+                info->SurvivingDc = realm;
+                TEvVGenerationChange event(info->GetVDiskId(0), info);
+                THolder<TEvVGenerationChange> clone(event.Clone());
+                UNIT_ASSERT(clone->NewInfo->EnableSingleDcMode);
+                UNIT_ASSERT(clone->NewInfo->SurvivingDc.has_value());
+                UNIT_ASSERT_VALUES_EQUAL(*clone->NewInfo->SurvivingDc, realm);
+                UNIT_ASSERT_VALUES_EQUAL(clone->NewVDiskId, event.NewVDiskId);
+            }
+            auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureMirror3dc, 1u, 3u, 3u);
+            TEvVGenerationChange event(info->GetVDiskId(0), info);
+            THolder<TEvVGenerationChange> clone(event.Clone());
+            UNIT_ASSERT(!clone->NewInfo->EnableSingleDcMode);
+            UNIT_ASSERT(!clone->NewInfo->SurvivingDc);
+        }
+
         Y_UNIT_TEST(VPutWithoutPayload) {
             TEvBlobStorage::TEvVPut event;
 

@@ -5,13 +5,21 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
 
+#include <library/cpp/dot_product/dot_product.h>
+#include <library/cpp/dot_product/dot_product_avx2.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/random/fast.h>
+#include <util/system/cpu_id.h>
+
+#include <method/visited_list_pool.h>
 
 #include <atomic>
+#include <barrier>
+#include <cstring>
 #include <thread>
 #include <sstream>
 
@@ -95,6 +103,84 @@ THashSet<TString> BruteForceTopK(
 } // namespace
 
 Y_UNIT_TEST_SUITE(THnswIndexTest) {
+    Y_UNIT_TEST(GraphBuildIsIndependentOfWorkerHistory) {
+        const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 200);
+        TFastRng<ui64> rng(42);
+        std::vector<std::pair<TString, TString>> rows;
+        std::vector<std::pair<TString, TString>> history;
+        for (ui32 i = 0; i < 64; ++i) {
+            rows.emplace_back(KeyFor(i), RandomFloatVector(rng, 200));
+        }
+        for (ui32 i = 0; i < 37; ++i) {
+            history.emplace_back(KeyFor(i), RandomFloatVector(rng, 200));
+        }
+        const auto snapshot = [&](const auto& vectors) {
+            TString error;
+            auto graph = THnswIndex::Build(settings, vectors, 4_MB, error);
+            UNIT_ASSERT_C(graph, error);
+            std::ostringstream output(std::ios::binary);
+            graph->SaveGraph(output);
+            return output.str();
+        };
+        const auto first = snapshot(rows);
+        snapshot(history);
+        UNIT_ASSERT_C(first == snapshot(rows), "Graph topology depends on previous builds on this worker");
+    }
+
+    Y_UNIT_TEST(InnerProductSimdTailsSurviveSnapshotRoundTrip) {
+        // The test runner normally disables AVX dispatch. Exercise both kernels
+        // in this forked subtest and restore the process-local dispatcher.
+        const auto saved = NDotProductImpl::DotProductFloatImpl;
+        Y_DEFER { NDotProductImpl::DotProductFloatImpl = saved; };
+        std::vector<decltype(NDotProductImpl::DotProductFloatImpl)> kernels{saved};
+        if (NX86::HaveAVX2() && NX86::HaveFMA()) {
+            kernels.push_back(&DotProductAvx2);
+        }
+        for (auto kernel : kernels) {
+            NDotProductImpl::DotProductFloatImpl = kernel;
+            for (const ui32 dimension : {1, 3, 4, 7, 8, 15, 16, 31, 32, 199, 200, 201, 257}) {
+                TFastRng<ui64> rng(42);
+                auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT,
+                    Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimension);
+                settings.set_m(4);
+                std::vector<std::pair<TString, TString>> rows;
+                for (ui32 i = 0; i < 16; ++i) {
+                    rows.emplace_back(KeyFor(i), RandomFloatVector(rng, dimension));
+                }
+                const auto target = RandomFloatVector(rng, dimension);
+                THashMap<TString, double> expected;
+                for (const auto& [key, vector] : rows) {
+                    double distance = 0;
+                    for (ui32 d = 0; d < dimension; ++d) {
+                        float lhs, rhs;
+                        std::memcpy(&lhs, vector.data() + d * sizeof(float), sizeof(float));
+                        std::memcpy(&rhs, target.data() + d * sizeof(float), sizeof(float));
+                        distance -= static_cast<double>(lhs) * rhs;
+                    }
+                    expected.emplace(key, distance);
+                }
+                TString error;
+                auto original = THnswIndex::Build(settings, rows, 1_MB, error);
+                UNIT_ASSERT_C(original, error);
+                std::ostringstream out(std::ios::binary);
+                original->SaveGraph(out);
+                std::istringstream in(out.str(), std::ios::binary);
+                auto restored = THnswIndex::LoadGraph(in, settings, 1_MB, error);
+                UNIT_ASSERT_C(restored, error);
+                for (const auto* index : {original.get(), restored.get()}) {
+                    const auto result = index->Search(target, rows.size(), TRowVersion::Max(), 32);
+                    UNIT_ASSERT(result.Covered);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Results.size(), rows.size());
+                    for (const auto& [key, distance] : result.Results) {
+                        UNIT_ASSERT_DOUBLES_EQUAL_C(distance, expected.at(key), 1e-4,
+                            "dimension=" << dimension << " key=" << key);
+                    }
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(BootstrapRejectsLateCommitsBeforeAndAfterManifestDelivery) {
         THnswBootstrapChanges before;
         UNIT_ASSERT(before.Observe(11, {50, 0}));
@@ -198,6 +284,192 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         const auto result = replica->Search(vector, 1, {10, 0});
         UNIT_ASSERT(result.Covered);
         UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "a");
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), replica->GetSearchWorkspaceStats().RetainedBytes);
+        UNIT_ASSERT_GT(tracker->GetUsed(), 0);
+        replica->TrimSearchWorkspaces();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+    }
+
+    Y_UNIT_TEST(SearchWorkspacePoolSeparatesConstructionAndSearchRetention) {
+        similarity::VisitedListPool pool(8, 128, 8);
+        std::vector<similarity::VisitedListPool::Lease> leases;
+        for (size_t i = 0; i < 8; ++i)
+            leases.push_back(pool.acquire());
+        leases.clear();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().Allocations, 8);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 8);
+
+        pool.Configure({});
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 0);
+        for (size_t i = 0; i < 8; ++i)
+            leases.push_back(pool.acquire());
+        leases.clear();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 4);
+        const auto allocations = pool.GetStats().Allocations;
+        for (size_t i = 0; i < 4; ++i)
+            leases.push_back(pool.acquire());
+        leases.clear();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().Allocations, allocations);
+    }
+
+    Y_UNIT_TEST(SearchWorkspacePoolReusesConcurrentBorrowersAcrossMarkerWraparound) {
+        constexpr size_t readers = 4;
+        constexpr size_t rounds = 300;
+        for (size_t retained : {1u, 4u}) {
+            similarity::VisitedListPool pool(0, 65536);
+            similarity::VisitedListPoolPolicy policy;
+            policy.MaxIdleLists = retained;
+            pool.Configure(std::move(policy));
+            std::barrier barrier(readers);
+            std::atomic<bool> clean{true};
+            std::vector<std::thread> threads;
+            for (size_t i = 0; i < readers; ++i) {
+                threads.emplace_back([&] {
+                    for (size_t round = 0; round < rounds; ++round) {
+                        auto lease = pool.acquire();
+                        barrier.arrive_and_wait(); // All buffers must coexist.
+                        if (lease->mass[0] == lease->curV)
+                            clean = false;
+                        lease->mass[0] = lease->curV;
+                        lease.reset();
+                        barrier.arrive_and_wait(); // All returns precede the next round.
+                    }
+                });
+            }
+            for (auto& thread : threads)
+                thread.join();
+            UNIT_ASSERT(clean.load());
+            const auto stats = pool.GetStats();
+            const size_t expectedAllocations = readers + (rounds - 1) * (readers - retained);
+            UNIT_ASSERT_VALUES_EQUAL(stats.Allocations, expectedAllocations);
+            UNIT_ASSERT_VALUES_EQUAL(stats.Reuses, readers * rounds - expectedAllocations);
+            UNIT_ASSERT_VALUES_EQUAL(stats.Frees, expectedAllocations - retained);
+            UNIT_ASSERT_VALUES_EQUAL(stats.ActiveBuffers, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.IdleBuffers, retained);
+            UNIT_ASSERT_VALUES_EQUAL(stats.RetainedBytes, retained * pool.BufferMemoryBytes());
+        }
+    }
+
+    Y_UNIT_TEST(SearchWorkspacePoolAdmissionExceptionsAndPressure) {
+        similarity::VisitedListPool pool(0, 128);
+        const auto bytes = pool.BufferMemoryBytes();
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        bool throwReservation = true;
+        similarity::VisitedListPoolPolicy policy;
+        policy.MaxIdleLists = 4;
+        policy.Reserve = [&](size_t size) -> std::shared_ptr<void> {
+            // Reentrant statistics verify callbacks run outside the pool lock.
+            UNIT_ASSERT_GT(pool.GetStats().ActiveBuffers, 0);
+            if (throwReservation)
+                throw std::runtime_error("reservation failed");
+            if (!tracker->TryAcquire(size))
+                return {};
+            return std::shared_ptr<void>(new int(0), [tracker, size](void* ptr) {
+                delete static_cast<int*>(ptr);
+                tracker->Release(size);
+            });
+        };
+        policy.CanRetain = [&] {
+            UNIT_ASSERT_GT(pool.GetStats().ActiveBuffers, 0);
+            return tracker->GetUsed() <= tracker->GetLimit();
+        };
+        pool.Configure(std::move(policy));
+        UNIT_ASSERT_EXCEPTION(pool.acquire(), std::runtime_error);
+        throwReservation = false;
+        tracker->SetLimit(bytes - 1);
+        UNIT_ASSERT_EXCEPTION(pool.acquire(), similarity::VisitedListMemoryLimitExceeded);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().ActiveBuffers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().AllocationFailures, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+
+        tracker->SetLimit(bytes * 4);
+        auto first = pool.acquire();
+        auto second = pool.acquire();
+        UNIT_ASSERT_EXCEPTION(pool.Configure({}), std::logic_error);
+        first.reset();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes * 2);
+        tracker->SetLimit(bytes);
+        pool.TrimIdle();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().ActiveBuffers, 1);
+        second->mass[0] = second->curV; // Trimming must preserve the borrower.
+        tracker->SetLimit(0);
+        second.reset();
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+
+        tracker->SetLimit(bytes * 4);
+        try {
+            auto lease = pool.acquire();
+            throw std::runtime_error("search failed");
+        } catch (const std::runtime_error&) {
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().ActiveBuffers, 0);
+        UNIT_ASSERT_VALUES_EQUAL(pool.GetStats().IdleBuffers, 1);
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), bytes);
+        pool.TrimIdle();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+    }
+
+    Y_UNIT_TEST(SearchWorkspacesAreSharedAndAccountedAfterBuildAndImport) {
+        const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        const auto target = SerializeFloatVector({1, 0});
+        TString error;
+        auto built = THnswIndex::Build(settings, {{"a", target}, {"b", SerializeFloatVector({0, 1})}}, 1_MB, error);
+        UNIT_ASSERT_C(built, error);
+        std::stringstream snapshot;
+        built->SaveGraph(snapshot);
+        auto imported = THnswIndex::LoadGraph(snapshot, settings, 1_MB, error);
+        UNIT_ASSERT_C(imported, error);
+        for (auto* graph : {built.get(), imported.get()}) {
+            auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+            tracker->SetLimit(1_MB);
+            graph->SetGraphReservation(std::make_shared<int>(0), tracker);
+            auto first = graph->CreateView({10, 0}, std::make_shared<THnswIndexChanges>());
+            auto second = graph->CreateView({20, 0}, std::make_shared<THnswIndexChanges>());
+            const auto before = graph->GetSearchWorkspaceStats();
+            for (size_t i = 0; i < 300; ++i) {
+                for (const auto* view : {graph, first.get(), second.get()}) {
+                    const auto result = view->Search(target, 1, {20, 0});
+                    UNIT_ASSERT(result.Covered);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Results.front().first, "a");
+                }
+            }
+            const auto stats = graph->GetSearchWorkspaceStats();
+            UNIT_ASSERT_VALUES_EQUAL(stats.Allocations - before.Allocations, 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.Reuses - before.Reuses, 899);
+            UNIT_ASSERT_VALUES_EQUAL(stats.IdleBuffers, 1);
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), stats.RetainedBytes);
+            UNIT_ASSERT_VALUES_EQUAL(first->GetSearchWorkspaceStats().RetainedBytes, stats.RetainedBytes);
+            first.reset();
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), stats.RetainedBytes);
+            tracker->SetLimit(0);
+            second->TrimSearchWorkspaces();
+            UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
+            UNIT_ASSERT(!graph->Search(target, 1).Covered);
+            tracker->SetLimit(1_MB);
+            UNIT_ASSERT(graph->Search(target, 1).Covered);
+        }
+    }
+
+    Y_UNIT_TEST(SearchWorkspaceReservationsSurviveUntilLastGraphViewIsDestroyed) {
+        const auto settings = MakeSettings(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 2);
+        const auto target = SerializeFloatVector({1, 0});
+        TString error;
+        auto graph = THnswIndex::Build(settings, {{"a", target}}, 1_MB, error);
+        UNIT_ASSERT_C(graph, error);
+        auto tracker = std::make_shared<THnswCacheMemoryTracker>();
+        tracker->SetLimit(1_MB);
+        graph->SetGraphReservation(std::make_shared<int>(0), tracker);
+        auto replica = graph->CreateView({10, 0}, std::make_shared<THnswIndexChanges>());
+        UNIT_ASSERT(replica->Search(target, 1, {10, 0}).Covered);
+        const auto retained = replica->GetSearchWorkspaceStats().RetainedBytes;
+        UNIT_ASSERT_GT(retained, 0);
+        graph.reset();
+        UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), retained);
+        replica.reset();
         UNIT_ASSERT_VALUES_EQUAL(tracker->GetUsed(), 0);
     }
 

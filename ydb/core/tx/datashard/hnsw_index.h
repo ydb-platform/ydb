@@ -126,6 +126,17 @@ struct THnswSearchResult {
     bool Covered = true;
 };
 
+struct THnswSearchWorkspaceStats {
+    ui64 Allocations = 0;
+    ui64 Reuses = 0;
+    ui64 Frees = 0;
+    ui64 AllocationFailures = 0;
+    ui64 ActiveBuffers = 0;
+    ui64 IdleBuffers = 0;
+    ui64 RetainedBytes = 0;
+    ui64 AllocatedBytes = 0;
+};
+
 // A bootstrap response may race with redo that has already passed its
 // checkpoint. Remember those commits until the graph base becomes known;
 // a late commit below that base must invalidate the downloaded generation.
@@ -247,8 +258,13 @@ public:
     bool SharesGraphWith(const THnswIndex& other) const;
     bool HasGraphReservation() const;
     size_t GraphUseCount() const;
+    // Install before sharing a built/imported graph. All views then share its
+    // reservation and the separately charged, lazily allocated search buffers.
     void SetGraphReservation(std::shared_ptr<void> reservation,
-        std::shared_ptr<THnswCacheMemoryTracker> memoryTracker = {});
+        std::shared_ptr<THnswCacheMemoryTracker> memoryTracker = {},
+        size_t maxIdleSearchWorkspaces = 4);
+    THnswSearchWorkspaceStats GetSearchWorkspaceStats() const;
+    void TrimSearchWorkspaces() const;
 
     // Versioned graph snapshot. Transaction-local and committed changes are
     // transferred separately; importing never calls graph construction.
@@ -288,8 +304,8 @@ public:
     size_t Size() const;
     size_t Dimension() const;
 
-    // Estimated resident memory of this index, in bytes. Computed once at
-    // build time from the same formula used to gate the build.
+    // Static estimate of resident graph storage, excluding search buffers and
+    // replica journals. Uses the same formula that gates graph construction.
     size_t EstimatedMemoryBytes() const;
 
     // Estimates the memory required to hold an HNSW index over `rowCount`

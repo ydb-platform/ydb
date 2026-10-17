@@ -13,11 +13,13 @@
 #include <method/hnsw.h>
 #include <space/space_lp.h>
 #include <space/space_scalar.h>
+#include <utils.h>
 #pragma clang diagnostic pop
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
@@ -33,12 +35,14 @@ namespace {
 
 using Ydb::Table::VectorIndexSettings;
 
-// Rough fixed per-node overhead of the HNSW graph, excluding friend ids.
+// Conservative fixed per-node overhead of the graph, excluding friend ids.
+// Runtime visited lists are reserved separately by the shared workspace pool.
 constexpr size_t EstimatedBytesPerNodeOverhead = 512;
 // HNSW construction runs in a build actor registered in the actor system's
 // batch pool. Keep NMSLIB single-threaded so it does not create unmanaged
 // std::threads outside that pool.
 constexpr unsigned BuildThreadsPerIndex = 1;
+constexpr size_t MaxIdleSearchWorkspaces = 4;
 constexpr ui32 DefaultHnswM = 16;
 constexpr ui32 DefaultHnswEfConstruction = 200;
 constexpr ui64 DefaultHnswMinRows = 10000;
@@ -265,7 +269,17 @@ public:
                 ? settings.ef_construction() : DefaultHnswEfConstruction),
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
-        Index->CreateIndex(buildParams);
+        {
+            // Batch workers are reused for different partitions. Give each
+            // graph its own random sequence so its topology does not depend on
+            // which partitions previously ran on this worker.
+            auto& generator = similarity::getThreadLocalRandomGenerator();
+            const auto previousGenerator = generator;
+            Y_DEFER { generator = previousGenerator; };
+            generator.seed(similarity::defaultRandomSeed);
+            Index->CreateIndex(buildParams);
+        }
+        ConfigureSearchWorkspaces();
         for (size_t i = 0; i < Objects.size(); ++i) {
             if (Objects[i]->id() != static_cast<similarity::IdType>(i)) {
                 Index.reset();
@@ -273,6 +287,31 @@ public:
             }
         }
         return true;
+    }
+
+    void ConfigureSearchWorkspaces(std::shared_ptr<THnswCacheMemoryTracker> tracker = {},
+            size_t maxIdle = MaxIdleSearchWorkspaces) const {
+        if (!Index)
+            return;
+        similarity::VisitedListPoolPolicy policy;
+        policy.MaxIdleLists = maxIdle;
+        if (tracker) {
+            policy.Reserve = [tracker](size_t bytes) -> std::shared_ptr<void> {
+                struct TReservation {
+                    std::shared_ptr<THnswCacheMemoryTracker> Tracker;
+                    ui64 Bytes = 0;
+                    ~TReservation() { if (Bytes) Tracker->Release(Bytes); }
+                };
+                auto reservation = std::make_shared<TReservation>();
+                reservation->Tracker = tracker;
+                if (!tracker->TryAcquire(bytes))
+                    return {};
+                reservation->Bytes = bytes;
+                return reservation;
+            };
+            policy.CanRetain = [tracker] { return tracker->GetUsed() <= tracker->GetLimit(); };
+        }
+        Index->ConfigureSearchWorkspaces(std::move(policy));
     }
 
     VectorIndexSettings Settings;
@@ -313,8 +352,8 @@ public:
 
         const size_t changes = ChangeCount();
         const size_t graphK = Min(k, Graph->Keys.size()) + Min(changes, Graph->Keys.size() - Min(k, Graph->Keys.size()));
-        // Concurrent searches share graph storage, but each needs its own
-        // visited bitmap, candidate queues and journal merge workspace.
+        // Bitmaps are charged by the shared pool until freed. Only queues and
+        // journal merge workspace belong to this individual search.
         struct TSearchReservation {
             std::shared_ptr<THnswCacheMemoryTracker> Tracker;
             ui64 Bytes = 0;
@@ -324,16 +363,25 @@ public:
             }
         } reservation{MemoryTracker};
         if (MemoryTracker) {
-            const ui64 bytes = EstimatedSearchMemoryBytes(k, efSearch);
+            const ui64 bytes = EstimatedSearchAuxMemoryBytes(k, efSearch);
             if (!MemoryTracker->TryAcquire(bytes)) {
-                result.Covered = false;
-                return result;
+                if (Graph->Index)
+                    Graph->Index->TrimSearchWorkspaces();
+                if (!MemoryTracker->TryAcquire(bytes)) {
+                    result.Covered = false;
+                    return result;
+                }
             }
             reservation.Bytes = bytes;
         }
         similarity::KNNQuery<float> query(*Graph->Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
         if (Graph->Index) {
-            Graph->Index->SearchWithEf(&query, efSearch);
+            try {
+                Graph->Index->SearchWithEf(&query, efSearch);
+            } catch (const similarity::VisitedListMemoryLimitExceeded&) {
+                result.Covered = false;
+                return result;
+            }
         }
 
         const similarity::KNNQueue<float>* queue = query.Result();
@@ -382,10 +430,18 @@ public:
     }
 
     ui64 EstimatedSearchMemoryBytes(size_t k, ui32 efSearch) const {
+        const auto stats = Graph->Index ? Graph->Index->GetSearchWorkspaceStats()
+            : similarity::VisitedListPoolStats{};
+        return EstimatedSearchAuxMemoryBytes(k, efSearch)
+            + (Graph->Index && !stats.IdleBuffers
+                ? sizeof(similarity::VisitedList) + (Graph->Keys.size() + 1) * sizeof(similarity::vl_type) : 0);
+    }
+
+    ui64 EstimatedSearchAuxMemoryBytes(size_t k, ui32 efSearch) const {
         const auto changes = ChangeCount();
         const auto graphK = Min(k, Graph->Keys.size())
             + Min(changes, Graph->Keys.size() - Min(k, Graph->Keys.size()));
-        return Graph->Keys.size() + Graph->Dimension * 8 + 4096
+        return Graph->Dimension * 8 + 4096
             + (Min(Max<size_t>(efSearch, graphK), Graph->Keys.size()) + changes) * 256;
     }
 
@@ -490,10 +546,24 @@ size_t THnswIndex::GraphUseCount() const {
 }
 
 void THnswIndex::SetGraphReservation(std::shared_ptr<void> reservation,
-        std::shared_ptr<THnswCacheMemoryTracker> memoryTracker) {
+        std::shared_ptr<THnswCacheMemoryTracker> memoryTracker, size_t maxIdleSearchWorkspaces) {
     Y_ENSURE(!Impl->GraphReservation);
+    Impl->Graph->ConfigureSearchWorkspaces(memoryTracker, maxIdleSearchWorkspaces);
     Impl->GraphReservation = std::move(reservation);
     Impl->MemoryTracker = std::move(memoryTracker);
+}
+
+THnswSearchWorkspaceStats THnswIndex::GetSearchWorkspaceStats() const {
+    if (!Impl->Graph->Index)
+        return {};
+    const auto stats = Impl->Graph->Index->GetSearchWorkspaceStats();
+    return {stats.Allocations, stats.Reuses, stats.Frees, stats.AllocationFailures,
+        stats.ActiveBuffers, stats.IdleBuffers, stats.RetainedBytes, stats.AllocatedBytes};
+}
+
+void THnswIndex::TrimSearchWorkspaces() const {
+    if (Impl->Graph->Index)
+        Impl->Graph->Index->TrimSearchWorkspaces();
 }
 
 void THnswIndex::SaveGraph(std::ostream& output) const {
@@ -586,6 +656,7 @@ std::unique_ptr<THnswIndex> THnswIndex::LoadGraph(std::istream& input,
                 ythrow yexception() << "HNSW snapshot exceeds memory budget";
             graph->Index = std::make_unique<similarity::Hnsw<float>>(false, *graph->Space, graph->Objects);
             graph->Index->LoadTopology(in, connectivity, maxMemoryBytes - inputs);
+            graph->ConfigureSearchWorkspaces();
         }
         if (ReadSnapshotWord<ui64>(input) != buffer.Hash)
             ythrow yexception() << "HNSW snapshot checksum mismatch";

@@ -62,7 +62,7 @@ namespace similarity {
             NormalizeVect(pVectq, qty);
         }
 
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
@@ -153,7 +153,6 @@ namespace similarity {
                 }
             }
         }
-        visitedlistpool->releaseVisitedList(vl);
     }
 
     template <typename dist_t>
@@ -175,7 +174,7 @@ namespace similarity {
             NormalizeVect(pVectq, qty);
         }
 
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
@@ -220,6 +219,23 @@ namespace similarity {
         vector<QueueItem> &queueData = sortedArr.get_data();
         vector<QueueItem> itemBuff(1 + max(maxM_, maxM0_));
 
+        // Wide vectors span many cache lines. Fetch a bounded number of future
+        // neighbors before calculating their distances, without warming vectors
+        // that this search has already visited.
+        const bool prefetchWideVectors = qty >= 128;
+        constexpr int PrefetchAhead = 4;
+        const size_t vectorBytes = qty * sizeof(float);
+        const auto prefetchVector = [&](int node) {
+            const char* vector = data_level0_memory_ + node * memoryPerObject_ + offsetData_ + 16;
+            for (size_t offset = 0; offset < vectorBytes; offset += 64) {
+                PREFETCH(vector + offset, _MM_HINT_T0);
+            }
+            // The first element need not be aligned to a cache-line boundary.
+            if (vectorBytes) {
+                PREFETCH(vector + vectorBytes - 1, _MM_HINT_T0);
+            }
+        };
+
         massVisited[curNodeNum] = currentV;
 
         while (currElem < min(sortedArr.size(), ef)) {
@@ -234,15 +250,34 @@ namespace similarity {
 
             int *data = (int *)(data_level0_memory_ + curNodeNum * memoryPerObject_ + offsetLevel0_);
             int size = *data;
-            PREFETCH((char *)(massVisited + *(data + 1)), _MM_HINT_T0);
-            PREFETCH((char *)(massVisited + *(data + 1) + 64), _MM_HINT_T0);
-            PREFETCH(data_level0_memory_ + (*(data + 1)) * memoryPerObject_ + offsetData_, _MM_HINT_T0);
-            PREFETCH((char *)(data + 2), _MM_HINT_T0);
+            if (prefetchWideVectors) {
+                for (int j = 1; j <= size; ++j) {
+                    PREFETCH(massVisited + data[j], _MM_HINT_T0);
+                }
+                for (int j = 1; j <= std::min(size, PrefetchAhead); ++j) {
+                    if (massVisited[data[j]] != currentV) {
+                        prefetchVector(data[j]);
+                    }
+                }
+            } else if (size) {
+                PREFETCH(massVisited + data[1], _MM_HINT_T0);
+                PREFETCH(data_level0_memory_ + data[1] * memoryPerObject_ + offsetData_, _MM_HINT_T0);
+            }
 
             for (int j = 1; j <= size; j++) {
                 int tnum = *(data + j);
-                PREFETCH((char *)(massVisited + *(data + j + 1)), _MM_HINT_T0);
-                PREFETCH(data_level0_memory_ + (*(data + j + 1)) * memoryPerObject_ + offsetData_, _MM_HINT_T0);
+                const int future = j + (prefetchWideVectors ? PrefetchAhead : 1);
+                if (future <= size) {
+                    const int nextNode = data[future];
+                    if (prefetchWideVectors) {
+                        if (massVisited[nextNode] != currentV) {
+                            prefetchVector(nextNode);
+                        }
+                    } else {
+                        PREFETCH(massVisited + nextNode, _MM_HINT_T0);
+                        PREFETCH(data_level0_memory_ + nextNode * memoryPerObject_ + offsetData_, _MM_HINT_T0);
+                    }
+                }
                 if (!(massVisited[tnum] == currentV)) {
 #ifdef DIST_CALC
                     query->distance_computations_++;
@@ -293,7 +328,6 @@ namespace similarity {
             // query->CheckAndAddToResult(queueData[i].key, new Object(currObj));
             query->CheckAndAddToResult(queueData[i].key, data_rearranged_[tnum]);
         }
-        visitedlistpool->releaseVisitedList(vl);
     }
 
     template class Hnsw<float>;

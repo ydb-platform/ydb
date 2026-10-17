@@ -36,6 +36,7 @@ TString FormatIfExpression(const TExpression::TIf& sqlIf);
 TString FormatUnwrap(const TExpression::TUnwrap& unwrap);
 TString FormatStructMember(const TExpression::TStructMember& structMember);
 TString FormatTupleNth(const TExpression::TTupleNth& tupleNth);
+TString FormatVariantGuess(const TExpression::TVariantGuess& variantGuess);
 TString FormatMinOf(const TExpression::TMinOf& minOf);
 TString FormatMaxOf(const TExpression::TMaxOf& maxOf);
 TString FormatCurrentUtcTimestamp(const TExpression::TCurrentUtcTimestamp& currentUtcTimestamp);
@@ -84,6 +85,12 @@ bool SerializeNth(const TCoNth& nth, TExpression* proto, TSerializationContext& 
     }
     tupleNth->set_field(*index);
     return SerializeExpression(nth.Tuple(), tupleNth->mutable_operand(), ctx, depth + 1);
+}
+
+bool SerializeGuess(const TCoGuess& guess, TExpression* proto, TSerializationContext& ctx, ui64 depth) {
+    auto variantGuess = proto->mutable_variant_guess();
+    variantGuess->set_field(guess.Index().StringValue());
+    return SerializeExpression(guess.Variant(), variantGuess->mutable_operand(), ctx, depth + 1);
 }
 
 bool SerializeLambdaArgument(const TExprBase& node, TExpression* proto, TSerializationContext& ctx) {
@@ -341,6 +348,9 @@ bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSeria
     }
     if (auto nth = expression.Maybe<TCoNth>()) {
         return SerializeNth(nth.Cast(), proto, ctx, depth);
+    }
+    if (auto guess = expression.Maybe<TCoGuess>()) {
+        return SerializeGuess(guess.Cast(), proto, ctx, depth);
     }
     if (auto coalesce = expression.Maybe<TCoCoalesce>()) {
         return SerializeCoalesceExpression(coalesce.Cast(), proto, ctx, depth);
@@ -609,6 +619,10 @@ bool SerializeNth(const TCoNth& nth, TPredicate* proto, TSerializationContext& c
     return SerializeNth(nth, proto->mutable_bool_expression()->mutable_value(), ctx, depth);
 }
 
+bool SerializeGuess(const TCoGuess& guess, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    return SerializeGuess(guess, proto->mutable_bool_expression()->mutable_value(), ctx, depth);
+}
+
 bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
     if (children.size() != 2) {
         ctx.Err << "expected exactly one argument for UDF function Re2.Grep, but got: " << children.size() - 1;
@@ -670,6 +684,9 @@ bool SerializePredicate(const TExprBase& predicate, TPredicate* proto, TSerializ
     if (auto nth = predicate.Maybe<TCoNth>()) {
         return SerializeNth(nth.Cast(), proto, ctx, depth);
     }
+    if (auto guess = predicate.Maybe<TCoGuess>()) {
+        return SerializeGuess(guess.Cast(), proto, ctx, depth);
+    }
     if (auto exists = predicate.Maybe<TCoExists>()) {
         return SerializeExists(exists.Cast(), proto, ctx, false, depth);
     }
@@ -703,12 +720,15 @@ TString FormatColumn(const TString& value) {
 }
 
 TString FormatStructMember(const TExpression::TStructMember& structMember) {
-    return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << "."
-                            << NFq::EncloseAndEscapeString(structMember.field(), '`');
+    return TStringBuilder() << '(' << FormatExpression(structMember.operand()) << ')' << '.' << FormatColumn(structMember.field());
 }
 
 TString FormatTupleNth(const TExpression::TTupleNth& tupleNth) {
     return TStringBuilder() << '(' << FormatExpression(tupleNth.operand()) << ')' << ".`" << tupleNth.field() << "`";
+}
+
+TString FormatVariantGuess(const TExpression::TVariantGuess& variantGuess) {
+    return TStringBuilder() << '(' << FormatExpression(variantGuess.operand()) << ')' << '.' << FormatColumn(variantGuess.field());
 }
 
 TString FormatValue(const Ydb::Value& value) {
@@ -925,6 +945,8 @@ TString FormatExpression(const TExpression& expression) {
             return FormatStructMember(expression.struct_member());
         case TExpression::kTupleNth:
             return FormatTupleNth(expression.tuple_nth());
+        case TExpression::kVariantGuess:
+            return FormatVariantGuess(expression.variant_guess());
         case TExpression::kMinOf:
             return FormatMinOf(expression.min_of());
         case TExpression::kMaxOf:

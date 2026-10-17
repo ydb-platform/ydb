@@ -44,28 +44,47 @@ GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_state.h)
 GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_defs.h)
 
 
-SRCS(
-    blobstorage_pdisk.cpp
+# the sources that include blobstorage_pdisk_impl.h; the groups follow YDB_LOG_THIS_FILE_COMPONENT, which a
+# source may define only once per translation unit
+JOIN_SRCS(
+    all_pdisk_impl_1.cpp
     blobstorage_pdisk_actor.cpp
     blobstorage_pdisk_blockdevice_async.cpp
-    blobstorage_pdisk_compaction_arbiter.cpp
+    blobstorage_pdisk_impl_metadata.cpp
     blobstorage_pdisk_completion_impl.cpp
+)
+
+JOIN_SRCS(
+    all_pdisk_impl_2.cpp
+    blobstorage_pdisk_impl.cpp
+    blobstorage_pdisk_impl_http.cpp
+    blobstorage_pdisk_logreader.cpp
+)
+
+JOIN_SRCS(
+    all_pdisk_impl_3.cpp
+    blobstorage_pdisk_impl_log.cpp
+    blobstorage_pdisk_syslogreader.cpp
+    blobstorage_pdisk_tools.cpp
+)
+
+JOIN_SRCS(
+    all_pdisk_1.cpp
+    blobstorage_pdisk.cpp
+    blobstorage_pdisk_compaction_arbiter.cpp
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp
     blobstorage_pdisk_drivemodel_db.cpp
-    blobstorage_pdisk_impl.cpp
-    blobstorage_pdisk_impl_http.cpp
-    blobstorage_pdisk_impl_log.cpp
-    blobstorage_pdisk_impl_metadata.cpp
     blobstorage_pdisk_internal_interface.cpp
     blobstorage_pdisk_log_cache.cpp
-    blobstorage_pdisk_logreader.cpp
     blobstorage_pdisk_mon.cpp
+)
+
+JOIN_SRCS(
+    all_pdisk_2.cpp
     blobstorage_pdisk_params.cpp
     blobstorage_pdisk_requestimpl.cpp
-    blobstorage_pdisk_syslogreader.cpp
     blobstorage_pdisk_sectorrestorator.cpp
-    blobstorage_pdisk_tools.cpp
     blobstorage_pdisk_util_atomicblockcounter.cpp
     blobstorage_pdisk_util_flightcontrol.cpp
     blobstorage_pdisk_util_signal_event.cpp

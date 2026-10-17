@@ -1,0 +1,13 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT * FROM (VALUES (1), (NULL), (2L)) AS t(x) ORDER BY x;
+SELECT * FROM (VALUES (NULL), (2L), (1)) AS t(x) ORDER BY x;
+SELECT * FROM (VALUES (1, NULL), (2L, 3.0), (NULL, 4)) AS t(x, y) ORDER BY x, y;
+SELECT * FROM (VALUES (NULL), (NULL)) AS t(x);
+
+SELECT count(*), count(x), sum(x), min(x), max(x), avg(x)
+FROM (VALUES (1), (NULL), (2L)) AS t(x);
+
+SELECT count(*), count(x), sum(x), min(x), max(x), avg(x)
+FROM (VALUES (1), (NULL), (2L)) AS t(x)
+WHERE false;

@@ -73,11 +73,6 @@ protected:
         TString address = event->Get()->Address;
         ui16 port = event->Get()->Port;
         MaxRecycledRequestsCount = event->Get()->MaxRecycledRequestsCount;
-        if (event->Get()->PreboundSocket) {
-            Socket = event->Get()->PreboundSocket;
-        } else if (!Socket) {
-            Socket = TryBindListeningSocket(address, port);
-        }
         Endpoint = std::make_shared<TPrivateEndpointInfo>(event->Get()->CompressContentTypes);
         Endpoint->Owner = SelfId();
         Endpoint->Proxy = Owner;
@@ -88,12 +83,6 @@ protected:
         Endpoint->RateLimiter.Period = TDuration::Seconds(1);
         Endpoint->InactivityTimeout = event->Get()->InactivityTimeout;
         int err = 0;
-        if (!Socket) {
-            err = -1;
-            YDB_LOG_WARN("Failed to bind",
-                {"address", address},
-                {"port", port});
-        }
         if (Endpoint->Secure) {
             if (!event->Get()->SslCertificatePem.empty()) {
                 Endpoint->SecureContext = TSslHelpers::CreateServerContext(
@@ -116,6 +105,20 @@ protected:
                 TSslHelpers::EnableAlpn(Endpoint->SecureContext.Get());
             }
         }
+        // Validate TLS before making the port visible to TCP probes.
+        if (err == 0) {
+            if (event->Get()->PreboundSocket) {
+                Socket = event->Get()->PreboundSocket;
+            } else if (!Socket) {
+                Socket = TryBindListeningSocket(address, port);
+            }
+            if (!Socket) {
+                err = -1;
+                YDB_LOG_WARN("Failed to bind",
+                    {"address", address},
+                    {"port", port});
+            }
+        }
         TStringBuf schema = Endpoint->Secure ? "https://" : "http://";
         if (err == 0) {
             SocketAddressType bindAddress(Socket->Socket.MakeAddress(address, port));
@@ -128,6 +131,11 @@ protected:
             return;
         }
         YDB_LOG_WARN("Failed to init - retrying...");
+        if (event->Get()->PreboundSocket) {
+            // Release the event's reference; the caller may still own the socket.
+            event->Get()->PreboundSocket.Reset();
+            YDB_LOG_WARN("Released the prebound listening socket");
+        }
         NActors::TActivationContext::Schedule(TDuration::Seconds(1), event.Release());
     }
 

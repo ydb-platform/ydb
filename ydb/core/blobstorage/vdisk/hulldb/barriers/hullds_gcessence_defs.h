@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
 #include <ydb/library/actors/util/named_tuple.h>
@@ -190,6 +191,12 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////
         inline bool CompleteDelCmd(ui32 collectGeneration, ui32 collectStep) {
             return collectGeneration == Max<ui32>() && collectStep == Max<ui32>();
+        }
+
+        // Max-generation block is the persistent tombstone of a complete tablet deletion
+        // (issued by Hive). When it is present, no data for that tablet is needed.
+        inline bool CompleteDelBlock(ui32 blockedGeneration) {
+            return IsCompleteTabletDeletionBlock(blockedGeneration);
         }
 
     } // NGc

@@ -224,6 +224,9 @@ void TTopicWorkloadKeyedWriterWorker::TryCommitTx(TInstant& commitTime)
         WaitForCommitTx,
         [](const TInstant&, const TInstant&, size_t) {
             // Keyed writer: keep the previous behavior (no extra debug logging).
+        },
+        [this] {
+            return InflightMessagesEmpty();
         }
     );
 }

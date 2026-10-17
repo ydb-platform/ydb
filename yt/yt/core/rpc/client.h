@@ -23,7 +23,7 @@
 
 #include <library/cpp/yt/misc/property.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 #include <optional>
@@ -201,7 +201,7 @@ public:
     std::string GetMethod() const override;
 
     //! Fluent request annotation: |request->Annotate().With("Key", value)|.
-    NLogging::TLoggingTagListBuilder Annotate();
+    NLogging::TLoggingTagListBuilderGuard<> Annotate();
 
     const NLogging::TLoggingTagList& GetLoggingTags() const override;
 
@@ -260,7 +260,7 @@ private:
     std::atomic<bool> Serialized_ = false;
 
     std::atomic<bool> HeaderPrepared_ = false;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HeaderPreparationLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, HeaderPreparationLock_);
     NProto::TRequestHeader Header_;
 
     mutable TSharedRefArray SerializedHeaderlessMessage_;
@@ -525,11 +525,15 @@ struct TMethodDescriptor
     std::string MethodName;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
     bool StreamingEnabled = false;
+    bool RequestHeavy = false;
+    bool ResponseHeavy = false;
 
     explicit TMethodDescriptor(std::string methodName);
 
     TMethodDescriptor& SetMultiplexingBand(EMultiplexingBand value);
     TMethodDescriptor& SetStreamingEnabled(bool value);
+    TMethodDescriptor& SetRequestHeavy(bool value);
+    TMethodDescriptor& SetResponseHeavy(bool value);
 };
 
 #define DEFINE_RPC_PROXY_METHOD_GENERIC(method, request, response, ...) \

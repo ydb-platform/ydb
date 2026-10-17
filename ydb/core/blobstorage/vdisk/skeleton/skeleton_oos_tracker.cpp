@@ -21,7 +21,6 @@ namespace NKikimr {
         TPDiskCtxPtr PDiskCtx;
         const TDuration DskTrackerInterval;
         NMonGroup::TDskOutOfSpaceGroup MonGroup;
-        NMonGroup::TCostGroup CostGroup;
         // how many 'wait intervals' we spent in 'bad' zones
         ui64 YellowZonePeriods = 0;
         ui64 OrangeZonePeriods = 0;
@@ -29,6 +28,7 @@ namespace NKikimr {
         ui64 BlackZonePeriods = 0;
         ui64 TotalChunks = 0;
         ui64 FreeChunks = 0;
+        ui64 SpaceObservationGeneration = 0;
 
         friend class TActorBootstrapped<TDskSpaceTrackerActor>;
 
@@ -66,6 +66,7 @@ namespace NKikimr {
                 {"marker", "BSVSOOST01"});
             // send message to PDisk
             Become(&TThis::AskFunc);
+            SpaceObservationGeneration = VCtx->OutOfSpaceState.StartSpacePoll();
             ctx.Send(PDiskCtx->PDiskId,
                     new NPDisk::TEvCheckSpace(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound));
         }
@@ -93,11 +94,12 @@ namespace NKikimr {
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;
-            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags);
-            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags);
+            VCtx->OutOfSpaceState.UpdateLocalChunk(msg->StatusFlags, SpaceObservationGeneration);
+            VCtx->OutOfSpaceState.UpdateLocalLog(msg->LogStatusFlags, SpaceObservationGeneration);
             VCtx->OutOfSpaceState.UpdateLocalFreeSpaceShare(ui64(1 << 24) * (1.0 - msg->NormalizedOccupancy));
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);
+            VCtx->OutOfSpaceState.UpdateSpaceHeadroom(msg->Headroom, SpaceObservationGeneration);
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
@@ -116,12 +118,8 @@ namespace NKikimr {
             MonGroup.CapacityAlertRed() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::RED) ? 1 : 0;
             MonGroup.CapacityAlertBlack() = (spaceColor == NKikimrBlobStorage::TPDiskSpaceColor::BLACK) ? 1 : 0;
 
-            if (msg->NumSlots > 0) {
-                ui32 timeAvailable = 1'000'000'000 / msg->NumSlots;
-                CostGroup.DiskTimeAvailableNs() = timeAvailable;
-                if (VCtx->CostTracker) {
-                    VCtx->CostTracker->UpdatePDiskParameters(msg->NumSlots, msg->ExpectedSlotCount);
-                }
+            if (msg->NumOwners > 0 && VCtx->CostTracker) {
+                VCtx->CostTracker->UpdatePDiskParameters(msg->NumOwners, msg->ExpectedSlotCount);
             }
 
             Become(&TThis::WaitFunc);
@@ -241,7 +239,6 @@ namespace NKikimr {
             , PDiskCtx(pdiskCtx)
             , DskTrackerInterval(dskTrackerInterval)
             , MonGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
-            , CostGroup(VCtx->VDiskCounters, "subsystem", "cost")
         {}
     };
 

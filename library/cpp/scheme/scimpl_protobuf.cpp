@@ -3,6 +3,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
+#include <memory>
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/reflection.h>
@@ -316,12 +318,12 @@ namespace NSc {
 
         auto mutableField = reflection->GetMutableRepeatedFieldRef<Message>(&msg, field);
         for (const auto& value : fieldValue.GetDict()) {
-            THolder<Message> entry(mutableField.NewMessage());
+            std::unique_ptr<Message> entry(mutableField.NewMessage());
             auto entryDesc = entry->GetDescriptor();
             auto keyField = entryDesc->FindFieldByNumber(1);
             auto valueField = entryDesc->FindFieldByNumber(2);
             auto entryReflection = entry->GetReflection();
-            entryReflection->SetString(entry.Get(), keyField, TString(value.first));
+            entryReflection->SetString(entry.get(), keyField, TString(value.first));
             ValueToField(value.second, *entry, valueField, opts);
             mutableField.Add(*entry);
         }

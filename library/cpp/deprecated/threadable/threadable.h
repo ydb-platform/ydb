@@ -48,7 +48,7 @@ public:
                 *result = ret;
             }
 
-            Thread_.Destroy();
+            Thread_.reset();
 
             return 0;
         } catch (...) {

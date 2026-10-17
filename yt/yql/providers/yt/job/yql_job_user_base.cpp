@@ -265,7 +265,7 @@ void TYqlUserJobBase::DoImpl() {
     mkqlWriter.Drop();
 
     MkqlIOSpecs->Clear();
-    MkqlIOSpecs.Destroy();
+    MkqlIOSpecs.reset();
 }
 
 void TYqlUserJobBase::Do() {

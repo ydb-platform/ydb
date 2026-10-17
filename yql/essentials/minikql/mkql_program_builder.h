@@ -549,7 +549,7 @@ public:
                                   TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay,
                                   TRuntimeNode dataWatermarks, TRuntimeNode watermarksMode,
                                   TRuntimeNode farFutureCountMax, TRuntimeNode farFutureTimeMax,
-                                  TRuntimeNode earlyPolicy, TRuntimeNode latePolicy);
+                                  TRuntimeNode earlyPolicy, TRuntimeNode latePolicy, bool checkMinWindowStart);
 
     TRuntimeNode Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor, const TBinaryLambda& groupSwitch, const TBinaryLambda& groupHandler);
 

@@ -11,6 +11,7 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/core/dq_integration/yql_dq_helper.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 
@@ -31,8 +32,8 @@ protected:
     virtual ISecretMasker::TPtr CreateSecretMasker();
 
 protected:
-    TString MrJobBin_;
-    TString MrJobUdfsDir_;
+    TMaybe<TString> MrJobBin_;
+    TMaybe<TString> MrJobUdfsDir_;
     size_t NumYtThreads_ = 1;
     bool KeepTemp_ = false;
     TConfigClusters::TPtr YtClusters_;

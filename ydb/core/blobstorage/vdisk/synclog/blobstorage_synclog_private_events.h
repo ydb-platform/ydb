@@ -77,6 +77,19 @@ namespace NKikimr {
             {}
         };
 
+        struct TEvSyncLogSpaceStat
+            : TEventLocal<TEvSyncLogSpaceStat, TEvBlobStorage::EvSyncLogSpaceStat>
+        {};
+
+        struct TEvSyncLogSpaceStatResult
+            : TEventLocal<TEvSyncLogSpaceStatResult, TEvBlobStorage::EvSyncLogSpaceStatResult>
+        {
+            ui64 ChunkSizeBytes = 0;
+            ui64 ActiveChunkCount = 0;
+            ui64 UsedBytes = 0;
+            ui64 FreeBytes = 0;
+        };
+
         struct TEvPhantomFlagStorageFinishBuilder
                 : public TEventLocal<TEvPhantomFlagStorageFinishBuilder,
                                      TEvBlobStorage::EvPhantomFlagStorageFinishBuilder>

@@ -385,6 +385,7 @@ message TStorageUsage {
     uint64 Limit = 3;
     uint64 SoftQuota = 4;
     uint64 HardQuota = 5;
+    optional uint64 Groups = 6;
 }
 
 message TTenant {
@@ -449,6 +450,7 @@ message TStoragePDisk {
     uint64 SlotSize = 11;
     uint64 SlotCount = 12;
     string MaintenanceStatus = 13;
+    optional bool HasWhiteboardData = 14;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 
@@ -461,6 +463,7 @@ message TStorageVDisk {
     string Status = 6;
     EFlag DiskSpace = 7;
     repeated TStorageVDisk Donors = 8;
+    optional bool HasWhiteboardData = 9;
     TStoragePDisk PDisk = 20;
     NKikimrWhiteboard.TVDiskStateInfo Whiteboard = 50;
 }
@@ -596,6 +599,7 @@ message TNodeInfo {
     repeated TTabletStateInfo Tablets = 53;
     repeated NKikimrWhiteboard.TNodeStateInfo Peers = 54;
     repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
+    repeated NKikimrWhiteboard.TDDiskStateInfo DDisks = 56;
 }
 
 message TNodeBatch {
@@ -876,6 +880,7 @@ message TQueryAutocomplete {
 message TPDiskInfoWhiteboard {
     NKikimrWhiteboard.TPDiskStateInfo PDisk = 1;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 2;
+    repeated NKikimrWhiteboard.TDDiskStateInfo DDisks = 3;
 }
 
 message TPDiskInfoBSC {

@@ -1,21 +1,19 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <stdint.h>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <string>
 #include <utility>
 
 #include "opentelemetry/common/timestamp.h"
 #include "opentelemetry/context/context.h"
-#include "opentelemetry/context/context_value.h"
 #include "opentelemetry/context/runtime_context.h"
 #include "opentelemetry/logs/event_id.h"
 #include "opentelemetry/logs/log_record.h"
 #include "opentelemetry/logs/noop.h"
 #include "opentelemetry/logs/severity.h"
-#include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/nostd/unique_ptr.h"
 #include "opentelemetry/nostd/variant.h"
@@ -26,10 +24,9 @@
 #include "opentelemetry/sdk/logs/logger_context.h"
 #include "opentelemetry/sdk/logs/processor.h"
 #include "opentelemetry/sdk/logs/recordable.h"
-#include "opentelemetry/trace/span.h"
+#include "opentelemetry/trace/context.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_id.h"
-#include "opentelemetry/trace/span_metadata.h"
 #include "opentelemetry/trace/trace_flags.h"
 #include "opentelemetry/version.h"
 
@@ -50,33 +47,6 @@ nostd::string_view GetEventName(const opentelemetry::logs::EventId &event_id) no
                                    : nostd::string_view{};
 }
 
-trace_api::SpanContext ExtractSpanContextFromContext(const context::Context &context) noexcept
-{
-  if (!context.HasKey(trace_api::kSpanKey))
-  {
-    return trace_api::SpanContext::GetInvalid();
-  }
-
-  const context::ContextValue context_value = context.GetValue(trace_api::kSpanKey);
-
-  // Get the span metadata from the active span in the context
-  if (const nostd::shared_ptr<trace_api::Span> *maybe_span =
-          nostd::get_if<nostd::shared_ptr<trace_api::Span>>(&context_value))
-  {
-    const nostd::shared_ptr<trace_api::Span> &span = *maybe_span;
-    return span->GetContext();
-  }
-  // Get the span metadata directly from a SpanContext in the context.
-  // TODO: This path is unused and may be removed in the future.
-  if (const nostd::shared_ptr<trace_api::SpanContext> *maybe_span_context =
-          nostd::get_if<nostd::shared_ptr<trace_api::SpanContext>>(&context_value))
-  {
-    const nostd::shared_ptr<trace_api::SpanContext> &span_context = *maybe_span_context;
-    return *span_context;
-  }
-  return trace_api::SpanContext::GetInvalid();
-}
-
 trace_api::SpanContext ExtractSpanContext(
     const nostd::variant<trace_api::SpanContext, context::Context> &context_or_span) noexcept
 {
@@ -86,7 +56,7 @@ trace_api::SpanContext ExtractSpanContext(
   }
   if (const context::Context *ctx = nostd::get_if<context::Context>(&context_or_span))
   {
-    return ExtractSpanContextFromContext(*ctx);
+    return trace_api::GetSpanContext(*ctx);
   }
   return trace_api::SpanContext::GetInvalid();
 }

@@ -6,10 +6,13 @@
 #include <yt/yt/client/api/operation_client.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/table_client.h>
+#include <yt/yt/client/api/table_reader.h>
 
 #include <yt/yt/client/sequoia_client/public.h>
 
 #include <yt/yt/client/signature/signature.h>
+
+#include <yt/yt/client/chunk_client/timing_statistics.h>
 
 #include <yt/yt/client/table_client/columnar_statistics.h>
 #include <yt/yt/client/table_client/column_sort_schema.h>
@@ -703,6 +706,56 @@ void FromProto(
 }
 
 void ToProto(
+    NProto::TTimingStatistics* protoStatistics,
+    const NChunkClient::TTimingStatistics& statistics)
+{
+    protoStatistics->set_wait_time(statistics.WaitTime.MicroSeconds());
+    protoStatistics->set_read_time(statistics.ReadTime.MicroSeconds());
+    protoStatistics->set_idle_time(statistics.IdleTime.MicroSeconds());
+}
+
+void FromProto(
+    NChunkClient::TTimingStatistics* statistics,
+    const NProto::TTimingStatistics& protoStatistics)
+{
+    statistics->WaitTime = TDuration::MicroSeconds(protoStatistics.wait_time());
+    statistics->ReadTime = TDuration::MicroSeconds(protoStatistics.read_time());
+    statistics->IdleTime = TDuration::MicroSeconds(protoStatistics.idle_time());
+}
+
+void ToProto(
+    NProto::TRemoteTableReaderTimingStatistics* protoStatistics,
+    const NApi::TRemoteTableReaderTimingStatistics& statistics)
+{
+    if (statistics.MasterFetchTime) {
+        protoStatistics->set_master_fetch_time(statistics.MasterFetchTime->MicroSeconds());
+    }
+    if (statistics.DataReadTiming) {
+        ToProto(protoStatistics->mutable_data_read_timing(), *statistics.DataReadTiming);
+    }
+    protoStatistics->set_total_time(statistics.TotalTime.MicroSeconds());
+    protoStatistics->set_encode_time(statistics.EncodeTime.MicroSeconds());
+    protoStatistics->set_write_stall_time(statistics.WriteStallTime.MicroSeconds());
+    protoStatistics->set_window_drained_time(statistics.WindowDrainedTime.MicroSeconds());
+}
+
+void FromProto(
+    NApi::TRemoteTableReaderTimingStatistics* statistics,
+    const NProto::TRemoteTableReaderTimingStatistics& protoStatistics)
+{
+    if (protoStatistics.has_master_fetch_time()) {
+        statistics->MasterFetchTime = TDuration::MicroSeconds(protoStatistics.master_fetch_time());
+    }
+    if (protoStatistics.has_data_read_timing()) {
+        statistics->DataReadTiming = FromProto<NChunkClient::TTimingStatistics>(protoStatistics.data_read_timing());
+    }
+    statistics->TotalTime = TDuration::MicroSeconds(protoStatistics.total_time());
+    statistics->EncodeTime = TDuration::MicroSeconds(protoStatistics.encode_time());
+    statistics->WriteStallTime = TDuration::MicroSeconds(protoStatistics.write_stall_time());
+    statistics->WindowDrainedTime = TDuration::MicroSeconds(protoStatistics.window_drained_time());
+}
+
+void ToProto(
     NProto::TQueryStatistics* protoStatistics,
     const NQueryClient::TQueryStatistics& statistics)
 {
@@ -736,6 +789,8 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_query_count(statistics.QueryCount);
+    protoStatistics->set_scan_order(
+        static_cast<NProto::TQueryStatistics::EReportedScanOrder>(statistics.ScanOrder));
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -775,6 +830,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->QueryCount = protoStatistics.query_count();
+    statistics->ScanOrder = FromProto<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -1383,6 +1439,46 @@ void FromProto(
     const TProtobufString& protoCookie)
 {
     *cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
+}
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TFilePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition)
+{
+    ToProto(protoFilePartition->mutable_cookie(), filePartition.Cookie);
+    protoFilePartition->set_length(filePartition.Length);
+}
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition)
+{
+    FromProto(&filePartition->Cookie, protoFilePartition.cookie());
+    filePartition->Length = protoFilePartition.length();
+}
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile)
+{
+    FromProto(
+        &filePartitions->Partitions,
+        protoRspPartitionFile.partitions());
 }
 
 void ToProto(
@@ -2456,6 +2552,7 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
             code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraIsUnknown ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
             code == NChaosClient::EErrorCode::ShortcutRevoked ||

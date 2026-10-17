@@ -188,7 +188,7 @@ class TestVectorIndexNegative(VectorBase):
                                         order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                         limit 10;
                                         """
-        return self.query(select_sql)
+        return self.query(select_sql, retry_settings=ydb.RetrySettings(max_retries=0))
 
     def drop_index(self):
         drop_index_sql = f"""

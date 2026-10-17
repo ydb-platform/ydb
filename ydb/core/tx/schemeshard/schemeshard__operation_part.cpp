@@ -16,6 +16,10 @@
 #include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/tx_processing.h>
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 template <typename T>
@@ -78,39 +82,48 @@ TString ISubOperationState::DebugReply(const TEvPtr& ev) {
 #undef DefineDebugReply
 
 
-static TString LogMessage(const TString& ev, TOperationContext& context, bool ignore) {
-    return TStringBuilder() << (ignore ? "Ignore" : "Unexpected") << " message"
-        << ": tablet# " << context.SS->SelfTabletId()
-        << ", ev# " << ev;
-}
-
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const auto msg = LogMessage(DebugReply(ev), context, false); \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
-        Y_FAIL_S(msg); \
-    } \
-    \
+        const TString& msg = "Break on unexpected message " #NS "::" #TEvType;                                    \
+        YDB_LOG_CRIT_CTX(context.Ctx, msg,                                                                        \
+            {"catchAt", "ISubOperationState"},                                                                    \
+            {"message", DebugReply(ev)},                                                                          \
+        );                                                                                                        \
+        Y_FAIL_S(msg << ", ISubOperationState::HandleReply"                                                       \
+            << ", message " << DebugReply(ev)                                                                     \
+            << ", schemeshard " << context.SS->TabletID()                                                         \
+        );                                                                                                        \
+    }                                                                                                             \
+                                                                                                                  \
     bool TSubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
-        const auto msg = LogMessage(DebugReply(ev), context, ignore); \
-        if (ignore) { \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
-            return false; \
-        } \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
-        Y_FAIL_S(msg); \
-    } \
-    \
-    bool TSubOperation::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
-        return Progress(context, &ISubOperationState::HandleReply, ev); \
+        if (MsgToIgnore.contains(NS::TEvType::EventType)) {                                                       \
+            YDB_LOG_WARN_CTX(context.Ctx, "Ignore unexpected message " #NS "::" #TEvType,                         \
+                {"message", DebugReply(ev)},                                                                      \
+                {"catchedAt", "TSubOperationState"},                                                              \
+            );                                                                                                    \
+            return false;                                                                                         \
+                                                                                                                  \
+        } else {                                                                                                  \
+            const TString& msg = "Break on unexpected message " #NS "::" #TEvType;                                \
+            YDB_LOG_CRIT_CTX(context.Ctx, msg,                                                                    \
+                {"message", DebugReply(ev)},                                                                      \
+                {"catchedAt", "TSubOperationState"},                                                              \
+            );                                                                                                    \
+            Y_FAIL_S(msg << ", TSubOperationState::HandleReply"                                                   \
+                << ", message " << DebugReply(ev)                                                                 \
+                << ", schemeshard " << context.SS->TabletID()                                                     \
+            );                                                                                                    \
+        }                                                                                                         \
+    }                                                                                                             \
+                                                                                                                  \
+    bool TSubOperation::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) {      \
+        return Progress(context, &ISubOperationState::HandleReply, ev);                                           \
     }
 
     SCHEMESHARD_INCOMING_EVENTS(DefaultHandleReply)
 #undef DefaultHandleReply
 
-void TSubOperationState::IgnoreMessages(TString debugHint, TSet<ui32> mgsIds) {
-    LogHint = debugHint;
+void TSubOperationState::IgnoreMessages(TSet<ui32> mgsIds) {
     MsgToIgnore.swap(mgsIds);
 }
 
@@ -222,3 +235,5 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

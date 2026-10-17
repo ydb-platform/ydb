@@ -3,11 +3,13 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/topic_description.h>
+#include <ydb/library/backup/proto/proto.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -75,7 +77,7 @@ bool BuildTopicScheme(
     Ydb::Topic::CreateTopicRequest request;
     NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
-    return google::protobuf::TextFormat::PrintToString(request, &scheme);
+    return NYdb::NBackup::PrintProto(request, scheme);
 }
 
 bool BuildReplicationScheme(
@@ -189,14 +191,19 @@ bool BuildSysViewScheme(
     Ydb::StatusIds_StatusCode status;
 
     const auto& pathDescription = describeResult.GetPathDescription();
+    const auto sysViewType = pathDescription.GetSysViewDescription().GetType();
+    if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
+        error = TStringBuilder() << "Unknown system view type: " << sysViewType;
+        return false;
+    }
+
     if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
         return false;
     }
 
     describeSysViewResult.clear_self();
 
-    google::protobuf::TextFormat::PrintToString(describeSysViewResult, &scheme);
-    return true;
+    return NYdb::NBackup::PrintProto(describeSysViewResult, scheme);
 }
 
 bool BuildScheme(

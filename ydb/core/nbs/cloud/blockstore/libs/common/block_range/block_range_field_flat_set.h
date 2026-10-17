@@ -68,8 +68,7 @@ public:
     [[nodiscard]] bool Empty() const override;
     [[nodiscard]] size_t GetBlockCount() const override;
     [[nodiscard]] size_t GetSegmentCount() const override;
-    [[nodiscard]] size_t GetAllocatedSize() const override;
-    [[nodiscard]] size_t GetUsedSize() const override;
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const override;
 
 private:
     // A single chunk: a count of used ranges plus a sorted array of

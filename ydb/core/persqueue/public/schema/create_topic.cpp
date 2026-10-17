@@ -42,17 +42,15 @@ TResult ApplyChangesInt(
             error = TStringBuilder() << "Partitions count must be positive, provided " << settings.min_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
-        if (settings.min_active_partitions() >= Max<ui32>()) {
-            error = TStringBuilder() << "Partitions count must be less than " << Max<ui32>() << ", provided " << settings.min_active_partitions();
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        if (auto r = ValidateTopicPartitionCount(settings.min_active_partitions(), "Partitions count"); !r) {
+            return r;
         }
         if (settings.max_active_partitions() < 0) {
             error = TStringBuilder() << "Max active partitions must be non-negative, provided " << settings.max_active_partitions();
             return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
         }
-        if (settings.max_active_partitions() >= Max<ui32>()) {
-            error = TStringBuilder() << "Max active partitions must be less than " << Max<ui32>() << ", provided " << settings.max_active_partitions();
-            return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+        if (auto r = ValidateTopicPartitionCount(settings.max_active_partitions(), "Max active partitions"); !r) {
+            return r;
         }
         minParts = std::max<ui32>(1, settings.min_active_partitions());
         if (request.partitioning_settings().has_auto_partitioning_settings() &&

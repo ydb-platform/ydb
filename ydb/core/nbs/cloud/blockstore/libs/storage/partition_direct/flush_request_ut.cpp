@@ -21,10 +21,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(42),
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .Range = TBlockRange16::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(43),
-            .Range = TBlockRange64::WithLength(20, 3)});
+            .Range = TBlockRange16::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -66,10 +66,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(42),
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .Range = TBlockRange16::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(43),
-            .Range = TBlockRange64::WithLength(20, 3)});
+            .Range = TBlockRange16::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -111,10 +111,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(42),
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .Range = TBlockRange16::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(43),
-            .Range = TBlockRange64::WithLength(20, 3)});
+            .Range = TBlockRange16::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -157,10 +157,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(42),
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .Range = TBlockRange16::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(43),
-            .Range = TBlockRange64::WithLength(20, 3)});
+            .Range = TBlockRange16::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
             .PBufferKey = MakeKey(42),
-            .Range = TBlockRange64::WithLength(10, 3)});
+            .Range = TBlockRange16::WithLength(10, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
             Runtime->GetActorSystem(0),

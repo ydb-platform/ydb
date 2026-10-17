@@ -51,10 +51,7 @@ table_service_config:
 
 Например, при значении по умолчанию `80` спиллинг активируется, когда пул запросов заполнен примерно на 80%.
 
-Порог применяется:
-
-- к общему пулу памяти запросов на узле (размер — см. [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit));
-- к [resource pool](../../concepts/glossary.md#resource-pool), если запрос выполняется в workload-пуле с ограничением `total_memory_limit_percent_per_node`.
+Порог применяется к общему пулу памяти запросов на узле (размер — см. [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit)).
 
 {% note info %}
 

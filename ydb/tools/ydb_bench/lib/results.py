@@ -37,7 +37,7 @@ def transition(record, state, **fields):
     return updated
 
 
-def load_manifest(path):
+def load_manifest(path, *, allow_legacy_deployment=False):
     import json
 
     try:
@@ -47,6 +47,16 @@ def load_manifest(path):
         raise BenchmarkError("cannot read result manifest {}: {}".format(path, error)) from error
     if not isinstance(value, dict):
         raise BenchmarkError("result manifest must be a JSON object")
+    if (
+        allow_legacy_deployment
+        and "schema_version" not in value
+        and value.get("benchmark") == "distributed-ydb"
+        and isinstance(value.get("parameters"), dict)
+        and value["parameters"].get("mode") == "deploy"
+        and value.get("attempts") == []
+    ):
+        # Read-only compatibility for the initial deployment-only writer.
+        value["schema_version"] = SCHEMA_VERSION
     if value.get("schema_version") != SCHEMA_VERSION:
         raise BenchmarkError("unsupported result manifest schema version {}".format(value.get("schema_version")))
     return value
@@ -55,14 +65,17 @@ def load_manifest(path):
 class ResultStore:
     """Own a manifest and ensure each published version is atomically replaced."""
 
-    def __init__(self, path, manifest):
+    def __init__(self, path, manifest, on_write=None):
         self.path = Path(path)
+        self.on_write = on_write
         self.manifest = deepcopy(manifest)
         self.manifest["schema_version"] = SCHEMA_VERSION
 
     def write(self):
         # atomic_write_json fsyncs the temporary file before replacement.
         atomic_write_json(self.path, self.manifest)
+        if self.on_write is not None:
+            self.on_write(self.path)
 
     def transition_step(self, step_id, state, **fields):
         for index, record in enumerate(self.manifest["steps"]):

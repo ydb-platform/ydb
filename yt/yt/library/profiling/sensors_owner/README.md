@@ -12,7 +12,7 @@ This is a persistent layer for NYT::NProfiling. `TSensorsOwner` contains a `TPro
 sensorsOwner.Increment("/my_simple_counter", 1);
 ```
 
-In this example just one counter is incremented. Thid counter object will be created once and stored inside sensorsOwner.  
+In this example just one counter is incremented. This counter object will be created once and stored inside sensorsOwner.  
 
 This approach is not recommended for more complex cases.
 
@@ -56,7 +56,7 @@ struct THistogramSensors
 owner.Get<THistogramSensors>(/*Key*/ 132, /*Buckets*/ std::vector<TDuration>{5s, 10min}).Histogram.Record(6s);
 ```
 
-* It is allowed to explicitly imlement a constructor for the structure with metrics:
+* It is allowed to explicitly implement a constructor for the structure with metrics:
 ```cpp
 struct TChildSensors
 {

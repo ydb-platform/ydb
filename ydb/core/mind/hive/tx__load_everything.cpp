@@ -39,6 +39,10 @@ public:
         Self->Domains.clear();
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
+        Self->RecentNodeEvents.Clear();
+        Self->RecentTabletEvents.Clear();
+
+        Self->ResetTotalResourceValues();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -63,6 +67,7 @@ public:
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
             auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
+            auto groupRowset = db.Table<Schema::Group>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -80,7 +85,8 @@ public:
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
                     || !operationsRowset.IsReady()
-                    || !bridgePileRowset.IsReady())
+                    || !bridgePileRowset.IsReady()
+                    || !groupRowset.IsReady())
                 return false;
         }
 
@@ -362,19 +368,7 @@ public:
                 TNodeId nodeId = nodeRowset.GetValue<Schema::Node::ID>();
                 TNodeInfo& node = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first->second;
                 node.Local = nodeRowset.GetValue<Schema::Node::Local>();
-                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>());
-                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>());
-                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
-                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
-                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
-                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
                 node.Name = nodeRowset.GetValueOrDefault<Schema::Node::Name>();
-                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
-                if (node.BecomeUpOnRestart) {
-                    // If a node must become up on restart, it must have been down
-                    // That was not persisted to avoid issues with downgrades
-                    node.SetDown(true);
-                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {
@@ -382,12 +376,24 @@ public:
                         node.LocationAcquired = true;
                     }
                 }
-                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
-                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                node.ServicedDomains = nodeRowset.GetValueOrDefault<Schema::Node::ServicedDomains>();
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
+                node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
+                node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
+                node.SetDown(nodeRowset.GetValue<Schema::Node::Down>(), EHiveEventReason::LoadedFromDatabase);
+                node.SetFreeze(nodeRowset.GetValue<Schema::Node::Freeze>(), EHiveEventReason::LoadedFromDatabase);
+                node.BecomeUpOnRestart = nodeRowset.GetValueOrDefault<Schema::Node::BecomeUpOnRestart>(false);
+                if (node.BecomeUpOnRestart) {
+                    // If a node must become up on restart, it must have been down
+                    // That was not persisted to avoid issues with downgrades
+                    node.SetDown(true, EHiveEventReason::LoadedFromDatabase);
+                }
+                node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();
@@ -492,6 +498,11 @@ public:
                 tablet.LockedToActor = tabletRowset.GetValueOrDefault<Schema::Tablet::LockedToActor>();
                 tablet.LockedReconnectTimeout = TDuration::MilliSeconds(tabletRowset.GetValueOrDefault<Schema::Tablet::LockedReconnectTimeout>());
                 if (tablet.LockedToActor) {
+                    if (tablet.NodeId != 0) {
+                        // A lock suppresses local execution; discard stale placement from older versions.
+                        tablet.NodeId = 0;
+                        db.Table<Schema::Tablet>().Key(tabletId).Update<Schema::Tablet::LeaderNode>(0);
+                    }
                     TNodeId nodeId = tablet.LockedToActor.NodeId();
                     auto it = Self->Nodes.find(nodeId);
                     if (it == Self->Nodes.end()) {
@@ -501,7 +512,7 @@ public:
                     }
                     it->second.LockedTablets.insert(&tablet);
                     if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                        tablet.BecomeUnknown(&it->second);
                     }
                 }
 
@@ -522,23 +533,27 @@ public:
                 }
 
                 if (tablet.NodeId == 0) {
-                    if (!tablet.LockedToActor || !Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
-                        tablet.BecomeStopped();
+                    if (tablet.IsDeleting()
+                            || !tablet.LockedToActor
+                            || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
+                    {
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
-                    tablet.BecomeStopped();
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
                     if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 }
                 tablet.InitTabletMetrics();
 
                 tablet.TabletStorageInfo.Reset(new TTabletStorageInfo(tabletId, tablet.Type));
                 tablet.TabletStorageInfo->Version = tabletRowset.GetValueOrDefault<Schema::Tablet::TabletStorageVersion>();
+                tablet.ConfirmedStorageVersion =
+                    tabletRowset.GetValueOrDefault<Schema::Tablet::ConfirmedStorageVersion>();
                 tablet.TabletStorageInfo->TenantPathId = tablet.GetTenant();
 
                 if (!tabletRowset.Next())
@@ -611,7 +626,8 @@ public:
                         tablet->TabletStorageInfo->Channels.emplace_back();
                         tablet->TabletStorageInfo->Channels.back().Channel = tablet->TabletStorageInfo->Channels.size() - 1;
                     }
-                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp);
+                    ui32 version = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::Version>();
+                    TTabletChannelInfo::THistoryEntry entry(generationId, groupId, timestamp, version);
                     auto deletedAtGeneration = tabletChannelGenRowset.GetValueOrDefault<Schema::TabletChannelGen::DeletedAtGeneration>();
                     if (deletedAtGeneration) {
                         tablet->DeletedHistory.emplace(channelId, entry, deletedAtGeneration);
@@ -703,13 +719,13 @@ public:
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                         }
                     }
                     follower.InitTabletMetrics();

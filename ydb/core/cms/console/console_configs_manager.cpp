@@ -165,17 +165,8 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
                 // Best-effort field collection; never blocks config acceptance.
             }
 
-            // Validate the fully resolved configuration. This decides accept/reject.
-            std::vector<TString> errors;
-            NYamlConfig::ResolveUniqueDocs(
-                tree,
-                [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(config.second, true, true);
-                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                    if (result == NKikimr::NConfig::EValidationResult::Error) {
-                        ythrow yexception() << errors.front();
-                    }
-                });
+            const auto validator = NYamlConfig::CreateDefaultConfigSwissKnife();
+            NYamlConfig::ValidateConfig(tree, validator.get());
         }
     } catch (const yexception &e) {
         opCtx.Error = e.what();
@@ -274,25 +265,7 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            errors.clear();
-
-            auto* csk = AppData()->ConfigSwissKnife;
-
-            NYamlConfig::ResolveUniqueDocs(
-                tree,
-                [&](NYamlConfig::TDocumentConfig&& config) {
-                    auto cfg = NYamlConfig::YamlToProto(
-                        config.second,
-                        true,
-                        true,
-                        unknownFieldsCollector);
-                    if (csk) {
-                        auto result = csk->ValidateConfig(cfg, errors);
-                        if (result == NYamlConfig::EValidationResult::Error) {
-                            ythrow yexception() << errors.front();
-                        }
-                    }
-                });
+            NYamlConfig::ValidateConfig(tree, AppData()->ConfigSwissKnife, unknownFieldsCollector);
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 

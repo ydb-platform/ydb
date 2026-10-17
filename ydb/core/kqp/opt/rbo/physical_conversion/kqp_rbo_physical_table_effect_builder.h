@@ -8,11 +8,11 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalTableEffectBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalTableEffectBuilder(TIntrusivePtr<TOpTableEffect> tableEffect, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos), TableEffect(tableEffect) {}
+    TPhysicalTableEffectBuilder(TOpTableEffect& tableEffect, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names), TableEffect(tableEffect) {}
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    TIntrusivePtr<TOpTableEffect> TableEffect;
+    TOpTableEffect& TableEffect;
 };

@@ -41,6 +41,9 @@ struct TLogWriterConfig
     bool EnableSystemFields;
     //! If set, every event carries the "host" field with the local hostname.
     bool EnableHostField;
+    //! If set, plain-text events logged under a trace context carry the "span_id" field.
+    //! Off by default because writers with a fixed schema reject unknown fields.
+    bool EnableSpanIdField;
     //! If set, a tagged message's tags go to a nested "tags" map; otherwise they
     //! are folded into the "message" field as |Message (Key: Value, ...)|.
     bool EnableNativeTags;

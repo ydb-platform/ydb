@@ -28,9 +28,9 @@ namespace NYdb::inline Dev::NQuery {
 
 using TQueryObservation = NObservability::TRequestObservation;
 
-NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIndempotent) {
+NYdb::NRetry::TRetryOperationSettings GetRetrySettings(TDuration timeout, bool isIdempotent) {
     return NYdb::NRetry::TRetryOperationSettings()
-        .Idempotent(isIndempotent)
+        .Idempotent(isIdempotent)
         .GetSessionClientTimeout(timeout)
         .MaxTimeout(timeout);
 }
@@ -232,7 +232,8 @@ public:
             DbDriverState_,
             rpcSettings);
 
-        return promise.GetFuture();
+        return NSessionPool::InjectSessionStatusInterception(
+            session.SessionImpl_, promise.GetFuture(), true, Settings_.SessionPoolSettings_.CloseIdleThreshold_);
     }
 
     TAsyncCommitTransactionResult CommitTransaction(const std::string& txId,
@@ -285,7 +286,8 @@ public:
             DbDriverState_,
             rpcSettings);
 
-        return promise.GetFuture();
+        return NSessionPool::InjectSessionStatusInterception(
+            session.SessionImpl_, promise.GetFuture(), true, Settings_.SessionPoolSettings_.CloseIdleThreshold_);
     }
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings,
@@ -925,9 +927,9 @@ TStatus TQueryClient::RetryQuerySync(const TQueryWithoutSessionSyncFunc& queryFu
 }
 
 TAsyncExecuteQueryResult TQueryClient::RetryQuery(const std::string& query, const TTxControl& txControl,
-    TDuration timeout, bool isIndempotent)
+    TDuration timeout, bool isIdempotent)
 {
-    auto settings = GetRetrySettings(timeout, isIndempotent);
+    auto settings = GetRetrySettings(timeout, isIdempotent);
     auto queryFunc = [query, txControl](TSession session, TDuration duration) -> TAsyncExecuteQueryResult {
         return session.ExecuteQuery(query, txControl, TExecuteQuerySettings().ClientTimeout(duration));
     };

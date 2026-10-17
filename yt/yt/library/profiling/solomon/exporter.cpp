@@ -176,21 +176,25 @@ void TSolomonExporter::Reconfigure(const TSolomonExporterDynamicConfigPtr& dynam
 
 void TSolomonExporter::TransferSensors()
 {
-    std::vector<std::pair<TFuture<TSharedRef>, TIntrusivePtr<TRemoteProcess>>> remoteFutures;
+    std::vector<TRemoteProcessPtr> processes;
     {
         auto processGuard = Guard(RemoteProcessLock_);
+        processes = {RemoteProcessList_.begin(), RemoteProcessList_.end()};
+    }
 
-        for (const auto& process : RemoteProcessList_) {
-            try {
-                auto asyncDump = process->DumpSensors();
-                remoteFutures.emplace_back(asyncDump, process);
-            } catch (const std::exception& ex) {
-                remoteFutures.emplace_back(MakeFuture<TSharedRef>(TError(ex)), process);
-            }
+    // NB: DumpSensors may block; do not invoke it under the spinlock.
+    std::vector<std::pair<TFuture<TSharedRef>, TRemoteProcessPtr>> remoteFutures;
+    remoteFutures.reserve(processes.size());
+    for (const auto& process : processes) {
+        try {
+            auto asyncDump = process->DumpSensors();
+            remoteFutures.emplace_back(asyncDump, process);
+        } catch (const std::exception& ex) {
+            remoteFutures.emplace_back(MakeFuture<TSharedRef>(TError(ex)), process);
         }
     }
 
-    std::vector<TIntrusivePtr<TRemoteProcess>> deadProcesses;
+    std::vector<TRemoteProcessPtr> deadProcesses;
     for (const auto& [dumpFuture, process] : remoteFutures) {
         // Use BlockingGet(), because we want to lock current thread while data structure is updating.
         auto result = dumpFuture.BlockingGet();

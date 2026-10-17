@@ -51,6 +51,7 @@ SRCS(
     ydb_rate_limiter.proto
     ydb_scheme.proto
     ydb_secret.proto
+    ydb_udf.proto
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto

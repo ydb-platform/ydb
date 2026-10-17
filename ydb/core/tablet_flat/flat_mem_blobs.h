@@ -72,9 +72,10 @@ namespace NMem {
         void Assign(TArrayRef<NPageCollection::TLoadedPage> pages)
         {
             for (auto &one : pages) {
-                Y_ENSURE(one.PageId < Store.size());
+                size_t index = one.Location.GetPageIndex();
+                Y_ENSURE(index < Store.size());
 
-                Store[one.PageId].Data = std::move(one.Data);
+                Store[index].Data = std::move(one.Data);
             }
         }
 

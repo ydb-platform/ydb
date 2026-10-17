@@ -4227,7 +4227,7 @@ TExprNode::TPtr ReplaceFuncWithImpl(const TExprNode::TPtr& node, TExprContext& c
     lambda = ctx.ReplaceNodes(lambda->TailPtr(), replaces);
 
     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(lambda, lambda, ctx);
+    auto status = ExpandApplyNoRepeat(lambda, lambda, ctx, *optCtx.Types);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
     YQL_CLOG(DEBUG, Core) << "Replace " << node->Content() << " with implementation";

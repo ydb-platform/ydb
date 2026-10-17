@@ -58,7 +58,8 @@ namespace NYql::NDqs {
                 exprRoot,
                 [](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
-                    return !node.Maybe<TCoLambda>();
+                    return !node.Maybe<TCoLambda>()
+                        && !node.Maybe<TDqSource>();
                 },
                 [&stages](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
@@ -577,7 +578,7 @@ namespace NYql::NDqs {
 
         StagePrograms.clear();
 
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), FunctionRegistry->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         TTypeEnvironment typeEnv(alloc);
         TVector<NNodes::TExprBase> fakeReads;
         NCommon::TMkqlCommonCallableCompiler compiler;

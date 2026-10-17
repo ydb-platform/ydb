@@ -94,6 +94,16 @@
             "uri": "file://test.test_ImplicitSplit_/results.txt"
         }
     ],
+    "test.test[Init64]": [
+        {
+            "uri": "file://test.test_Init64_/results.txt"
+        }
+    ],
+    "test.test[Init]": [
+        {
+            "uri": "file://test.test_Init_/results.txt"
+        }
+    ],
     "test.test[MakeWriteOffsetWithColonAvailableSince_202501]": [
         {
             "uri": "file://test.test_MakeWriteOffsetWithColonAvailableSince_202501_/results.txt"

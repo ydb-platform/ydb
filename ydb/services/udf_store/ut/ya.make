@@ -18,6 +18,7 @@ PEERDIR(
 )
 
 SRCS(
+    exact_bridge_runtime_ut.cpp
     manifest_ut.cpp
     blob_chunks_ut.cpp
     bridge_abi_ut.cpp

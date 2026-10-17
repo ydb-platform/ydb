@@ -31,7 +31,10 @@ class TestListingBatching(SolomonReadingTestBase):
 
         for i in range(total_size - first_label_size):
             if int(test_labels[i]) != 0:
-                return False, f"Invalid test_label = \"0\" values, should contain {total_size - first_label_size} zeros, have: {i}"
+                return (
+                    False,
+                    f"Invalid test_label = \"0\" values, should contain {total_size - first_label_size} zeros, have: {i}",
+                )
         for i in range(total_size - first_label_size, total_size):
             if int(test_labels[i]) != i - total_size + first_label_size:
                 return False, f"Missing test_label = {i - total_size + first_label_size}"

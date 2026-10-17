@@ -123,6 +123,48 @@ std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataTyp
     return out;
 }
 
+std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<std::optional<bool>>& vec) {
+    std::shared_ptr<arrow::Array> out;
+    arrow::BooleanBuilder builder;
+    for (const auto& value : vec) {
+        if (value) {
+            Y_ABORT_UNLESS(builder.Append(*value).ok());
+        } else {
+            Y_ABORT_UNLESS(builder.AppendNull().ok());
+        }
+    }
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
+    return out;
+}
+
+std::shared_ptr<arrow::Array> StringVecToArray(const std::vector<std::optional<std::string>>& vec) {
+    std::shared_ptr<arrow::Array> out;
+    arrow::StringBuilder builder;
+    for (const auto& value : vec) {
+        if (value) {
+            Y_ABORT_UNLESS(builder.Append(*value).ok());
+        } else {
+            Y_ABORT_UNLESS(builder.AppendNull().ok());
+        }
+    }
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
+    return out;
+}
+
+std::shared_ptr<arrow::Array> UInt8VecToArray(const std::vector<std::optional<uint8_t>>& vec) {
+    std::shared_ptr<arrow::Array> out;
+    arrow::UInt8Builder builder;
+    for (const auto& value : vec) {
+        if (value) {
+            Y_ABORT_UNLESS(builder.Append(*value).ok());
+        } else {
+            Y_ABORT_UNLESS(builder.AppendNull().ok());
+        }
+    }
+    Y_ABORT_UNLESS(builder.Finish(&out).ok());
+    return out;
+}
+
 static void RegisterMath(cp::FunctionRegistry* registry) {
     Y_ABORT_UNLESS(registry->AddFunction(MakeMathUnary<TAcosh>(TAcosh::Name)).ok());
     Y_ABORT_UNLESS(registry->AddFunction(MakeMathUnary<TAtanh>(TAtanh::Name)).ok());

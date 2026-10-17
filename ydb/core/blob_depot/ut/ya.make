@@ -4,10 +4,12 @@ UNITTEST_FOR(ydb/core/blob_depot)
 
     IF (NOT OS_WINDOWS)
         SRCS(
+            agent_disconnect_ut.cpp
             s3_router_ut.cpp
         )
 
         PEERDIR(
+            ydb/core/blob_depot/agent
             ydb/core/testlib/default
             ydb/library/actors/http
             ydb/library/aws_init

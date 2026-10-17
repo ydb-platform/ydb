@@ -5,7 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/chaos_injector_control.h>
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
@@ -13,7 +13,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/bitmap.h>
 #include <util/generic/set.h>
+#include <util/generic/vector.h>
 
 #include <algorithm>
 #include <thread>
@@ -25,6 +27,25 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 namespace {
 
 using EChaosMode = TChaosConfig::TChaosNodeConfig::EChaosMode;
+
+// Provides an empty touched-vchunk mask for fast-path service tests.
+class TEmptyTouchedProvider final: public ITouchedProvider
+{
+public:
+    // Implemented ITouchedProvider.
+    [[nodiscard]] bool Get(ui32 vChunkIndex) const override
+    {
+        Y_UNUSED(vChunkIndex);
+        return false;
+    }
+
+    [[nodiscard]] TRegionVChunks GetTouchedVChunks(
+        ui32 regionIndex) const override
+    {
+        Y_UNUSED(regionIndex);
+        return {};
+    }
+};
 
 // Records node state changes issued by TFastPathService for one DBG.
 class TChaosInjectorControlMock final: public NTransport::IChaosInjectorControl
@@ -45,8 +66,24 @@ public:
         return DisabledNodes.contains(nodeId);
     }
 
+    void ArmFaultRule(NTransport::TFaultRule rule) override
+    {
+        Rules.push_back(std::move(rule));
+    }
+
+    void ClearFaultRules() override
+    {
+        Rules.clear();
+    }
+
+    [[nodiscard]] TVector<NTransport::TFaultRule> GetFaultRules() const override
+    {
+        return Rules;
+    }
+
 private:
     TSet<ui32> DisabledNodes;
+    TVector<NTransport::TFaultRule> Rules;
 };
 
 void AssertChaosMode(
@@ -91,19 +128,21 @@ struct TFixture: public NUnitTest::TBaseFixture
         storageServiceConfig.SetCopyRangeBandwidthMbs(copyRangeBandwidthMbs);
 
         TVector<IDirectBlockGroupPtr> directBlockGroups;
-        directBlockGroups.reserve(DirectBlockGroupsCount);
+        directBlockGroups.reserve(VChunkPerRegionCount);
         TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
-        chaosInjectorControls.reserve(DirectBlockGroupsCount);
+        chaosInjectorControls.reserve(VChunkPerRegionCount);
         ChaosInjectorControls.clear();
-        ChaosInjectorControls.reserve(DirectBlockGroupsCount);
+        ChaosInjectorControls.reserve(VChunkPerRegionCount);
 
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             directBlockGroups.push_back(
                 std::make_shared<TDirectBlockGroupMock>());
             auto control = std::make_shared<TChaosInjectorControlMock>();
             chaosInjectorControls.push_back(control);
             ChaosInjectorControls.push_back(std::move(control));
         }
+
+        TEmptyTouchedProvider touchedProvider;
 
         return std::make_shared<TFastPathService>(
             Runtime->GetActorSystem(0),
@@ -117,6 +156,7 @@ struct TFixture: public NUnitTest::TBaseFixture
             std::move(directBlockGroups),
             std::move(chaosInjectorControls),
             TVChunkConfigs{},
+            &touchedProvider,
             TDirtyMapStateProtos{},
             std::make_shared<TStorageConfig>(std::move(storageServiceConfig)),
             nullptr,
@@ -213,15 +253,15 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
 
         service->SetNodeChaosMode(42, std::nullopt, EChaosMode::Disabled);
         UNIT_ASSERT_VALUES_EQUAL(
-            DirectBlockGroupsCount,
+            VChunkPerRegionCount,
             service->GetChaosConfig().NodeConfigs.size());
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             AssertChaosMode(*service, 42, i, EChaosMode::Disabled);
             UNIT_ASSERT(ChaosInjectorControls[i]->IsNodeDisabled(42));
         }
 
         service->SetNodeChaosMode(42, std::nullopt, EChaosMode::Enabled);
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             AssertChaosMode(*service, 42, i, EChaosMode::Enabled);
             UNIT_ASSERT(!ChaosInjectorControls[i]->IsNodeDisabled(42));
         }
@@ -233,7 +273,7 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
 
         service->SetNodeChaosMode(
             42,
-            DirectBlockGroupsCount,
+            VChunkPerRegionCount,
             EChaosMode::Disabled);
 
         UNIT_ASSERT(service->GetChaosConfig().NodeConfigs.empty());
@@ -246,10 +286,33 @@ Y_UNIT_TEST_SUITE(TFastPathServiceTest)
     {
         auto service = MakeService(0);
 
-        for (ui32 i = 0; i < DirectBlockGroupsCount; ++i) {
+        for (ui32 i = 0; i < VChunkPerRegionCount; ++i) {
             UNIT_ASSERT(service->GetDirectBlockGroup(i));
         }
-        UNIT_ASSERT(!service->GetDirectBlockGroup(DirectBlockGroupsCount));
+        UNIT_ASSERT(!service->GetDirectBlockGroup(VChunkPerRegionCount));
+    }
+
+    Y_UNIT_TEST_F(ShouldTrackInflightWritesInOnWriteStarted, TFixture)
+    {
+        auto service = MakeService(0);
+
+        const ui64 first = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(1u, first);
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        const ui64 second = service->OnWriteStarted();
+        UNIT_ASSERT_VALUES_EQUAL(2u, second);
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(2u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(1u, service->GetMonInfo().InflightWriteCount);
+
+        service->OnWriteFinished();
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetInflightWriteCount());
+        UNIT_ASSERT_VALUES_EQUAL(0u, service->GetMonInfo().InflightWriteCount);
     }
 }
 

@@ -3,6 +3,7 @@ LIBRARY()
     SRCS(
         ddisk.cpp
         ddisk.h
+        chunk_manager.h
         ddisk_checksums.cpp
         ddisk_checksums.h
         ddisk_actor.cpp
@@ -11,23 +12,30 @@ LIBRARY()
         ddisk_actor_chunks.cpp
         ddisk_actor_connect.cpp
         ddisk_actor_mon.cpp
+        ddisk_actor_metrics.cpp
+        metric_rates.cpp
         ddisk_actor_persistent_buffer.cpp
         ddisk_actor_read_write.cpp
         ddisk_actor_sync.cpp
+        ddisk_actor_tablet_stats.cpp
+        tablet_stats.h
+        tablet_stats_actor.h
+        tablet_stats_actor.cpp
         direct_io_op.cpp
         integrity_manager.cpp
         integrity_manager.h
         persistent_buffer_barriers_manager.cpp
         persistent_buffer_space_allocator.cpp
         persistent_buffer_mon.cpp
-        segment_manager.cpp
         write_persistent_buffers_request_actor.cpp
     )
 
     PEERDIR(
+        library/cpp/json
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io
+        ydb/library/actors/async
         library/cpp/containers/absl
         contrib/libs/xxhash
     )

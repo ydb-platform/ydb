@@ -53,7 +53,7 @@ public:
     void EndScopeFilterMatchBlock(TStringBuf path);
 
 
-    void SetFieldName(TStringBuf name)
+    void SetFieldName(const char* name)
     {
         FieldName_ = name;
     }
@@ -65,9 +65,9 @@ public:
         BeginWrite();
         ScratchBuilder_.AppendChar(' ', IndentDepth_ * 2);
         if (FieldName_) {
-            ScratchBuilder_.AppendString(FieldName_);
+            ScratchBuilder_.AppendString(TStringBuf(FieldName_));
             ScratchBuilder_.AppendString(": ");
-            FieldName_ = {};
+            FieldName_ = nullptr;
         }
         ScratchBuilder_.AppendFormat(format, std::forward<TArgs>(args)...);
         ScratchBuilder_.AppendChar('\n');
@@ -92,7 +92,7 @@ private:
     static constexpr i64 SuspendLockDelta = -(1LL << 32);
     i64 ContentDumpLock_ = -(1LL << 62);
 
-    TStringBuf FieldName_;
+    const char* FieldName_ = nullptr;
     TStringBuilder ScratchBuilder_;
 
     void BeginWrite()
@@ -182,7 +182,7 @@ private:
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
     if (!(context).Dumper().IsContentDumpActive()) [[likely]] { \
     } else \
-        (context).Dumper().WriteContent(__VA_ARGS__)
+        [&] () Y_NO_INLINE { (context).Dumper().WriteContent(__VA_ARGS__); }()
 
 #define SERIALIZATION_DUMP_INDENT(context) \
     if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) { \

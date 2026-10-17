@@ -15,12 +15,12 @@ namespace NActors {
 
 class TTestActorRuntimeBase;
 
-} //namespace NActors
+}   //namespace NActors
 
 namespace NTestUtils {
 
 struct TEvMockPqEvents {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvCreateSession = EvBegin,
         EvEnd
@@ -28,7 +28,7 @@ struct TEvMockPqEvents {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvCreateSession : public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
+    struct TEvCreateSession: public NActors::TEventLocal<TEvCreateSession, EvCreateSession> {};
 };
 
 class IMockPqReadSession {
@@ -39,7 +39,7 @@ public:
     struct TMessage {
         ui64 Offset;
         TString Data;
-        std::optional<TInstant> MessageTime;  // CreateTime/WriteTime in event; if unset, TInstant::Now() is used
+        std::optional<TInstant> MessageTime;   // CreateTime/WriteTime in event; if unset, TInstant::Now() is used
     };
 
     virtual ~IMockPqReadSession() = default;
@@ -89,7 +89,8 @@ public:
 
     virtual void Unlock() = 0;
 
-    virtual void UnlockAcks(NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState status = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN) = 0;
+    virtual void UnlockAcks(
+        NYdb::NTopic::TWriteSessionEvent::TWriteAck::EEventState status = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN) = 0;
 
     // Acks management. Must be called after LockAcks()
 
@@ -98,7 +99,27 @@ public:
 
 class IMockPqDeferredPublishClient {
 public:
+    enum class EMethod {
+        Begin,
+        Publish,
+        Cancel,
+        List,
+    };
+
+    struct TRequest {
+        EMethod Method;
+        ui64 PublicationId = 0;
+        TString ExternalId;
+        std::optional<std::string> WriterIdentity;
+        std::function<void(NYdb::EStatus, std::vector<NYdb::NTopic::TPublicationSummary>)> Reply;
+    };
+
+    using TRequestHandler = std::function<void(TRequest)>;
+
     virtual ~IMockPqDeferredPublishClient() = default;
+
+    // When set, the handler replies to SDK requests instead of automatic publication bookkeeping.
+    virtual void SetRequestHandler(TRequestHandler handler) = 0;
 
     virtual void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) = 0;
 
@@ -117,7 +138,7 @@ public:
 
 // Limitations:
 // - There should be at most one query in flight for each topic
-class IMockPqGateway : public NYql::IPqGateway {
+class IMockPqGateway: public NYql::IPqGateway {
 public:
     using TPtr = TIntrusivePtr<IMockPqGateway>;
 
@@ -142,16 +163,18 @@ public:
 
 struct TMockPqGatewaySettings {
     struct TTopicInfo {
-        ui32  PartitionCount = 1;
+        ui32 PartitionCount = 1;
+        TVector<TString> Consumers{};
     };
 
     bool LockWritingByDefault = false;
     TDuration OperationTimeout = TDuration::Seconds(10);
     NActors::TTestActorRuntimeBase* Runtime = nullptr;
     NActors::TActorId Notifier;
+    TTopicInfo DefaultTopicSettings;
     std::unordered_map<TString, TTopicInfo> Topics;
 };
 
 TIntrusivePtr<IMockPqGateway> CreateMockPqGateway(const TMockPqGatewaySettings& settings = {});
 
-}  // namespace NTestUtils
+}   // namespace NTestUtils

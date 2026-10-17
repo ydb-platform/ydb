@@ -296,12 +296,8 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
             ui64 alignMask = Step - 1;
             delta = (delta + alignMask) & ~alignMask;
 
-            // optional growth must not push the parent over its target: refuse in advance, do not ask
-            if (isOptional && GetExtraMemoryAvailability() < static_cast<i64>(delta)) {
-                return false;
-            }
-
-            if (!AllocateExtraQuota(delta)) {
+            // the parent decides on optional growth as well, it knows its target exactly
+            if (!AllocateExtraQuota(delta, isOptional)) {
                 return false;
             }
 
@@ -343,7 +339,8 @@ struct TGuaranteeQuotaManager : public IMemoryQuotaManager {
         return TString();
     }
 
-    virtual bool AllocateExtraQuota(ui64) {
+    // isOptional: see IMemoryQuotaManager::AllocateQuota, the parent may refuse an optional delta it could grant
+    virtual bool AllocateExtraQuota(ui64 /* extraSize */, bool /* isOptional */) {
         return false;
     }
 

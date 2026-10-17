@@ -360,6 +360,36 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         Cerr << rawBytes3 << "/" << bytes3 << "/" << count3 << Endl;
     }
 
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
+        constexpr ui64 portionsCount = 3;
+        constexpr ui64 limit = 3;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        for (ui64 i = 0; i < portionsCount; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        const TString sysViewPath = "/Root/olapStore/olapTable/.sys/primary_index_stats";
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteScanQuery(tableClient, "SELECT DISTINCT PortionId FROM `" + sysViewPath + "`").size(), portionsCount);
+        NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+        scanSettings.CollectQueryStats(NYdb::NTable::ECollectQueryStatsMode::Full);
+        for (const TStringBuf direction : {"ASC"sv, "DESC"sv}) {
+            const TString query = TStringBuilder()
+                << "SELECT PathId, TabletId, PortionId FROM `" << sysViewPath << "` ORDER BY PathId " << direction
+                << ", TabletId " << direction << ", PortionId " << direction << " LIMIT " << limit;
+            auto stream = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(stream.IsSuccess(), stream.GetIssues().ToString());
+            const auto result = CollectStreamResult(stream);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.RowsCount, limit, direction);
+            UNIT_ASSERT(result.QueryStats);
+            // Count rows entering KQP, before its own TopSort and LIMIT can hide a missing pushdown.
+            AssertTableStats(*result.QueryStats, sysViewPath, {.ExpectedReads = limit});
+        }
+    }
+
     Y_UNIT_TEST(StatsSysViewBytesPackActualization) {
         ui64 rawBytesPK1;
         ui64 bytesPK1;

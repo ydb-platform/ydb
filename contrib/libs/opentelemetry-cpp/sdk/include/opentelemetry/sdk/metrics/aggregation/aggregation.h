@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <stdint.h>
+#include <cstdint>
 #include <memory>
 #include "opentelemetry/sdk/metrics/data/metric_data.h"
 #include "opentelemetry/version.h"

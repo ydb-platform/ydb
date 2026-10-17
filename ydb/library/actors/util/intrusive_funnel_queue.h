@@ -110,11 +110,11 @@ public:
     // wake the consumer on the empty-to-nonempty transition.
     bool Push(T* item) noexcept
     {
-        item->Next_.store(nullptr, std::memory_order_relaxed);
+        static_cast<TItem*>(item)->Next_.store(nullptr, std::memory_order_relaxed);
 
         T* const previous = Back_.exchange(item, std::memory_order_acq_rel);
         if (previous) {
-            previous->Next_.store(item, std::memory_order_release);
+            static_cast<TItem*>(previous)->Next_.store(item, std::memory_order_release);
         } else {
             Front_.store(item, std::memory_order_release);
         }
@@ -168,12 +168,12 @@ private:
                 std::memory_order_acq_rel,
                 std::memory_order_acquire);
         } else {
-            T* next = front->Next_.load(std::memory_order_acquire);
+            T* next = static_cast<TItem*>(front)->Next_.load(std::memory_order_acquire);
             if (!next) {
                 if constexpr (Wait) {
                     do {
                         SpinLockPause();
-                        next = front->Next_.load(std::memory_order_acquire);
+                        next = static_cast<TItem*>(front)->Next_.load(std::memory_order_acquire);
                     } while (!next);
                 } else {
                     return {ETryPopStatus::Retry, nullptr};
@@ -182,7 +182,7 @@ private:
             Front_.store(next, std::memory_order_release);
         }
 
-        front->Next_.store(nullptr, std::memory_order_relaxed);
+        static_cast<TItem*>(front)->Next_.store(nullptr, std::memory_order_relaxed);
         return {ETryPopStatus::Item, front};
     }
 

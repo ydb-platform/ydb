@@ -3,6 +3,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <array>
+#include <bit>
 #include <limits>
 
 #include <util/stream/mem.h>
@@ -732,6 +733,12 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     }
 
     return _collector.Size;
+}
+
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta) {
+    // Kafka uses Java long addition, which wraps modulo 2^64. Add unsigned
+    // values to avoid C++ signed overflow, then interpret the resulting bits.
+    return std::bit_cast<i64>(static_cast<ui64>(baseTimestamp) + static_cast<ui64>(timestampDelta));
 }
 
 

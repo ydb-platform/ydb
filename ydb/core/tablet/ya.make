@@ -54,12 +54,20 @@ SRCS(
     simple_tablet.h
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
-    detailed_metrics/detailed_metrics_counter_set.cpp
-    detailed_metrics/detailed_metrics_counter_set.h
+    detailed_metrics/detailed_metrics_binding.cpp
+    detailed_metrics/detailed_metrics_binding.h
+    detailed_metrics/detailed_metrics_tree.cpp
+    detailed_metrics/detailed_metrics_tree.h
+    detailed_metrics/detailed_values_accumulator.cpp
+    detailed_metrics/detailed_values_accumulator.h
+    detailed_metrics/memory_tags.cpp
+    detailed_metrics/memory_tags.h
     detailed_metrics/metric_value_aggregator.cpp
     detailed_metrics/metric_value_aggregator.h
     detailed_metrics/node_database_metrics_aggregator.cpp
     detailed_metrics/node_database_metrics_aggregator.h
+    detailed_metrics/processor_database_metrics_aggregator.cpp
+    detailed_metrics/processor_database_metrics_aggregator.h
     detailed_metrics/ydb_metrics_aggregator.cpp
     detailed_metrics/ydb_metrics_aggregator.h
     detailed_metrics/ydb_metrics_mapper.cpp

@@ -37,7 +37,7 @@ ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransactio
  * @param state Transaction state
  * @return Sub-operation pointer
  */
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state, TOperationContext& context);
 
 /**
  * Creates a vector of change path state operations from a transaction.

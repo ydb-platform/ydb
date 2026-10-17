@@ -195,6 +195,7 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
         TSubSystems SubSystems;
+        bool ExecutorThreadsPrepared = false;
         std::vector<size_t> SubSystemOrder;
 
         std::atomic_bool StartExecuted = false;
@@ -341,6 +342,10 @@ namespace NActors {
         }
 
         TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
+        void PrepareExecutorThread(TThreadContext* context);
+        void InitializeExecutorThread(TThreadContext* context);
+        void CleanupExecutorThread(TThreadContext* context);
 
         template<class T>
         void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {

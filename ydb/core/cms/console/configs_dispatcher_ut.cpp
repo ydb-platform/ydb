@@ -2,6 +2,7 @@
 #include "console.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/config/init/mock.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/tablet/bootstrapper.h>
@@ -1551,29 +1552,158 @@ selector_config: []
 }
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherObservabilityTests) {
-    
+
     TActorId GetRuntimeDispatcherId(TTenantTestRuntime& runtime) {
         return MakeConfigsDispatcherID(runtime.GetNodeId(0));
     }
-    
+
     TConfigsDispatcherState QueryState(TTenantTestRuntime& runtime, TActorId dispatcherId) {
         runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStateRequest()));
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStateResponse>(handle);
         return response->State;
     }
-    
+
     TString QueryStorageYaml(TTenantTestRuntime& runtime, TActorId dispatcherId) {
         runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new TEvConfigsDispatcher::TEvGetStorageYamlRequest()));
         TAutoPtr<IEventHandle> handle;
         auto response = runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvGetStorageYamlResponse>(handle);
         return response->StorageYaml;
     }
-    
+
     TTenantTestConfig ConfigWithoutDispatcher() {
         TTenantTestConfig cfg = DefaultConsoleTestConfig();
         cfg.CreateConfigsDispatcher = false;
         return cfg;
+    }
+
+    // Bootstrap a dispatcher and consume its initial Console response before testing metrics.
+    TActorId StartYamlVersionMetricsDispatcher(TTenantTestRuntime& runtime) {
+        // Register the actor and allow its subscription client to start.
+        auto dispatcherId = runtime.Register(CreateConfigsDispatcher({}));
+        runtime.EnableScheduleForActor(dispatcherId, true);
+
+        // Wait for bootstrap and the initial response before sending node-local requests.
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvConsole::EvConfigSubscriptionNotification);
+        runtime.DispatchEvents(options);
+        QueryState(runtime, dispatcherId);
+        return dispatcherId;
+    }
+
+    // Deliver a YAML update and verify the gauges after the dispatcher handles it.
+    void CheckYamlVersionMetrics(TTenantTestRuntime& runtime, TActorId dispatcherId,
+                                const TString& mainYaml, const std::optional<TString>& databaseYaml,
+                                ui64 mainVersion, ui64 databaseVersion) {
+        // Synchronize with the actor through a state request following the update.
+        auto notification = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>();
+        notification->Record.SetMainYamlConfig(mainYaml);
+        if (databaseYaml) {
+            notification->Record.SetDatabaseYamlConfig(*databaseYaml);
+        }
+        runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, notification.Release()));
+        QueryState(runtime, dispatcherId);
+
+        // Read existing counters so the check cannot create a missing metric.
+        auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "config")
+            ->GetSubgroup("subsystem", "configs_dispatcher");
+        auto mainCounter = counters->FindCounter("MainYamlConfigVersion");
+        auto databaseCounter = counters->FindCounter("DatabaseYamlConfigVersion");
+        UNIT_ASSERT(mainCounter);
+        UNIT_ASSERT(databaseCounter);
+        UNIT_ASSERT_VALUES_EQUAL(mainCounter->Val(), mainVersion);
+        UNIT_ASSERT_VALUES_EQUAL(databaseCounter->Val(), databaseVersion);
+    }
+
+    // Check that default initialization registers both YAML version gauges with an initial zero.
+    Y_UNIT_TEST(TestYamlVersionMetricsInitiallyZero) {
+        // Bootstrap a dispatcher that has not received any YAML configuration.
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
+        StartYamlVersionMetricsDispatcher(runtime);
+
+        // Verify both the gauge type and the observable initial value.
+        auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "config")
+            ->GetSubgroup("subsystem", "configs_dispatcher");
+        for (const auto* name : {"MainYamlConfigVersion", "DatabaseYamlConfigVersion"}) {
+            auto counter = counters->FindCounter(name);
+            UNIT_ASSERT_C(counter, name);
+            UNIT_ASSERT(!counter->ForDerivative());
+            UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+        }
+    }
+
+    // Check metadata-only changes, YAML mode transitions and retained database state without subscribers.
+    Y_UNIT_TEST(TestYamlVersionMetricsTrackCurrentDocuments) {
+        // Drain the initial Console response before injecting deterministic node-local updates.
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
+        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime);
+
+        TString mainYaml = "metadata: {version: 7}\nconfig: {yaml_config_enabled: true}\n";
+        TString databaseYaml = "metadata: {version: 11}\nconfig: {}\n";
+
+        // Add main YAML first, then database YAML without changing the main document.
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, std::nullopt, 7, 0);
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, databaseYaml, 7, 11);
+
+        // Change only main metadata; an omitted database payload keeps the cached document.
+        SubstGlobal(mainYaml, "version: 7", "version: 8");
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, std::nullopt, 8, 11);
+
+        // Hide both versions while YAML is disabled, then restore the current metadata versions.
+        SubstGlobal(mainYaml, "true", "false");
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, std::nullopt, 0, 0);
+        UNIT_ASSERT(!QueryState(runtime, dispatcherId).YamlConfigEnabled);
+        SubstGlobal(mainYaml, "false", "true");
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, std::nullopt, 8, 11);
+
+        // Clear main YAML and verify that cached database metadata alone is not reported as active.
+        CheckYamlVersionMetrics(runtime, dispatcherId, {}, std::nullopt, 0, 0);
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, std::nullopt, 8, 11);
+
+        // Assign a lower database version directly; gauges must not accumulate revisions.
+        SubstGlobal(databaseYaml, "version: 11", "version: 3");
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, databaseYaml, 8, 3);
+    }
+
+    // Check that missing or unreadable metadata zeros only the affected source's gauge without subscribers.
+    // Limit this test to metric error handling; the config delivery path is not exercised.
+    Y_UNIT_TEST(TestYamlVersionMetricsUnknownVersions) {
+        // Drain the initial Console response so it cannot overwrite injected configurations.
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
+        auto dispatcherId = StartYamlVersionMetricsDispatcher(runtime);
+
+        const TString mainYaml = "metadata: {version: 7}\nconfig: {yaml_config_enabled: true}\n";
+        const TString databaseYaml = "metadata: {version: 11}\nconfig: {}\n";
+
+        // Exercise missing metadata, a missing version, zero, conversion errors and a non-scalar version.
+        for (const TString& metadata : {"", "metadata: {}\n", "metadata: {version: 0}\n",
+                "metadata: {version: invalid}\n", "metadata: {version: 18446744073709551616}\n",
+                "metadata: {version: [1, 2]}\n"}) {
+            CheckYamlVersionMetrics(runtime, dispatcherId,
+                metadata + "config: {yaml_config_enabled: true}\n", databaseYaml, 0, 11);
+            CheckYamlVersionMetrics(runtime, dispatcherId,
+                mainYaml, metadata + "config: {}\n", 7, 0);
+        }
+
+        // Recover both gauges after replacing unreadable metadata with valid versions.
+        CheckYamlVersionMetrics(runtime, dispatcherId, mainYaml, databaseYaml, 7, 11);
+    }
+
+    // Check that a new dispatcher clears version counters retained in the process registry.
+    Y_UNIT_TEST(TestYamlVersionMetricsResetExistingCounters) {
+        // Simulate counters left by an earlier dispatcher instance.
+        TTenantTestRuntime runtime(ConfigWithoutDispatcher());
+        auto counters = GetServiceCounters(runtime.GetDynamicCounters(0), "config")
+            ->GetSubgroup("subsystem", "configs_dispatcher");
+        auto mainCounter = counters->GetCounter("MainYamlConfigVersion", false);
+        auto databaseCounter = counters->GetCounter("DatabaseYamlConfigVersion", false);
+        *mainCounter = 7;
+        *databaseCounter = 11;
+
+        // Bootstrap with default initialization and verify that stale versions are not exposed.
+        StartYamlVersionMetricsDispatcher(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(mainCounter->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(databaseCounter->Val(), 0);
     }
 
     Y_UNIT_TEST(TestStartupReplayDoesNotAccumulateConfigTrace) {
@@ -1653,118 +1783,118 @@ selector_config: []
             }
         }
     }
-    
+
     Y_UNIT_TEST(TestGetStateRequestResponse) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitConfigsDispatcher(runtime);
-        
+
         TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
         auto state = QueryState(runtime, dispatcherId);
-        
+
         UNIT_ASSERT(!state.ConfigSourceLabel.empty() || state.ConfigSource != EConfigSource::Unknown);
         UNIT_ASSERT(state.SubscriptionsCount >= 0);
     }
-    
+
     Y_UNIT_TEST(TestGetStorageYamlRequestResponse) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitConfigsDispatcher(runtime);
-        
+
         TActorId dispatcherId = GetRuntimeDispatcherId(runtime);
         TString storageYaml = QueryStorageYaml(runtime, dispatcherId);
-        
+
         UNIT_ASSERT(storageYaml.empty());
     }
-    
+
     Y_UNIT_TEST(TestSeedNodesInitialization) {
         NKikimrConfig::TAppConfig config;
         TString storageYaml = "storage:\n  nodes:\n  - node1:2135\n  - node2:2135\n";
         config.SetStartupStorageYaml(storageYaml);
-        
+
         NConfig::TConfigsDispatcherInitInfo initInfo;
         initInfo.InitialConfig = config;
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.StartupStorageYaml = storageYaml;
         initInfo.Labels["config_source"] = "seed_nodes";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
-        
+
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
-        
+
         auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
         TActorId dispatcherId = runtime.Register(dispatcher);
         runtime.EnableScheduleForActor(dispatcherId, true);
-        
+
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
             runtime.DispatchEvents(options);
         }
-        
+
         auto state = QueryState(runtime, dispatcherId);
-        
+
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::SeedNodes);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "seed_nodes");
         UNIT_ASSERT(state.HasStorageYaml);
         UNIT_ASSERT(state.StorageYamlSize > 0);
-        
+
         TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
         UNIT_ASSERT_VALUES_EQUAL(retrievedStorageYaml, storageYaml);
     }
-    
+
     Y_UNIT_TEST(TestDynamicConfigInitialization) {
-        
+
         NKikimrConfig::TAppConfig config;
-        
+
         NConfig::TConfigsDispatcherInitInfo initInfo;
         initInfo.InitialConfig = config;
         initInfo.StartupConfigYaml = "config:\n  log_config:\n    cluster_name: test\n";
         initInfo.Labels["config_source"] = "dynamic";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
-        
+
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
-        
+
         auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
         TActorId dispatcherId = runtime.Register(dispatcher);
         runtime.EnableScheduleForActor(dispatcherId, true);
-        
+
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
             runtime.DispatchEvents(options);
         }
-        
+
         auto state = QueryState(runtime, dispatcherId);
-        
+
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT_VALUES_EQUAL(state.ConfigSourceLabel, "dynamic");
         UNIT_ASSERT(!state.HasStorageYaml);
         UNIT_ASSERT_VALUES_EQUAL(state.StorageYamlSize, 0);
-        
+
         TString retrievedStorageYaml = QueryStorageYaml(runtime, dispatcherId);
         UNIT_ASSERT(retrievedStorageYaml.empty());
     }
-    
+
     Y_UNIT_TEST(TestUnknownConfigSource) {
         NKikimrConfig::TAppConfig config;
-        
+
         NConfig::TConfigsDispatcherInitInfo initInfo;
         initInfo.InitialConfig = config;
         initInfo.StartupConfigYaml = "config: {}\n";
         initInfo.DebugInfo = NConfig::TDebugInfo{};
-        
+
         TTenantTestRuntime runtime(ConfigWithoutDispatcher(), config);
-        
+
         auto* dispatcher = NConsole::CreateConfigsDispatcher(initInfo);
         TActorId dispatcherId = runtime.Register(dispatcher);
         runtime.EnableScheduleForActor(dispatcherId, true);
-        
+
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvConsole::EvConfigSubscriptionNotification));
             runtime.DispatchEvents(options);
         }
-        
+
         auto state = QueryState(runtime, dispatcherId);
-        
+
         UNIT_ASSERT_EQUAL(state.ConfigSource, EConfigSource::DynamicConfig);
         UNIT_ASSERT(state.ConfigSourceLabel.empty());
         UNIT_ASSERT(!state.HasStorageYaml);
@@ -1914,6 +2044,107 @@ selector_config: []
 }
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherOpaqueConfigTests) {
+
+    // Verify that disabling YAML resets an applied opaque config before its ACK and rejects that stale ACK.
+    Y_UNIT_TEST(TestOpaqueConfigResetOnYamlDisabledBeforeAck) {
+        // Acknowledge an empty baseline shared by YAML and the PROTO fallback.
+        const ui32 kind = NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem;
+        auto testConfig = DefaultConsoleTestConfig();
+        testConfig.OpaqueConfigParsers[kind] = std::bind(
+            NYaml::DefaultOpaqueConfigParser<NKikimrOpaqueConfigUt::TUtPrivateDatabaseConfig>,
+            std::placeholders::_1, true);
+        TTenantTestRuntime runtime(testConfig);
+        const auto dispatcherId = runtime.GetLocalServiceId(InitConfigsDispatcher(runtime));
+        TString yaml = R"(
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto subscriberId = runtime.Register(new TPrivateDatabaseConfigSubscriber(runtime.Sender));
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(handle);
+
+        // Read only this subscription's monitoring state after previously sent events are processed.
+        auto subscriptionState = [&]() {
+            THttpRequest request(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &request, nullptr, nullptr, "", nullptr);
+            runtime.Send(new IEventHandle(dispatcherId, runtime.Sender, new NMon::TEvHttpInfo(monReq)));
+            TAutoPtr<IEventHandle> responseHandle;
+            const auto* response = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(responseHandle);
+            const auto& answer = response->Answer;
+            const auto begin = answer.find("- Kinds: PrivateDatabaseConfigItem\n");
+            UNIT_ASSERT_UNEQUAL_C(begin, TString::npos, answer);
+            auto end = answer.find("\n- Kinds:", begin);
+            if (end == TString::npos) {
+                end = answer.find("\nSubscribers:", begin);
+            }
+            UNIT_ASSERT_UNEQUAL_C(end, TString::npos, answer);
+            return answer.substr(begin, end - begin + 1);
+        };
+        UNIT_ASSERT(!subscriptionState().Contains("UpdateInProcess:"));
+
+        // Hold outgoing ACKs after the real subscriber applies each notification.
+        TVector<TAutoPtr<IEventHandle>> acks;
+        TVector<ui64> cookies;
+        auto observer = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Sender == dispatcherId && ev->Recipient == subscriberId &&
+                ev->GetTypeRewrite() == TEvConsole::EvConfigNotificationRequest)
+            {
+                const auto* notification = ev->Get<TEvConsole::TEvConfigNotificationRequest>();
+                UNIT_ASSERT_VALUES_EQUAL(notification->Record.ItemKindsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(notification->Record.GetItemKinds(0), kind);
+                if (!cookies.empty()) {
+                    UNIT_ASSERT(notification->OpaqueConfigs.empty());
+                    UNIT_ASSERT(!notification->Record.GetConfig().HasPrivateDatabaseConfig());
+                }
+                cookies.push_back(ev->Cookie);
+            }
+            if (ev->Sender == subscriberId && ev->Recipient == dispatcherId &&
+                ev->GetTypeRewrite() == TEvConsole::EvConfigNotificationResponse)
+            {
+                acks.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        SubstGlobal(yaml, "version: 0", "version: 1");
+        yaml += "  private_database_config:\n    secret_port: 200\n";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto* parsed = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(parsed->SecretPort, 200);
+        runtime.WaitFor("opaque config ACK", [&]() { return acks.size() == 1; }, TDuration::Seconds(1));
+        UNIT_ASSERT(subscriptionState().Contains("UpdateInProcessYamlVersion:"));
+
+        // Disable YAML without changing the empty PROTO fallback or acknowledging the opaque payload.
+        SubstGlobal(yaml, "version: 1", "version: 2");
+        SubstGlobal(yaml, "yaml_config_enabled: true", "yaml_config_enabled: false");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yaml);
+        const auto* reset = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(
+            handle, TDuration::Seconds(1));
+        UNIT_ASSERT_C(reset, "Disabling YAML must remove the unacknowledged opaque config");
+        runtime.WaitFor("opaque reset ACK", [&]() { return acks.size() == 2; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(cookies.size(), 2);
+        UNIT_ASSERT_UNEQUAL(cookies[0], cookies[1]);
+        UNIT_ASSERT_VALUES_EQUAL(acks[0]->Cookie, cookies[0]);
+        UNIT_ASSERT_VALUES_EQUAL(acks[1]->Cookie, cookies[1]);
+        runtime.SetObserverFunc(observer);
+
+        // Deliver the stale ACK and prove that the reset remains pending without the canceled YAML version.
+        runtime.Send(acks[0].Release());
+        const auto pending = subscriptionState();
+        UNIT_ASSERT_STRING_CONTAINS(pending, TStringBuilder() << "UpdateInProcessCookie: " << cookies[1] << "\n");
+        UNIT_ASSERT(!pending.Contains("UpdateInProcessYamlVersion:"));
+
+        // Complete the reset with its own ACK and verify that no YAML version is committed.
+        runtime.Send(acks[1].Release());
+        const auto completed = subscriptionState();
+        UNIT_ASSERT(!completed.Contains("UpdateInProcess:"));
+        UNIT_ASSERT(!completed.Contains("YamlVersion:"));
+    }
 
     TTenantTestConfig TenantTestConfig()
     {

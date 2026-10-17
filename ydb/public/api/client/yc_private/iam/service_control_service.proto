@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package yandex.cloud.priv.iam.v1;
+
+import "ydb/public/api/client/yc_private/iam/resource.proto";
+import "ydb/public/api/client/yc_private/operation/operation.proto";
+
+// Trimmed copy of yandex/cloud/priv/iam/v1/service_control_service.proto:
+// only the methods needed for the Delegate Access Pattern are kept
+// (https://wiki.yandex-team.ru/cloud/iamrm/research/setupdelegation-pattern/).
+service ServiceControlService {
+  // Grants the agent service account of the service (service_id/microservice_id) in the resource
+  // container the right to impersonate target_service_account_id. Called with the system service
+  // account token of the service; on_behalf_of_subject_id is the user who initiated the operation
+  // and must be allowed to delegate the target service account.
+  rpc SetupDelegation (SetupDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
+
+  // Reverts SetupDelegation for the same referrer.
+  rpc RevokeDelegation (RevokeDelegationRequest) returns (.ydb.yc.priv.operation.Operation);
+}
+
+message SetupDelegationRequest {
+  string service_id = 1;
+  string microservice_id = 2;
+  Resource resource = 3;
+  string target_service_account_id = 4;
+  Resource referrer = 5;
+  string on_behalf_of_subject_id = 6;
+  bool with_references = 7;
+}
+
+message SetupDelegationMetadata {
+  string service_id = 1;
+  Resource resource = 2;
+}
+
+message RevokeDelegationRequest {
+  string service_id = 1;
+  string microservice_id = 2;
+  Resource resource = 3;
+  string target_service_account_id = 4;
+  Resource referrer = 5;
+  bool with_references = 6;
+}
+
+message RevokeDelegationMetadata {
+  string service_id = 1;
+  Resource resource = 2;
+}

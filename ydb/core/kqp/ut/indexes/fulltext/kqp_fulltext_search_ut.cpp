@@ -3880,6 +3880,54 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchPrefixed, Compact, KeyPart) {
     }
 }
 
+Y_UNIT_TEST(SelectWithFulltextMatchPrefixedStructParameter) {
+    auto kikimr = KikimrPrefix(false);
+    auto db = kikimr.GetQueryClient();
+
+    auto execute = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+
+    execute(R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64,
+            UserId Uint64,
+            Text Utf8,
+            PRIMARY KEY (Key),
+            INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (UserId, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        );
+    )sql");
+    execute(R"sql(
+        UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+            (1, 100, "cats love to play"),
+            (2, 100, "dogs love to run"),
+            (3, 200, "cats love milk");
+    )sql");
+
+    const auto params = NYdb::TParamsBuilder()
+        .AddParam("$filter")
+            .BeginStruct()
+                .AddMember("A").Uint64(42)
+                .AddMember("UserId").Uint64(200)
+            .EndStruct()
+            .Build()
+        .Build();
+    const auto result = db.ExecuteQuery(R"sql(
+        DECLARE $filter AS Struct<A: Uint64, UserId: Uint64>;
+
+        SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = $filter.UserId AND FulltextMatch(Text, "cats")
+        ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[[3u]]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+}
+
 Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndexPrefix(false);
@@ -5225,6 +5273,30 @@ Y_UNIT_TEST_TWIN(PrefixedRowIdInsertSupported, Compact) {
     )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL("[[\"a1\"];[\"a2\"]]", NYdb::FormatResultSetYson(select.GetResultSet(0)));
+}
+
+// Check dropping _row_id column
+Y_UNIT_TEST_TWIN(DropRowIdColumn, Compact) {
+    auto kikimr = KikimrPrefixRowId(Compact);
+    auto db = kikimr.GetQueryClient();
+    SetupPrefixedRowIdDocs(db);
+
+    auto exec = [&](const TString& q) {
+        auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+    };
+    exec(R"sql(
+        INSERT INTO `/Root/Docs` (Org, Pk, Tenant, Text) VALUES ("acme"u, "a2"u, "red"u, "cats are fast"u);
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Docs` DROP INDEX `fulltext_idx`
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Docs` DROP INDEX `__ydb_unique_row_id`
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/Docs` DROP COLUMN `__ydb_row_id`
+    )sql");
 }
 
 // UPSERT/REPLACE/UPDATE on a prefixed __ydb_row_id fulltext index reconcile an existing row's

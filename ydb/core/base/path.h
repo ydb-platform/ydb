@@ -1,7 +1,9 @@
 #pragma once
 
-#include <util/generic/vector.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/string/join.h>
 
 namespace NKikimr {
@@ -30,6 +32,8 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
 
+TString CreateDatabaseId(const TString& database, bool serverless, TPathId pathId);
+
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {
     auto path = JoinRange("/", begin, end);
@@ -52,4 +56,4 @@ inline TVector<TString> ChildPath(const TVector<TString>& parentPath, const TVec
     return path;
 }
 
-}
+} // namespace NKikimr

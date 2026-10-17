@@ -14,6 +14,7 @@ namespace NSQLComplete {
 struct TFolderEntry {
     static constexpr const char* Folder = "Folder";
     static constexpr const char* Table = "Table";
+    static constexpr const char* View = "View";
 
     static THashSet<TString> KnownTypes;
 

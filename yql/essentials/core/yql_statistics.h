@@ -17,6 +17,10 @@
 #include <optional>
 #include <iostream>
 
+namespace NKikimr {
+class TEqHeightHistogram;
+}
+
 namespace NYql {
 
 enum EStatisticsType: ui32 {
@@ -73,6 +77,26 @@ struct TColumnStatistics {
     TColumnStatistics() = default;
 };
 
+struct TMultiColumnStatistics {
+    TVector<TString> Columns;
+    TVector<TString> Types;
+    std::shared_ptr<NKikimr::TEqHeightHistogram> EqHeightHistogram;
+    std::shared_ptr<NKikimr::TCountMinSketch> CountMinSketch;
+
+    TMultiColumnStatistics() = default;
+};
+
+inline TString MakeMultiColumnKey(const TVector<TString>& columns) {
+    TString key;
+    for (const auto& column : columns) {
+        if (!key.empty()) {
+            key.append('\0');
+        }
+        key.append(column);
+    }
+    return key;
+}
+
 /**
  * Optimizer Statistics struct records per-table and per-column statistics
  * for the current operator in the plan. Currently, only Nrows and Ncols are
@@ -112,6 +136,7 @@ struct TOptimizerStatistics {
 
     struct TColumnStatMap: public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString, TColumnStatistics> Data;
+        THashMap<TString, TMultiColumnStatistics> MultiData;
         TColumnStatMap() = default;
         explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data)
             : Data(std::move(data))

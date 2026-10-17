@@ -271,12 +271,12 @@ namespace NKikimr::NBlobDepot {
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
 
-            if (Self->MoveData.IsInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
+            if (Self->MoveData.IsBlobMovingInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
                 const TString binaryKey = key.MakeBinaryKey();
                 if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey) {
                     Self->MoveData.RecordTouched = true;
                 }
-                if (outcome != EUpdateOutcome::DROP) {
+                if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass) {
                     for (const auto& item : value.ValueChain) {
                         if (item.HasBlobLocator() && Self->NeedMoveBlob(item.GetBlobLocator())) {
                             Self->MoveData.NeedsAnotherPass = true;
@@ -373,6 +373,13 @@ namespace NKikimr::NBlobDepot {
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
 
+        YDB_LOG_DEBUG("ReplaceLocatorForMoveData",
+            {"marker", "BDT11"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"valueChainIndex", valueChainIndex},
+            {"expectedValueVersion", expectedValueVersion});
+
         const TValue *value = FindKey(key);
         if (!value) {
             return EMoveDataReplaceResult::KeyMissing;
@@ -394,10 +401,10 @@ namespace NKikimr::NBlobDepot {
             return EMoveDataReplaceResult::KeyChanged;
         }
 
+        Y_ABORT_UNLESS(RefCountBlobs.contains(Self->MoveData.BlobId));
+        bool multipleRefs = RefCountBlobs[Self->MoveData.BlobId] > 1;
+
         Self->MoveData.ApplyingIndexUpdate = true;
-        Y_DEFER {
-            Self->MoveData.ApplyingIndexUpdate = false;
-        };
 
         const bool changed = UpdateKey(key, txc, cookie, "ReplaceLocatorForMoveData",
             [&](TValue& mutableValue, bool inserted) {
@@ -412,6 +419,13 @@ namespace NKikimr::NBlobDepot {
                 return EUpdateOutcome::CHANGE;
             });
         Y_ABORT_UNLESS(changed);
+
+        Self->MoveData.ApplyingIndexUpdate = false;
+
+        if (multipleRefs) {
+            Self->MoveData.BlobIdToNewLocator.try_emplace(Self->MoveData.BlobId, newLocator);
+        }
+
         return EMoveDataReplaceResult::Replaced;
     }
 
@@ -419,40 +433,15 @@ namespace NKikimr::NBlobDepot {
         return RefCountBlobs.contains(id);
     }
 
-    TData::EMoveDataTrashStatus TData::CheckMoveDataTrash(const TSet<ui32>& groups) {
-        // TODO: rewrite
-
-        bool hasUsed = false;
-        bool waitingForGC = false;
-
-        for (auto& [key, record] : RecordsPerChannelGroup) {
-            const auto& [channel, groupId] = key;
-            Y_UNUSED(channel);
-            if (!groups.contains(groupId)) {
-                continue;
-            }
-
-            hasUsed = hasUsed || !record.Used.empty();
-            waitingForGC = waitingForGC || !record.Trash.empty() || !record.TrashInFlight.empty() ||
-                record.CollectGarbageRequestsInFlight;
-            record.CollectIfPossible(this);
-        }
-
-        for (const TLogoBlobID& id : AllInFlightTrashBlobs) {
-            if (groups.contains(Self->Info()->GroupFor(id.Channel(), id.Generation()))) {
-                waitingForGC = true;
-                break;
+    std::unordered_set<std::tuple<ui8, ui32>> TData::PrepareCheckTrash(const THashSet<ui32>& groups) {
+        std::unordered_set<std::tuple<ui8, ui32>> channelGroups;
+        for (const auto& [key, _] : RecordsPerChannelGroup) {
+            const auto groupId = std::get<1>(key);
+            if (groups.contains(groupId)) {
+                channelGroups.insert(key);
             }
         }
-
-        if (hasUsed) {
-            return EMoveDataTrashStatus::NeedsIndexRescan;
-        }
-        if (waitingForGC || !IsTrashFullyLoaded()) {
-            IssueLoadTrashBatch();
-            return EMoveDataTrashStatus::WaitingForGC;
-        }
-        return EMoveDataTrashStatus::Clear;
+        return channelGroups;
     }
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
@@ -779,6 +768,43 @@ namespace NKikimr::NBlobDepot {
         });
 
         // delete selected keys
+        for (const TKey& key : keysToDelete) {
+            DeleteKey(key, txc, cookie);
+        }
+
+        return finished;
+    }
+
+    bool TData::OnTabletDeleted(ui64 tabletId, ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc,
+            void *cookie) {
+        YDB_LOG_DEBUG("OnTabletDeleted",
+            {"marker", "BDT85"},
+            {"id", Self->GetLogId()},
+            {"tabletId", tabletId},
+            {"maxItems", maxItems});
+
+        Y_ABORT_UNLESS(Loaded);
+
+        // the whole tablet is gone, so this covers all of its channels in a single scan
+        const TData::TKey first(TLogoBlobID(tabletId, 0, 0, 0, 0, 0));
+        const TData::TKey last(TLogoBlobID(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+            TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
+
+        bool finished = true;
+        TScanRange r{first, last, TData::EScanFlags::INCLUDE_BEGIN | TData::EScanFlags::INCLUDE_END};
+        std::vector<TKey> keysToDelete;
+        ScanRange(r, nullptr, nullptr, [&](auto& key, auto& /*value*/) {
+            // a complete deletion is a hard barrier, so Keep flags do not save anything here
+            if (maxItems) {
+                keysToDelete.push_back(key);
+                --maxItems;
+            } else {
+                finished = false;
+                return false;
+            }
+            return true;
+        });
+
         for (const TKey& key : keysToDelete) {
             DeleteKey(key, txc, cookie);
         }

@@ -11,6 +11,7 @@ def add_options(p):
     common.add_allow_unusable_pdisks_option(p)
     common.add_ignore_degraded_group_check_option(p)
     common.add_ignore_failure_model_group_check_option(p)
+    common.add_ignore_group_layout_check_option(p)
     common.add_ignore_vslot_quotas_option(p)
     p.add_argument('--move-only-to-operational-pdisks', action='store_true', help='Move VDisks only to operational PDisks')
     p.add_argument('--suppress-donor-mode', action='store_true', help='Do not leave the previous VDisk in donor mode after the moving and drop it')
@@ -26,6 +27,7 @@ def create_request(args, vdisk):
     request.options.ignore_target_space_check = args.ignore_vslot_quotas
     request.options.safety.ignore_degraded_groups = args.ignore_degraded_group_check
     request.options.safety.ignore_group_failure_model = args.ignore_failure_model_group_check
+    request.options.safety.ignore_group_layout_checks = args.ignore_group_layout_check
     return request
 
 

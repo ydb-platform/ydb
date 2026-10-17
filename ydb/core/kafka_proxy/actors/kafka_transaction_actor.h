@@ -8,7 +8,6 @@
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
-#include <util/generic/vector.h>
 
 namespace NKafka {
     /*
@@ -40,10 +39,6 @@ namespace NKafka {
                 // This request sends to KQP a command to commit transaction
                 COMMIT
             };
-
-            // Cap in-flight EndTxn(commit) retries. When full, fail the oldest with
-            // COORDINATOR_NOT_AVAILABLE so the client's latest correlation id stays queued.
-            static constexpr size_t MaxPendingEndTxnRequests = 8;
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
             TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs, const TString& resourceDatabasePath) :
@@ -125,8 +120,11 @@ namespace NKafka {
             void HandleCommitResponse(const TActorContext& ctx);
             void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
             // Kafka Java treats BROKER_NOT_AVAILABLE / INVALID_TXN_STATE as fatal on EndTxn.
-            // COORDINATOR_NOT_AVAILABLE is retryable; keep the actor so a retry still sees partitions/offsets.
-            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage);
+            // COORDINATOR_NOT_AVAILABLE and CONCURRENT_TRANSACTIONS are retryable; keep the actor
+            // so a retry still sees partitions/offsets. CONCURRENT_TRANSACTIONS matches Kafka 3.4
+            // when the previous transaction is still completing.
+            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage,
+                                     EKafkaErrors errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
             TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
@@ -143,9 +141,9 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
-            // EndTxn is idempotent: Kafka clients retry with a new correlation id while KQP is still
-            // committing. Dropping those retries left the producer hanging until request timeout.
-            TVector<TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>>> PendingEndTxnRequests;
+            // The connection processes one in-flight Kafka request, so at most one EndTxn is pending
+            // while KQP commits. Extra EndTxn on this actor is rejected with CONCURRENT_TRANSACTIONS.
+            TEvKafka::TEvEndTxnRequest::TPtr PendingEndTxnRequest;
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

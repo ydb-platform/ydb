@@ -1,0 +1,9 @@
+UNITTEST()
+SRCS(read_actor_ut.cpp)
+PEERDIR(
+    ydb/library/yql/providers/common/message_stream/async_io/testlib
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/stub
+)
+YQL_LAST_ABI_VERSION()
+END()

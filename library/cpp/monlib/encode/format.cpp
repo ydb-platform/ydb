@@ -7,6 +7,39 @@
 #include <util/string/cast.h>
 
 namespace NMonitoring {
+    namespace {
+        constexpr TStringBuf SolomonMediaTypePrefix = "application/x-solomon-";
+
+        bool IsSolomonMediaType(TStringBuf value) {
+            value = StripString(value).Before(';');
+            return value.size() > SolomonMediaTypePrefix.size() &&
+                   AsciiHasPrefixIgnoreCase(value, SolomonMediaTypePrefix);
+        }
+
+        bool HeaderHasSolomonMediaType(const THttpHeaders& headers, TStringBuf headerName) {
+            for (const auto& header : headers) {
+                if (AsciiEqualsIgnoreCase(header.Name(), headerName) && IsSolomonMediaType(header.Value())) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool AcceptsSolomonMediaType(const THttpHeaders& headers) {
+            for (const auto& header : headers) {
+                if (!AsciiEqualsIgnoreCase(header.Name(), "Accept")) {
+                    continue;
+                }
+                for (const auto& item : StringSplitter(header.Value()).Split(',').SkipEmpty()) {
+                    if (IsSolomonMediaType(item.Token())) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+
     static ECompression CompressionFromHeader(TStringBuf value) {
         if (value.empty()) {
             return ECompression::UNKNOWN;
@@ -66,6 +99,11 @@ namespace NMonitoring {
         value = value.NextTok(';');
 
         return FormatFromHttpMedia(value);
+    }
+
+    bool DisableContentEncoding(const THttpHeaders& requestHeaders, const THttpHeaders& responseHeaders) {
+        return !AcceptsSolomonMediaType(requestHeaders) &&
+               !HeaderHasSolomonMediaType(responseHeaders, "Content-Type");
     }
 
     TStringBuf ContentTypeByFormat(EFormat format) {

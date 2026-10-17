@@ -44,7 +44,7 @@ private:
     void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override;
 
 public:
-    TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source);
+    TDictionaryFetchLogic(const ui32 columnId, const IDataSource& source);
     TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<ISnapshotSchema>& sourceSchema,
         const std::shared_ptr<IStoragesManager>& storages, const ui32 recordsCount);
 };

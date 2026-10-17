@@ -1,7 +1,7 @@
 #pragma once
 #include "common.h"
 
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ydb/library/signals/object_counter.h>
 

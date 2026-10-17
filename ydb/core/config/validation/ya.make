@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     validators.h
@@ -13,9 +13,12 @@ SRCS(
 PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/protos
+    ydb/core/path_aliasing
     ydb/core/formats/arrow/serializer
     ydb/core/tx/conveyor_composite/common
+    ydb/core/tx/conveyor_composite/common/config
     library/cpp/protobuf/json
+    library/cpp/logger
 )
 
 END()

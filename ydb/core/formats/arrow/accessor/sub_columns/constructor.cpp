@@ -49,7 +49,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             std::shared_ptr<TColumnLoader> columnLoader =
                 std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
                     headerConclusion->GetColumnStats().GetAccessorConstructor(i, Settings.GetEncodingParams()), schema->field(i), nullptr, 0);
-            const TStringBuf columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
+            // the array outlives originalData, so it must own its slice of the blob
+            const TString columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
             auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetKeyColumns(i).GetAdditionalAccessorData());
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(
                 externalInfo.GetRecordsCount(), columnLoader, columnBlob, true, std::move(additionalData)));
@@ -114,7 +115,7 @@ TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContain
                 TString(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize()), proto.GetOtherRecordsCount()));
         } else {
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(
-                proto.GetOtherRecordsCount(), columnLoader, TStringBuf(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize()), true));
+                proto.GetOtherRecordsCount(), columnLoader, TString(data.data() + currentIndex, proto.GetOtherColumns(i).GetSize()), true));
         }
         currentIndex += proto.GetOtherColumns(i).GetSize();
     }

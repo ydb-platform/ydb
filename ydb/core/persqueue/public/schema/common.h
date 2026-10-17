@@ -61,6 +61,7 @@ ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration);
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
 std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);
+TResult ValidateTopicPartitionCount(i64 count, TStringBuf what);
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(
     const google::protobuf::Duration& duration,
     std::string_view consumerName

@@ -14,6 +14,7 @@
 #include <library/cpp/yt/yson_string/string.h>
 
 #include <library/cpp/yt/misc/guid.h>
+#include <library/cpp/yt/misc/immortal.h>
 
 #include <library/cpp/yt/system/thread_name.h>
 
@@ -77,6 +78,7 @@ struct TLoggingAnchor
 using TThreadId = size_t;
 using TFiberId = size_t;
 using TTraceId = TGuid;
+using TSpanId = ui64;
 using TRequestId = TGuid;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,6 +102,7 @@ struct TLogEvent
     TFiberId FiberId = {};
 
     TTraceId TraceId;
+    TSpanId SpanId = {};
     TRequestId RequestId;
 
     TStringBuf SourceFile;
@@ -134,11 +137,12 @@ ILogManager* GetDefaultLogManager();
 
 struct TLoggingContext
 {
-    TCpuInstant Instant;
-    TThreadId ThreadId;
+    TCpuInstant Instant = 0;
+    TThreadId ThreadId = 0;
     TThreadName ThreadName;
-    TFiberId FiberId;
+    TFiberId FiberId = 0;
     TTraceId TraceId;
+    TSpanId SpanId = 0;
     TRequestId RequestId;
     TLoggingTagListPayloadView TraceLoggingTags;
 };
@@ -330,10 +334,23 @@ void LogStructuredEvent(
 #define YT_LOG_ALERT_IF(condition, ...)        if (condition)    YT_LOG_ALERT(__VA_ARGS__)
 #define YT_LOG_ALERT_UNLESS(condition, ...)    if (!(condition)) YT_LOG_ALERT(__VA_ARGS__)
 
-#define YT_LOG_FATAL(...)                                                     \
-    do {                                                                      \
-        YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Fatal, __VA_ARGS__); \
-        Y_UNREACHABLE();                                                      \
+// Not #YT_LOG_EVENT: a fatal event must not be skipped, so it needs no level check nor an
+// anchor to be suppressed by.
+#define YT_LOG_FATAL(...)                                                                \
+    do {                                                                                 \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */  \
+        const auto& logger__ = (Logger)();                                               \
+        auto loggingContext__ = ::NYT::NLogging::GetLoggingContext();                    \
+        auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(                      \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __VA_ARGS__);                                                                \
+        ::NYT::NLogging::NDetail::LogFatalEventAndAbort(                                 \
+            loggingContext__,                                                            \
+            logger__,                                                                    \
+            __LOCATION__,                                                                \
+            std::move(message__.Payload));                                               \
+         /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */    \
     } while(false)
 #define YT_LOG_FATAL_IF(condition, ...)        if (Y_UNLIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
 #define YT_LOG_FATAL_UNLESS(condition, ...)    if (!Y_LIKELY(condition)) YT_LOG_FATAL(__VA_ARGS__)
@@ -359,9 +376,9 @@ void LogStructuredEvent(
         auto loggingContext__ = ::NYT::NLogging::GetLoggingContext();                                                \
         auto message__ = ::NYT::NLogging::NDetail::BuildLogMessage(loggingContext__, logger__, __VA_ARGS__);         \
         /* Copy the message out before the payload is moved into the log event below. */                             \
-        auto messageStr__ = ::std::string(::NYT::NLogging::GetMessageFromTaggedPayload(message__.Payload)); \
+        auto messageStr__ = ::std::string(::NYT::NLogging::GetMessageFromTaggedPayload(message__.Payload));          \
                                                                                                                      \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                                \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                                    \
         auto* anchor__ = anchorStorage__.Get();                                                                      \
                                                                                                                      \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__);                                                \
@@ -406,7 +423,7 @@ void LogStructuredEvent(
         const auto& logger__ = (logger)();                                                                   \
         auto level__ = (level);                                                                              \
         auto location__ = __LOCATION__;                                                                      \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                        \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;                            \
         auto* anchor__ = anchorStorage__.Get();                                                              \
                                                                                                              \
         bool anchorUpToDate__ = logger__.IsAnchorUpToDate(*anchor__);                                        \
@@ -489,12 +506,12 @@ void LogStructuredEvent(
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
 
-//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site leaky anchor, its
+//! Yields a #TStaticAnchorRef for the expansion site: a per-call-site immortal anchor, its
 //! one-shot registration flag and the site's source location.
 #define YT_TLOG_STATIC_ANCHOR_REF()                                                    \
     [] {                                                                               \
         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
-        static ::NYT::TLeakyStorage<::NYT::NLogging::TLoggingAnchor> anchorStorage__;  \
+        static ::NYT::TImmortal<::NYT::NLogging::TLoggingAnchor> anchorStorage__;      \
         static std::atomic<bool> anchorRegistered__;                                   \
         return ::NYT::NLogging::NDetail::TStaticAnchorRef{                             \
             anchorStorage__.Get(),                                                     \

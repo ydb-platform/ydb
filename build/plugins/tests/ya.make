@@ -7,6 +7,7 @@ TEST_SRCS(
     test_common.py
     test_dart_fields.py
     test_gobuild.py
+    test_nots_checks.py
     test_requirements.py
     test_res.py
 )

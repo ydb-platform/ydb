@@ -107,6 +107,8 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
         const TInstant LastFailAt;
         const TInstant SuspendedUntil;
         const Ydb::StatusIds::StatusCode RequestStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        const TInstant SubmittedAt;
+        const TInstant FinishedAt;
     };
 
     TEvGetScriptExecutionOperationResponse(const Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues)
@@ -120,6 +122,8 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
         , RetryCount(info.RetryCount)
         , LastFailAt(info.LastFailAt)
         , SuspendedUntil(info.SuspendedUntil)
+        , SubmittedAt(info.SubmittedAt)
+        , FinishedAt(info.FinishedAt)
     {}
 
     TEvGetScriptExecutionOperationResponse(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
@@ -137,6 +141,8 @@ struct TEvGetScriptExecutionOperationResponse : public TEventLocal<TEvGetScriptE
     const ui64 RetryCount = 0;
     const TInstant LastFailAt;
     const TInstant SuspendedUntil;
+    const TInstant SubmittedAt;
+    const TInstant FinishedAt;
 };
 
 struct TEvListScriptExecutionOperations : public TEventWithDatabaseId<TEvListScriptExecutionOperations, TKqpScriptExecutionEvents::EvListScriptExecutionOperations> {

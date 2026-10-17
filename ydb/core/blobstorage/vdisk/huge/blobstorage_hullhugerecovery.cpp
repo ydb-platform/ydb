@@ -712,13 +712,7 @@ namespace NKikimr {
         }
 
         bool THullHugeKeeperPersState::UseStripeAllocator() const {
-            if (StripeAllocatorEnabled) {
-                return true;
-            }
-            if (!TlsActivationContext) {
-                return false;
-            }
-            return AppData()->FeatureFlags.GetEnableVDiskHeapAllocator();
+            return StripeAllocatorEnabled;
         }
 
         bool THullHugeKeeperPersState::IsStripeAddr(const TDiskPart &addr) const {

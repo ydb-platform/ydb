@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     lambda_builder.cpp
@@ -15,7 +15,5 @@ PEERDIR(
     yql/essentials/providers/common/mkql
     yql/essentials/public/langver
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

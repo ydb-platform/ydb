@@ -1,16 +1,18 @@
-#include "local_topic_read_session.h"
 #include "local_topic_client_helpers.h"
 #include "local_topic_io_session_common.h"
+#include "local_topic_read_session.h"
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
-#include <ydb/library/actors/core/actorsystem.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/persqueue_v1/actors/read_session_actor.h>
 
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <library/cpp/protobuf/interop/cast.h>
-
 #include <util/generic/guid.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YDB_SDK
@@ -23,10 +25,10 @@ using namespace NGRpcService;
 using namespace NYdb;
 using namespace NYdb::NTopic;
 
-class TLocalTopicReadSessionActor final
-    : public TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient, Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters>
-{
-    using TBase = TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient, Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters>;
+class TLocalTopicReadSessionActor final: public TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient,
+                                             Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters> {
+    using TBase = TLocalTopicIoSessionActor<TLocalTopicReadSessionActor, Ydb::Topic::StreamReadMessage::FromClient,
+        Ydb::Topic::StreamReadMessage::FromServer, TReadSessionEvent::TEvent, TReaderCounters>;
 
     struct TEvPartition {
         enum EEv {
@@ -41,33 +43,37 @@ class TLocalTopicReadSessionActor final
 
         // Events from partition session callbacks
 
-        struct TEvStatusRequest : public TEventLocal<TEvStatusRequest, EvStatusRequest> {
+        struct TEvStatusRequest: public TEventLocal<TEvStatusRequest, EvStatusRequest> {
             explicit TEvStatusRequest(i64 partitionSessionId)
                 : PartitionSessionId(partitionSessionId)
-            {}
+            {
+            }
 
             const i64 PartitionSessionId;
         };
 
-        struct TEvOffsetsCommitRequest : public TEventLocal<TEvOffsetsCommitRequest, EvOffsetsCommitRequest> {
+        struct TEvOffsetsCommitRequest: public TEventLocal<TEvOffsetsCommitRequest, EvOffsetsCommitRequest> {
             TEvOffsetsCommitRequest(i64 partitionSessionId, ui64 startOffset, ui64 endOffset)
                 : PartitionSessionId(partitionSessionId)
                 , StartOffset(startOffset)
                 , EndOffset(endOffset)
-            {}
+            {
+            }
 
             const i64 PartitionSessionId;
             const ui64 StartOffset;
             const ui64 EndOffset;
         };
 
-        struct TEvConfirmCreate : public TEventLocal<TEvConfirmCreate, EvConfirmCreate> {
-            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset)
+        struct TEvConfirmCreate: public TEventLocal<TEvConfirmCreate, EvConfirmCreate> {
+            TEvConfirmCreate(
+                i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset)
                 : PartitionSessionId(partitionSessionId)
                 , ReadOffset(readOffset)
                 , CommitOffset(commitOffset)
                 , MaxOffset(maxOffset)
-            {}
+            {
+            }
 
             const i64 PartitionSessionId;
             const std::optional<ui64> ReadOffset;
@@ -75,16 +81,17 @@ class TLocalTopicReadSessionActor final
             const std::optional<ui64> MaxOffset;
         };
 
-        struct TEvConfirmDestroy : public TEventLocal<TEvConfirmDestroy, EvConfirmDestroy> {
+        struct TEvConfirmDestroy: public TEventLocal<TEvConfirmDestroy, EvConfirmDestroy> {
             explicit TEvConfirmDestroy(i64 partitionSessionId)
                 : PartitionSessionId(partitionSessionId)
-            {}
+            {
+            }
 
             const i64 PartitionSessionId;
         };
     };
 
-    class TLocalPartitionSession final : public TPartitionSessionControl {
+    class TLocalPartitionSession final: public TPartitionSessionControl {
     public:
         struct TSettings {
             i64 PartitionSessionId = 0;
@@ -143,12 +150,18 @@ class TLocalTopicReadSessionActor final
         bool AutoPartitioningSupport = false;
     };
 
+    struct TPartitionCommitState {
+        ui64 NextReadOffset = 0;
+        TDisjointIntervalTree<ui64> PendingRanges;
+    };
+
 public:
     TLocalTopicReadSessionActor(const TSettings& actorSettings, const TReadSessionSettings& sessionSettings)
         : TBase(__func__, actorSettings, GetTopicPath(sessionSettings), sessionSettings.MaxMemoryUsageBytes_)
         , Settings(sessionSettings)
         , ReadSettings(GetReadSettings(sessionSettings))
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TSessionEvents::TEvExtractReadyEvents, TBase::Handle);
@@ -290,25 +303,37 @@ private:
     }
 
     void Handle(TEvPartition::TEvOffsetsCommitRequest::TPtr& ev) {
-        const auto partitionSessionId = ev->Get()->PartitionSessionId;
-        const auto start = ev->Get()->StartOffset;
-        const auto end = ev->Get()->EndOffset;
-        YDB_LOG_DEBUG("Partition offsets commit request",
-            {"logPrefix", LogPrefix()},
-            {"session", partitionSessionId},
-            {"start", start},
-            {"end", end});
+        const auto& request = *ev->Get();
+        auto& ranges = PartitionCommitStates[request.PartitionSessionId].PendingRanges;
+        Y_VALIDATE(request.StartOffset < request.EndOffset, "Invalid commit offset range");
+        Y_VALIDATE(!ranges.Intersects(request.StartOffset, request.EndOffset), "Commit range overlaps skipped offsets");
+        ranges.InsertInterval(request.StartOffset, request.EndOffset);
 
-        TRpcIn message;
+        for (const auto& [start, end] : ranges) {
+            if (start >= request.EndOffset) {
+                break;
+            }
 
-        auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
-        commitRequest.set_partition_session_id(partitionSessionId);
+            const auto endOffset = Min(end, request.EndOffset);
+            YDB_LOG_DEBUG("Partition offsets commit request",
+                {"logPrefix", LogPrefix()},
+                {"session", request.PartitionSessionId},
+                {"start", start},
+                {"end", endOffset});
 
-        auto& offsets = *commitRequest.add_offsets();
-        offsets.set_start(start);
-        offsets.set_end(end);
+            TRpcIn message;
 
-        AddSessionEvent(std::move(message));
+            auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
+            commitRequest.set_partition_session_id(request.PartitionSessionId);
+
+            auto& offsets = *commitRequest.add_offsets();
+            offsets.set_start(start);
+            offsets.set_end(endOffset);
+
+            AddSessionEvent(std::move(message));
+        }
+
+        ranges.EraseInterval(0, request.EndOffset);
     }
 
     void Handle(TEvPartition::TEvConfirmCreate::TPtr& ev) {
@@ -334,6 +359,8 @@ private:
         }
         if (commitOffset) {
             startResponse.set_commit_offset(*commitOffset);
+            auto& nextOffset = PartitionCommitStates[partitionSessionId].NextReadOffset;
+            nextOffset = Max(nextOffset, *commitOffset);
         }
         if (maxOffset) {
             startResponse.set_max_offset(*maxOffset);
@@ -412,7 +439,7 @@ private:
                 for (auto& event : *batch.mutable_message_data()) {
                     TDecompressionResult codecResult;
                     std::exception_ptr decompressionException;
-                    if (!IsIn({Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_UNSPECIFIED}, static_cast<Ydb::Topic::Codec>(batch.codec()))) {
+                    if (!IsIn({ Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_UNSPECIFIED }, static_cast<Ydb::Topic::Codec>(batch.codec()))) {
                         try {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
                             codecResult = codecImpl->DecompressData(event.data());
@@ -444,23 +471,25 @@ private:
                         if (decompressedMsg.Meta) {
                             offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
                             seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
-                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
+                            createTime = TInstant::MilliSeconds(
+                                NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, decompressedMsg.Meta->TimestampDelta));
+                        }
+
+                        if (!ReadSettings.Consumer.empty()) {
+                            auto& state = PartitionCommitStates[partitionSessionId];
+                            auto& nextOffset = state.NextReadOffset;
+                            if (offset > nextOffset) {
+                                state.PendingRanges.InsertInterval(nextOffset, offset);
+                            }
+                            nextOffset = Max(nextOffset, offset + 1);
                         }
 
                         messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
                         Counters->BytesRead->Add(decompressedMsg.Data.size());
 
-                        messages.emplace_back(decompressedMsg.Data, decompressionException, TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
-                            offset,
-                            producerId,
-                            seqNo,
-                            createTime,
-                            writtenAt,
-                            writeSessionMeta,
-                            messageMeta,
-                            event.uncompressed_size(),
-                            event.message_group_id()
-                        ), partitionSession);
+                        messages.emplace_back(decompressedMsg.Data, decompressionException,
+                            TReadSessionEvent::TDataReceivedEvent::TMessageInformation(offset, producerId, seqNo, createTime, writtenAt,
+                                writeSessionMeta, messageMeta, event.uncompressed_size(), event.message_group_id()), partitionSession);
                     }
                 }
             }
@@ -468,11 +497,7 @@ private:
             messagesSize += sizeof(TReadSessionEvent::TDataReceivedEvent::TMessage) * messages.size();
             Counters->MessagesRead->Add(messages.size());
 
-            AddOutgoingEvent(TReadSessionEvent::TDataReceivedEvent(
-                std::move(messages),
-                {},
-                std::move(partitionSession)
-            ), messagesSize);
+            AddOutgoingEvent(TReadSessionEvent::TDataReceivedEvent(std::move(messages), {}, std::move(partitionSession)), messagesSize);
         }
 
         // If after decompression data size less than compressed, request new data from server
@@ -488,10 +513,7 @@ private:
                 {"session", partitionSessionId},
                 {"offset", offset});
 
-            AddOutgoingEvent(TReadSessionEvent::TCommitOffsetAcknowledgementEvent(
-                GetPartitionSession(partitionSessionId),
-                offset
-            ));
+            AddOutgoingEvent(TReadSessionEvent::TCommitOffsetAcknowledgementEvent(GetPartitionSession(partitionSessionId), offset));
         }
     }
 
@@ -502,13 +524,8 @@ private:
             {"session", partitionSessionId},
             {"message", message});
 
-        AddOutgoingEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
-            GetPartitionSession(partitionSessionId),
-            message.committed_offset(),
-            message.read_offset(),
-            message.partition_offsets().end(),
-            NProtoInterop::CastFromProto(message.write_time_high_watermark())
-        ));
+        AddOutgoingEvent(TReadSessionEvent::TPartitionSessionStatusEvent(GetPartitionSession(partitionSessionId), message.committed_offset(),
+            message.read_offset(), message.partition_offsets().end(), NProtoInterop::CastFromProto(message.write_time_high_watermark())));
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StartPartitionSessionRequest& message) {
@@ -524,12 +541,18 @@ private:
             {"committedOffset", committedOffset},
             {"partitionOffsets", offsets});
 
-        auto partitionSession = MakeIntrusive<TLocalPartitionSession>(ActorContext().ActorSystem(), SelfId(), TLocalPartitionSession::TSettings{
-            .PartitionSessionId = partitionSessionId,
-            .PartitionId = partitionId,
-            .TopicPath = info.path(),
-            .ReadSessionId = SessionId,
-        });
+        auto partitionSession = MakeIntrusive<TLocalPartitionSession>(ActorContext().ActorSystem(), SelfId(),
+            TLocalPartitionSession::TSettings{
+                .PartitionSessionId = partitionSessionId,
+                .PartitionId = partitionId,
+                .TopicPath = info.path(),
+                .ReadSessionId = SessionId,
+            });
+
+        auto& commitState = PartitionCommitStates[partitionSessionId];
+        commitState.NextReadOffset = committedOffset;
+        commitState.PendingRanges.Clear();
+
         if (const auto [it, inserted] = PartitionSessions.emplace(partitionSessionId, partitionSession); !inserted) {
             // After internal server retry session may be reconnected
             YDB_LOG_NOTICE("Partition reconnected",
@@ -539,11 +562,7 @@ private:
             it->second = partitionSession;
         }
 
-        AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
-            std::move(partitionSession),
-            committedOffset,
-            offsets.end()
-        ));
+        AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(std::move(partitionSession), committedOffset, offsets.end()));
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest& message) {
@@ -558,10 +577,7 @@ private:
             return AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost);
         }
 
-        return AddOutgoingEvent(TReadSessionEvent::TStopPartitionSessionEvent(
-            GetPartitionSession(partitionSessionId),
-            committedOffset
-        ));
+        return AddOutgoingEvent(TReadSessionEvent::TStopPartitionSessionEvent(GetPartitionSession(partitionSessionId), committedOffset));
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::UpdatePartitionSession& message) {
@@ -581,11 +597,10 @@ private:
             {"adjacentIds", adjacentIds.size()},
             {"childIds", childIds.size()});
 
-        AddOutgoingEvent(TReadSessionEvent::TEndPartitionSessionEvent(
-            GetPartitionSession(partitionSessionId),
-            std::vector<uint32_t>(adjacentIds.begin(), adjacentIds.end()),
-            std::vector<uint32_t>(childIds.begin(), childIds.end())
-        ), sizeof(uint32_t) * (adjacentIds.size() + childIds.size()));
+        AddOutgoingEvent(
+            TReadSessionEvent::TEndPartitionSessionEvent(GetPartitionSession(partitionSessionId),
+                std::vector<uint32_t>(adjacentIds.begin(), adjacentIds.end()), std::vector<uint32_t>(childIds.begin(), childIds.end())),
+            sizeof(uint32_t) * (adjacentIds.size() + childIds.size()));
     }
 
     // Events to PQ read service
@@ -631,10 +646,7 @@ private:
     // Events to TLocalTopicReadSession
 
     void AddOutgoingSessionClosedEvent(i64 partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason reason) {
-        AddOutgoingEvent(TReadSessionEvent::TPartitionSessionClosedEvent(
-            GetPartitionSession(partitionSessionId),
-            reason
-        ));
+        AddOutgoingEvent(TReadSessionEvent::TPartitionSessionClosedEvent(GetPartitionSession(partitionSessionId), reason));
     }
 
     template <typename TEvent>
@@ -656,12 +668,13 @@ private:
     i64 ServerMemoryDelta = 0;
     TString SessionId;
     std::unordered_map<i64, TPartitionSession::TPtr> PartitionSessions;
+    std::unordered_map<i64, TPartitionCommitState> PartitionCommitStates;
 };
 
 // Supposed to be used from actor system, so all blocking methods are not supported.
 // Read session is not thread safe and MUST be used from single actor.
 // NOTICE: data is decompressed in one thread inside TLocalTopicReadSessionActor for simplicity.
-class TLocalTopicReadSession final : public TLocalTopicSessionBase<TReadSessionEvent::TEvent>, public IReadSession {
+class TLocalTopicReadSession final: public TLocalTopicSessionBase<TReadSessionEvent::TEvent>, public IReadSession {
     using TBase = TLocalTopicSessionBase<TReadSessionEvent::TEvent>;
     using TReadEvents = TLocalTopicReadSessionActor::TSessionEvents;
 
@@ -718,7 +731,7 @@ public:
             ActorSystem->Send(ReadSessionActor, new TReadEvents::TEvEventsConsumed(totalSize, result.size()));
         }
 
-        WaitEvent(); // Request next event batch
+        WaitEvent();   // Request next event batch
 
         return result;
     }
@@ -745,8 +758,8 @@ public:
     bool Close(TDuration timeout) final {
         Y_VALIDATE(!timeout, "Timeout on close is not allowed for local topic read session");
 
-        ExtractEvents(); // Refresh events and maybe accept TSessionClosedEvent
-        WaitEvent(); // Request next event batch if there is no TSessionClosedEvent
+        ExtractEvents();   // Refresh events and maybe accept TSessionClosedEvent
+        WaitEvent();   // Request next event batch if there is no TSessionClosedEvent
 
         if (!ReadSessionActor) {
             // TSessionClosedEvent accepted
@@ -805,11 +818,12 @@ private:
 
     void Start(const TReadSessionSettings& sessionSettings) {
         Y_VALIDATE(!ReadSessionActor, "Read session is already started");
-        ReadSessionActor = ActorSystem->Register(new TLocalTopicReadSessionActor({
-            .Database = Database,
-            .CredentialsProvider = CredentialsProvider,
-            .Counters = Counters,
-        }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        ReadSessionActor = ActorSystem->Register(
+            new TLocalTopicReadSessionActor({
+                                                .Database = Database,
+                                                .CredentialsProvider = CredentialsProvider,
+                                                .Counters = Counters,
+                                            }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
     }
 
     const TReaderCounters::TPtr Counters;
@@ -817,10 +831,11 @@ private:
     TActorId ReadSessionActor;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-std::shared_ptr<IReadSession> CreateLocalTopicReadSession(const TLocalTopicSessionSettings& localSettings, const TReadSessionSettings& sessionSettings) {
+std::shared_ptr<IReadSession> CreateLocalTopicReadSession(
+    const TLocalTopicSessionSettings& localSettings, const TReadSessionSettings& sessionSettings) {
     return std::make_shared<TLocalTopicReadSession>(localSettings, sessionSettings);
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

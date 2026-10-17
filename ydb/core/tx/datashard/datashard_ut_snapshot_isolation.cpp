@@ -1424,6 +1424,72 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation) {
             "{ items { int32_value: 11 } items { int32_value: 1102 } }");
     }
 
+    Y_UNIT_TEST(WriteDuplicateWithoutLocks) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES (1, 100);
+        )");
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        UNIT_ASSERT(tableId);
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+
+        // Use write seqnums in this tx
+        TTransactionState tx(runtime, NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        tx.WriterIndex = 123;
+
+        // Delete non-existing row, but block the response.
+        auto shard0Actor = ResolveTablet(runtime, shards.at(0));
+        TBlockEvents<NEvents::TDataEvents::TEvWriteResult> blockWriteResToShard0(runtime, [&](auto& ev) {
+            return ev->Sender == shard0Actor;
+        });
+
+        auto write1Fut = tx.SendWrite(tableId, shards.at(0), TOperation::Delete(2));
+        UNIT_ASSERT_VALUES_EQUAL(
+            write1Fut.NextString(TDuration::Seconds(1)),
+            "<timeout>");
+
+        runtime.WaitFor("Blocked writes", [&] {
+            return !blockWriteResToShard0.empty();
+        });
+        blockWriteResToShard0.Stop();
+
+        // Retry deletion, it should not return locks.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.Write(tableId, shards.at(0), TOperation::Delete(2)),
+            "OK (duplicate)");
+        UNIT_ASSERT_VALUES_EQUAL(tx.Locks.size(), 0);
+
+        // Check that we are able to commit the tx.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.WriteCommit(tableId, shards.at(0)),
+            "OK");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 100 } }");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardSnapshotIsolation)
 
 } // namespace NKikimr

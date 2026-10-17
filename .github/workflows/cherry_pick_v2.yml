@@ -9,6 +9,8 @@ on:
           List of commit SHAs or PR numbers to cherry-pick.
           Can be represented as a full or short commit SHA or a PR number.
           Separated by space, comma or line end.
+          Merged sources are applied in merge-time order regardless of input order,
+          unmerged ones are applied after them in input order.
           Example: "sha5682 12345"
         required: true
       target_branches:

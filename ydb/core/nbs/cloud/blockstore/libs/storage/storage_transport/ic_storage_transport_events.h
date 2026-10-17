@@ -30,9 +30,8 @@ struct TEvTransportPrivate
             NThreading::NewPromise<TResult>();
         NThreading::TPromise<ui32> DisconnectPromise =
             NThreading::NewPromise<ui32>();
-        // The sender timestamp for TEvRegisterPersistentBuffer. Fixed on the
-        // first send and must not be refreshed on BUSY/OVERLOADED retries.
-        TInstant RegistrationTimestamp;
+        // Issued by the PB once; reuse on BUSY/OVERLOADED retries.
+        ui64 RegistrationToken = 0;
 
         TConnect(
             const NActors::TActorId& serviceId,
@@ -55,6 +54,8 @@ struct TEvTransportPrivate
         const ui64 Lsn;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -66,6 +67,7 @@ struct TEvTransportPrivate
             const ui64 lsn,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
@@ -73,6 +75,7 @@ struct TEvTransportPrivate
             , Lsn(lsn)
             , Instruction(instruction)
             , Data(data)
+            , Checksums(checksums)
             , TraceId(std::move(traceId))
 
         {}
@@ -89,6 +92,8 @@ struct TEvTransportPrivate
         const NKikimr::NDDisk::TBlockSelector Selector;
         const NKikimr::NDDisk::TWriteInstruction Instruction;
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
         NWilson::TTraceId TraceId;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
@@ -99,12 +104,14 @@ struct TEvTransportPrivate
             const NKikimr::NDDisk::TBlockSelector& selector,
             const NKikimr::NDDisk::TWriteInstruction instruction,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
             , Credentials(credentials)
             , Selector(selector)
             , Instruction(instruction)
             , Data(data)
+            , Checksums(checksums)
             , TraceId(std::move(traceId))
 
         {}
@@ -324,6 +331,8 @@ struct TEvTransportPrivate
         const TDuration ReplyTimeout;
 
         const TGuardedSgList Data;
+        // Checksums of Data. Empty means the transport computes them.
+        const TBlockChecksums Checksums;
         const TCallback Callback;
 
         NWilson::TTraceId TraceId;
@@ -338,6 +347,7 @@ struct TEvTransportPrivate
             TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
             const TDuration replyTimeout,
             const TGuardedSgList& data,
+            const TBlockChecksums& checksums,
             TCallback callback,
             NWilson::TTraceId traceId)
             : ServiceId(serviceId)
@@ -348,6 +358,7 @@ struct TEvTransportPrivate
             , PersistentBufferIds(std::move(persistentBufferIds))
             , ReplyTimeout(replyTimeout)
             , Data(data)
+            , Checksums(checksums)
             , Callback(std::move(callback))
             , TraceId(std::move(traceId))
         {

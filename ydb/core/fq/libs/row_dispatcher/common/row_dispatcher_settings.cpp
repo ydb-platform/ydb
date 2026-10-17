@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
@@ -32,12 +33,14 @@ TRowDispatcherSettings::TCoordinatorSettings::TCoordinatorSettings(const NConfig
     , Database(config.GetDatabase())
     , CoordinationNodePath(config.GetCoordinationNodePath())
     , RebalancingTimeout(TDuration::Seconds(config.GetRebalancingTimeoutSec()))
-{}
+{
+}
 
 TRowDispatcherSettings::TCoordinatorSettings::TCoordinatorSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config)
     : Database(config)
     , CoordinationNodePath(Database.GetPathPrefix())
-{}
+{
+}
 
 TRowDispatcherSettings::TRowDispatcherSettings(const NConfig::TRowDispatcherConfig& config)
     : Coordinator(config.GetCoordinator())
@@ -47,9 +50,11 @@ TRowDispatcherSettings::TRowDispatcherSettings(const NConfig::TRowDispatcherConf
     , TimeoutBeforeStartSession(TDuration::Seconds(config.GetTimeoutBeforeStartSessionSec()))
     , MaxSessionUsedMemory(config.GetMaxSessionUsedMemory())
     , ConsumerMode(config.GetWithoutConsumer() ? EConsumerMode::Without : EConsumerMode::Required)
-{}
+{
+}
 
-TRowDispatcherSettings::TRowDispatcherSettings(const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config, bool enableStructuredJsonParsing)
+TRowDispatcherSettings::TRowDispatcherSettings(
+    const NKikimrConfig::TStreamingQueriesConfig::TExternalStorageConfig& config, bool enableStructuredJsonParsing)
     : Coordinator(config)
 {
     JsonParser.SetStructuredParsing(enableStructuredJsonParsing);
@@ -62,4 +67,4 @@ TRowDispatcherSettings::TRowDispatcherSettings(const NKikimrConfig::TStreamingQu
     CompileService.SetParallelCompilationLimit(std::max(userPoolSize.value_or(NSystemInfo::NumberOfCpus()) / 2, static_cast<size_t>(1)));
 }
 
-} // namespace NFq
+}   // namespace NFq

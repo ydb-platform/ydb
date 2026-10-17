@@ -543,6 +543,7 @@ public:
         bool IsExternalStatisticsAggregator;
         bool IsExternalBackupController;
         bool IsGraphShardEnabled = false;
+        bool IsWasmCompileControllerEnabled = false;
         bool AreResourcesShared;
         THashSet<TTenant::TPtr> HostedTenants;
 

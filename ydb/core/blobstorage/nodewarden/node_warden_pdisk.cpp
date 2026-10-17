@@ -36,10 +36,21 @@ namespace NKikimr::NStorage {
             : static_cast<ui32>(slotCount);
     }
 
-    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots) {
+    void TNodeWarden::InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize, ui64 unitSizeInBytes,
+            ui32 maxSlots, bool useFixedVDiskSlotSize) {
         Y_ABORT_UNLESS(driveSize);
         Y_ABORT_UNLESS(unitSizeInBytes);
 
+        if (useFixedVDiskSlotSize) {
+            const ui64 capacityUnits = driveSize / unitSizeInBytes;
+            const ui32 slotLimit = maxSlots ? maxSlots : 16;
+            pdiskConfig->ExpectedSlotSize = unitSizeInBytes;
+            pdiskConfig->ExpectedSlotCount = Min(capacityUnits, ui64(slotLimit));
+            pdiskConfig->SlotSizeInUnits = Max(ui64{1}, Min(capacityUnits / slotLimit, ui64(Max<ui32>())));
+            return;
+        }
+
+        pdiskConfig->ExpectedSlotSize = 0;
         const double slotCount = lround(double(driveSize) / unitSizeInBytes);
         ui32 slotSizeInUnits = 1u;
 
@@ -206,6 +217,26 @@ namespace NKikimr::NStorage {
             pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pdiskConfig->SectorMap);
         }
 
+        const bool hasChunkSize = (pdisk.HasPDiskConfig() && pdisk.GetPDiskConfig().HasChunkSize())
+            || Cfg->PDiskConfigOverlay.HasChunkSize();
+        if (hasChunkSize && pdiskConfig->PhysicalChunkSize) {
+            const TString warning = TStringBuilder()
+                << "PDiskConfig has both ChunkSize and PhysicalChunkSize; "
+                << "ignoring PhysicalChunkSize, the physical size is derived from ChunkSize"
+                << " ChunkSize# " << pdiskConfig->ChunkSize
+                << " PhysicalChunkSize# " << pdiskConfig->PhysicalChunkSize;
+            YDB_LOG_WARN("PDiskConfig has both ChunkSize and PhysicalChunkSize",
+                {"marker", "NW119"},
+                {"PDiskId", pdiskID},
+                {"path", path},
+                {"chunkSize", pdiskConfig->ChunkSize},
+                {"physicalChunkSize", pdiskConfig->PhysicalChunkSize});
+            if (configWarning && configWarning->empty()) {
+                *configWarning = warning;
+            }
+            pdiskConfig->PhysicalChunkSize = 0;
+        }
+
         const bool hasExpectedSlotCount = pdiskConfig->ExpectedSlotCount != 0;
         const bool hasSlotSizeInUnits = pdiskConfig->SlotSizeInUnits != 0;
         const bool hasExpectedSlotSize = pdiskConfig->ExpectedSlotSize != 0;
@@ -370,12 +401,13 @@ namespace NKikimr::NStorage {
                     {"path", path},
                     {"details", driveSizeDetails});
             } else {
-                InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots);
+                InferPDiskSlotCount(pdiskConfig, size, inferSettings.UnitSize, inferSettings.MaxSlots, UseFixedVDiskSlotSize);
                 YDB_LOG_DEBUG("Inferred PDisk slot count",
                     {"marker", "NW102"},
                     {"path", path},
                     {"slotCount", pdiskConfig->ExpectedSlotCount},
                     {"slotSizeInUnits", pdiskConfig->SlotSizeInUnits},
+                    {"expectedSlotSize", pdiskConfig->ExpectedSlotSize},
                     {"fromDriveSize", size},
                     {"fromUnitSize", inferSettings.UnitSize},
                     {"fromMaxSlots", inferSettings.MaxSlots});

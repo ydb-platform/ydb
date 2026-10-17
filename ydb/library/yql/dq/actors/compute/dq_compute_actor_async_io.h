@@ -1,12 +1,12 @@
 #pragma once
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
-#include <ydb/library/yql/dq/actors/compute/events/events.h>
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+#include <ydb/library/yql/dq/actors/compute/events/events.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
-#include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
+#include <ydb/library/yql/dq/runtime/dq_input_producer.h>
+#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -43,7 +43,8 @@ struct IMemoryQuotaManager {
     using TWeakPtr = std::weak_ptr<IMemoryQuotaManager>;
     virtual ~IMemoryQuotaManager() = default;
     // isOptional == true: the caller can continue without the memory (e.g. hash table growth that can be
-    // replaced by spilling), the manager MAY refuse in advance even if it has free quota.
+    // replaced by spilling), the manager MAY refuse in advance even if it has free quota. TGuaranteeQuotaManager
+    // passes the flag on to its parent, the KQP resource manager refuses it at the spilling threshold.
     // isOptional == false: the caller fails without the memory.
     virtual bool AllocateQuota(ui64 memorySize, bool isOptional) = 0;
     virtual void FreeQuota(ui64 memorySize) = 0;
@@ -324,6 +325,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
         const bool IsMultiMatches;
+        const TCollectStatsLevel StatsLevel;
     };
 
     struct TSinkArguments {
@@ -381,6 +383,7 @@ public:
     struct TControlPlaneArguments {
         TString Type;
         TTxId TxId;
+        const THashMap<TString, TString>& SecureParams;
     };
 
     // Creates source.

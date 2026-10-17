@@ -3,6 +3,9 @@
 #include "schemeshard.h"  // for TEvMeasureSelfResponseTime and TEvWakeupToMeasureSelfResponseTime
 
 #include <ydb/core/protos/counters_schemeshard.pb.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -13,8 +16,10 @@ void TSelfPinger::Handle(TEvSchemeShard::TEvMeasureSelfResponseTime::TPtr &ev, c
     LastResponseTime = responseTime;
     TabletCounters->Simple()[COUNTER_RESPONSE_TIME_USEC].Set(LastResponseTime.MicroSeconds());
     if (responseTime.MilliSeconds() > 1000) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Schemeshard " << TabletId << " response time is " << responseTime.MilliSeconds() << " msec");
+        YDB_LOG_WARN_CTX(ctx, "Schemeshard response time is high",
+            {"schemeshard", TabletId},
+            {"responseTimeMs", responseTime.MilliSeconds()},
+        );
     }
     SelfPingInFlight = false;
     if (responseTime > SELF_PING_INTERVAL) {
@@ -61,3 +66,5 @@ void TSelfPinger::ScheduleSelfPingWakeup(const NActors::TActorContext &ctx) {
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

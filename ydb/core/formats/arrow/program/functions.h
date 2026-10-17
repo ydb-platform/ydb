@@ -4,12 +4,60 @@
 #include "collection.h"
 #include "custom_registry.h"
 
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/library/arrow_kernels/operations.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimr::NArrow::NSSA {
+
+// Either an arrow scalar or an IChunkedArray.
+// Arrow computations return arrow::Datum, but we want to be able to return a dictionary-encoded array from a function.
+// arrow::DictionaryArray is not suitable, because its element type is `dictionary<index, value>` instead of `value`,
+// so all arrays are returned as IChunkedArray.
+class TFunctionResult {
+private:
+    std::variant<std::shared_ptr<arrow::Scalar>, std::shared_ptr<NAccessor::IChunkedArray>> Data;
+
+public:
+    TFunctionResult(const std::shared_ptr<arrow::Scalar>& data)
+        : Data(data) {
+    }
+
+    TFunctionResult(const std::shared_ptr<NAccessor::IChunkedArray>& data)
+        : Data(data) {
+    }
+
+    bool IsScalar() const {
+        return std::holds_alternative<std::shared_ptr<arrow::Scalar>>(Data);
+    }
+
+    const std::shared_ptr<NAccessor::IChunkedArray>& GetAccessorVerified() const {
+        if (const auto* accessor = std::get_if<std::shared_ptr<NAccessor::IChunkedArray>>(&Data)) {
+            return *accessor;
+        }
+        AFL_VERIFY(false);
+        return Default<std::shared_ptr<NAccessor::IChunkedArray>>();
+    }
+
+    const std::shared_ptr<arrow::Scalar>& GetScalarVerified() const {
+        if (const auto* scalar = std::get_if<std::shared_ptr<arrow::Scalar>>(&Data)) {
+            return *scalar;
+        }
+        AFL_VERIFY(false);
+        return Default<std::shared_ptr<arrow::Scalar>>();
+    }
+
+    static TFunctionResult FromDatum(arrow::Datum&& data) {
+        if (data.is_scalar()) {
+            return data.scalar();
+        }
+        return NAccessor::TAccessorCollectedContainer(data).GetData();
+    }
+};
 
 class TExecFunctionContext {
 private:
@@ -44,7 +92,7 @@ public:
     }
 
     virtual ~IStepFunction() = default;
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const = 0;
+    virtual TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const = 0;
     virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output) const = 0;
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = DoDebugJson();
@@ -71,7 +119,7 @@ public:
         : TBase(needConcatenation)
         , FunctionOptions(functionOptions) {
     }
-    virtual TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
+    virtual TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override;
 };
 
 class TSimpleFunction: public TInternalFunction {
@@ -343,6 +391,69 @@ private:
         return false;
     }
 
+    static std::shared_ptr<arrow::DataType> GetKernelType(const std::shared_ptr<arrow::DataType>& type) {
+        if (type->id() == arrow::Type::TIMESTAMP &&
+            std::static_pointer_cast<arrow::TimestampType>(type)->unit() == arrow::TimeUnit::MICRO) {
+            return arrow::uint64();
+        }
+        return type;
+    }
+
+    TConclusion<arrow::Datum> Execute(std::vector<arrow::Datum>& arguments) const {
+        try {
+            for (auto& arg : arguments) {
+                const auto type = GetKernelType(arg.descr().type);
+                if (type != arg.descr().type) {
+                    if (arg.is_array()) {
+                        // ArrayData is shared with the source accessor (TableBatchReader hands out unsliced
+                        // chunks as-is). Retyping it in place would turn the column into uint64 for every
+                        // later consumer (PK comparisons in SYNC_LIMIT, merge, result), so retype a shallow copy.
+                        auto retyped = arg.array()->Copy();
+                        retyped->type = type;
+                        arg = arrow::Datum(std::move(retyped));
+                    } else if (arg.kind() == arrow::Datum::CHUNKED_ARRAY) {
+                        auto retyped = arg.chunked_array()->View(type);
+                        if (!retyped.ok()) {
+                            return TConclusionStatus::Fail(retyped.status().message());
+                        }
+                        arg = std::move(*retyped);
+                    }
+                }
+            }
+            auto result = Function->Execute(arguments, FunctionOptions.get(), GetContext());
+            if (result.ok()) {
+                return std::move(*result);
+            }
+            return TConclusionStatus::Fail(result.status().message());
+        } catch (const std::exception& ex) {
+            return TConclusionStatus::Fail(ex.what());
+        }
+    }
+
+    TConclusion<std::shared_ptr<arrow::Scalar>> GetKernelOutputForNullInput(
+        const TAccessorsCollection::TChunkedArguments::TBatch& batch) const {
+        AFL_VERIFY(batch.Dictionary);
+        std::vector<arrow::Datum> nullArguments = batch.Arguments;
+        const auto nullInputType = GetKernelType(batch.Dictionary->GetDictionary()->type());
+        auto nullArgument = arrow::MakeArrayFromScalar(*arrow::MakeNullScalar(nullInputType), 1);
+        if (!nullArgument.ok()) {
+            return TConclusionStatus::Fail(nullArgument.status().message());
+        }
+        nullArguments[batch.DictionaryIndex] = *nullArgument;
+        auto nullResult = Execute(nullArguments);
+        if (nullResult.IsFail()) {
+            return nullResult.GetError();
+        }
+        if (!nullResult->is_array()) {
+            return TConclusionStatus::Fail("dictionary null kernel result is not an array");
+        }
+        const auto& nullValue = nullResult->make_array();
+        if (nullValue->length() != 1) {
+            return TConclusionStatus::Fail("dictionary null kernel result has incorrect length");
+        }
+        return TStatusValidator::GetValid(nullValue->GetScalar(0));
+    }
+
 public:
     TKernelFunction(const std::shared_ptr<const arrow::compute::ScalarFunction> kernelsFunction,
         const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
@@ -352,36 +463,55 @@ public:
         AFL_VERIFY(Function);
     }
 
-    TConclusion<arrow::Datum> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {
-        auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
+    TConclusion<TFunctionResult> Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const override {
+        // GetArguments may select one TDictionaryArray or TCompositeChunkedArray arg for special handling.
+        auto argumentsReader = resources.GetArguments(
+            TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation, !NeedConcatenation);
         TAccessorsCollection::TChunksMerger merger;
-        while (auto args = argumentsReader.ReadNext()) {
-            try {
-                for (auto& arg : *args) {
-                    if (arg.kind() == arrow::Datum::ARRAY && arg.descr().type->id() == arrow::Type::TIMESTAMP) {
-                        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
-                        arrow::TimeUnit::type unit = timestamp_type->unit();
-                        if (unit == arrow::TimeUnit::MICRO) {
-                            // ArrayData is shared with the source accessor (TableBatchReader hands out unsliced
-                            // chunks as-is). Retyping it in place would turn the column into uint64 for every
-                            // later consumer (PK comparisons in SYNC_LIMIT, merge, result), so retype a shallow copy.
-                            auto retyped = arg.array()->Copy();
-                            retyped->type = arrow::uint64();
-                            arg = arrow::Datum(std::move(retyped));
-                        }
-                    }
+        std::shared_ptr<arrow::Scalar> nullResult;
+        while (auto batch = argumentsReader.ReadNext()) {
+            // Some kernels may produce non-null output for null input.
+            // We shall restore that output at null positions after expanding the mapped dictionary values.
+            if (batch->Dictionary && batch->Dictionary->GetPositions()->null_count() && !nullResult) {
+                auto result = GetKernelOutputForNullInput(*batch);
+                if (result.IsFail()) {
+                    return result.GetError();
                 }
-                auto result = Function->Execute(*args, FunctionOptions.get(), GetContext());
-                if (result.ok()) {
-                    merger.AddChunk(*result);
-                } else {
-                    return TConclusionStatus::Fail(result.status().message());
-                }
-            } catch (const std::exception& ex) {
-                return TConclusionStatus::Fail(ex.what());
+                nullResult = result.DetachResult();
             }
+            auto result = Execute(batch->Arguments);
+            if (result.IsFail()) {
+                return result.GetError();
+            }
+            auto datum = result.DetachResult();
+            if (const auto& dictionary = batch->Dictionary) {
+                if (!datum.is_array()) {
+                    return TConclusionStatus::Fail("dictionary scalar kernel result is not an array");
+                }
+                auto materialized = arrow::compute::Take(datum, arrow::Datum(dictionary->GetPositions()));
+                if (!materialized.ok()) {
+                    return TConclusionStatus::Fail(materialized.status().message());
+                }
+                datum = std::move(*materialized);
+                if (nullResult && nullResult->is_valid && dictionary->GetPositions()->null_count()) {
+                    auto nullPositions = arrow::compute::IsNull(arrow::Datum(dictionary->GetPositions()));
+                    if (!nullPositions.ok()) {
+                        return TConclusionStatus::Fail(nullPositions.status().message());
+                    }
+                    auto replaced = arrow::compute::IfElse(*nullPositions, arrow::Datum(nullResult), datum);
+                    if (!replaced.ok()) {
+                        return TConclusionStatus::Fail(replaced.status().message());
+                    }
+                    datum = std::move(*replaced);
+                }
+            }
+            merger.AddChunk(datum);
         }
-        return merger.Execute();
+        auto result = merger.Execute();
+        if (result.IsFail()) {
+            return result.GetError();
+        }
+        return TFunctionResult::FromDatum(result.DetachResult());
     }
 
     virtual TConclusionStatus CheckIO(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output) const override {

@@ -74,7 +74,8 @@ struct TUringCounters {
 // IORING_SETUP_DEFER_TASKRUN. It batches submissions, reaps completions, and
 // invokes operation callbacks.
 //
-// RegisterFile(), RegisterBuffers(), SetSampleSink(), and Start() are setup
+// RegisterFile(), RegisterBuffers(), SetSampleSink(), SetIoCompletionSink(),
+// and Start() are setup
 // operations and must be called by one thread before concurrent submission.
 // StopAsync() closes admission without waiting. StopSync() is the owner-side
 // retirement barrier: it waits for publishers through queue publication and
@@ -97,8 +98,12 @@ struct TUringCounters {
 //
 // Optional device I/O sample sink: if set via SetSampleSink() before Start(),
 // the I/O thread invokes it once per successfully completed Read/Write CQE.
+// DevNull synthetic completions produce no device sample.
 // The sink must be cheap and thread-safe on its own.
 using TDeviceIoSampleSink = std::function<void(const TDeviceIoSample&)>;
+// Invoked for every positive data CQE, including each successful short-I/O
+// leg. Zero-progress and failed completions do not invoke the sink.
+using TIoCompletionSink = std::function<void()>;
 
 class TUringRouter : public IUringRouterClient {
     friend class TUringRouterTestPeer;
@@ -120,6 +125,12 @@ public:
     // Must be called before Start().
     void SetSampleSink(TDeviceIoSampleSink sink) {
         SampleSink = std::move(sink);
+    }
+
+    // Must be called before Start(). The sink runs on the I/O thread and must
+    // be cheap, thread-safe, and independent of caller actor lifetime.
+    void SetIoCompletionSink(TIoCompletionSink sink) {
+        IoCompletionSink = std::move(sink);
     }
 
     // --- Setup (call before Start) ---
@@ -175,8 +186,8 @@ public:
     // before this call and restore it only if false is returned. False means
     // the router has not been started or is stopping/stopped and no callback
     // will be delivered. Every accepted operation gets exactly one terminal
-    // callback: OnComplete() after kernel submission, or OnDrop() if shutdown
-    // reaches it first.
+    // callback: OnComplete() after a kernel data result or an I/O-thread
+    // DevNull synthetic result, or OnDrop() if shutdown reaches it first.
     //
     // Concurrent callers must keep the router alive for the entire call.
     // Accepted publishers are fenced through publication and wake by StopSync.
@@ -233,6 +244,7 @@ private:
     TUringRouterConfig Config;
     TUringCounters Counters;
     TDeviceIoSampleSink SampleSink;
+    TIoCompletionSink IoCompletionSink;
 
     std::unique_ptr<NUringPrivate::IUringRouterBackend> Backend;
     std::unique_ptr<struct io_uring> Ring;

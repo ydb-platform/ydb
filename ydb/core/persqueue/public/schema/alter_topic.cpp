@@ -153,10 +153,8 @@ TResult ApplyChangesInt(
                 return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                     << "Partitions count must be non-negative, provided " << settings.set_min_active_partitions()};
             }
-            if (settings.set_min_active_partitions() >= Max<ui32>()) {
-                return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                    << "Partitions count must be less than " << Max<ui32>()
-                    << ", provided " << settings.set_min_active_partitions()};
+            if (auto r = ValidateTopicPartitionCount(settings.set_min_active_partitions(), "Partitions count"); !r) {
+                return r;
             }
             auto minParts = IfEqualThenDefault<i64>(settings.set_min_active_partitions(), 0L, 1L);
             config.SetTotalGroupCount(minParts);
@@ -172,12 +170,14 @@ TResult ApplyChangesInt(
                         << "Max active partitions must be non-negative, provided "
                         << settings.set_max_active_partitions()};
                 }
-                if (settings.set_max_active_partitions() >= Max<ui32>()) {
-                    return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                        << "Max active partitions must be less than " << Max<ui32>()
-                        << ", provided " << settings.set_max_active_partitions()};
+                if (auto r = ValidateTopicPartitionCount(settings.set_max_active_partitions(), "Max active partitions"); !r) {
+                    return r;
                 }
-                pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(settings.set_max_active_partitions());
+                const auto maxParts = IfEqualThenDefault<i64>(
+                    settings.set_max_active_partitions(),
+                    0L,
+                    pqTabletConfig->GetPartitionStrategy().GetMinPartitionCount());
+                pqTabletConfig->MutablePartitionStrategy()->SetMaxPartitionCount(maxParts);
             }
             if (settings.has_alter_auto_partitioning_settings()) {
                 if (settings.alter_auto_partitioning_settings().has_set_partition_write_speed()) {

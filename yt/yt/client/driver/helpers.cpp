@@ -67,7 +67,7 @@ void PutMethodInfoInTraceContext(TStringBuf methodName)
     }
 }
 
-void WriteFileByBatches(const IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize)
+void WriteInBatches(const IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize)
 {
     i64 dataSize = std::ssize(data);
     for (i64 offset = 0; offset < dataSize; offset += maxAttachmentSize) {

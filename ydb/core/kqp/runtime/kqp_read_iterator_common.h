@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -35,6 +36,21 @@ struct TEvReadSettings : public TAtomicRefCount<TEvReadSettings> {
 
     NKikimrTxDataShard::TEvRead Read;
     NKikimrTxDataShard::TEvReadAck Ack;
+};
+
+struct TReadLockInfo {
+    TVector<NKikimrDataEvents::TLock> Locks;
+    TVector<NKikimrDataEvents::TLock> BrokenLocks;
+    struct TDeferredBreakerInfo {
+        ui64 QuerySpanId = 0;
+        ui32 NodeId = 0;
+    };
+    TVector<TDeferredBreakerInfo> DeferredBreakers;
+    ui64 DeferredVictimQuerySpanId = 0;
+
+    void Add(const NKikimrTxDataShard::TEvReadResult& record);
+    NKikimrTxDataShard::TEvKqpInputActorResultInfo GetExtraData();
+    void FillExtraStats(NYql::NDqProto::TDqTaskStats* stats);
 };
 
 void SetReadIteratorBackoffSettings(TIntrusivePtr<TIteratorReadBackoffSettings>);

@@ -1,0 +1,250 @@
+#pragma once
+
+#include "line_types.h"
+
+#include <util/generic/deque.h>
+
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <type_traits>
+#include <utility>
+#include <variant>
+
+namespace NActors {
+    struct TChunk;
+    template<class TFrontend> class TLine;
+    class TLineSnapshot;
+    class TSnapshotView;
+    class TInMemorySnapshot;
+    class TInMemoryMetricsBackend;
+
+    using TReadSnapshotCallback = std::function<void(const TSnapshotView&)>;
+
+    namespace NInMemoryMetricsPrivate {
+        struct TChunkSnapshotView;
+        class TSnapshot;
+
+        struct TLineSnapshotAccess {
+            template<class TCallback>
+            static void ForEachChunk(const TLineSnapshot& snapshot, TCallback&& cb);
+
+            static TInstant DecodeTimestampTs(const TLineSnapshot& snapshot, NHPTimer::STime ts) noexcept;
+        };
+    } // namespace NInMemoryMetricsPrivate
+
+    template<class TValue>
+    struct TGenericRecordView {
+        TInstant Timestamp;
+        TValue Value;
+    };
+
+    struct TTimeAnchor {
+        NHPTimer::STime BaseCycles = 0;
+        TInstant BaseWallClock;
+    };
+
+    struct TLineLabelView {
+        TStringBuf Name;
+        TStringBuf Value;
+    };
+
+    // Static field identity within a structured line. Instance labels are on
+    // TLineSnapshot; these labels and names are owned by the frontend descriptor.
+    struct TLineFieldMeta {
+        TStringBuf Name;
+        std::span<const TLineLabelView> Labels;
+    };
+
+    // Type-erased numeric reads are for diagnostics/export. Values keep integer
+    // precision; unsupported producer types are represented by monostate.
+    using TLineNumericValue = std::variant<std::monostate, ui64, i64, double, bool>;
+
+    template<class TValue>
+    TLineNumericValue MakeLineNumericValue(const TValue& value) {
+        if constexpr (std::is_same_v<TValue, bool>) {
+            return value;
+        } else if constexpr (std::is_integral_v<TValue> && std::is_unsigned_v<TValue>) {
+            return static_cast<ui64>(value);
+        } else if constexpr (std::is_integral_v<TValue>) {
+            return static_cast<i64>(value);
+        } else if constexpr (std::is_floating_point_v<TValue>) {
+            return static_cast<double>(value);
+        } else {
+            return std::monostate{};
+        }
+    }
+
+    struct TLineFrontendOps {
+        using TInvokeValue = void (*)(void*, TInstant, const void*);
+        using TReadRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeValue);
+        using TInvokeNumericValues = void (*)(void*, TInstant, std::span<const TLineNumericValue>);
+        using TReadNumericRange = void (*)(const TLineSnapshot&, TInstant, TInstant, void*, TInvokeNumericValues);
+
+        TStringBuf Name;
+        TReadRange ReadRange = nullptr;
+        std::span<const TLineFieldMeta> Fields;
+        TReadNumericRange ReadNumericRange = nullptr;
+    };
+
+    struct TLineMeta {
+        const TLineFrontendOps* Frontend = nullptr;
+        // Runtime schemas remain alive with registration requests and snapshots.
+        std::shared_ptr<const TLineFrontendOps> FrontendOwner;
+
+        TLineMeta() noexcept;
+        explicit TLineMeta(const TLineFrontendOps* frontend) noexcept;
+
+        TStringBuf FrontendName() const noexcept;
+    };
+
+    // Borrowing snapshot view of a single line. Instances are owned by backend
+    // internals and must only be used during the enclosing ReadSnapshot() callback.
+    class TLineSnapshot {
+    public:
+        TLineSnapshot();
+        TLineSnapshot(const TLineSnapshot&) = delete;
+        TLineSnapshot(TLineSnapshot&&) noexcept;
+        TLineSnapshot& operator=(const TLineSnapshot&) = delete;
+        TLineSnapshot& operator=(TLineSnapshot&&) noexcept;
+        ~TLineSnapshot();
+
+        size_t GetChunkCount() const noexcept {
+            return ChunkCount;
+        }
+
+        template<class TValueType>
+        TDeque<TGenericRecordView<TValueType>> ReadRecordsAs() const {
+            return ReadRecordsAsInRange<TValueType>(TInstant::Zero(), TInstant::Max());
+        }
+
+        template<class TValueType>
+        TDeque<TGenericRecordView<TValueType>> ReadRecordsAsInRange(TInstant beginTs, TInstant endTs) const {
+            TDeque<TGenericRecordView<TValueType>> records;
+            const auto* frontend = Meta.Frontend;
+            auto* output = std::addressof(records);
+            auto invoker = [](void* opaque, TInstant timestamp, const void* valuePtr) {
+                auto* output = static_cast<TDeque<TGenericRecordView<TValueType>>*>(opaque);
+                output->push_back(TGenericRecordView<TValueType>{
+                    .Timestamp = timestamp,
+                    .Value = *static_cast<const TValueType*>(valuePtr),
+                });
+            };
+            if (frontend && frontend->ReadRange) {
+                frontend->ReadRange(*this, beginTs, endTs, output, invoker);
+            }
+            return records;
+        }
+
+        template<class TValueType>
+        TDeque<TValueType> ReadValuesAs() const {
+            return ReadValuesAsInRange<TValueType>(TInstant::Zero(), TInstant::Max());
+        }
+
+        template<class TValueType>
+        TDeque<TValueType> ReadValuesAsInRange(TInstant beginTs, TInstant endTs) const {
+            TDeque<TValueType> values;
+            const auto* frontend = Meta.Frontend;
+            auto* output = std::addressof(values);
+            auto invoker = [](void* opaque, TInstant, const void* valuePtr) {
+                auto* output = static_cast<TDeque<TValueType>*>(opaque);
+                output->push_back(*static_cast<const TValueType*>(valuePtr));
+            };
+            if (frontend && frontend->ReadRange) {
+                frontend->ReadRange(*this, beginTs, endTs, output, invoker);
+            }
+            return values;
+        }
+
+    public:
+        ui32 LineId = 0;
+        TString Name;
+        TVector<TLabel> Labels;
+        TLineMeta Meta;
+        bool Closed = false;
+        TInstant ClosedAt = TInstant::Max();
+
+    private:
+        template<class TFrontend>
+        friend class TLine;
+        friend struct NInMemoryMetricsPrivate::TLineSnapshotAccess;
+        friend class TInMemoryMetricsBackend;
+        friend class TInMemorySnapshot;
+
+        template<class TCallback>
+        void ForEachChunk(TCallback&& cb) const;
+        TInstant DecodeTimestampTs(NHPTimer::STime ts) const noexcept;
+
+        const NInMemoryMetricsPrivate::TSnapshot* Owner = nullptr;
+        size_t ChunkBegin = 0;
+        size_t ChunkCount = 0;
+    };
+
+    // Borrowing snapshot view of the whole registry. Instances are non-copyable
+    // and non-movable, and are valid only during the enclosing ReadSnapshot()
+    // callback.
+    class TSnapshotView {
+    public:
+        TSnapshotView() = default;
+        TSnapshotView(const TSnapshotView&) = delete;
+        TSnapshotView(TSnapshotView&&) = delete;
+        TSnapshotView& operator=(const TSnapshotView&) = delete;
+        TSnapshotView& operator=(TSnapshotView&&) = delete;
+
+        size_t CommonLabelsSize() const noexcept {
+            return CommonLabelsCount;
+        }
+
+        const TLabel& GetCommonLabel(size_t index) const noexcept {
+            return CommonLabels[index];
+        }
+
+        size_t LinesSize() const noexcept {
+            return LinesCount;
+        }
+
+        const TLineSnapshot& GetLine(size_t index) const noexcept {
+            return Lines[index];
+        }
+
+        template<class TCallback>
+        void ForEachCommonLabel(TCallback&& cb) const {
+            for (size_t i = 0; i < CommonLabelsCount; ++i) {
+                cb(CommonLabels[i]);
+            }
+        }
+
+        template<class TCallback>
+        void ForEachLine(TCallback&& cb) const {
+            for (size_t i = 0; i < LinesCount; ++i) {
+                cb(Lines[i]);
+            }
+        }
+
+    private:
+        friend class TInMemoryMetricsBackend;
+        friend class TInMemorySnapshot;
+
+        const TLabel* CommonLabels = nullptr;
+        size_t CommonLabelsCount = 0;
+        const TLineSnapshot* Lines = nullptr;
+        size_t LinesCount = 0;
+    };
+
+    // Immutable metadata and captured prefixes; shared pins keep payload alive.
+    // May be moved to another thread or outlive the actor system.
+    class TInMemorySnapshot {
+    public:
+        TInMemorySnapshot() = default;
+        void Read(const TReadSnapshotCallback& cb) const;
+        explicit operator bool() const noexcept { return bool(Data); }
+
+    private:
+        friend class TInMemoryMetricsBackend;
+        explicit TInMemorySnapshot(std::shared_ptr<const NInMemoryMetricsPrivate::TSnapshot> data)
+            : Data(std::move(data))
+        {}
+        std::shared_ptr<const NInMemoryMetricsPrivate::TSnapshot> Data;
+    };
+
+} // namespace NActors

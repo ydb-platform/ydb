@@ -43,8 +43,8 @@ namespace {
 
 void WriteVersionToLog()
 {
-    YT_LOG_DEBUG("Wrapper version: %v",
-        TProcessState::Get()->ClientVersion);
+    YT_TLOG_DEBUG("Wrapper version")
+        .With("Version", TProcessState::Get()->ClientVersion);
 }
 
 static TNode SecureVaultContents; // safe
@@ -101,8 +101,7 @@ private:
         const TString& logMessage)
     {
         std::function<void()> threadFun = [=] {
-            YT_LOG_INFO("%v",
-                logMessage);
+            YT_TLOG_INFO(logMessage);
             NDetail::TAbortableRegistry::Get()->AbortAllAndBlockForever();
         };
         TThread thread(TThread::TParams(Invoke, &threadFun).SetName("aborter"));

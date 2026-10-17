@@ -6,21 +6,16 @@
 #include <atomic>
 #include <chrono>
 
-// clang-format off
-#include "opentelemetry/exporters/otlp/protobuf_include_prefix.h"
-// clang-format on
-
-#include "opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h"
-
-// clang-format off
-#include "opentelemetry/exporters/otlp/protobuf_include_suffix.h"
-// clang-format on
-
+#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/sdk/trace/exporter.h"
+#include "opentelemetry/version.h"
 
-#include "opentelemetry/exporters/otlp/otlp_environment.h"
-#include "opentelemetry/exporters/otlp/otlp_grpc_exporter_options.h"
+// clang-format off
+#include "opentelemetry/exporters/otlp/protobuf_include_prefix.h" // IWYU pragma: keep
+#include "opentelemetry/proto/collector/trace/v1/trace_service.grpc.pb.h"
+#include "opentelemetry/exporters/otlp/protobuf_include_suffix.h" // IWYU pragma: keep
+// clang-format on
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace exporter
@@ -28,9 +23,8 @@ namespace exporter
 namespace otlp
 {
 
-class OtlpGrpcClientReferenceGuard;
-
-class OtlpGrpcClient;
+class OtlpGrpcClientReferenceGuard;  // IWYU pragma: keep
+class OtlpGrpcClient;                // IWYU pragma: keep
 
 /**
  * The OTLP exporter exports span data in OpenTelemetry Protocol (OTLP) format.

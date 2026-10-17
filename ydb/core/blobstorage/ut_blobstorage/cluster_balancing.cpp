@@ -287,6 +287,88 @@ Y_UNIT_TEST_SUITE(ClusterBalancing) {
         UNIT_ASSERT(success);
     }
 
+    Y_UNIT_TEST(ClusterBalancingUsesReportedSlotCount) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 6, 10, TDuration::MilliSeconds(100));
+        UNIT_ASSERT(env.EachPDiskHasNVDisks(6));
+
+        ui32 rewrittenPDisks = 0;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.HasBaseConfig()) {
+                        for (auto& pdisk : *status.MutableBaseConfig()->MutablePDisk()) {
+                            // QueryBaseConfig reports the configured count separately from
+                            // the capacity inferred by PDisk for fixed-size slots.
+                            pdisk.SetExpectedSlotCount(0);
+                            pdisk.MutablePDiskMetrics()->SetExpectedSlotCount(16);
+                            ++rewrittenPDisks;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2);
+        // Reading the configured zero as capacity one would stop balancing after
+        // each new disk receives its first VDisk, leaving a 5:1 distribution.
+        const bool balanced = env.WaitFor([&] {
+            return env.EachPDiskHasNVDisks(3);
+        }, 60);
+        UNIT_ASSERT(rewrittenPDisks);
+        UNIT_ASSERT_C(balanced, "Expected balancing to use the reported slot count");
+    }
+
+    Y_UNIT_TEST(ClusterBalancingRejectsReportedZeroCapacity) {
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2, 10, TDuration::MilliSeconds(100));
+        bool reportZeroCapacity = true;
+        ui32 snapshots = 0;
+        ui32 reassignAttempts = 0;
+
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                auto *response = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.MutableResponse();
+                for (auto& status : *response->MutableStatus()) {
+                    if (status.HasBaseConfig()) {
+                        ++snapshots;
+                        for (auto& pdisk : *status.MutableBaseConfig()->MutablePDisk()) {
+                            pdisk.SetExpectedSlotCount(0);
+                            auto *metrics = pdisk.MutablePDiskMetrics();
+                            if (reportZeroCapacity) {
+                                metrics->SetExpectedSlotCount(0);
+                            } else {
+                                metrics->ClearExpectedSlotCount();
+                            }
+                        }
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.HasReassignGroupDisk()) {
+                        ++reassignAttempts;
+                        // Keep the distribution unchanged while observing the balancer's decisions.
+                        env.SendReassignNotViable(*ev);
+                        return false;
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->AlterBox(1, 2);
+        snapshots = 0;
+        env->Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_C(snapshots >= 2, "Expected multiple balancing iterations");
+        UNIT_ASSERT_VALUES_EQUAL_C(reassignAttempts, 0, "Reported zero capacity must exclude empty targets");
+
+        // An absent metric must retain the legacy fallback, even when the configured count is zero.
+        reportZeroCapacity = false;
+        UNIT_ASSERT_C(env.WaitFor([&] { return reassignAttempts != 0; }, 10),
+            "Expected balancing attempts when the capacity metric is absent");
+    }
+
     Y_UNIT_TEST(ClusterBalancingEvenDistributionNotPossible) {
         TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 3, 10, TDuration::MilliSeconds(100));
 

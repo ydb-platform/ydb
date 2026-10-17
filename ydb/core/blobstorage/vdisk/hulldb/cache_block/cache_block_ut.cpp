@@ -36,6 +36,53 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
         }
 
+        Y_UNIT_TEST(FindMaxRepeatedPersistedIssuer) {
+            TBlocksCache c;
+            c.Build(nullptr);
+            c.UpdatePersistent(17, {2, 123});
+            UNIT_ASSERT(c.IsBlocked(17, {2, 123}).Status == TBlocksCache::EStatus::OK);
+            c.UpdateInFlight(17, {2, 123}, 500);
+            const auto [generation, lsn] = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+        }
+
+        Y_UNIT_TEST(FindMaxRepeatedInFlightIssuer) {
+            TBlocksCache c;
+            c.Build(nullptr);
+            c.UpdateInFlight(17, {2, 123}, 500);
+            UNIT_ASSERT(c.IsBlocked(17, {2, 123}).Status == TBlocksCache::EStatus::OK);
+            c.UpdateInFlight(17, {2, 123}, 501);
+            c.CommitInFlight(17, {2, 123}, 500);
+            const auto [generation, lsn] = c.FindMax(17);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+        }
+
+        Y_UNIT_TEST(FindMaxSyncedDuplicateVersion) {
+            TBlocksCache c;
+            c.Build(nullptr);
+            const ui64 tabletId = ~ui64(17);
+            c.UpdateInFlight(tabletId, {2, 0}, 500);
+            c.UpdateInFlight(tabletId, {2, 0}, 501);
+            c.CommitInFlight(tabletId, {2, 0}, 500);
+            const auto [generation, lsn] = c.FindMax(tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 2);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+        }
+
+        Y_UNIT_TEST(FindMaxSyncedOlderVersion) {
+            TBlocksCache c;
+            c.Build(nullptr);
+            const ui64 tabletId = ~ui64(17);
+            c.UpdateInFlight(tabletId, {4, 0}, 500);
+            c.UpdateInFlight(tabletId, {3, 0}, 501);
+            c.CommitInFlight(tabletId, {4, 0}, 500);
+            const auto [generation, lsn] = c.FindMax(tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(generation, 4);
+            UNIT_ASSERT_VALUES_EQUAL(lsn, 0);
+        }
+
         Y_UNIT_TEST(LegacyAndModern) {
             TBlocksCache c;
             c.Build(nullptr);

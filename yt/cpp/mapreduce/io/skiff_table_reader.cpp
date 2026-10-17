@@ -39,6 +39,24 @@ struct TSkiffColumnSchema
     { }
 };
 
+bool IsSupportedWireType(NSkiff::EWireType wireType)
+{
+    using NSkiff::EWireType;
+
+    switch (wireType) {
+        case EWireType::Nothing:
+        case EWireType::Boolean:
+        case EWireType::Int64:
+        case EWireType::Uint64:
+        case EWireType::Double:
+        case EWireType::String32:
+        case EWireType::Yson32:
+            return true;
+        default:
+            return false;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
@@ -100,7 +118,8 @@ void TSkiffTableReader::Next()
             ReadRow();
             break;
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR("Read error: %v", ex.what());
+            YT_TLOG_ERROR("Read error")
+                .With("Error", ex.what());
             if (!Input_.Retry(RangeIndex_, RowIndex_, std::make_exception_ptr(ex))) {
                 throw;
             }
@@ -201,14 +220,14 @@ TVector<TSkiffTableReader::TSkiffTableSchema> TSkiffTableReader::CreateSkiffTabl
                     const auto& children = columnSchema->GetChildren();
                     Y_ENSURE(
                         children.size() == 2 && children[0]->GetWireType() == EWireType::Nothing &&
-                        NSkiff::IsSimpleType(children[1]->GetWireType()),
-                        "Expected schema of form 'variant8<nothing, simple-type>', got "
+                        IsSupportedWireType(children[1]->GetWireType()),
+                        "Expected schema of form 'variant8<nothing, supported-type>', got "
                             << NSkiff::GetShortDebugString(columnSchema));
                     wireType = children[1]->GetWireType();
                     required = false;
                 }
-                Y_ENSURE(NSkiff::IsSimpleType(wireType),
-                    "Expected column schema to be of simple type, got " << NSkiff::GetShortDebugString(columnSchema));
+                Y_ENSURE(IsSupportedWireType(wireType),
+                    "Expected column schema to be of a supported type, got " << NSkiff::GetShortDebugString(columnSchema));
                 columns.emplace_back(
                     EColumnType::Dense,
                     required,

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_codec.cpp
@@ -20,8 +20,6 @@ PEERDIR(
     library/cpp/json
     library/cpp/enumbitset
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
 

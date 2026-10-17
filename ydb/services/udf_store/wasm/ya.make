@@ -29,11 +29,13 @@ CFLAGS(
 )
 
 PEERDIR(
+    ydb/public/lib/udf/manifest
     ydb/services/udf_store/wasm/abi
     ydb/library/wasm/api
     ydb/library/wasm/engine
     ydb/library/yql/dq/proto
     yql/essentials/public/udf
+    yql/essentials/ast
     yql/essentials/minikql
     library/cpp/json
     contrib/restricted/wavm_llvm16/Lib

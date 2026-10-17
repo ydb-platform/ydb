@@ -33,9 +33,9 @@ namespace {
         Disk,
     };
 
-    enum class EErasureSpecies {
-        Mirror3dc,
-        Block42,
+    enum class EErasureSpecies : ui32 {
+        Mirror3dc = 9,
+        Block42 = 4,
     };
 
     struct TGroupShape {
@@ -283,6 +283,13 @@ namespace {
         }
         if (AsciiEqualsIgnoreCase(value, "block-4-2")) {
             return EErasureSpecies::Block42;
+        }
+        ui32 numericValue;
+        if (TryFromString(value, numericValue)) {
+            const auto species = static_cast<EErasureSpecies>(numericValue);
+            if (species == EErasureSpecies::Mirror3dc || species == EErasureSpecies::Block42) {
+                return species;
+            }
         }
         return std::nullopt;
     }

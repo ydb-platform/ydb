@@ -56,6 +56,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     OverloadSubscribe = record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>{};
 
+    PreserveLockTxIds.assign(record.GetPreserveLockTxIds().begin(), record.GetPreserveLockTxIds().end());
+
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
     YDB_LOG_TRACE("Parsing write transaction",
@@ -79,7 +81,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.HasLocks()) {
         KqpLocks = record.GetLocks();
-        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator);
+        const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator, allowAncestorLocks);
     }
     KeyValidator.GetInfo().SetLoaded();
 }
@@ -98,6 +101,7 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
         case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT:
+        case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE:
             break;
         default:
             return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << OperationType << " operation is not supported now"};
@@ -122,6 +126,23 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
 
     if (tableInfo.GetTableSchemaVersion() != 0 && tableIdRecord.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
         return {NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder() << "Table '" << tableInfo.Path << "' scheme changed."};
+
+    if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {
+        // An unsafe truncate wipes the whole table on this shard, so it carries neither payload nor
+        // columns and registers no key ranges. Conflicts are covered by the GlobalWriter flag
+        // instead, see TPipeline::BuildOperation.
+        if (!ColumnIds.empty())
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, "Unsafe truncate operation doesn't support column ids"};
+
+        if (recordOperation.HasPayloadIndex())
+            return {NKikimrTxDataShard::TError::BAD_ARGUMENT, "Unsafe truncate operation doesn't support payload"};
+
+        TableId = TTableId(tableIdRecord.GetOwnerId(), tableIdRecord.GetTableId(), tableIdRecord.GetSchemaVersion());
+        UserCtx = NACLib::TUserContextBuilder()
+            .DeserializeFromEvent(ev, traceId)
+            .Build();
+        return {NKikimrTxDataShard::TError::OK, {}};
+    }
 
     if (recordOperation.GetPayloadFormat() != NKikimrDataEvents::FORMAT_CELLVEC)
         return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder() << "Only FORMAT_CELLVEC is supported now. Got: " << recordOperation.GetPayloadFormat()};
@@ -233,6 +254,13 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     if (recordOperation.HasWriteSeqNum()) {
         WriteSeqNum.WriterIndex = recordOperation.GetWriteSeqNum().GetWriterIndex();
         WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
+    }
+
+    OriginalShard = recordOperation.GetOriginalShard();
+    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+            << "Retrying operation performed on OriginalShard " << OriginalShard
+            << " requires WriteSeqNum"};
     }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);

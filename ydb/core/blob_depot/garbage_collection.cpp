@@ -95,6 +95,14 @@ namespace NKikimr::NBlobDepot {
             const TGenStep genCtr(record.GetGeneration(), record.GetPerGenerationCounter());
             const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
 
+            if (Self->BlocksManager->IsTabletDeleted(tabletId)) {
+                // The tablet has been deleted for good: TTxDeleteTabletData has dropped all of its
+                // keys and UpdateKey refuses to create new ones, so there is nothing left for this
+                // barrier to collect. Do not remember it either -- Hive retries the delete barrier,
+                // and recording it would resurrect the row OnTabletDeleted has just purged.
+                return true;
+            }
+
             const auto key = std::make_tuple(tabletId, channel);
             TBarrier& barrier = Self->BarrierServer->Barriers[key];
             TGenStep& barrierGenCtr = hard ? barrier.HardGenCtr : barrier.SoftGenCtr;
@@ -212,6 +220,12 @@ namespace NKikimr::NBlobDepot {
 
     bool TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,
             ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        if (Self->BlocksManager->IsTabletDeleted(barrier.TabletId)) {
+            // blocks are assimilated before any barrier, so we already know this tablet is gone and
+            // none of its blobs will be taken in -- there is nothing for this barrier to guard
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
 
         const auto key = std::make_tuple(barrier.TabletId, barrier.Channel);
@@ -279,12 +293,17 @@ namespace NKikimr::NBlobDepot {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
                 std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
         } else {
-            const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
-            Barriers[key].ProcessingQ.emplace_back(ev.Release());
+            PendingRequests.emplace_back(ev.Release());
         }
     }
 
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
+        if (Self->BlocksManager->IsTabletDeleted(id.TabletID())) {
+            // the tablet has been deleted for good, so every channel of it counts as fully collected
+            // even though we may never see the matching hard barrier
+            *underSoft = *underHard = true;
+            return;
+        }
         const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;
@@ -292,9 +311,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBarrierServer::OnDataLoaded() {
-        for (auto& [key, barrier] : Barriers) {
-            for (auto& ev : std::exchange(barrier.ProcessingQ, {})) {
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(ev)));
+        for (auto& ev : std::exchange(PendingRequests, {})) {
+            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(ev)));
+        }
+    }
+
+    void TBlobDepot::TBarrierServer::OnTabletDeleted(ui64 tabletId, NTabletFlatExecutor::TTransactionContext& txc) {
+        NIceDb::TNiceDb db(txc.DB);
+        for (ui32 index = 0; index <= Max<ui8>(); ++index) {
+            const ui8 channel = index;
+            if (Barriers.erase(std::make_tuple(tabletId, channel))) {
+                db.Table<Schema::Barriers>().Key(tabletId, channel).Delete();
             }
         }
     }

@@ -89,21 +89,21 @@ TString TruncateForLogs(const TString& text, size_t maxSize)
     }
 }
 
-TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit)
+NLogging::TLoggingTagList GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit)
 {
-    const auto parametersDebugString = GetParametersDebugString(header);
-    TStringStream out;
-    out << "Method: " << url << "; "
-        << "X-YT-Parameters (sent in " << (includeParameters ? "header" : "body") << "): " << TruncateForLogs(parametersDebugString, sizeLimit);
-    return out.Str();
+    return NLogging::TLoggingTagList()
+        .With("Method", header.GetMethod())
+        .With("Url", url)
+        .With("ParametersSentIn", includeParameters ? "header" : "body")
+        .With("Parameters", TruncateForLogs(GetParametersDebugString(header), sizeLimit));
 }
 
 void LogRequest(const THttpHeader& header, const TString& url, bool includeParameters, const TString& requestId, const TString& hostName)
 {
-    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; %v)",
-        requestId,
-        hostName,
-        GetLoggedAttributes(header, url, includeParameters, Max<size_t>()));
+    YT_TLOG_DEBUG("Sending request")
+        .With("RequestId", requestId)
+        .With("HostName", hostName)
+        .With(GetLoggedAttributes(header, url, includeParameters, Max<size_t>()));
 }
 
 TString FormatTraceParentHeader(const NTracing::TTraceId& traceId, const NTracing::TSpanId& spanId)

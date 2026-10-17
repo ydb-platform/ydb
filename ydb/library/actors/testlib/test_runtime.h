@@ -651,11 +651,14 @@ namespace NActors {
         const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
         void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
 
+        // both are read only while the actor systems are built
         void SetUseRealInterconnect() {
+            Y_ABORT_UNLESS(!IsInitialized, "SetUseRealInterconnect() after the runtime is initialized has no effect");
             UseRealInterconnect = true;
         }
 
         void SetICCommonSetupper(std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)>&& icCommonSetupper) {
+            Y_ABORT_UNLESS(!IsInitialized, "SetICCommonSetupper() after the runtime is initialized has no effect");
             ICCommonSetupper = std::move(icCommonSetupper);
         }
 

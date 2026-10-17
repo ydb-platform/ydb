@@ -13,9 +13,7 @@ public:
     {}
 
     bool AllocateQuota(ui64 size, bool isOptional) final {
-        Y_UNUSED(isOptional);
-
-        if (size && !ResourceManager->AllocateResources(*State, /* taskId */ 0, {.Memory = size})) {
+        if (size && !ResourceManager->AllocateResources(*State, /* taskId */ 0, {.Memory = size, .Optional = isOptional})) {
             return false;
         }
 

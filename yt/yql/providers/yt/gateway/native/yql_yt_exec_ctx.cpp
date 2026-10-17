@@ -69,7 +69,7 @@ void TExecContextBase::SetCache(const TVector<TString>& outTablePaths, const TVe
         QueryCacheItem.Reset(new TYtQueryCacheItem(settings->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable),
             entry, opHash, outputHash, outTablePaths, outTableSpecs, Session_->UserName_, tmpFolder, mergeSpec, tableAttrs, chunkLimit,
             settings->QueryCacheUseExpirationTimeout.Get().GetOrElse(false),
-            settings->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS), LogCtx_));
+            LogCtx_));
     }
 }
 

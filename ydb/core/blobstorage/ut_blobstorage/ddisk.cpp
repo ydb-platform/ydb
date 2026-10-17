@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 
 Y_UNIT_TEST_SUITE(DDisk) {
 
@@ -152,6 +153,14 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return response->Get()->Record;
         }
 
+        ui64 GetRegistrationToken(const NDDisk::TQueryCredentials& creds) {
+            Env.Runtime->Send(new IEventHandle(PBServiceId, Edge,
+                new NDDisk::TEvGetPersistentBufferRegistrationToken(creds)), Edge.NodeId());
+            auto result = Env.WaitForEdgeActorEvent<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(Edge, false);
+            UNIT_ASSERT(result->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
+            return result->Get()->Record.GetToken();
+        }
+
         void GreetDDisks() {
             Creds.TabletId = 1;
             Creds.Generation = 1;
@@ -173,7 +182,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
                 PBCreds[i].DDiskInstanceGuid = res->Get()->Record.GetDDiskInstanceGuid();
                 PBCreds[i].ConnectionToken.emplace(res->Get()->Record.GetConnectionToken());
                 Env.Runtime->Send(new IEventHandle(PBServiceId, Edge,
-                    new NDDisk::TEvRegisterPersistentBuffer(PBCreds[i], Env.Runtime->GetClock())), Edge.NodeId());
+                    new NDDisk::TEvRegisterPersistentBuffer(PBCreds[i], GetRegistrationToken(PBCreds[i]))), Edge.NodeId());
                 auto registration = Env.WaitForEdgeActorEvent<NDDisk::TEvRegisterPersistentBufferResult>(Edge, false);
                 const auto status = registration->Get()->Record.GetStatus();
                 UNIT_ASSERT_C(status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK
@@ -669,6 +678,28 @@ Y_UNIT_TEST_SUITE(DDisk) {
         }
     };
 
+    Y_UNIT_TEST(SystemViewMarksDDiskSlots) {
+        TDDiskTestContext f;
+        f.Env.Sim(TDuration::Seconds(10));
+        using namespace NSysView;
+        f.Env.Runtime->SendToPipe(f.Env.TabletId, f.Edge, new TEvSysView::TEvGetVSlotsRequest(),
+            0, TTestActorSystem::GetPipeConfigWithRetries());
+        auto response = f.Env.WaitForEdgeActorEvent<TEvSysView::TEvGetVSlotsResponse>(f.Edge);
+        ui32 ddiskSlots = 0;
+        ui32 ordinarySlots = 0;
+        for (const auto& entry : response->Get()->Record.GetEntries()) {
+            if (entry.GetInfo().GetDDisk()) {
+                ++ddiskSlots;
+                UNIT_ASSERT(entry.GetInfo().HasGroupId());
+            } else {
+                ++ordinarySlots;
+            }
+        }
+        // The fixture creates three DDisk groups with five slots each, plus a conventional pool.
+        UNIT_ASSERT_VALUES_EQUAL(ddiskSlots, 15);
+        UNIT_ASSERT(ordinarySlots > 0);
+    }
+
     Y_UNIT_TEST(Basic) {
         TDDiskTestContext f;
         auto group = f.AllocateDDiskBlockGroup();
@@ -866,6 +897,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
         f.ChangeTestingNode(groups.begin()->GetNodes(0));
         f.WritePB(0, 4, 0);
         f.WritePB(0, 4, 1);
+        const auto token = f.GetRegistrationToken(f.PBCreds[0]);
         const auto timestamp = f.Env.Runtime->GetClock();
         f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge,
             new NDDisk::TEvUnregisterPersistentBuffer(f.PBCreds[0])), f.Edge.NodeId());
@@ -877,7 +909,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
         // A delayed registration from before retirement must not recreate it.
         f.Env.Runtime->Send(new IEventHandle(f.PBServiceId, f.Edge,
-            new NDDisk::TEvRegisterPersistentBuffer(f.PBCreds[0], timestamp)), f.Edge.NodeId());
+            new NDDisk::TEvRegisterPersistentBuffer(f.PBCreds[0], token)), f.Edge.NodeId());
         auto stale = f.Env.WaitForEdgeActorEvent<NDDisk::TEvRegisterPersistentBufferResult>(f.Edge, false);
         UNIT_ASSERT(stale->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
 

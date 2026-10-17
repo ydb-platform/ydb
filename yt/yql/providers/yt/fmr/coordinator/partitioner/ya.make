@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_fmr_partitioner.cpp
@@ -18,7 +18,5 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -10,6 +10,7 @@ import "yt_proto/yt/core/misc/proto/error.proto";
 import "yt_proto/yt/core/misc/proto/guid.proto";
 import "yt_proto/yt/core/misc/proto/hyperloglog.proto";
 import "yt_proto/yt/core/rpc/proto/rpc.proto";
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
 import "yt_proto/yt/core/ytree/proto/attributes.proto";
 import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/api/common/proto/schema.proto";
@@ -406,12 +407,33 @@ message TRowsetDescriptor
     optional TTableSchema schema = 5;
 }
 
+message TTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 wait_time = 1;
+    optional uint64 read_time = 2;
+    optional uint64 idle_time = 3;
+}
+
+// Timing statistics of the table reader on the proxy side; mirrors NApi::TRemoteTableReaderTimingStatistics.
+message TRemoteTableReaderTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 master_fetch_time = 1;
+    optional TTimingStatistics data_read_timing = 2;
+    optional uint64 total_time = 3;
+    optional uint64 encode_time = 4;
+    optional uint64 write_stall_time = 5;
+    optional uint64 window_drained_time = 6;
+}
+
 // Could be embedded into response attachment block sequence along with the actual data
 // to indidate the progress of table reader/writer.
 message TRowsetStatistics
 {
     required int64 total_row_count = 1;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 2;
+    optional TRemoteTableReaderTimingStatistics timing_statistics = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -691,6 +713,18 @@ message TQueryStatistics
         optional int64 max = 2;
         optional string argmax_node = 3;
     };
+
+    // Matches NYT::NQueryClient::EReportedScanOrder.
+    enum EReportedScanOrder
+    {
+        SO_UNKNOWN = 0 [(NYT.NYson.NProto.enum_value_name) = "unknown"];
+        SO_UNORDERED = 1 [(NYT.NYson.NProto.enum_value_name) = "unordered"];
+        SO_ORDERED = 2 [(NYT.NYson.NProto.enum_value_name) = "ordered"];
+        SO_REVERSED = 3 [(NYT.NYson.NProto.enum_value_name) = "reversed"];
+        SO_MIXED = 4 [(NYT.NYson.NProto.enum_value_name) = "mixed"];
+    };
+
+    optional EReportedScanOrder scan_order = 33;
 
     optional TAggregate rows_read_aggr = 21;
     optional TAggregate data_weight_read_aggr = 22;
@@ -1033,6 +1067,7 @@ message TRspGetTabletInfos
         required int64 total_row_count = 1;
         required int64 trimmed_row_count = 2;
         optional int64 delayed_lockless_row_count = 7;
+        optional int64 flushed_row_count = 8;
         optional uint64 barrier_timestamp = 3;
         optional uint64 last_write_timestamp = 4;
 
@@ -2860,6 +2895,7 @@ message TReqPartitionFile
     optional bool fetch_cookie_node_descriptors = 4 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
+    optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }
 
 message TFilePartition
@@ -2886,6 +2922,8 @@ message TRspReadFilePartition
 
 message TRspReadFilePartitionMeta
 {
+    required NYT.NProto.TGuid id = 1;
+    required uint64 revision = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3732,6 +3770,8 @@ message TReqGetQuery
     required NYT.NProto.TGuid query_id = 2;
     optional NYT.NYTree.NProto.TAttributeFilter attributes = 3;
     optional uint64 timestamp = 4;
+    repeated string progress_parts = 5;
+    optional uint32 min_progress_revision = 6;
 }
 
 message TRspGetQuery
@@ -3948,6 +3988,9 @@ message TReqStartShuffle
 
     // YSON-serialized TShuffleConfig.
     optional bytes config = 9;
+
+    // NCompression::ECodec.
+    optional int32 codec = 10 [default = 0];
 }
 
 message TRspStartShuffle

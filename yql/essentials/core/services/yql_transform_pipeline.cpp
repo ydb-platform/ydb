@@ -105,11 +105,11 @@ TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const 
 
 TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(bool expandCons, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
-    if (expandCons) {
-        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", issueCode));
-    } else {
-        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApplyWithoutCons), "ExpandApply", issueCode));
-    }
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+                                                [&typeCtx, expandCons](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                                                    return expandCons ? ExpandApply(input, output, ctx, typeCtx)
+                                                                      : ExpandApplyWithoutCons(input, output, ctx, typeCtx);
+                                                }), "ExpandApply", issueCode));
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
                                                 [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                                                     return ValidateProviders(input, output, ctx, typeCtx);

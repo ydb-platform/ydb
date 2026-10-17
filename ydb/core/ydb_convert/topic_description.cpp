@@ -89,7 +89,9 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
 
             auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
             deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
-            deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
+            if (in.HasMaxProcessingAttempts() || in.GetDeadLetterPolicyEnabled()) {
+                deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
+            }
 
             switch (in.GetDeadLetterPolicy()) {
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:

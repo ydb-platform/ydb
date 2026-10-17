@@ -461,6 +461,17 @@ Y_UNIT_TEST(AlterAutoPartitioningAndCodecs) {
     {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
+        request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(0);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        const auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetMinPartitionCount(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetMaxPartitionCount(), 2u);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
         request.mutable_set_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
         request.mutable_set_supported_codecs()->add_codecs(Ydb::Topic::CODEC_GZIP);
         request.set_set_metrics_level(1);
@@ -617,6 +628,13 @@ Y_UNIT_TEST(CreateAttributeEdgeCases) {
         auto request = MakeCreateTopicRequest("/Root/topic_neg_parts");
         request.mutable_partitioning_settings()->set_min_active_partitions(-3);
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "positive");
+    }
+
+    {
+        auto request = MakeCreateTopicRequest("/Root/topic_too_many_parts");
+        request.mutable_partitioning_settings()->set_min_active_partitions(
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "less than");
     }
 }
 
@@ -905,7 +923,7 @@ Y_UNIT_TEST(AlterRejectsNegativeSpeedsAndHugePartitions) {
 
     expectBad([](auto& r) {
         r.mutable_alter_partitioning_settings()->set_set_min_active_partitions(
-            static_cast<i64>(Max<ui32>()));
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
     }, "less than");
 
     expectBad([](auto& r) {
@@ -1038,7 +1056,7 @@ Y_UNIT_TEST(AlterEnableAutopartitioningAndServiceConsumerGuards) {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
         request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(
-            static_cast<i64>(Max<ui32>()));
+            static_cast<i64>(MAX_TOPIC_PARTITIONS) + 1);
         AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "less than");
     }
 

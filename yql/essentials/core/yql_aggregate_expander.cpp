@@ -154,7 +154,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
                                                         {lambda->Head().Child(1), extractor}});
 
     Ctx_.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(traits, traits, Ctx_);
+    auto status = ExpandApplyNoRepeat(traits, traits, Ctx_, TypesCtx_);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
     return traits;
 }

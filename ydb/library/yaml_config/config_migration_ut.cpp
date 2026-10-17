@@ -1,3 +1,4 @@
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yaml_config/public/migration/config_migration.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -19,6 +20,11 @@ namespace {
     NFyaml::TDocument ParseSuccessfulMerge(const NYamlConfig::TMigrationConfigMergeResult& result) {
         UNIT_ASSERT_C(!result.HasConflicts, result.Config);
         return NFyaml::TDocument::Parse(result.Config);
+    }
+
+    NFyaml::TDocument ToggleMigration(const TString& input, bool selfManagement, bool enabled) {
+        return selfManagement ? NYamlConfig::SetSelfManagement(input, enabled)
+                              : NYamlConfig::SetConfigV2FeatureFlag(input, enabled);
     }
 
 } // anonymous namespace
@@ -385,6 +391,87 @@ config:
         disabledSerialized << disabled;
         auto v2Disabled = NYamlConfig::SetConfigV2FeatureFlag(disabledSerialized.Str(), false);
         UNIT_ASSERT_VALUES_EQUAL(Config(v2Disabled).at("feature_flags").Map().at("switch_to_config_v2").Scalar(), "false");
+    }
+
+    Y_UNIT_TEST_TWIN(EnableRequiresConfigGrpcService, selfManagement) {
+        struct TTestCase {
+            TStringBuf GrpcConfig;
+            bool Valid;
+        };
+        const TTestCase cases[] = {
+            {"{}", true},
+            {"{port: 2135}", true},
+            {"{port: 2135, services: []}", true},
+            {"{port: 2135, services: [cms]}", false},
+            {"{ssl_port: 2135, services: [cms]}", false},
+            {"{port: 2135, services: [cms, config]}", true},
+            {"{port: 2135, services: [cms], services_enabled: [config]}", true},
+            {"{ssl_port: 2135, services: [config]}", true},
+            {"{port: 2135, services_disabled: [config]}", false},
+            {"{port: 2135, services: [config], services_disabled: [config]}", false},
+            {"{port: 2135, services: [cms], services_enabled: [config], services_disabled: [config]}", false},
+            {"{port: 2135, services_enabled: [cms], services_disabled: [cms]}", true},
+            {"{port: 0, services: [cms]}", true},
+            {"{port: 2135, start_grpc_proxy: false, services: [cms]}", true},
+            {"{port: 2135, services: [cms], ext_endpoints: [{}]}", false},
+            {"{port: 2135, services_disabled: [config], ext_endpoints: [{port: 2136}]}", true},
+            {"{port: 2135, services: [cms], ext_endpoints: [{ssl_port: 2136, services: [config]}]}", true},
+            {"{ext_endpoints: [{port: 2136, services: [cms]}]}", false},
+            {"{ext_endpoints: [{port: 2136, services: [cms], services_enabled: [config]}]}", true},
+            {"{port: 2135, services_enabled: [monitoring], services_disabled: [config, topic, config]}", false},
+        };
+        for (const auto& testCase : cases) {
+            const TString input = TStringBuilder() << "config:\n"
+                                                     "  feature_flags: {switch_to_config_v2: true}\n"
+                                                     "  grpc_config: " << testCase.GrpcConfig << '\n';
+            if (testCase.Valid) {
+                auto result = ToggleMigration(input, selfManagement, true);
+                auto original = NFyaml::TDocument::Parse(input);
+                UNIT_ASSERT(Config(result).at("grpc_config").DeepEqual(Config(original).at("grpc_config")));
+            } else {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ToggleMigration(input, selfManagement, true),
+                                              NYamlConfig::TYamlConfigEx, "requires the 'config' gRPC service");
+            }
+            UNIT_ASSERT_NO_EXCEPTION(ToggleMigration(input, selfManagement, false));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ConfigGrpcServiceWithSelectors, selfManagement) {
+        const TString input = R"(
+config:
+  feature_flags:
+    switch_to_config_v2: true
+  grpc_config:
+    port: 2135
+    services: [cms]
+allowed_labels:
+  node_id:
+    type: string
+selector_config:
+- description: Enable config service
+  selector: {}
+  config:
+    grpc_config: !inherit
+      services_enabled: [config]
+)";
+        auto result = ToggleMigration(input, selfManagement, true);
+        const auto selectorConfig = result.Root().Map().at("selector_config").Sequence().at(0).Map().at("config").Map();
+        const auto tag = selectorConfig.at("grpc_config").Tag();
+        UNIT_ASSERT(tag);
+        UNIT_ASSERT_VALUES_EQUAL(*tag, "!inherit");
+        UNIT_ASSERT_VALUES_EQUAL(Config(result).at("grpc_config").Map().at("services").Sequence().at(0).Scalar(), "cms");
+
+        const TString withDisabledService = input + R"(
+- description: Disable config service on one node
+  selector:
+    node_id: '1'
+  config:
+    grpc_config: !inherit
+      services_disabled: [config]
+)";
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ToggleMigration(withDisabledService, selfManagement, true),
+                                      NYamlConfig::TYamlConfigEx, "requires the 'config' gRPC service");
+        UNIT_ASSERT_NO_EXCEPTION(ToggleMigration(withDisabledService, selfManagement, false));
     }
 
     Y_UNIT_TEST(SelfManagementRequiresV2) {

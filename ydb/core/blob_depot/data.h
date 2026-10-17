@@ -747,13 +747,7 @@ namespace NKikimr::NBlobDepot {
             const NKikimrBlobDepot::TBlobLocator& newLocator,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
-        enum class EMoveDataTrashStatus {
-            Clear,
-            NeedsIndexRescan,
-            WaitingForGC,
-        };
-
-        EMoveDataTrashStatus CheckMoveDataTrash(const TSet<ui32>& groups);
+        std::unordered_set<std::tuple<ui8, ui32>> PrepareCheckTrash(const THashSet<ui32>& groups);
         bool IsBlobReferenced(TLogoBlobID id) const;
 
         bool UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
@@ -765,6 +759,10 @@ namespace NKikimr::NBlobDepot {
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
         bool OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        // Drop every key of a completely deleted tablet (Max<ui32>() block), on all channels at once;
+        // returns false when it ran out of maxItems and has to be called again.
+        bool OnTabletDeleted(ui64 tabletId, ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc,
+            void *cookie);
         void CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
             const std::function<bool(TLogoBlobID)>& callback);
         void OnCommitHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);

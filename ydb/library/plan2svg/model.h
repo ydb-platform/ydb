@@ -87,6 +87,13 @@ public:
     bool Blocks = false;
 };
 
+// Task counts of a stage on one cluster node, as reported in Stats.Nodes.
+struct TStageNodeTasks {
+    ui32 NodeId = 0;
+    ui32 Tasks = 0;
+    ui32 Finished = 0;
+};
+
 class TPlan;
 
 class TStage {
@@ -132,6 +139,7 @@ public:
     ui32 OutputPhysicalStageId = 0; // only first/main, not CTE-clone
     ui32 Tasks = 0;
     ui32 FinishedTasks = 0;
+    std::vector<TStageNodeTasks> Nodes; // sorted by NodeId; empty for plans without per-node stats
     const NJson::TJsonValue* StatsNode = nullptr;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;

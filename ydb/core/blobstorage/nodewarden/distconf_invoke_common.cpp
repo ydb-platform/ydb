@@ -13,6 +13,15 @@ namespace NKikimr::NStorage {
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
     namespace {
+        void SendInvokeResult(TActorId recipient, TActorId sender, ui64 cookie, TActorId sessionId,
+                              std::unique_ptr<TEvNodeConfigInvokeOnRootResult> response) {
+            auto handle = std::make_unique<IEventHandle>(recipient, sender, response.release(), 0, cookie);
+            if (sessionId) {
+                handle->Rewrite(TEvInterconnect::EvForward, sessionId);
+            }
+            TActivationContext::Send(handle.release());
+        }
+
         bool IsClusterStateReached(const NKikimrBridge::TClusterState& current, const NKikimrBridge::TClusterState& requested) {
             if (current.GetGeneration() < requested.GetGeneration()) {
                 return false;
@@ -208,6 +217,9 @@ namespace NKikimr::NStorage {
 
                     case TQuery::REQUEST_NOT_SET:
                         throw TExError() << "Request field not set";
+
+                    case TQuery::kQueryWorkingRoot:
+                        Y_ABORT("QueryWorkingRoot must be handled directly by the keeper");
                 }
 
                 throw TExError() << "Unhandled request";
@@ -443,11 +455,7 @@ namespace NKikimr::NStorage {
                 if (sendResult) {
                     auto ev = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
                     record.Swap(&ev->Record);
-                    auto handle = std::make_unique<IEventHandle>(op.Sender, SelfId(), ev.release(), 0, op.Cookie);
-                    if (op.SessionId) {
-                        handle->Rewrite(TEvInterconnect::EvForward, op.SessionId);
-                    }
-                    TActivationContext::Send(handle.release());
+                    SendInvokeResult(op.Sender, SelfId(), op.Cookie, op.SessionId, std::move(ev));
                 }
             },
             [&](TCollectConfigsAndPropose&) {
@@ -532,6 +540,10 @@ namespace NKikimr::NStorage {
         if (LifetimeToken.expired()) {
             return PassAway();
         }
+        if (!WaitingReplyFromNode && !Detached && InvokePipelineGeneration != Self->InvokePipelineGeneration
+            && ev->GetTypeRewrite() != TEvPrivate::EvAbortQuery && ev->GetTypeRewrite() != TEvents::TSystem::Poison) {
+            return Finish(TResult::RACE, "root operation superseded");
+        }
         try {
             STRICT_STFUNC_BODY(
                 cFunc(TEvPrivate::EvExecuteQuery, HandleExecuteQuery);
@@ -562,6 +574,17 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::HandleInvokeOnRoot(TEvNodeConfigInvokeOnRoot::TPtr ev) {
+        if (ev->Get()->Record.HasQueryWorkingRoot()) {
+            auto response = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
+            response->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+            if (Scepter && HasStaticGroupConfig() && QuorumValid && GlobalQuorum) {
+                auto *scepter = response->Record.MutableScepter();
+                scepter->SetId(Scepter->Id);
+                scepter->SetNodeId(SelfId().NodeId());
+            }
+            SendInvokeResult(ev->Sender, SelfId(), ev->Cookie, ev->InterconnectSession, std::move(response));
+            return;
+        }
         if (Binding && !Binding->RootNodeId) { // binding is in progess, wait for it to complete
             InvokeOnRootPending.push_back(std::move(ev));
         } else if (Binding) {

@@ -24,4 +24,4 @@ using TWasmModuleStatePtr = std::shared_ptr<TWasmModuleState>;
 using TWasmCompartmentState = TWasmModuleState;
 using TWasmCompartmentStatePtr = TWasmModuleStatePtr;
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

@@ -1,5 +1,6 @@
 #include "udf_module.h"
 #include "udf_module_behaviour.h"
+
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NUdfStore {
@@ -13,11 +14,7 @@ TUdfModule::TDecoder::TDecoder(const Ydb::ResultSet& rawData) {
     ManifestIdx = GetFieldIndex(rawData, ManifestColName);
     VersionIdx = GetFieldIndex(rawData, VersionColName);
     ChunkCountIdx = GetFieldIndex(rawData, ChunkCountColName);
-    CompileStatusIdx = GetFieldIndex(rawData, CompileStatusColName);
-    CompileErrorIdx = GetFieldIndex(rawData, CompileErrorColName);
     CreatedAtIdx = GetFieldIndex(rawData, CreatedAtColName);
-    CompileStartedAtIdx = GetFieldIndex(rawData, CompileStartedAtColName);
-    CompileFinishedAtIdx = GetFieldIndex(rawData, CompileFinishedAtColName);
 }
 
 bool TUdfModule::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::Value& r) const {
@@ -129,7 +126,7 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() 
 }
 
 TVector<TString> TUdfModule::GetPk() {
-    return {NameColName};
+    return { NameColName };
 }
 
 bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
@@ -160,25 +157,8 @@ bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value
     if (decoder.GetChunkCountIdx() >= 0) {
         decoder.Read(decoder.GetChunkCountIdx(), ChunkCount, rawValue);
     }
-    if (decoder.GetCompileStatusIdx() >= 0) {
-        ECompileStatus status = ECompileStatus::Pending;
-        if (decoder.Read(decoder.GetCompileStatusIdx(), status, rawValue)) {
-            CompileStatus = status;
-        }
-    } else if (Type == EUdfType::WASM || Type == EUdfType::LIBRARY) {
-        CompileStatus = ECompileStatus::Pending;
-    }
-    if (decoder.GetCompileErrorIdx() >= 0) {
-        decoder.Read(decoder.GetCompileErrorIdx(), CompileError, rawValue);
-    }
     if (decoder.GetCreatedAtIdx() >= 0) {
         decoder.Read(decoder.GetCreatedAtIdx(), CreatedAt, rawValue);
-    }
-    if (decoder.GetCompileStartedAtIdx() >= 0) {
-        decoder.Read(decoder.GetCompileStartedAtIdx(), CompileStartedAt, rawValue);
-    }
-    if (decoder.GetCompileFinishedAtIdx() >= 0) {
-        decoder.Read(decoder.GetCompileFinishedAtIdx(), CompileFinishedAt, rawValue);
     }
     return true;
 }
@@ -189,20 +169,12 @@ NMetadata::NInternal::TTableRecord TUdfModule::SerializeToRecord() const {
 
 TString TUdfModule::SerializeToString() const {
     return TStringBuilder() << "{"
-        << "Uid: " << Uid
-        << ", Md5: " << Md5
-        << ", Size: " << Size
-        << ", Name: " << Name
-        << ", Type: " << TypeToString(Type)
-        << ", Manifest: " << Manifest
-        << ", Version: " << Version
-        << ", ChunkCount: " << ChunkCount
-        << ", CompileStatus: " << CompileStatusToString(CompileStatus)
-        << "}";
+                            << "Uid: " << Uid << ", Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name << ", Type: " << TypeToString(Type)
+                            << ", Manifest: " << Manifest << ", Version: " << Version << ", ChunkCount: " << ChunkCount << "}";
 }
 
 NMetadata::IClassBehaviour::TPtr TUdfModule::GetBehaviour() {
     return TUdfModuleBehaviour::GetInstance();
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

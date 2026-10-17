@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/labeled_db_counters.h>
 #include <ydb/core/tablet/labeled_counters_merger.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
@@ -222,7 +223,12 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
         auto group = InternalGroups["tablets_serverless"];
         Y_ABORT_UNLESS(group);
         THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
-        result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters));
+        result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters), FollowerTabletsGroup);
+        break;
+    }
+    case NKikimrSysView::TABLETS_FOLLOWERS: {
+        THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
+        result = CreateTabletDbCounters(nullptr, FollowerTabletsGroup, std::move(executorCounters));
         break;
     }
     case NKikimrSysView::GRPC: {
@@ -252,7 +258,9 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
 }
 
 void TSysViewProcessor::AttachExternalCounters() {
-    if (!Database) {
+    // The navigate result handler runs whenever either EnableDbCounters or
+    // EnableDataShardDetailedMetrics is set, so the gate has to live here.
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -272,7 +280,7 @@ void TSysViewProcessor::AttachExternalCounters() {
 }
 
 void TSysViewProcessor::AttachInternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -284,7 +292,7 @@ void TSysViewProcessor::AttachInternalCounters() {
 }
 
 void TSysViewProcessor::DetachExternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -296,7 +304,7 @@ void TSysViewProcessor::DetachExternalCounters() {
 }
 
 void TSysViewProcessor::DetachInternalCounters() {
-    if (!Database) {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDbCounters()) {
         return;
     }
 
@@ -306,8 +314,51 @@ void TSysViewProcessor::DetachInternalCounters() {
     }
 }
 
+void TSysViewProcessor::AttachDetailedCounters() {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+        return;
+    }
+
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+    auto group = GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
+        ->GetSubgroup("host", "");
+    if (MonitoringProjectId) {
+        group = group->GetSubgroup("monitoring_project_id", MonitoringProjectId);
+    }
+    group->RegisterSubgroup("database", Database, DetailedGroup);
+}
+
+void TSysViewProcessor::DetachDetailedCounters() {
+    if (!Database || !AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+        return;
+    }
+
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+    std::vector<std::pair<TString, TString>> chain{{"host", ""}};
+    if (MonitoringProjectId) {
+        chain.emplace_back("monitoring_project_id", MonitoringProjectId);
+    }
+    chain.emplace_back("database", Database);
+
+    GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
+        ->RemoveSubgroupChain(chain);
+}
+
+TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() {
+    // The same two conditions AttachDetailedCounters() checks: with the flag off there
+    // is nothing to publish into, and without a database the target group is not scoped
+    // yet. Gating here rather than at the call site keeps every caller honest - the
+    // request handler runs whenever EITHER flag is on, so an ungated aggregator would
+    // be built and fed on a plain db counters deployment.
+    if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database);
+    }
+    return DetailedAggregator.Get();
+}
+
 void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
-    if (!AppData()->FeatureFlags.GetEnableDbCounters()) {
+    if (!AppData()->FeatureFlags.GetEnableDbCounters() && !AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         return;
     }
 
@@ -334,6 +385,13 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
 
     std::unordered_set<NKikimrSysView::EDbCountersService> incomingServicesSet;
 
+    // Followers ride their own field, see sys_view.proto
+    for (auto& serviceCounters : *record.MutableFollowerServiceCounters()) {
+        if (serviceCounters.HasService()) { // an enum value this processor lacks would read as KQP
+            record.MutableServiceCounters()->Add(std::move(serviceCounters));
+        }
+    }
+
     for (auto& serviceCounters : *record.MutableServiceCounters()) {
         auto service = serviceCounters.GetService();
         incomingServicesSet.insert(service);
@@ -354,11 +412,44 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {
         }
     }
 
+    if (auto* aggregator = GetDetailedAggregator()) {
+        bool hasLeaderRole = false;
+        bool hasFollowerRole = false;
+        for (const auto& roleCounters : record.GetDetailedCounters()) {
+            const auto service = roleCounters.GetService();
+            // The aggregator keys a node's contributions by {nodeId, isFollowerRole} and
+            // replaces that set wholesale, so at most one entry per role may arrive. Only
+            // TABLETS and TABLETS_FOLLOWERS register detailed counters today
+            // (ydb/core/tablet/tablet_counters_aggregator.cpp), and the sender keys them by
+            // service, so each role appears at most once. A new service on this channel has
+            // to update this assert in the same change.
+            Y_ABORT_UNLESS(service == NKikimrSysView::TABLETS || service == NKikimrSysView::TABLETS_FOLLOWERS,
+                "unexpected detailed counters service %d from node %" PRIu64,
+                static_cast<int>(service), static_cast<ui64>(nodeId));
+            const bool isFollower = service == NKikimrSysView::TABLETS_FOLLOWERS;
+            if (isFollower) {
+                hasFollowerRole = true;
+            } else {
+                hasLeaderRole = true;
+            }
+            aggregator->ApplyFromNode(nodeId, isFollower, roleCounters.GetTables());
+        }
+        // An empty table list for a role the node stayed silent about retires whatever it
+        // last reported for that role.
+        if (!hasLeaderRole) {
+            aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ false, {});
+        }
+        if (!hasFollowerRole) {
+            aggregator->ApplyFromNode(nodeId, /* isFollowerRole = */ true, {});
+        }
+    }
+
     YDB_LOG_DEBUG("Handle TEvSysView::TEvSendDbCountersRequest: applying counters from node",
         {"tabletId", TabletID()},
         {"nodeId", nodeId},
         {"generation", state.Generation},
         {"serviceCount", incomingServicesSet.size()},
+        {"detailedRoleCount", record.DetailedCountersSize()},
         {"recordByteSize", record.ByteSize()});
 
     auto response = MakeHolder<TEvSysView::TEvSendDbCountersResponse>();
@@ -432,6 +523,9 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
     for (auto it = NodeCountersStates.begin(); it != NodeCountersStates.end(); ) {
         auto& state = it->second;
         if (state.FreshCount > 1) {
+            if (auto* aggregator = DetailedAggregator.Get()) {
+                aggregator->DropNode(it->first);
+            }
             it = NodeCountersStates.erase(it);
             continue;
         }
@@ -441,17 +535,29 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvApplyCounters::TPtr&) {
         }
         ++it;
     }
-    for (auto& [service, aggrCounters] : AggregatedCountersState) {
+    auto apply = [this](auto service, auto& aggrCounters) {
         TIntrusivePtr<IDbCounters> counters;
         if (auto it = Counters.find(service); it != Counters.end()) {
             counters = it->second;
         } else {
             counters = CreateCountersForService(service);
         }
-        if (!counters) {
-            continue;
+        if (counters) {
+            counters->FromProto(aggrCounters);
         }
-        counters->FromProto(aggrCounters);
+    };
+    // TABLETS maps the follower group into ydb_serverless, so the followers go first
+    if (auto it = AggregatedCountersState.find(NKikimrSysView::TABLETS_FOLLOWERS); it != AggregatedCountersState.end()) {
+        apply(it->first, it->second);
+    }
+    for (auto& [service, aggrCounters] : AggregatedCountersState) {
+        if (service != NKikimrSysView::TABLETS_FOLLOWERS) {
+            apply(service, aggrCounters);
+        }
+    }
+
+    if (auto* aggregator = DetailedAggregator.Get()) {
+        aggregator->RecalculateAllCounters();
     }
 
     YDB_LOG_DEBUG("Handle TEvPrivate::TEvApplyCounters: applying aggregated counters",
@@ -525,18 +631,27 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
         return;
     }
 
+    TString cloudId, folderId, databaseId, monitoringProjectId;
     for (const auto& [key, value] : entry.Attributes) {
         if (key == "cloud_id") {
-            CloudId = value;
+            cloudId = value;
         } else if (key == "folder_id") {
-            FolderId = value;
+            folderId = value;
         } else if (key == "database_id") {
-            DatabaseId = value;
+            databaseId = value;
+        } else if (key == "monitoring_project_id") {
+            monitoringProjectId = value;
         }
     }
 
+    CloudId = cloudId;
+    FolderId = folderId;
+    DatabaseId = databaseId;
+    MonitoringProjectId = monitoringProjectId;
+
     AttachExternalCounters();
     AttachInternalCounters();
+    AttachDetailedCounters();
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(entry.TableId.PathId));
 
@@ -546,7 +661,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::T
         {"pathId", entry.TableId.PathId},
         {"cloudId", CloudId},
         {"folderId", FolderId},
-        {"databaseId", DatabaseId});
+        {"databaseId", DatabaseId},
+        {"monitoringProjectId", MonitoringProjectId});
 }
 
 void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
@@ -564,7 +680,7 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
     const auto& pathDescription = describeResult->GetPathDescription();
     const auto& userAttrs = pathDescription.GetUserAttributes();
 
-    TString cloudId, folderId, databaseId;
+    TString cloudId, folderId, databaseId, monitoringProjectId;
     for (const auto& attr : userAttrs) {
         if (attr.GetKey() == "cloud_id") {
             cloudId = attr.GetValue();
@@ -572,6 +688,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
             folderId = attr.GetValue();
         } else if (attr.GetKey() == "database_id") {
             databaseId = attr.GetValue();
+        } else if (attr.GetKey() == "monitoring_project_id") {
+            monitoringProjectId = attr.GetValue();
         }
     }
 
@@ -580,7 +698,8 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
         {"database", Database},
         {"cloudId", cloudId},
         {"folderId", folderId},
-        {"databaseId", databaseId});
+        {"databaseId", databaseId},
+        {"monitoringProjectId", monitoringProjectId});
 
     if (cloudId != CloudId || folderId != FolderId || databaseId != DatabaseId) {
         DetachExternalCounters();
@@ -588,6 +707,12 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPt
         FolderId = folderId;
         DatabaseId = databaseId;
         AttachExternalCounters();
+    }
+
+    if (monitoringProjectId != MonitoringProjectId) {
+        DetachDetailedCounters();
+        MonitoringProjectId = monitoringProjectId;
+        AttachDetailedCounters();
     }
 }
 
@@ -597,4 +722,3 @@ void TSysViewProcessor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPt
 
 } // NSysView
 } // NKikimr
-

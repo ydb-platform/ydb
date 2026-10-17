@@ -50,6 +50,7 @@
 #include "follower_tablet_info.h"
 #include "follower_group.h"
 #include "node_info.h"
+#include "event_history.h"
 #include "storage_group_info.h"
 #include "storage_pool_info.h"
 #include "sequencer.h"
@@ -208,6 +209,9 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
+    friend class TTxMonEvent_Events;
+    friend class TTxMonEvent_NodeInfo;
+    friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -249,6 +253,7 @@ protected:
     friend class TTxConfigureScaleRecommender;
     friend class TTxProcessBootQueue;
     friend class TTxUnlockTabletExecution;
+    friend class TTxMonEvent_MoveData;
 
     friend class TDeleteTabletActor;
 
@@ -260,9 +265,11 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
-    void StartReassignActor(std::vector<TReassignOperation> operations);
-    void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
+    // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
+    void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
+    void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -286,7 +293,7 @@ protected:
                                            TEvLocal::TEvTabletStatus::EStatus status,
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
-    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
+    ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails);
     ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
@@ -517,6 +524,13 @@ protected:
     };
 
     TStaticRingBuffer<TTabletMoveInfo, 5> TabletMoveHistory;
+
+    // last events across all nodes, per-node history lives in TNodeInfo::EventHistory
+    static constexpr size_t RECENT_NODE_EVENTS_SIZE = 256;
+    TStaticRingBuffer<TRecentNodeEvent, RECENT_NODE_EVENTS_SIZE> RecentNodeEvents;
+    // tablet events are far more frequent than node events, so they live in a separate, larger ring
+    static constexpr size_t RECENT_TABLET_EVENTS_SIZE = 1024;
+    TStaticRingBuffer<TRecentTabletEvent, RECENT_TABLET_EVENTS_SIZE> RecentTabletEvents;
     std::vector<TTabletMoveInfo> TabletMoveSamplesForLog; // stores (at most) MOVE_SAMPLES_PER_LOG_ENTRY highest priority moves in a heap
     static constexpr size_t MOVE_SAMPLES_PER_LOG_ENTRY = 10;
     std::unordered_map<TTabletTypes::EType, ui64> TabletMovesByTypeForLog;
@@ -697,7 +711,7 @@ public:
     TTabletInfo& GetTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(TTabletId tabletId, TFollowerId followerId);
     TTabletInfo* FindTablet(const TFullTabletId& tabletId) { return FindTablet(tabletId.first, tabletId.second); }
-TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
+    TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId);
     TStoragePoolInfo& GetStoragePool(const TString& name);
     TStoragePoolInfo* FindStoragePool(const TString& name);
     TDomainInfo* FindDomain(TSubDomainKey key);
@@ -710,7 +724,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void ReportStoppedToWhiteboard(const TLeaderTabletInfo& tablet);
     void ReportDeletedToWhiteboard(const TLeaderTabletInfo& tablet);
     TTabletCategoryInfo& GetTabletCategory(TTabletCategoryId tabletCategoryId);
-    void KillNode(TNodeId nodeId, const TActorId& local);
+    void KillNode(TNodeId nodeId, const TActorId& local, EHiveEventReason reason, TString reasonDetails = {});
     void AddToBootQueue(TTabletInfo* tablet, TNodeId node = 0);
     void UpdateDomainTabletsTotal(const TSubDomainKey& objectDomain, i64 tabletsTotalDiff);
     void UpdateDomainTabletsAlive(const TSubDomainKey& objectDomain, i64 tabletsAliveDiff, const TSubDomainKey& tabletNodeDomain);
@@ -728,7 +742,18 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
     void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
-    void RecordTabletMove(const TTabletMoveInfo& info);
+    void UpdateCounterShrinkRemainingHistory();
+    void OnShrinkMoveDataSent(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataAnswered(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataRetried();
+    void OnShrinkMoveDataFinished();
+    // details are appended to the "from=X to=Y" of the Moved event
+    void RecordTabletMove(const TTabletMoveInfo& info, EHiveEventReason reason, TString details = {});
+    // details is the variable part of the description, reason covers the constant part
+    void RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReason reason, TString details = {});
+    // skipIfRepeated drops the event when the tablet's last event has the same type, reason and details
+    void RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EHiveEventReason reason, TString details = {}, bool skipIfRepeated = false);
+    void RecordTabletBootFailure(const TTabletInfo& tablet, EHiveEventReason reason, TString details = {});
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
     void ProcessWaitQueue();
@@ -749,6 +774,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
             const TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
+    void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
@@ -925,6 +951,18 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return TDuration::MilliSeconds(CurrentConfig.GetTabletRestartsPeriod());
     }
 
+    // upper bound for TabletEventHistorySize / NodeEventHistorySize, applied in BuildCurrentConfig:
+    // a history is allocated per tablet and per node
+    static constexpr ui64 MAX_EVENT_HISTORY_SIZE = 5000;
+
+    ui64 GetTabletEventHistorySize() const {
+        return CurrentConfig.GetTabletEventHistorySize();
+    }
+
+    ui64 GetNodeEventHistorySize() const {
+        return CurrentConfig.GetNodeEventHistorySize();
+    }
+
     ui64 GetTabletRestartsMaxCount() const {
         if (CurrentConfig.HasTabletRestarsMaxCount() && !CurrentConfig.HasTabletRestartsMaxCount()) {
             return CurrentConfig.GetTabletRestarsMaxCount();
@@ -1096,7 +1134,16 @@ protected:
     void ScheduleUnlockTabletExecution(TNodeInfo& node, NKikimrHive::ELockLostReason reason);
     TString DebugDomainsActiveNodes() const;
     TResourceNormalizedValues GetStDevResourceValues() const;
-    bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    struct TMoveExpediency {
+        bool Expedient = false;
+        EHiveEventReason Reason = EHiveEventReason::ResourceStDevImproved; // meaningful only when Expedient
+        double StDevBefore = 0; // set only when the decision was made by resource stdev
+        double StDevAfter = 0;
+    };
+    TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
+    bool IsTabletMoveExpedient(const TTabletInfo& tablet, const TNodeInfo& node) const {
+        return CheckTabletMoveExpediency(tablet, node).Expedient;
+    }
     TResourceRawValues GetDefaultResourceInitialMaximumValues();
     double GetScatter() const;
     double GetUsage() const;

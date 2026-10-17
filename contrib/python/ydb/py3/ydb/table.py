@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 import abc
+from concurrent import futures
 from dataclasses import dataclass
 import ydb
 from abc import abstractmethod
 import logging
 import enum
 import typing
+import warnings
 
 from typing import (
     Any,
     Dict,
     Generic,
     List,
+    Mapping,
     Optional,
     Tuple,
     TYPE_CHECKING,
+    Union,
 )
 
 from ._typing import DriverT
@@ -985,6 +989,11 @@ class ScanQuery(object):
         self.parameters_types = parameters_types
 
 
+_SCAN_QUERY_DEPRECATION_MESSAGE = (
+    "{method} is deprecated and will be removed in a future release, use QueryService ({pool}) instead"
+)
+
+
 def _wrap_scan_query_response(response, table_client_settings):
     issues._process_response(response)
     return ScanQueryResult(response.result, table_client_settings)
@@ -1181,6 +1190,9 @@ class ITableClient(abc.ABC):
 
     @abstractmethod
     def scan_query(self, query, parameters=None, settings=None):
+        """
+        Deprecated: use QueryService (:class:`ydb.QuerySessionPool`) instead.
+        """
         pass
 
     @abstractmethod
@@ -1191,6 +1203,20 @@ class ITableClient(abc.ABC):
         :param table_path: A table path.
         :param rows: A list of structures.
         :param column_types: Bulk upsert column types.
+
+        """
+        pass
+
+    @abstractmethod
+    def read_rows(self, table_path, keys, key_types, columns=None, settings=None):
+        """
+        Read specified keys non-transactionally from a single table.
+
+        :param table_path: A table path.
+        :param keys: A list of structures matching the primary key.
+        :param key_types: Primary key column types.
+        :param columns: Optional iterable of column names to return.
+        :param settings: Request settings.
 
         """
         pass
@@ -1208,7 +1234,15 @@ class BaseTableClient(ITableClient, Generic[DriverT]):
         return Session(self._driver, self._table_client_settings)
 
     def scan_query(self, query, parameters=None, settings=None):
-        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> _utilities.SyncResponseIterator
+        # type: (Union[str, ydb.ScanQuery], Optional[Mapping[str, Any]], Optional[ydb.BaseRequestSettings]) -> _utilities.SyncResponseIterator
+        """
+        Deprecated: use QueryService (:class:`ydb.QuerySessionPool`) instead.
+        """
+        warnings.warn(
+            _SCAN_QUERY_DEPRECATION_MESSAGE.format(method="scan_query", pool="ydb.QuerySessionPool"),
+            DeprecationWarning,
+            stacklevel=2,
+        )
         request = _scan_query_request_factory(query, parameters, settings)
         stream_it = self._driver(
             request,
@@ -1222,7 +1256,7 @@ class BaseTableClient(ITableClient, Generic[DriverT]):
         )
 
     def bulk_upsert(self, table_path, rows, column_types, settings=None):
-        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], ydb.BaseRequestSettings) -> Any
+        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], Optional[ydb.BaseRequestSettings]) -> Any
         """
         Bulk upsert data
 
@@ -1240,8 +1274,30 @@ class BaseTableClient(ITableClient, Generic[DriverT]):
             (),
         )
 
+    def read_rows(self, table_path, keys, key_types, columns=None, settings=None):
+        # type: (str, list, ydb.AbstractTypeBuilder, typing.Optional[list], Optional[ydb.BaseRequestSettings]) -> Any
+        """
+        Read specified keys non-transactionally from a single table.
+
+        :param table_path: A table path.
+        :param keys: A list of structures matching the primary key.
+        :param key_types: Primary key column types.
+        :param columns: Optional iterable of column names to return. Empty or omitted returns all columns.
+        :param settings: Request settings.
+
+        :return: ResultSet with matching rows.
+        """
+        return self._driver(
+            _session_impl.read_rows_request_factory(table_path, keys, key_types, columns),
+            _apis.TableService.Stub,
+            _apis.TableService.ReadRows,
+            _session_impl.wrap_read_rows_response,
+            settings,
+            (self._table_client_settings,),
+        )
+
     def describe_system_view(self, path, settings=None):
-        # type: (str, ydb.BaseRequestSettings) -> Any
+        # type: (str, Optional[ydb.BaseRequestSettings]) -> Any
         """
         Returns a full description of a system view by the provided path.
 
@@ -1269,7 +1325,15 @@ class TableClient(BaseTableClient["SyncDriver"]):
         self._stop_pool_if_needed()
 
     def async_scan_query(self, query, parameters=None, settings=None):
-        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> _utilities.AsyncResponseIterator
+        # type: (Union[str, ydb.ScanQuery], Optional[Mapping[str, Any]], Optional[ydb.BaseRequestSettings]) -> _utilities.AsyncResponseIterator
+        """
+        Deprecated: use QueryService (:class:`ydb.QuerySessionPool`) instead.
+        """
+        warnings.warn(
+            _SCAN_QUERY_DEPRECATION_MESSAGE.format(method="async_scan_query", pool="ydb.QuerySessionPool"),
+            DeprecationWarning,
+            stacklevel=2,
+        )
         request = _scan_query_request_factory(query, parameters, settings)
         stream_it = self._driver(
             request,
@@ -1284,7 +1348,7 @@ class TableClient(BaseTableClient["SyncDriver"]):
 
     @_utilities.wrap_async_call_exceptions
     def async_bulk_upsert(self, table_path, rows, column_types, settings=None):
-        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], ydb.BaseRequestSettings) -> None
+        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], Optional[ydb.BaseRequestSettings]) -> futures.Future[ydb.Operation]
         return self._driver.future(
             _session_impl.bulk_upsert_request_factory(table_path, rows, column_types),
             _apis.TableService.Stub,
@@ -1292,6 +1356,18 @@ class TableClient(BaseTableClient["SyncDriver"]):
             _session_impl.wrap_operation_bulk_upsert,
             settings,
             (),
+        )
+
+    @_utilities.wrap_async_call_exceptions
+    def async_read_rows(self, table_path, keys, key_types, columns=None, settings=None):
+        # type: (str, list, ydb.AbstractTypeBuilder, typing.Optional[list], Optional[ydb.BaseRequestSettings]) -> Any
+        return self._driver.future(
+            _session_impl.read_rows_request_factory(table_path, keys, key_types, columns),
+            _apis.TableService.Stub,
+            _apis.TableService.ReadRows,
+            _session_impl.wrap_read_rows_response,
+            settings,
+            (self._table_client_settings,),
         )
 
     @_utilities.wrap_async_call_exceptions

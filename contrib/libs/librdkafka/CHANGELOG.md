@@ -1,3 +1,70 @@
+# librdkafka v2.15.1
+
+librdkafka v2.15.1 is a maintenance release:
+
+* Update bundled OpenSSL and libcurl dependencies, and refresh the Windows
+  build toolchain (msys2, vcpkg) (#5579).
+* Fix `int_latency` metric calculation, that was reporting bogus values when
+  `message.timeout.ms` is set to 0 (infinite) (#5335).
+* IPv6 addresses are wrapped in square brackets following RFC 3986, allowing to connect to those compressed IPv6 addresses (#5544).
+* IPv6 addresses are correctly passed to OpenSSL as IPs not as hostnames with brackets and the certificate is validated against its `iPAddress` entries instead of against `dNSName` entries (#5544).
+
+
+## Upgrade considerations
+
+* If you're parsing the nodename as received by `connect_cb`, `stats_cb`, `ssl_cert_verify_cb` or `throttle_cb`, make sure you're correctly parsing it following RFC 3986. Metadata API calls are unaffected: they return the host and port as separate fields.
+* Make sure the brokers' certificates carry the IP in an iPAddress entry, not a dNSName entry. Previously the certificate was validated against dNSName (falling back to the subject CN) whenever the address could not be parsed as an IP literal: with OpenSSL < 3.0 or BoringSSL for any IP address, and on all OpenSSL versions for an IPv6 address configured in brackets in bootstrap.servers ([::1]:9092), which never verified. A scoped address (fe80::1%eth0) was likewise dNSName-matched on every version and now has the zone stripped before matching. IPv6 addresses ending in :: could not be connected to at all, as the nodename became host:::port and failed name resolution. In the remaining cases, a bare IPv4 or IPv6 literal on OpenSSL >= 3.0, the iPAddress entry was already used, and behaviour is unchanged.
+
+
+## Security considerations
+
+Bundled dependencies were further upgraded as follows:
+OpenSSL 3.5.6 → 3.5.7 for source/autoconf builds, and 3.6.2 → 3.6.3 for
+vcpkg-based packages; libcurl 8.20.0 → 8.21.0, now used by both
+source/autoconf builds and vcpkg (previously pinned to 8.19.0 in vcpkg,
+so vcpkg-based packages also pick up the fixes below that source/autoconf
+builds already got from 8.20.0).
+
+ * OpenSSL upgrade (3.5.6 → 3.5.7 for source/autoconf, 3.6.2 → 3.6.3 for
+   vcpkg) addresses:
+   * Both branches: CVE-2026-34180, CVE-2026-34181, CVE-2026-34182,
+     CVE-2026-34183, CVE-2026-42764, CVE-2026-42766, CVE-2026-42767,
+     CVE-2026-42768, CVE-2026-42769, CVE-2026-42770, CVE-2026-45445,
+     CVE-2026-45446, CVE-2026-45447, CVE-2026-7383, CVE-2026-9076.
+   * Only the vcpkg 3.6.2 → 3.6.3 branch (3.5.6/3.5.7 were not affected):
+     CVE-2026-35188, CVE-2026-42765.
+
+ * libcurl upgrade (8.20.0 → 8.21.0) addresses: CVE-2026-8286,
+   CVE-2026-8458, CVE-2026-8924, CVE-2026-8925, CVE-2026-8926,
+   CVE-2026-8927, CVE-2026-8932, CVE-2026-9079, CVE-2026-9080,
+   CVE-2026-9545, CVE-2026-9546, CVE-2026-9547, CVE-2026-10536,
+   CVE-2026-11352, CVE-2026-11564, CVE-2026-11586, CVE-2026-11856,
+   CVE-2026-12064.
+   Since libcurl is now at the same version (8.21.0) for both
+   source/autoconf and vcpkg builds, this also closes the gap noted in
+   the previous release, where vcpkg-pinned 8.19.0 still contained
+   CVE-2026-4873, CVE-2026-5545, CVE-2026-5773, CVE-2026-6253,
+   CVE-2026-6276, CVE-2026-6429, CVE-2026-7168.
+
+ * zlib vcpkg port revision bump (1.3.2#0 → 1.3.2#1): no upstream version
+   change and no associated CVE; packaging-only update.
+
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #5555.
+  Fix `int_latency` metric calculation. It was derived from the message
+  timeout timestamp (`now + message.timeout.ms - rkm_ts_timeout`), which
+  yields a large negative value when `message.timeout.ms` is 0 (infinite)
+  and `rkm_ts_timeout` is `INT64_MAX`. It's now computed directly as
+  `now - rkm_ts_enq`, the actual time the message spent in the queue,
+  regardless of the timeout setting.
+  Happening since 0.11.0 (#5335).
+
+
+
 # librdkafka v2.15.0
 
 librdkafka v2.15.0 is a feature release:

@@ -8,6 +8,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_document_api_ut.cpp
+    kqp_kill_session_ut.cpp
     kqp_qs_queries_ut.cpp
     kqp_qs_scripts_ut.cpp
     kqp_service_ut.cpp

@@ -47,6 +47,10 @@ struct TFormatOptions {
     bool EnableFormatAndMetadataEncryption = true;
     std::optional<bool> EnableSectorEncryption = std::nullopt;
     std::optional<bool> ForceRandomizeMagic = std::nullopt;
+    // When set, the physical chunk size to write into the format record, instead of deriving it from
+    // the user-accessible size passed to FormatPDisk. Must be a multiple of the sector size and of
+    // NPDisk::ChunkSizeAlignment.
+    std::optional<ui32> PhysicalChunkSizeBytes = std::nullopt;
 };
 
 // Throws yexception in case of errors

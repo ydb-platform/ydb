@@ -7,6 +7,7 @@
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -75,9 +76,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
-    return std::make_shared<NArrow::NAccessor::TDictionaryArray>(
-        NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), 1),
-        NArrow::TThreadSimpleArraysCache::Get(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), externalInfo.GetRecordsCount()));
+    auto dictionary = NArrow::TThreadSimpleArraysCache::Get(externalInfo.GetColumnType(), externalInfo.GetDefaultValue(), 1);
+    auto positions = dictionary->IsNull(0)
+                         ? NArrow::TThreadSimpleArraysCache::GetNull(arrow::uint8(), externalInfo.GetRecordsCount())
+                         : NArrow::TThreadSimpleArraysCache::GetConst(
+                               arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), externalInfo.GetRecordsCount());
+    return std::make_shared<NArrow::NAccessor::TDictionaryArray>(dictionary, positions);
 }
 
 NKikimrArrowAccessorProto::TConstructor TConstructor::DoSerializeToProto() const {

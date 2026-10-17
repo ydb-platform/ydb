@@ -4,9 +4,24 @@
             "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
+    "test.test[Crc32_2026.03-Results]": [
+        {
+            "uri": "file://test.test_Crc32_2026.03-Results_/results.txt"
+        }
+    ],
     "test.test[Init-Results]": [
         {
             "uri": "file://test.test_Init-Results_/results.txt"
+        }
+    ],
+    "test.test[Sha224_2026.03-Results]": [
+        {
+            "uri": "file://test.test_Sha224_2026.03-Results_/results.txt"
+        }
+    ],
+    "test.test[Sha384_2026.03-Results]": [
+        {
+            "uri": "file://test.test_Sha384_2026.03-Results_/results.txt"
         }
     ],
     "test.test[Sha512VersionFail_2025.02-Results]": [

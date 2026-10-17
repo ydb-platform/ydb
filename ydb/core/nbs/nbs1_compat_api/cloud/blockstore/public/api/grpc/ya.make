@@ -4,7 +4,7 @@ EXCLUDE_TAGS(GO_PROTO)
 EXCLUDE_TAGS(JAVA_PROTO)
 
 SRCS(
-    service.proto
+    GLOBAL service.proto
 )
 
 PEERDIR(

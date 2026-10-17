@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
@@ -251,7 +252,7 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
                     if (msg.Meta) {
                         offset = r.GetOffset() + static_cast<ui64>(msg.Meta->OffsetDelta);
                         seqNo = static_cast<ui64>(*decompressed.BatchBaseSequence) + static_cast<ui64>(msg.Meta->SequenceDelta);
-                        createTs = *decompressed.BatchBaseTimestampMs + msg.Meta->TimestampDelta;
+                        createTs = NKafka::GetRecordTimestamp(*decompressed.BatchBaseTimestampMs, msg.Meta->TimestampDelta);
                     }
 
                     if (offset < Offset) {

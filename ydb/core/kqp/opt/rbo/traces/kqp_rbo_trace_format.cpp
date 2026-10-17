@@ -16,59 +16,8 @@ std::string FormatBool(bool value) {
     return value ? "true" : "false";
 }
 
-TString FormatInfoUnit(const TInfoUnit& unit) {
-    if (unit.GetAlias().empty()) {
-        return unit.GetColumnName();
-    }
-    return TStringBuilder() << unit.GetAlias() << "." << unit.GetColumnName();
-}
-
-TString FormatInfoUnits(const TVector<TInfoUnit>& units) {
-    TStringBuilder result;
-    for (size_t i = 0; i < units.size(); ++i) {
-        if (i) {
-            result << ", ";
-        }
-        result << FormatInfoUnit(units[i]);
-    }
-    return result;
-}
-
-std::vector<std::string> MakeInfoUnitItems(const TVector<TInfoUnit>& units) {
-    std::vector<std::string> items;
-    items.reserve(units.size());
-    for (const auto& unit : units) {
-        items.push_back(ToStdString(FormatInfoUnit(unit)));
-    }
-    return items;
-}
-
-TVector<TInfoUnit> SortInfoUnits(TVector<TInfoUnit> units) {
-    std::sort(units.begin(), units.end(), [](const TInfoUnit& lhs, const TInfoUnit& rhs) {
-        return lhs.GetFullName() < rhs.GetFullName();
-    });
-    return units;
-}
-
-TVector<TInfoUnit> SortInfoUnitSet(const TInfoUnitSet& units) {
-    TVector<TInfoUnit> result;
-    result.reserve(units.size());
-    for (const auto& unit : units) {
-        result.push_back(unit);
-    }
-    return SortInfoUnits(std::move(result));
-}
-
-TVector<TInfoUnit> UniqueInfoUnits(const TVector<TInfoUnit>& units) {
-    TVector<TInfoUnit> result;
-    TInfoUnitSet seen;
-    result.reserve(units.size());
-    for (const auto& unit : units) {
-        if (seen.insert(unit).second) {
-            result.push_back(unit);
-        }
-    }
-    return result;
+TString FormatInfoUnit(TInfoUnitId unit, const TInfoUnitRegistry& registry) {
+    return registry.GetDebugName(unit);
 }
 
 std::string FormatCountedSummary(const std::vector<std::string>& items, size_t maxItems) {

@@ -83,7 +83,7 @@ public:
         std::function<NThreading::TFuture<TDBGReadBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TReadBlocksFromPBufferHandler =
@@ -91,32 +91,35 @@ public:
             ui32 vChunkIndex,
             THostIndex hostIndex,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToDDiskHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToPBufferHandler =
         std::function<NThreading::TFuture<TDBGWriteBlocksResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             const TGuardedSgList& guardedSglist,
+            const TBlockChecksums& checksums,
             const NWilson::TTraceId& traceId)>;
     using TWriteBlocksToManyPBuffersHandler = std::function<void(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback)>;
     using TSyncWithPBufferHandler =
@@ -164,6 +167,10 @@ public:
     TWriteBlocksToDDiskHandler WriteBlocksToDDiskHandler;
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
+
+    // Checksums of the last WriteBlocksToDDisk, WriteBlocksToPBuffer or
+    // WriteBlocksToManyPBuffers call.
+    TBlockChecksums LastWriteChecksums;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
     TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
@@ -174,14 +181,22 @@ public:
     TOnRemoveHostSucceededHandler OnRemoveHostSucceededHandler;
     TOnRemoveHostFailedHandler OnRemoveHostFailedHandler;
     TTakeCopyRangeBudgetHandler TakeCopyRangeBudgetHandler;
+    std::function<void(EDDiskBalanceStrategy)> BalanceDDisksHandler;
 
     TVector<TVChunkWeakPtr> VChunks;
+    THashMap<ui32, THostIndex> PendingDDiskAllocations;
+    TArenaAllocatorPoolPtr ArenaAllocatorPool;
 
     TDirectBlockGroupMock();
 
     void Register(TVChunkWeakPtr vChunk) override;
+    THostIndex AllocateDDiskForPromote(const TVChunkConfig& config) override;
+    void AllocateDDiskPromotion(ui32 vChunkId, THostIndex hostIndex) override;
+    void CommitDDiskPromotion(const TVChunkConfig& config) override;
+    THostMask SelectDDiskForDemote(THostMask candidates) const override;
 
     TExecutorPtr GetExecutor() override;
+    TArenaAllocatorPoolPtr GetArenaAllocatorPool() override;
 
     ui32 GetTabletGeneration() const override;
 
@@ -200,7 +215,7 @@ public:
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
@@ -208,23 +223,25 @@ public:
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToDDisk(
         ui32 vChunkIndex,
         THostIndex hostIndex,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGWriteBlocksResponse> WriteBlocksToPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId) override;
 
     void WriteBlocksToManyPBuffers(
@@ -232,9 +249,10 @@ public:
         THostIndex coordinatorHostIndex,
         THostMask hostIndexes,
         TPBufferKey pBufferKey,
-        TBlockRange64 range,
+        TBlockRange16 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
+        const TBlockChecksums& checksums,
         const NWilson::TTraceId& traceId,
         TWriteBlocksToManyPBuffersCallback callback) override;
 
@@ -249,11 +267,6 @@ public:
         THostIndex hostIndex,
         const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
-
-    void BarrierEraseFromPBuffer(ui64 lsn) override;
-
-    NThreading::TFuture<std::optional<TPBufferKey>>
-    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -283,7 +296,10 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot(
+        EDbgMonSnapshotDetail detail) const override;
+
+    void BalanceDDisks(EDDiskBalanceStrategy strategy) override;
 
     NThreading::TFuture<TVChunkStatsGatherResult> GatherVChunkStats(
         EVChunkStatsDetail detail) const override;

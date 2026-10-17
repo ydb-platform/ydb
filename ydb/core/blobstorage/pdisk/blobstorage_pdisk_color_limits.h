@@ -4,6 +4,9 @@
 
 #include <ydb/core/protos/blobstorage_disk_color.pb.h>
 
+#include <util/generic/algorithm.h>
+#include <util/string/builder.h>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -16,13 +19,19 @@ struct TDiskColor {
     i64 Multiplier = 0;
     i64 Divisor = 1;
     i64 Addend = 0;
+    i64 MinChunks = 0;
 
     TString ToString() const {
-        return TStringBuilder() << Multiplier << " / " << Divisor << " + " << Addend;
+        TStringBuilder str;
+        str << Multiplier << " / " << Divisor << " + " << Addend;
+        if (MinChunks) {
+            str << " min " << MinChunks;
+        }
+        return str;
     }
 
     i64 CalculateQuota(i64 total) const {
-        return total * Multiplier / Divisor + Addend;
+        return Max(total * Multiplier / Divisor + Addend, MinChunks);
     }
 
     double CalculateOccupancy(i64 total) const {
@@ -51,16 +60,44 @@ struct TColorLimits {
         str << "  Cyan = Total * " << Cyan.ToString() << "\n";
     }
 
-    static TColorLimits MakeChunkLimits(i64 cyan) {
-        cyan = Min<i64>(130, cyan);
+    static constexpr i64 DefaultCyanPermille = 130;
+    static constexpr i64 TightCyanPermille = 30;
+
+    static constexpr i64 TightMinChunksBlack = 2;
+    static constexpr i64 TightMinChunksRed = 4;
+    static constexpr i64 TightMinChunksOrange = 8;
+    static constexpr i64 TightMinChunksPreOrange = 12;
+    static constexpr i64 TightMinChunksLightOrange = 14;
+    static constexpr i64 TightMinChunksYellow = 16;
+    static constexpr i64 TightMinChunksLightYellow = 20;
+    static constexpr i64 TightMinChunksCyan = 24;
+
+    static TColorLimits MakeChunkLimits(i64 cyan, bool tightFloors = false) {
+        cyan = Min<i64>(DefaultCyanPermille, cyan);
         cyan = Max<i64>(13, cyan);
 
-        i64 lightYellow = cyan * 100 / 130;
-        i64 yellow = cyan * 80 / 130;
-        i64 lightOrange = cyan * 65 / 130;
-        i64 preOrange = cyan * 50 / 130;
-        i64 orange = cyan * 30 / 130;
-        i64 red = cyan * 10 / 130;
+        i64 lightYellow = cyan * 100 / DefaultCyanPermille;
+        i64 yellow = cyan * 80 / DefaultCyanPermille;
+        i64 lightOrange = cyan * 65 / DefaultCyanPermille;
+        i64 preOrange = cyan * 50 / DefaultCyanPermille;
+        i64 orange = cyan * 30 / DefaultCyanPermille;
+        i64 red = cyan * 10 / DefaultCyanPermille;
+
+        if (tightFloors) {
+            // 3% cyan (by default) with per-color chunk floors so small disks
+            // keep a compaction runway. Addends are 0: Max(percent, MinChunks)
+            // is the floor, not percent plus extra chunks.
+            return {
+                {1, 1000, 0, TightMinChunksBlack},
+                {red, 1000, 0, TightMinChunksRed},
+                {orange, 1000, 0, TightMinChunksOrange},
+                {preOrange, 1000, 0, TightMinChunksPreOrange},
+                {lightOrange, 1000, 0, TightMinChunksLightOrange},
+                {yellow, 1000, 0, TightMinChunksYellow},
+                {lightYellow, 1000, 0, TightMinChunksLightYellow},
+                {cyan, 1000, 0, TightMinChunksCyan},
+            };
+        }
 
         return {
             {1,   1000, 2}, // Black: Leave bare minimum for disaster recovery
@@ -70,7 +107,7 @@ struct TColorLimits {
             {lightOrange,  1000, 5}, // LightOrange
             {yellow,  1000, 6}, // Yellow: Stop serving user writes at 8% (by default) free space
             {lightYellow, 1000, 7}, // LightYellow: Ask tablets to move to another group at 10% (by default) free space
-            {cyan, 1000, 8}, // Cyan: 13% (by default) free space or less
+            {cyan, 1000, 8}, // Cyan: 13% (by default) free space or less; EnableTightPDiskSpaceColors uses 3% plus MinChunks
         };
     }
 

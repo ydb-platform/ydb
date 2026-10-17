@@ -29,6 +29,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 03887b7a15a83ffca946cf4fada07504
+BELONGS ya.make
+    License text:
+        // Copyright 2024 The gRPC Authors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/core/lib/event_engine/windows/native_windows_dns_resolver.cc [1:1]
+        src/core/lib/event_engine/windows/native_windows_dns_resolver.h [1:1]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 06745079442081a41390888905fc6bdb
 BELONGS ya.make
     License text:
@@ -122,7 +134,6 @@ BELONGS ya.make
         src/core/lib/config/core_configuration.h [1:1]
         src/core/lib/debug/histogram_view.cc [1:1]
         src/core/lib/debug/histogram_view.h [1:1]
-        src/core/lib/event_engine/memory_allocator.cc [1:1]
         src/core/lib/gprpp/bitset.h [1:1]
         src/core/lib/gprpp/chunked_vector.h [1:1]
         src/core/lib/gprpp/construct_destruct.h [1:1]
@@ -138,6 +149,7 @@ BELONGS ya.make
         src/core/lib/matchers/matchers.h [1:1]
         src/core/lib/promise/activity.cc [1:1]
         src/core/lib/promise/activity.h [1:1]
+        src/core/lib/promise/all_ok.h [1:1]
         src/core/lib/promise/arena_promise.h [1:1]
         src/core/lib/promise/context.h [1:1]
         src/core/lib/promise/detail/basic_seq.h [1:1]
@@ -155,6 +167,7 @@ BELONGS ya.make
         src/core/lib/promise/promise.h [1:1]
         src/core/lib/promise/race.h [1:1]
         src/core/lib/promise/seq.h [1:1]
+        src/core/lib/promise/try_join.h [1:1]
         src/core/lib/promise/try_seq.h [1:1]
         src/core/lib/resource_quota/api.cc [1:1]
         src/core/lib/resource_quota/api.h [1:1]
@@ -366,6 +379,7 @@ BELONGS ya.make
         src/core/ext/transport/chttp2/transport/bin_encoder.cc [3:3]
         src/core/ext/transport/chttp2/transport/bin_encoder.h [3:3]
         src/core/ext/transport/chttp2/transport/chttp2_transport.h [3:3]
+        src/core/ext/transport/chttp2/transport/frame.h [1:1]
         src/core/ext/transport/chttp2/transport/frame_data.cc [3:3]
         src/core/ext/transport/chttp2/transport/frame_data.h [3:3]
         src/core/ext/transport/chttp2/transport/frame_goaway.cc [3:3]
@@ -562,6 +576,7 @@ BELONGS ya.make
         src/core/lib/security/security_connector/ssl_utils.h [3:3]
         src/core/lib/security/transport/auth_filters.h [3:3]
         src/core/lib/security/transport/client_auth_filter.cc [3:3]
+        src/core/lib/security/transport/legacy_server_auth_filter.cc [3:3]
         src/core/lib/security/transport/secure_endpoint.cc [3:3]
         src/core/lib/security/transport/secure_endpoint.h [3:3]
         src/core/lib/security/transport/security_handshaker.cc [3:3]
@@ -671,6 +686,8 @@ BELONGS ya.make
         include/grpcpp/version_info.h [1:1]
         src/core/ext/filters/channel_idle/channel_idle_filter.cc [1:1]
         src/core/ext/filters/channel_idle/channel_idle_filter.h [1:1]
+        src/core/ext/filters/channel_idle/legacy_channel_idle_filter.cc [1:1]
+        src/core/ext/filters/channel_idle/legacy_channel_idle_filter.h [1:1]
         src/core/ext/filters/client_channel/lb_policy/backend_metric_data.h [2:2]
         src/core/ext/filters/client_channel/lb_policy/health_check_client.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/health_check_client.h [2:2]
@@ -687,6 +704,7 @@ BELONGS ya.make
         src/core/ext/filters/client_channel/lb_policy/xds/xds_wrr_locality.cc [2:2]
         src/core/ext/filters/client_channel/subchannel_interface_internal.h [2:2]
         src/core/ext/filters/http/message_compress/compression_filter.cc [1:1]
+        src/core/ext/filters/http/message_compress/legacy_compression_filter.cc [1:1]
         src/core/ext/filters/stateful_session/stateful_session_filter.cc [2:2]
         src/core/ext/filters/stateful_session/stateful_session_filter.h [2:2]
         src/core/ext/filters/stateful_session/stateful_session_service_config_parser.cc [2:2]
@@ -918,7 +936,6 @@ BELONGS ya.make
         src/core/ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_impl.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc [2:2]
-        src/core/ext/filters/client_channel/lb_policy/xds/xds_cluster_resolver.cc [2:2]
         src/core/ext/filters/client_channel/local_subchannel_pool.cc [3:3]
         src/core/ext/filters/client_channel/local_subchannel_pool.h [3:3]
         src/core/ext/filters/client_channel/retry_service_config.cc [2:2]
@@ -1086,8 +1103,12 @@ BELONGS ya.make
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.cc [2:2]
         src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.h [2:2]
         src/core/ext/filters/client_channel/lb_policy/xds/cds.cc [2:2]
+        src/core/ext/filters/client_channel/resolver/xds/xds_dependency_manager.cc [2:2]
+        src/core/ext/filters/client_channel/resolver/xds/xds_dependency_manager.h [2:2]
         src/core/ext/filters/client_channel/resolver/xds/xds_resolver.cc [2:2]
-        src/core/ext/filters/client_channel/resolver/xds/xds_resolver.h [2:2]
+        src/core/ext/filters/client_channel/resolver/xds/xds_resolver_attributes.h [2:2]
+        src/core/ext/filters/client_channel/resolver/xds/xds_resolver_trace.cc [2:2]
+        src/core/ext/filters/client_channel/resolver/xds/xds_resolver_trace.h [2:2]
         src/core/ext/xds/xds_bootstrap.cc [2:2]
         src/core/ext/xds/xds_bootstrap.h [2:2]
         src/core/ext/xds/xds_bootstrap_grpc.cc [2:2]
@@ -1129,6 +1150,7 @@ BELONGS ya.make
         src/core/ext/filters/client_channel/lb_policy/xds/xds_channel_args.h [2:2]
         src/core/ext/filters/client_channel/service_config_channel_arg_filter.cc [2:2]
         src/core/ext/filters/http/message_compress/compression_filter.h [3:3]
+        src/core/ext/filters/http/message_compress/legacy_compression_filter.h [3:3]
         src/core/ext/xds/certificate_provider_store.cc [3:3]
         src/core/ext/xds/certificate_provider_store.h [3:3]
         src/core/ext/xds/file_watcher_certificate_provider_factory.cc [3:3]
@@ -1202,6 +1224,7 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/grpc/impl/call.h [1:1]
         src/compiler/proto_parser_helper.cc [1:1]
         src/compiler/proto_parser_helper.h [1:1]
         src/core/ext/filters/client_channel/resolver/dns/event_engine/event_engine_client_channel_resolver.cc [1:1]
@@ -1363,6 +1386,7 @@ BELONGS ya.make
         include/grpc/grpc_crl_provider.h [3:3]
         include/grpc/impl/channel_arg_names.h [1:1]
         include/grpcpp/ext/csm_observability.h [3:3]
+        include/grpcpp/ext/otel_plugin.h [3:3]
         include/grpcpp/ext/server_metric_recorder.h [3:3]
         include/grpcpp/security/audit_logging.h [3:3]
         include/grpcpp/security/tls_crl_provider.h [3:3]
@@ -1375,6 +1399,7 @@ BELONGS ya.make
         src/core/ext/filters/client_channel/retry_filter_legacy_call_data.h [1:1]
         src/core/ext/gcp/metadata_query.cc [3:3]
         src/core/ext/gcp/metadata_query.h [2:2]
+        src/core/ext/transport/chttp2/transport/frame.cc [1:1]
         src/core/ext/transport/chttp2/transport/hpack_parse_result.cc [1:1]
         src/core/ext/transport/chttp2/transport/hpack_parse_result.h [1:1]
         src/core/ext/transport/chttp2/transport/max_concurrent_streams_policy.cc [1:1]
@@ -1415,16 +1440,19 @@ BELONGS ya.make
         src/core/lib/iomgr/vsock.cc [3:3]
         src/core/lib/iomgr/vsock.h [3:3]
         src/core/lib/load_balancing/delegating_helper.h [2:2]
+        src/core/lib/promise/detail/join_state.h [1:1]
         src/core/lib/promise/detail/seq_state.h [1:1]
         src/core/lib/promise/party.cc [1:1]
         src/core/lib/promise/party.h [1:1]
         src/core/lib/promise/prioritized_race.h [1:1]
+        src/core/lib/promise/status_flag.h [1:1]
         src/core/lib/security/authorization/audit_logging.cc [3:3]
         src/core/lib/security/authorization/audit_logging.h [3:3]
         src/core/lib/security/authorization/stdout_logger.cc [1:1]
         src/core/lib/security/authorization/stdout_logger.h [1:1]
         src/core/lib/security/credentials/tls/grpc_tls_crl_provider.cc [3:3]
         src/core/lib/security/credentials/tls/grpc_tls_crl_provider.h [3:3]
+        src/core/lib/surface/wait_for_cq_end_op.h [1:1]
         src/core/lib/transport/batch_builder.cc [1:1]
         src/core/lib/transport/batch_builder.h [1:1]
         src/core/lib/transport/custom_metadata.h [1:1]
@@ -1563,7 +1591,6 @@ BELONGS third_party/upb/ya.make
         third_party/upb/upb/base/status.h [2:2]
         third_party/upb/upb/base/status.hpp [2:2]
         third_party/upb/upb/base/string_view.h [2:2]
-        third_party/upb/upb/collections/map.h [2:2]
         third_party/upb/upb/generated_code_support.h [2:2]
         third_party/upb/upb/hash/common.c [2:2]
         third_party/upb/upb/hash/common.h [2:2]
@@ -1692,7 +1719,6 @@ BELONGS third_party/upb/ya.make
         third_party/upb/upb/reflection/service_def.h [2:2]
         third_party/upb/upb/text/encode.c [2:2]
         third_party/upb/upb/text/encode.h [2:2]
-        third_party/upb/upb/upb.hpp [2:2]
         third_party/upb/upb/wire/decode.c [2:2]
         third_party/upb/upb/wire/decode.h [2:2]
         third_party/upb/upb/wire/decode_fast.c [2:2]
@@ -1718,6 +1744,9 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         src/core/lib/event_engine/nameser.h [1:1]
+        src/core/lib/event_engine/posix_engine/native_posix_dns_resolver.cc [1:1]
+        src/core/lib/event_engine/posix_engine/native_posix_dns_resolver.h [1:1]
+        src/core/lib/event_engine/ref_counted_dns_resolver_interface.h [1:1]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f8fb9a8ebe3e4b096090bd006ebb72cc
 BELONGS ya.make
@@ -1843,8 +1872,6 @@ BELONGS ya.make
         src/core/lib/transport/handshaker_registry.h [3:3]
         src/core/lib/transport/http_connect_handshaker.cc [3:3]
         src/core/lib/transport/http_connect_handshaker.h [3:3]
-        src/core/lib/transport/pid_controller.cc [3:3]
-        src/core/lib/transport/pid_controller.h [3:3]
         src/core/plugin_registry/grpc_plugin_registry.cc [3:3]
         src/cpp/client/create_channel_posix.cc [3:3]
         src/cpp/common/resource_quota_cc.cc [3:3]
@@ -1857,3 +1884,15 @@ BELONGS ya.make
         src/cpp/server/server_posix.cc [3:3]
         src/cpp/thread_manager/thread_manager.cc [3:3]
         src/cpp/thread_manager/thread_manager.h [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fe737e18da29d04de3647ccd397285cd
+BELONGS ya.make
+    License text:
+        // Copyright 2024 gRPC authors.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/core/lib/transport/call_final_info.cc [1:1]
+        src/core/lib/transport/call_final_info.h [1:1]

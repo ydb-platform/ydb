@@ -158,6 +158,7 @@ namespace NKikimr {
 
     private:
         void UpdateBlocksCache(ui64 tabletId, ui32 gen, ui64 issuerGuid, ui64 lsn, EOpMode mode);
+        void UpdateBlocksCache(const TBlocksSst &sst);
         void UpdateBlocksCache(const std::shared_ptr<TFreshAppendixBlocks> &blocks, TLsnSeg seg, EOpMode mode);
         void UpdateBarrierCache(const TKeyBarrier& key);
         void UpdateBarrierCache(const std::shared_ptr<TFreshAppendixBarriers>& barriers);

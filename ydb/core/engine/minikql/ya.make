@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     flat_local_minikql_host.h
@@ -15,7 +15,5 @@ PEERDIR(
     ydb/core/tablet_flat
     yql/essentials/parser/pg_wrapper/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

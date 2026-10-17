@@ -102,10 +102,8 @@ namespace NKikimr::NBsController {
             throw errorException;
         }
 
-        // returns pair of previous VDisk and PDisk id's
-        std::pair<TVDiskIdShort, TPDiskId> SanitizeGroup(TGroupMapper &mapper, TGroupId groupId,
-                TGroupMapper::TGroupDefinition &group, TGroupMapper::TGroupConstraintsDefinition&,
-                const THashMap<TVDiskIdShort, TPDiskId>& /*replacedDisks*/, TGroupMapper::TForbiddenPDisks forbid,
+        TVDiskIdShort RepairGroupLayout(TGroupMapper &mapper, TGroupId groupId,
+                TGroupMapper::TGroupDefinition &group, TGroupMapper::TForbiddenPDisks forbid,
                 ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) const {
             TString error;
             auto misplacedVDisks = mapper.FindMisplacedVDisks(group, groupSizeInUnits);
@@ -114,10 +112,9 @@ namespace NKikimr::NBsController {
             } else {
                 for (const bool requireOperational : {true, false}) {
                     for (const auto& replacedDisk : misplacedVDisks.Disks) {
-                        TPDiskId pdiskId = group[replacedDisk.FailRealm][replacedDisk.FailDomain][replacedDisk.VDisk];
                         if (mapper.TargetMisplacedVDisk(groupId, group, replacedDisk, forbid, groupSizeInUnits, requiredSpace,
                                 requireOperational, bridgePileId, error)) {
-                            return {replacedDisk, pdiskId};
+                            return replacedDisk;
                         }
                     }
                 }

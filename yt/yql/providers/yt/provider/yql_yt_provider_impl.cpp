@@ -36,10 +36,30 @@ void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& ch
     });
 }
 
-void ScanForUsedOutputTables(const TExprNode& input, TVector<TString>& usedNodeIds)
-{
-    VisitExpr(input, [&usedNodeIds](const TExprNode& node) {
-        if (auto maybeYtOutput = TMaybeNode<TYtOutput>(&node)) {
+void ScanForUsedInputTables(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) {
+    VisitExpr(input, [&usedNodeIds, root = input.Get()](const TExprNode::TPtr& node) {
+        if (TMaybeNode<TYtOutput>(node)) {
+            return false;
+        }
+
+        if (auto maybeTable = TMaybeNode<TYtTable>(node)) {
+            auto table = maybeTable.Cast();
+            auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0);
+            usedNodeIds.push_back(MakeUsedSnapshotNodeId(table.Cluster().StringValue(), table.Name().StringValue(), epoch));
+            return false;
+        }
+
+        if (node.Get() != root && node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+            return false;
+        }
+
+        return true;
+    });
+}
+
+void ScanForUsedOutputTables(const TExprNode::TPtr& input, TVector<TString>& usedNodeIds) {
+    VisitExpr(input, [&usedNodeIds](const TExprNode::TPtr& node) {
+        if (auto maybeYtOutput = TMaybeNode<TYtOutput>(node)) {
 
             auto ytOutput = maybeYtOutput.Cast();
 
@@ -66,8 +86,14 @@ void ScanForUsedOutputTables(const TExprNode& input, TVector<TString>& usedNodeI
 
 }
 
-TString MakeUsedNodeId(const TString& cluster, const TString& table)
-{
+TString MakeUsedSnapshotNodeId(const TString& cluster, const TString& table, ui32 epoch) {
+    YQL_ENSURE(!cluster.empty());
+    YQL_ENSURE(!table.empty());
+
+    return TStringBuilder() << MakeUsedNodeId(cluster, table) << "#" << epoch;
+}
+
+TString MakeUsedNodeId(const TString& cluster, const TString& table) {
     YQL_ENSURE(!cluster.empty());
     YQL_ENSURE(!table.empty());
 

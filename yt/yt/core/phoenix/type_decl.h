@@ -2,6 +2,11 @@
 
 #include "public.h"
 
+#include <yt/yt/core/misc/public.h>
+
+#include <concepts>
+#include <type_traits>
+
 namespace NYT::NPhoenix {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,6 +62,17 @@ namespace NYT::NPhoenix {
 
 //! Declares a Phoenix-enabled opaque class.
 #define PHOENIX_DECLARE_OPAQUE_TYPE(type, typeTagValue)
+
+////////////////////////////////////////////////////////////////////////////////
+// External types
+// For classes that cannot be altered, metadata is declared outside of the class.
+// Both macros must appear at global scope; the registration body is written
+// exactly as an in-class one, and may reach protected members.
+// Handler signatures stay TThis* (the registered type); a handler reaches
+// a protected member as this_->*(&TAccessor::Field_).
+
+//! Declares Phoenix metadata for an already existing class.
+#define PHOENIX_DECLARE_EXTERNAL_TYPE(type, typeTagValue, saveContext, loadContext)
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -11,6 +11,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/events.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model/touched_vchunks.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
@@ -21,11 +24,15 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/bscontroller/types.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/ptr.h>
 
 #include <optional>
 
@@ -54,11 +61,32 @@ private:
     TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
-    NActors::TActorId BSControllerPipeClient;
+
+    NActors::TActorId BscProxy;
+
+    // Which operation sent a BSC request. The reply carries the cookie back.
+    enum class EBscRequest
+    {
+        // First bulk allocation that creates the direct block groups.
+        InitialAllocation,
+        // Add one host to an existing direct block group.
+        AddHost,
+        // Remove one host from an existing direct block group.
+        RemoveHost,
+    };
+
+    // Cookie on the next BSC request.
+    ui64 NextBscCookie = 1;
+    // BSC requests waiting for a reply, by cookie. Up to two: the proxy
+    // rejects a second send with TRYLATER while the first is still in flight.
+    THashMap<ui64, EBscRequest> BscRequestsInFlight;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
     TFastPathServicePtr FastPathService;
+    TPartitionSessionPtr Session;
+    // A queued Ready event must not republish metadata after backend shutdown.
+    bool FrontendRegistrationClosed = false;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -76,7 +104,6 @@ private:
         size_t DirectBlockGroupId = 0;
         ui32 LiveHostCount = 0;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one add-host runs at a time across the whole partition.
@@ -88,24 +115,24 @@ private:
         NKikimrBlobStorage::NDDisk::TDDiskId DDiskId;
         NKikimrBlobStorage::NDDisk::TDDiskId PBufferId;
         ui32 DBGConnectionsConfigGeneration = 0;
-        NActors::TActorId BSPipeClient;
     };
 
     // At most one remove-host runs at a time; mutually exclusive with
     // AddHostInFlight.
     std::optional<TRemoveHostInFlight> RemoveHostInFlight;
 
-    // Batch persisting of vchunk configs.
-    bool ExecutingUpdateVChunkConfig = false;
-    TVector<TPersistResultPromise> ExecutingUpdateVChunkConfigPromises;
-    TTxPartition::TUpdateVChunkConfig::TUpdateConfigRequests
-        PendingUpdateVChunkConfigRequests;
+    // Batch persisting of vChunk configs and behind fields. Both kinds of
+    // updates share one queue so a combined update cannot overwrite a newer
+    // dirty-map state.
+    bool ExecutingUpdateVChunkState = false;
+    TVector<TPersistResultPromise> ExecutingUpdateVChunkStatePromises;
+    TTxPartition::TUpdateVChunkState::TUpdateStateRequests
+        PendingUpdateVChunkStateRequests;
+    // Persisted vchunk config overrides, keyed by vchunk index.
+    TVChunkConfigs VChunkConfigs;
 
-    // Batch persisting of ahead and behind fields.
-    bool ExecutingUpdateDirtyMapState = false;
-    TVector<TPersistResultPromise> ExecutingUpdateDirtyMapStatePromises;
-    TTxPartition::TUpdateDirtyMapState::TUpdateStateRequests
-        PendingUpdateDirtyMapStateRequests;
+    // A bit is set after its vchunk is touched and is never cleared.
+    TTouchedVChunks TouchedVChunks;
 
 public:
     TPartitionActor(
@@ -122,6 +149,19 @@ private:
     STFUNC(StateWork);
     // Remove tablet and wipe disk
     STFUNC(StateDelete);
+
+    // Sends request through the BSC proxy (created on first use). kind is
+    // recorded under a fresh cookie so the reply is delivered to that
+    // operation. Skipped in StateDelete.
+    void SendToBsc(
+        const NActors::TActorContext& ctx,
+        EBscRequest kind,
+        THolder<NActors::IEventBase> request);
+
+    // Poison the BSC proxy and drop the id. Outstanding BSC cookies are
+    // forgotten, so replies already on the way are dropped as unknown. No-op
+    // on the proxy if it was never created.
+    void StopBscProxy(const NActors::TActorContext& ctx);
 
     // Common handlers in different states
     void HandleCommonEvents(TAutoPtr<NActors::IEventHandle>& ev);
@@ -143,6 +183,7 @@ private:
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
     void CleanupResources(const NActors::TActorContext& ctx);
+    void UnregisterFrontendVolume(const NActors::TActorContext& ctx);
     void DetachEndpointAddDie(const NActors::TActorContext& ctx);
 
     void HandleConnect(
@@ -162,9 +203,8 @@ private:
         const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void ReportTabletState(const NActors::TActorContext& ctx);
-
-    void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
+    // Publish volume identity without changing the tablet health state.
+    void ReportDiskId(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
@@ -172,12 +212,15 @@ private:
         NKikimr::TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>
     MakeAllocateDDiskBlockGroupRequest() const;
 
+    // Delivers a BSC reply to the operation that sent the request, found by
+    // cookie. A reply whose cookie is not outstanding is logged and dropped.
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    // Sets up the group from the first (bulk) allocation response.
+    // Sets up the group from the first (bulk) allocation response. Ignores a
+    // later one from a repeated request.
     void HandleInitialAllocationResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -217,16 +260,48 @@ private:
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // Answers NBS1 StatVolume from the stored VolumeConfig. Volume gets
+    // DiskId, BlockSize, BlocksCount (partition 0), StorageMediaKind,
+    // ConfigVersion (VolumeConfig.Version), and ProjectId, FolderId, CloudId
+    // when the config has them. Clients stays empty. Before VolumeConfig is
+    // known (PartitionsSize() == 0): E_REJECTED, "volume config is not
+    // loaded". NoPartition is ignored: the reply never waits for IO
+    // readiness. The reply keeps the request cookie.
+    void HandleStatVolume(
+        const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleUpdateVChunkConfig(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Mount/unmount mutate the session only on the partition actor thread.
+    void HandleMountSession(
+        const TEvPartitionSession::TEvMount::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleUnmountSession(
+        const TEvPartitionSession::TEvUnmount::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateDirtyMapState(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void EnqueueUpdateVChunkState(
+        TTxPartition::TUpdateVChunkState::TUpdateStateRequest request,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouched(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleFastPathServiceReady(
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleRenderMonPage(
+        const TEvPartitionDirectPrivate::TEvRenderMonPage::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdown(
@@ -277,12 +352,23 @@ private:
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // StatVolume during delete: E_REJECTED, "partition is being deleted".
+    // The reply keeps the request cookie and does not wait for IO readiness.
+    void HandleStatVolumeDuringDelete(
+        const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleUpdateVChunkConfigDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateDirtyMapStateDuringDelete(
         const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleSetVChunkTouchedDuringDelete(
+        const TEvPartitionDirectPrivate::TEvSetVChunkTouched::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleFastPathServiceShutdownDuringDelete(

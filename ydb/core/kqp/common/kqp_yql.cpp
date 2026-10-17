@@ -182,6 +182,21 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             for(const auto& kv: lv) {
                 settings.IndexSelectionInfo.emplace(kv.Name().Value(), kv.Value().Cast<TCoAtom>().Value());
             }
+        } else if (name == TKqpReadTableSettings::SamplingRateSettingName) {
+            if (!settings.Sampling) {
+                settings.Sampling.ConstructInPlace();
+            }
+            settings.Sampling->Rate = FromString<double>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableSettings::SamplingSeedSettingName) {
+            if (!settings.Sampling) {
+                settings.Sampling.ConstructInPlace();
+            }
+            settings.Sampling->Seed = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
+        } else if (name == TKqpReadTableSettings::SamplingMemtableStrideSettingName) {
+            if (!settings.Sampling) {
+                settings.Sampling.ConstructInPlace();
+            }
+            settings.Sampling->MemtableStride = FromString<ui32>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == TKqpReadTableSettings::VectorTopKColumnSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.VectorTopKColumn = tuple.Value().Cast<TCoAtom>().Value();
@@ -446,6 +461,19 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                     .Add(isi)
                     .Build()
                 .Done());
+    }
+
+    if (Sampling) {
+        for (const auto& [name, value] : {
+            std::pair{SamplingRateSettingName, ToString(Sampling->Rate)},
+            std::pair{SamplingSeedSettingName, ToString(Sampling->Seed)},
+            std::pair{SamplingMemtableStrideSettingName, ToString(Sampling->MemtableStride)}})
+        {
+            settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(name)
+                .Value<TCoAtom>().Build(value)
+                .Done());
+        }
     }
 
     if (VectorTopKColumn) {

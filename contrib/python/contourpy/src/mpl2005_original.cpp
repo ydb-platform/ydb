@@ -1397,7 +1397,7 @@ reorder(double *xpp, double *ypp, short *kpp, double *xy, unsigned char *c, int 
 */
 static py::tuple
 build_cntr_list_v2(long *np, double *xp, double *yp, short *kp,
-                   int nparts, long ntotal, int nlevels)
+                   int nparts, int nlevels)
 {
     int i;
     long k;
@@ -1520,7 +1520,7 @@ cntr_trace(Csite *site, double levels[], int nlevels)
     site->kcp = nullptr;
 
     return build_cntr_list_v2(
-        nseg0.data(), xp0.data(), yp0.data(), kp0.data(), nparts, ntotal, nlevels);
+        nseg0.data(), xp0.data(), yp0.data(), kp0.data(), nparts, nlevels);
 }
 
 } // namespace contourpy

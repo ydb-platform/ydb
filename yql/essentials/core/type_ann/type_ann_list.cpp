@@ -29,7 +29,7 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& types, bool& isUniversal) {
         isUniversal = false;
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -158,7 +158,7 @@ namespace {
 
             auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+            auto status = ExpandApplyNoRepeat(traits, traits, ctx, types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
@@ -6068,7 +6068,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus MultiAggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus MultiAggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6133,7 +6133,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        output = RewriteMultiAggregate(*input, ctx.Expr, isUniversal);
+        output = RewriteMultiAggregate(*input, ctx.Expr, ctx.Types, isUniversal);
         if (isUniversal) {
             output = input;
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
@@ -8701,9 +8701,11 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinMaxArgsCount(*input, TCoMultiHoppingCore::idx_HoppingColumn + 1, TCoMultiHoppingCore::idx_LatePolicy + 1, ctx.Expr)) {
+
+        if (!EnsureMinMaxArgsCount(*input, TCoMultiHoppingCore::idx_HoppingColumn + 1, TCoMultiHoppingCore::idx_CheckMinWindowStart + 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
+
         auto& item = input->ChildRef(0);
         auto& lambdaKeyExtractor = input->ChildRef(1);
 
@@ -8840,6 +8842,10 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (TCoMultiHoppingCore::idx_CheckMinWindowStart < input->ChildrenSize() && !EnsureAtom(*input->Child(TCoMultiHoppingCore::idx_CheckMinWindowStart), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) {

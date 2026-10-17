@@ -28,10 +28,10 @@ public:
     void InitName(const TString& name);
     void InitExpr(const TNodePtr& expr);
 
-    bool Init(const TRule_using_call_expr& node);
-    bool Init(const TRule_value_constructor& node);
-    bool Init(const TRule_invoke_expr& node);
-    bool ConfigureExternalCall(const TRule_external_call_settings& node);
+    TSQLStatus Init(const TRule_using_call_expr& node);
+    TSQLStatus Init(const TRule_value_constructor& node);
+    TSQLStatus Init(const TRule_invoke_expr& node);
+    TSQLStatus ConfigureExternalCall(const TRule_external_call_settings& node);
     void IncCounters();
 
     TNodePtr BuildUdf(bool forReduce);
@@ -65,7 +65,7 @@ public:
     }
 
 private:
-    bool ExtractCallParam(const TRule_external_call_param& node);
+    TSQLStatus ExtractCallParam(const TRule_external_call_param& node);
     TSQLStatus FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node);
     TSQLStatus FillArgs(const TRule_named_expr_list& node);
 

@@ -43,33 +43,12 @@ def reformat(source):
 class Tests(unittest.TestCase):
     maxDiff = 80 * 30
 
-    def _test_patch_file(self, tmp_dir):
-        # test Patcher.patcher()
-        source = """
-            PyTypeObject*
-            test_type(PyObject *obj, PyTypeObject *type)
-            {
-                Py_TYPE(obj) = type;
-                return Py_TYPE(obj);
-            }
-        """
-        expected = """
-            #include "pythoncapi_compat.h"
-
-            PyTypeObject*
-            test_type(PyObject *obj, PyTypeObject *type)
-            {
-                Py_SET_TYPE(obj, type);
-                return Py_TYPE(obj);
-            }
-        """
-        source = reformat(source)
-        expected = reformat(expected)
-
+    def _patch_file(self, source, tmp_dir=None):
+         # test Patcher.patcher()
         filename = tempfile.mktemp(suffix='.c', dir=tmp_dir)
         old_filename = filename + ".old"
         try:
-            with open(filename, "w", encoding="utf-8") as fp:
+            with open(filename, "w", encoding="utf-8", newline="") as fp:
                 fp.write(source)
 
             old_stderr = sys.stderr
@@ -93,10 +72,10 @@ class Tests(unittest.TestCase):
                 sys.stderr = old_stderr
                 sys.argv = old_argv
 
-            with open(filename, encoding="utf-8") as fp:
+            with open(filename, encoding="utf-8", newline="") as fp:
                 new_contents = fp.read()
 
-            with open(old_filename, encoding="utf-8") as fp:
+            with open(old_filename, encoding="utf-8", newline="") as fp:
                 old_contents = fp.read()
         finally:
             try:
@@ -108,15 +87,53 @@ class Tests(unittest.TestCase):
             except FileNotFoundError:
                 pass
 
-        self.assertEqual(new_contents, expected)
         self.assertEqual(old_contents, source)
+        return new_contents
 
     def test_patch_file(self):
-        self._test_patch_file(None)
+        source = """
+            PyTypeObject*
+            test_type(PyObject *obj, PyTypeObject *type)
+            {
+                Py_TYPE(obj) = type;
+                return Py_TYPE(obj);
+            }
+        """
+        expected = """
+            #include "pythoncapi_compat.h"
 
-    def test_patch_directory(self):
+            PyTypeObject*
+            test_type(PyObject *obj, PyTypeObject *type)
+            {
+                Py_SET_TYPE(obj, type);
+                return Py_TYPE(obj);
+            }
+        """
+        source = reformat(source)
+        expected = reformat(expected)
+
+        new_contents = self._patch_file(source)
+        self.assertEqual(new_contents, expected)
+
         with tempfile.TemporaryDirectory() as tmp_dir:
-            self._test_patch_file(tmp_dir)
+            new_contents = self._patch_file(source, tmp_dir)
+            self.assertEqual(new_contents, expected)
+
+    def test_patch_file_preserve_newlines(self):
+        source = """
+            Py_ssize_t get_size(PyVarObject *obj)\r\n\
+            \n\
+            { return obj->ob_size; }\r\
+        """
+        expected = """
+            Py_ssize_t get_size(PyVarObject *obj)\r\n\
+            \n\
+            { return Py_SIZE(obj); }\r\
+        """
+        source = reformat(source)
+        expected = reformat(expected)
+        new_contents = self._patch_file(source)
+        self.assertEqual(new_contents, expected)
 
     def check_replace(self, source, expected, **kwargs):
         source = reformat(source)

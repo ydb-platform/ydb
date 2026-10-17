@@ -6,4 +6,4 @@ namespace NKikimr::NUdfStore::NWasm {
 
 TWasmManifest ParseManifest(TStringBuf manifestJson);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

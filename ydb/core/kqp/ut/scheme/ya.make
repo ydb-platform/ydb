@@ -24,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    yql/essentials/types/binary_json
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
@@ -37,5 +38,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
 
 END()

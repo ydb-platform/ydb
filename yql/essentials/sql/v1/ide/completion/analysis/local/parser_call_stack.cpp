@@ -13,6 +13,8 @@
 
 namespace NSQLComplete {
 
+namespace {
+
 const TVector<TRuleId> PreferredRules = {
     RULE(Keyword),
     RULE(Keyword_expr_uncompat),
@@ -39,15 +41,28 @@ const TVector<TRuleId> PreferredRules = {
     RULE(Value_constructor),
 };
 
-TVector<std::string> Symbolized(const TParserCallStack& stack) {
-    const ISqlGrammar& grammar = GetSqlGrammar();
+bool Contains(const TParserCallStack& sequence, const TParserCallStack& stack) {
+    return !std::ranges::search(stack, sequence).empty();
+}
 
-    TVector<std::string> symbolized;
-    symbolized.reserve(stack.size());
-    for (const TRuleId& rule : stack) {
-        symbolized.emplace_back(grammar.SymbolizedRule(rule));
-    }
-    return symbolized;
+bool IsDropTableStack(const TParserCallStack& stack) {
+    return Find(stack, RULE(Drop_table_stmt)) != std::end(stack);
+}
+
+bool IsDropViewStack(const TParserCallStack& stack) {
+    return Find(stack, RULE(Drop_view_stmt)) != std::end(stack);
+}
+
+bool IsTableRefStack(const TParserCallStack& stack) {
+    return !Contains({RULE(Create_table_stmt),
+                      RULE(Simple_table_ref)}, stack) &&
+           (Contains({RULE(Simple_table_ref),
+                      RULE(Simple_table_ref_core),
+                      RULE(Object_ref)}, stack) ||
+            Contains({RULE(Single_source),
+                      RULE(Table_ref),
+                      RULE(Table_key),
+                      RULE(Id_table_or_type)}, stack));
 }
 
 bool EndsWith(const TParserCallStack& suffix, const TParserCallStack& stack) {
@@ -58,13 +73,11 @@ bool EndsWith(const TParserCallStack& suffix, const TParserCallStack& stack) {
     return Equal(std::begin(stack) + prefixSize, std::end(stack), std::begin(suffix));
 }
 
-bool Contains(const TParserCallStack& sequence, const TParserCallStack& stack) {
-    return !std::ranges::search(stack, sequence).empty();
-}
-
 bool ContainsRule(TRuleId rule, const TParserCallStack& stack) {
     return Find(stack, rule) != std::end(stack);
 }
+
+} // namespace
 
 bool IsLikelyPragmaStack(const TParserCallStack& stack) {
     return EndsWith({RULE(Pragma_stmt), RULE(Opt_id_prefix_or_type)}, stack) ||
@@ -114,15 +127,11 @@ bool IsLikelyObjectRefStack(const TParserCallStack& stack) {
 }
 
 bool IsLikelyExistingTableStack(const TParserCallStack& stack) {
-    return !Contains({RULE(Create_table_stmt),
-                      RULE(Simple_table_ref)}, stack) &&
-           (Contains({RULE(Simple_table_ref),
-                      RULE(Simple_table_ref_core),
-                      RULE(Object_ref)}, stack) ||
-            Contains({RULE(Single_source),
-                      RULE(Table_ref),
-                      RULE(Table_key),
-                      RULE(Id_table_or_type)}, stack));
+    return (IsTableRefStack(stack) && !IsDropViewStack(stack)) || IsDropTableStack(stack);
+}
+
+bool IsLikelyExistingViewStack(const TParserCallStack& stack) {
+    return (IsTableRefStack(stack) && !IsDropTableStack(stack)) || IsDropViewStack(stack);
 }
 
 bool IsLikelyTableArgStack(const TParserCallStack& stack) {

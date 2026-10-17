@@ -3,6 +3,7 @@
 #include "../s3_router.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -18,6 +19,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/network/sock.h>
@@ -316,7 +318,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        auto* balancer = new TFakeBalancer({}, "endpoint-A.example.com");
+        const TString hostname = "endpoint-A.example.com";
+        auto* balancer = new TFakeBalancer({}, hostname);
         TActorId balancerId = runtime.Register(balancer);
         runtime.Send(new IEventHandle(proxyId, balancerId,
             new NHttp::TEvHttpProxy::TEvRegisterHandler("/", balancerId)), 0, true);
@@ -331,10 +334,31 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
         Y_UNUSED(routerId);
 
-        // Give the router a chance to issue its first balancer GET and process the reply.
-        // We don't have a direct hook to observe the endpoint switch, so we just verify
-        // that the runtime survives the round-trip without crashes/aborts.
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        WaitReal(runtime, [&] { return balancer->GetReplies() > 0; });
+
+        auto subsystem = GetServiceCounters(runtime.GetAppData(0).Counters, "tablets")->FindSubgroup("subsystem", "blob_depot");
+        UNIT_ASSERT(subsystem);
+        auto module = subsystem->FindSubgroup("module_id", "s3_router");
+        UNIT_ASSERT(module);
+        auto hostBuckets = module->FindSubgroup("component", "BalancerResolveByHostBucket");
+        UNIT_ASSERT(hostBuckets);
+
+        static constexpr size_t HostBucketCount = 16;
+        const size_t hostBucket = THash<TStringBuf>{}(hostname) % HostBucketCount;
+        auto bucket = hostBuckets->FindSubgroup("host_bucket", ToString(hostBucket));
+        UNIT_ASSERT(bucket);
+        auto selections = bucket->FindCounter("Selections");
+        UNIT_ASSERT(selections);
+        WaitReal(runtime, [&] { return *selections > 0; });
+
+        auto latency = bucket->FindHistogram("LatencyMs");
+        UNIT_ASSERT(latency);
+        const auto snapshot = latency->Snapshot();
+        ui64 latencySamples = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            latencySamples += snapshot->Value(i);
+        }
+        UNIT_ASSERT(latencySamples > 0);
     }
 
     Y_UNIT_TEST(FiveXxTriggersRefresh) {
@@ -483,6 +507,50 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
 
         WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
         UNIT_ASSERT_C(result->Ok.load(), result->Error);
+    }
+
+    Y_UNIT_TEST(RouterPoisonedWithRequestInFlight) {
+        const TDuration holdDuration = TDuration::Seconds(3);
+        TStallingS3Server s3Server(/*bodySize=*/4096, holdDuration);
+
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+        runtime.GetAppData(0).AwsClientConfig.SetRequestTimeoutMs(TDuration::Hours(1).MilliSeconds());
+        runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) { return false; });
+
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        auto* s3 = settings.MutableSettings();
+        s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << s3Server.GetPort());
+        s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3->SetBucket("test-bucket");
+        s3->SetAccessKey("access-key");
+        s3->SetSecretKey("secret-key");
+        s3->SetRegion("ru-central1");
+        s3->SetUseVirtualAddressing(false);
+
+        TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        TActorId edgeId = runtime.AllocateEdgeActor();
+
+        auto result = MakeIntrusive<TGetResult>();
+        TActorId collectorId = runtime.Register(new TGetCollector(result));
+
+        Aws::S3::Model::GetObjectRequest request;
+        request.SetBucket("test-bucket");
+        request.SetKey("held-object");
+        request.SetRange("bytes=0-4095");
+        runtime.Send(new IEventHandle(routerId, collectorId,
+            new NWrappers::NExternalStorage::TEvGetObjectRequest(request)), 0, true);
+
+        WaitReal(runtime, [&] { return s3Server.GetRequestsReceived() >= 1; });
+
+        // NodeWarden poisons the router when its last agent releases it; the inner
+        // wrapper still holds the request and reports its stats after the router is gone.
+        runtime.Send(new IEventHandle(routerId, edgeId, new TEvents::TEvPoison()), 0, true);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        // The dying wrapper disables request processing, so the reply may carry the abort error; it must still arrive.
+        WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
     }
 }
 

@@ -39,6 +39,7 @@ enum ESimpleCounters {
     COUNTER_S3_GET_READS_IN_FLIGHT = 31 [(NKikimr.CounterOpts) = {Name: "S3/Get/ReadsInFlight"}];
     COUNTER_S3_GET_MAX_READS_IN_FLIGHT = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/MaxReadsInFlight"}];
     COUNTER_S3_GET_PENDING_QUEUE_SIZE = 33 [(NKikimr.CounterOpts) = {Name: "S3/Get/PendingQueueSize"}];
+    COUNTER_AGENTS_BLOCKING_GC = 34 [(NKikimr.CounterOpts) = {Name: "AgentsBlockingGC"}];
 }
 
 enum ECumulativeCounters {
@@ -76,6 +77,8 @@ enum ECumulativeCounters {
     COUNTER_S3_GETS_SLOW_DOWN = 31 [(NKikimr.CounterOpts) = {Name: "S3/Gets/SlowDown"}];
     COUNTER_S3_GET_THROTTLE_ACTIVATIONS = 32 [(NKikimr.CounterOpts) = {Name: "S3/Get/ThrottleActivations"}];
     COUNTER_S3_ROUTER_RETIRING_WRAPPERS_ABORTED = 33 [(NKikimr.CounterOpts) = {Name: "S3/Router/RetiringWrappersAborted"}];
+    COUNTER_MOVE_DATA_BLOBS_MOVED = 34 [(NKikimr.CounterOpts) = {Name: "MoveData/BlobsMoved"}];
+    COUNTER_MOVE_DATA_BYTES_MOVED = 35 [(NKikimr.CounterOpts) = {Name: "MoveData/BytesMoved"}];
 }
 
 enum EPercentileCounters {
@@ -204,4 +207,6 @@ enum ETxTypes {
     TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS = 22 [(NKikimr.TxTypeOpts) = {Name: "TTxHardCollectAssimilatedBlobs"}];
     TXTYPE_MOVE_DATA_SCAN = 23 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataScan"}];
     TXTYPE_MOVE_DATA_UPDATE_INDEX = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataUpdateIndex"}];
+    TXTYPE_DELETE_TABLET_DATA = 25 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
+    TXTYPE_QUERY_BLOCKS = 26 [(NKikimr.TxTypeOpts) = {Name: "TTxQueryBlocks"}];
 }

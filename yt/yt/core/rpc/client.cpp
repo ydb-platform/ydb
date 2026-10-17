@@ -393,9 +393,9 @@ TClientContextPtr TClientRequest::CreateClientContext()
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
-NLogging::TLoggingTagListBuilder TClientRequest::Annotate()
+NLogging::TLoggingTagListBuilderGuard<> TClientRequest::Annotate()
 {
-    return NLogging::TLoggingTagListBuilder(&LoggingTags_);
+    return NLogging::TLoggingTagListBuilderGuard(&LoggingTags_);
 }
 
 const NLogging::TLoggingTagList& TClientRequest::GetLoggingTags() const
@@ -874,6 +874,18 @@ TMethodDescriptor& TMethodDescriptor::SetMultiplexingBand(EMultiplexingBand valu
 TMethodDescriptor& TMethodDescriptor::SetStreamingEnabled(bool value)
 {
     StreamingEnabled = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetRequestHeavy(bool value)
+{
+    RequestHeavy = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetResponseHeavy(bool value)
+{
+    ResponseHeavy = value;
     return *this;
 }
 

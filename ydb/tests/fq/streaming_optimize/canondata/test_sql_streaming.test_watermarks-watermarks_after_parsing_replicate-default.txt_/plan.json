@@ -27,7 +27,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 5
+                            }
+                        ],
                         "ExternalDataSource" : "pq",
                         "Name" : "Write pq",
                         "SinkType" : "pq"
@@ -57,7 +61,11 @@
                 ],
                 "Operators" : [
                     {
-                        "Inputs" : [ ],
+                        "Inputs" : [
+                            {
+                                "ExternalPlanNodeId" : 2
+                            }
+                        ],
                         "ExternalDataSource" : "pq",
                         "Name" : "Write pq",
                         "SinkType" : "pq"
@@ -82,6 +90,19 @@
         "Plans" : [
             {
                 "PlanNodeId" : 1,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 3,
+                        "Operators" : [
+                            {
+                                "ExternalDataSource" : "pq",
+                                "Name" : "Read pq",
+                                "SourceType" : "pq"
+                            }
+                        ],
+                        "Node Type" : "Read pq"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "pq",
@@ -92,7 +113,20 @@
                 "Node Type" : "Write pq"
             },
             {
-                "PlanNodeId" : 2,
+                "PlanNodeId" : 4,
+                "Plans" : [
+                    {
+                        "PlanNodeId" : 7,
+                        "Operators" : [
+                            {
+                                "ExternalDataSource" : "pq",
+                                "Name" : "Read pq",
+                                "SourceType" : "pq"
+                            }
+                        ],
+                        "Node Type" : "Read pq"
+                    }
+                ],
                 "Operators" : [
                     {
                         "ExternalDataSource" : "pq",

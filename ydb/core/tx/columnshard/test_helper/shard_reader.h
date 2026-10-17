@@ -29,6 +29,7 @@ private:
     // Unset means the request carries no Reverse field at all, which is how KQP asks for a scan whose
     // output needs no order: TTxScan then derives ERequestSorting::NONE.
     YDB_ACCESSOR(std::optional<bool>, Reverse, false);
+    YDB_ACCESSOR_DEF(TString, TablePath);
     YDB_ACCESSOR(ui32, Limit, 0);
     std::vector<TSerializedTableRange> Ranges;
     std::optional<NKikimrKqp::TEvKqpScanCursor> StartCursor;

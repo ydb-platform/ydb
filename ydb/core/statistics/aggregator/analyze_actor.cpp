@@ -9,8 +9,11 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/algorithm.h>
+#include <util/random/random.h>
+#include <util/random/shuffle.h>
 #include <util/string/vector.h>
 #include <algorithm>
+#include <cmath>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
@@ -35,6 +38,18 @@ std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColum
 
 } // anonymous namespace
 
+TVector<ui64> SelectAnalyzeSample(TVector<ui64> tablets, double rate, ui64 seed) {
+    // Avoid rounding an exact integer sample size up by one.
+    const double expected = std::nextafter(rate * tablets.size(), 0.0);
+    const size_t count = std::min(tablets.size(),
+        std::max<size_t>(1, static_cast<size_t>(std::ceil(expected))));
+    if (count < tablets.size()) {
+        PartialShuffle(tablets.begin(), tablets.end(), count, TFastRng64(seed));
+        tablets.resize(count);
+    }
+    return tablets;
+}
+
 class TAnalyzeActor::TScanActor : public TQueryBase {
 public:
     TScanActor(
@@ -57,11 +72,16 @@ public:
     }
 
     void OnStreamResult(NYdb::TResultSet&& resultSet) override {
-        NYdb::TResultSetParser result(std::move(resultSet));
-        if (!result.TryNextRow()) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "unexpected query result: expected row");
+        ResultSets.push_back(std::move(resultSet));
+    }
+
+    void OnQueryResult() override {
+        if (ResultSets.size() != 1 || ResultSets.front().RowsCount() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "unexpected query result: expected one row");
             return;
         }
+        NYdb::TResultSetParser result(std::move(ResultSets.front()));
+        Y_ENSURE(result.TryNextRow());
         if (result.ColumnsCount() != ColumnCount) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR,
                 TStringBuilder() << "unexpected query result: expected "
@@ -74,20 +94,13 @@ public:
         for (size_t i = 0; i < ColumnCount; ++i) {
             resultColumns.push_back(result.GetValue(i));
         }
-
-        auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
-            std::move(resultColumns));
-        Send(Parent, response.release());
-        ResponseSent = true;
-    }
-
-    void OnQueryResult() override {
+        // Streamed aggregates are provisional until the query's final status.
+        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(std::move(resultColumns)));
         Finish();
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
         if (status == Ydb::StatusIds::SUCCESS) {
-            Y_ABORT_UNLESS(ResponseSent);
             return;
         }
 
@@ -97,12 +110,7 @@ public:
             {"issues", issues.ToOneLineString()},
             {"query", Query});
 
-        if (!ResponseSent) {
-            auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
-                status, std::move(issues));
-            Send(Parent, response.release());
-            ResponseSent = true;
-        }
+        Send(Parent, new TEvPrivate::TEvAnalyzeScanResult(status, std::move(issues)));
     }
 
 private:
@@ -125,7 +133,6 @@ private:
     TString Query;
     size_t ColumnCount;
     std::optional<NYdb::TParamsBuilder> Params;
-    bool ResponseSent = false;
 };
 
 void TAnalyzeActor::Bootstrap() {
@@ -142,6 +149,7 @@ void TAnalyzeActor::Bootstrap() {
     entry.TableId = PathId;
     entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
     entry.Operation = TNavigate::OpTable;
+    entry.SyncVersion = true;
 
     auto request = std::make_unique<TNavigate>();
     request->DatabaseName = DatabaseName;
@@ -203,6 +211,25 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             : TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
             NYql::TIssue(TStringBuilder() << "Navigate request failed with " << entry.Status));
         return;
+    }
+
+    if (SamplingRequested() && entry.ColumnTableInfo) {
+        const auto& sharding = entry.ColumnTableInfo->Description.GetSharding();
+        TVector<ui64> tablets;
+        if (sharding.ShardsInfoSize()) {
+            for (const auto& shard : sharding.GetShardsInfo()) {
+                if (shard.GetIsOpenForRead()) {
+                    tablets.push_back(shard.GetTabletId());
+                }
+            }
+        } else {
+            tablets.assign(sharding.GetColumnShards().begin(), sharding.GetColumnShards().end());
+        }
+        SortUnique(tablets);
+        EligibleUnits = tablets.size();
+        for (auto tablet : SelectAnalyzeSample(std::move(tablets), Config.SampleRate, RandomNumber<ui64>())) {
+            TabletIdsToLocate.insert(tablet);
+        }
     }
 
     HiveId = entry.DomainInfo->ExtractHive();
@@ -437,9 +464,14 @@ void TAnalyzeActor::HandleNavigateResult() {
                 col.Type, col.PgTypeMod),
         });
     }
+    if (SamplingRequested() && !IsColumnTable) {
+        // Reuse the seed for every statistics batch in this ANALYZE.
+        SamplingSeed = RandomNumber<ui64>();
+    }
 
     if (PendingTasks.empty()) {
         // All requested columns were already dropped. Send empty response right away.
+        SendProgressEvent(0, 0);
         auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
             std::vector<TStatisticsItem>{}, /*final=*/ true);
         Send(Parent, response.release());
@@ -451,9 +483,10 @@ void TAnalyzeActor::HandleNavigateResult() {
     const ui64 wholeTableScanMaxBytes = IsColumnTable
         ? Config.ColumnTableWholeTableScanMaxBytes
         : Config.RowTableWholeTableScanMaxBytes;
-    const bool shouldSplit = wholeTableScanMaxBytes == 0
-        || !Config.TableBytesSize
-        || *Config.TableBytesSize > wholeTableScanMaxBytes;
+    // Sampled row queries use bounded aggregates and KQP's shard-read scheduling.
+    // They bypass the byte threshold; KQP limits concurrency, not total scan work.
+    const bool shouldSplit = SamplingRequested() ? IsColumnTable
+        : wholeTableScanMaxBytes == 0 || !Config.TableBytesSize || *Config.TableBytesSize > wholeTableScanMaxBytes;
     if (shouldSplit) {
         ScanMode = IsColumnTable ? EScanMode::PerShard : EScanMode::PerRange;
     } else {
@@ -487,7 +520,15 @@ void TAnalyzeActor::HandleNavigateResult() {
         }
     }
 
-    if (IsPartitionedScan()) {
+    if (SamplingRequested() && IsColumnTable) {
+        if (TabletIdsToLocate.empty()) {
+            FinishWithFailure(TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+                NYql::TIssue("ANALYZE found no table partitions to scan"));
+            return;
+        }
+        Send(SelfId(), new TEvPrivate::TEvRequestTableDistribution);
+        Become(&TThis::StateLocateTablets);
+    } else if (IsPartitionedScan()) {
         // Resolve shard ids (and PK range bounds for row tables).
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
@@ -665,10 +706,10 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     SelectBuilder.emplace(/*isIntermediateAggregation=*/IsPartitionedScan());
     size_t totalSize = 0;
 
-    if (!CountSeq && !RowCount) {
-        // Calculate total row count in the first scan we dispatch
-        CountSeq = SelectBuilder->AddBuiltinAggregation({}, "count");
-    }
+    // Batches may see different data or sampling layouts, even with the same seed.
+    // Count alongside each batch so its statistics describe the rows it actually read.
+    RowCount = 0;
+    CountSeq = SelectBuilder->AddBuiltinAggregation({}, "count");
 
     while (!PendingTasks.empty()) {
         auto& task = PendingTasks.front();
@@ -705,7 +746,7 @@ bool TAnalyzeActor::DispatchSomeScanActors() {
     {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
-            SelectBuilder->Build(TableName, tabletId, where, declares),
+            SelectBuilder->Build(TableName, tabletId, where, declares, IsColumnTable ? 1.0 : Config.SampleRate, SamplingSeed),
             SelectBuilder->ColumnCount(),
             std::move(params));
         ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
@@ -822,11 +863,8 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
         }
     }
 
-    if (CountSeq) {
-        NYdb::TValueParser val(result.AggColumns.at(CountSeq.value()));
-        ui64 count = val.GetUint64();
-        RowCount = count + RowCount.value_or(0);
-    }
+    NYdb::TValueParser count(result.AggColumns.at(CountSeq));
+    RowCount += count.GetUint64();
 
     if (!ScanActorsInFlight.empty()) {
         // More scan results coming for the current column tasks batch, merge the current one
@@ -847,16 +885,27 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     // This is the last scan result for the current column tasks batch, finalize the result.
 
     std::vector<TStatisticsItem> resultItems;
+    auto addResult = [&](TStatisticsItem item) {
+        // An unusable statistic clears its old sample, but leaves full statistics alone.
+        if (!item.Data.empty() || SamplingRequested()) {
+            resultItems.push_back(std::move(item));
+        }
+    };
 
-    if (CountSeq) {
+    if (FirstScan) {
         NKikimrStat::TTableSummaryStatistics tableSummary;
-        tableSummary.SetRowCount(*RowCount);
-        resultItems.emplace_back(
-            std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString());
-        CountSeq.reset();
+        tableSummary.SetRowCount(RowCount);
+        addResult({std::nullopt, EStatType::TABLE_SUMMARY, tableSummary.SerializeAsString()});
+        FirstScan = false;
 
         auto supportedMultiColumnTypes = IMultiColumnStatisticEval::SupportedMultiColumnTypes();
         for (const auto& def : MultiColumnStatDescs) {
+            // A partial ANALYZE only refreshes tuples entirely within its column list.
+            if (!RequestedColumnTags.empty() && !AllOf(def.ColumnIds, [&](ui32 tag) {
+                    return Find(RequestedColumnTags, tag) != RequestedColumnTags.end();
+                })) {
+                continue;
+            }
             for (auto type : def.Types) {
                 if (std::find(supportedMultiColumnTypes.begin(), supportedMultiColumnTypes.end(), type)
                         == supportedMultiColumnTypes.end()) {
@@ -866,22 +915,23 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 sizing.OversampleFactor = Config.HistogramOversampleFactor;
                 sizing.MaxStateBytes = Config.HistogramMaxStateBytes;
                 auto statEval = IMultiColumnStatisticEval::MaybeCreate(
-                    type, def.ColumnNames, def.ColumnIds, RowCount.value(), sizing);
-                if (!statEval) {
-                    continue;
-                }
-                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                    type, def.ColumnNames, def.ColumnIds, RowCount, sizing);
+                if (statEval && statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
                     YDB_LOG_WARN("Skipping multi-column statistic: estimated size exceeds MaxStatisticSize",
                         {"operationId", OperationId.Quote()},
                         {"pathId", PathId},
                         {"statType", static_cast<int>(type)},
                         {"estimatedSize", statEval->EstimateSize()},
                         {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
-                    continue;
+                    statEval.reset();
                 }
-                PendingTasks.push(TColumnStatEvalTask{
-                    .MultiStatEval = std::move(statEval),
-                });
+                if (statEval) {
+                    PendingTasks.push(TColumnStatEvalTask{
+                        .MultiStatEval = std::move(statEval),
+                    });
+                } else {
+                    addResult({def.ColumnIds, type, {}});
+                }
             }
         }
     }
@@ -893,58 +943,77 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 
         if (task.SimpleStatEval) {
             const auto& col = Columns.at(task.ColumnIdx);
-            auto simpleStats = task.SimpleStatEval->Extract(RowCount.value(), result.AggColumns);
-            resultItems.emplace_back(
-                col.Tag,
-                task.SimpleStatEval->GetType(),
-                simpleStats.SerializeAsString());
-
+            auto simpleStats = task.SimpleStatEval->Extract(RowCount, result.AggColumns);
             for (auto type : supportedStatTypes) {
                 auto statEval = IStage2ColumnStatisticEval::MaybeCreate(type, simpleStats, col.Type);
-                if (!statEval) {
-                    continue;
-                }
-                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                if (statEval && statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
                     YDB_LOG_WARN("Skipping stage-2 statistic: estimated size exceeds MaxStatisticSize",
                         {"operationId", OperationId.Quote()},
                         {"pathId", PathId},
                         {"statType", static_cast<int>(type)},
                         {"estimatedSize", statEval->EstimateSize()},
                         {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
-                    continue;
+                    statEval.reset();
                 }
-                PendingTasks.push(TColumnStatEvalTask{
-                    .ColumnIdx = task.ColumnIdx,
-                    .Stage2StatEval = std::move(statEval),
-                });
+                if (statEval) {
+                    PendingTasks.push(TColumnStatEvalTask{
+                        .ColumnIdx = task.ColumnIdx,
+                        .Stage2StatEval = std::move(statEval),
+                    });
+                } else {
+                    addResult({col.Tag, type, {}});
+                }
             }
+            if (SamplingRequested() && (!IsColumnTable || PartitionedScanCount() < EligibleUnits)) {
+                simpleStats.ClearCountDistinct(); // Sample HLL is not population NDV.
+            }
+            addResult({col.Tag, task.SimpleStatEval->GetType(), simpleStats.SerializeAsString()});
         } else if (task.Stage2StatEval) {
             const auto& col = Columns.at(task.ColumnIdx);
-            resultItems.emplace_back(
-                col.Tag,
-                task.Stage2StatEval->GetType(),
-                task.Stage2StatEval->ExtractData(result.AggColumns));
-        } else {
-            auto data = task.MultiStatEval->ExtractData(result.AggColumns);
-            if (data) {
-                resultItems.emplace_back(
-                    task.MultiStatEval->GetColumnIds(),
-                    task.MultiStatEval->GetType(),
-                    std::move(*data));
+            auto data = task.Stage2StatEval->ExtractData(result.AggColumns);
+            if (data.empty()) {
+                YDB_LOG_WARN("Skipping stage-2 statistic: collected data is unusable",
+                    {"operationId", OperationId.Quote()},
+                    {"pathId", PathId},
+                    {"columnTag", col.Tag},
+                    {"statType", static_cast<int>(task.Stage2StatEval->GetType())});
             }
+            addResult({col.Tag, task.Stage2StatEval->GetType(), std::move(data)});
+        } else {
+            addResult({task.MultiStatEval->GetColumnIds(), task.MultiStatEval->GetType(),
+                task.MultiStatEval->ExtractData(result.AggColumns).value_or(TString{})});
         }
     }
 
     InProgressTasks.clear();
 
+    if (SamplingRequested()) {
+        NKikimrStat::TSamplingStatistics sampling;
+        sampling.SetRequestedRate(Config.SampleRate);
+        if (IsColumnTable) {
+            sampling.SetMethod(NKikimrStat::TSamplingStatistics::SHARD_SUBSET);
+            sampling.SetEligibleUnits(EligibleUnits);
+            sampling.SetSelectedUnits(PartitionedScanCount());
+        } else {
+            sampling.SetMethod(NKikimrStat::TSamplingStatistics::PK_UNIT_BERNOULLI);
+            sampling.SetSeed(SamplingSeed);
+        }
+        sampling.SetSampleRows(RowCount);
+        for (auto& item : resultItems) {
+            item.Sampling = sampling;
+        }
+    }
+
     const bool isFinalResult = PendingTasks.empty();
+    if (isFinalResult) {
+        // Only emit 100% once, when all scan rounds are done.
+        SendProgressEvent(shardsTotal, shardsTotal);
+    }
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(
         std::move(resultItems), isFinalResult);
     Send(Parent, response.release());
 
     if (isFinalResult) {
-        // Only emit 100% once, when all scan rounds are done.
-        SendProgressEvent(shardsTotal, shardsTotal);
         PassAway();
     } else {
         StartColumnStatEvalTasks();

@@ -1,13 +1,15 @@
-#include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_settings.h"
 
+#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
 #include <yql/essentials/sql/v1/translation/source.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql {
 
@@ -93,9 +95,10 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        source.DataSourceAuth.MutableNone();
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auth.MutableNone();
+        TExternalSourceAuth source(auth);
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 1);
         auto it = properties.find("authMethod");
         UNIT_ASSERT(it != properties.end());
@@ -104,12 +107,13 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesServiceAccount) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableServiceAccount();
-        sa.SetId("saId");
-        sa.SetSecretName("secretName");
-        source.ServiceAccountIdSignature = "saSignature";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* sa = auth.MutableServiceAccount();
+        sa->SetId("saId");
+        sa->SetSecretName("secretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"saSignature"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         {
             auto it = properties.find("authMethod");
@@ -135,12 +139,13 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesBasic) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableBasic();
-        sa.SetLogin("login");
-        sa.SetPasswordSecretName("passwordSecretName");
-        source.Password = "password";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* basic = auth.MutableBasic();
+        basic->SetLogin("login");
+        basic->SetPasswordSecretName("passwordSecretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"password"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         {
             auto it = properties.find("authMethod");
@@ -166,15 +171,15 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesMdbBasic) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableMdbBasic();
-        sa.SetServiceAccountId("saId");
-        sa.SetServiceAccountSecretName("secretName");
-        source.ServiceAccountIdSignature = "saSignature";
-        sa.SetLogin("login");
-        sa.SetPasswordSecretName("passwordSecretName");
-        source.Password = "password";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* mdb = auth.MutableMdbBasic();
+        mdb->SetServiceAccountId("saId");
+        mdb->SetServiceAccountSecretName("secretName");
+        mdb->SetLogin("login");
+        mdb->SetPasswordSecretName("passwordSecretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"saSignature", "password"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 7);
         {
             auto it = properties.find("authMethod");
@@ -215,14 +220,14 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesAws) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableAws();
-        sa.SetAwsAccessKeyIdSecretName("accessIdName");
-        sa.SetAwsSecretAccessKeySecretName("accessSecretName");
-        sa.SetAwsRegion("region");
-        source.AwsAccessKeyId = "accessId";
-        source.AwsSecretAccessKey = "accessSecret";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* aws = auth.MutableAws();
+        aws->SetAwsAccessKeyIdSecretName("accessIdName");
+        aws->SetAwsSecretAccessKeySecretName("accessSecretName");
+        aws->SetAwsRegion("region");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"accessId", "accessSecret"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 6);
         {
             auto it = properties.find("authMethod");

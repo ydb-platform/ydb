@@ -50,6 +50,7 @@ public:
             {T::BridgeSyncFirstErrorTimestamp::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncFirstErrorTimestampFieldNumber}},
             {T::BridgeSyncErrorCount::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncErrorCountFieldNumber}},
             {T::BridgeSyncRunning::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncRunningFieldNumber}},
+            {T::SpaceColor::ColumnId, {E::kInfoFieldNumber, V::kSpaceColorFieldNumber}},
         };
         return fieldMap;
     }

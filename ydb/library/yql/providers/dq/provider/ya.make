@@ -1,21 +1,22 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
+    yql_dq_datasink.cpp
+    yql_dq_datasink.h
     yql_dq_datasink_constraints.cpp
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h
+    yql_dq_datasource.cpp
+    yql_dq_datasource.h
     yql_dq_datasource_constraints.cpp
     yql_dq_datasource_type_ann.cpp
     yql_dq_datasource_type_ann.h
     yql_dq_gateway.h
     yql_dq_provider.cpp
     yql_dq_provider.h
-    yql_dq_datasink.cpp
-    yql_dq_datasink.h
-    yql_dq_datasource.cpp
-    yql_dq_datasource.h
     yql_dq_recapture.cpp
     yql_dq_recapture.h
+    yql_dq_stage_stats.cpp
     yql_dq_statistics.cpp
     yql_dq_statistics.h
     yql_dq_statistics_json.cpp
@@ -58,8 +59,6 @@ PEERDIR(
     yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

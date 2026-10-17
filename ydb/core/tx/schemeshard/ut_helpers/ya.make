@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/testlib
     ydb/core/tx
+    ydb/core/tx/columnshard/test_helper
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_allocator

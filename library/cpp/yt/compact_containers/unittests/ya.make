@@ -6,6 +6,7 @@ SRCS(
     compact_flat_map_ut.cpp
     compact_flat_set_ut.cpp
     compact_heap_ut.cpp
+    compact_map_ut.cpp
     compact_set_ut.cpp
     compact_vector_ut.cpp
     compact_queue_ut.cpp

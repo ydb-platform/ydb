@@ -59,6 +59,7 @@
  */
 
 
+	.file   "svml_z0_tanh_d_la.s"
 	.text
 .L_2__routine_start___svml_tanh8_z0_0:
 

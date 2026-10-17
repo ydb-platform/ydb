@@ -2,21 +2,7 @@
 
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_W
-#error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
-#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
-#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
-#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
-#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
-#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, stream)
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimrSchemeOp {
     enum EPathType : int;
@@ -24,6 +10,10 @@ namespace NKikimrSchemeOp {
 
 namespace NKikimrScheme {
     class TEvDescribeSchemeResult;
+}
+
+namespace Ydb::Export {
+    class ExportToS3Settings;
 }
 
 namespace NKikimr::NSchemeShard {
@@ -37,5 +27,9 @@ void AddIssue(T& response, const TString& message, NYql::TSeverityIds::ESeverity
 
 NKikimrSchemeOp::EPathType GetPathType(const NKikimrScheme::TEvDescribeSchemeResult& describeResult);
 
-} // namespace NKikimr::NSchemeShard
+inline constexpr TStringBuf ExportDataCompleteFileName = "data_complete.json";
+inline constexpr TStringBuf ExportCompleteFileName = "export_complete.json";
 
+TString GetExportCompletionPrefix(const Ydb::Export::ExportToS3Settings& settings);
+
+} // namespace NKikimr::NSchemeShard

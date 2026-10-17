@@ -1,15 +1,8 @@
 LIBRARY()
 
-YQL_ABI_VERSION(
-    2
-    27
-    0
-)
-
 PEERDIR(
     library/cpp/containers/absl
     library/cpp/json
-    yql/essentials/minikql/dom
     contrib/libs/simdjson
 )
 
@@ -26,6 +19,10 @@ CFLAGS(
 )
 
 END()
+
+RECURSE(
+    dom
+)
 
 RECURSE_FOR_TESTS(
     ut

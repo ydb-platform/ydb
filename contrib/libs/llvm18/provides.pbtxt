@@ -126,7 +126,6 @@ p { i: "llvm" x: "LLVMX86Disassembler" ix: true peerdir: "contrib/libs/llvm18/li
 p { i: "llvm" x: "LLVMX86Info" ix: true peerdir: "contrib/libs/llvm18/lib/Target/X86/TargetInfo" }
 p { i: "llvm" x: "LLVMX86TargetMCA" ix: true peerdir: "contrib/libs/llvm18/lib/Target/X86/MCA" }
 p { i: "llvm" x: "LLVMXRay" ix: true peerdir: "contrib/libs/llvm18/lib/XRay" }
-p { i: "llvm" x: "LLVMgold" ix: true peerdir: "contrib/libs/llvm18/tools/gold" }
 p { i: "llvm" x: "LLVMipo" ix: true peerdir: "contrib/libs/llvm18/lib/Transforms/IPO" }
 p { i: "llvm" x: "LTO" ix: true peerdir: "contrib/libs/llvm18/tools/lto" }
 p { i: "llvm" x: "Remarks" ix: true peerdir: "contrib/libs/llvm18/tools/remarks-shlib" }

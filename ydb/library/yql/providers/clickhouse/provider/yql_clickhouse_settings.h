@@ -16,7 +16,7 @@ struct TClickHouseSettings {
 struct TClickHouseConfiguration : public TClickHouseSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TClickHouseConfiguration>;
 
-    TClickHouseConfiguration();
+    explicit TClickHouseConfiguration(bool strictConfigValidation = false);
     TClickHouseConfiguration(const TClickHouseConfiguration&) = delete;
 
     template <typename TProtoConfig>

@@ -1149,6 +1149,17 @@ Y_UNIT_TEST(CreateTopicDefaultsAndIdempotentCreate) {
     AssertStatus(duplicate, Ydb::StatusIds::SUCCESS);
 }
 
+Y_UNIT_TEST(CreateTopicWith100000PartitionsRejected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_100000_parts";
+
+    auto request = MakeCreateTopicRequest(path, 100000);
+    auto result = DoActorRequest<Ydb::Topic::CreateTopicRequest, Ydb::Topic::CreateTopicResponse>(
+        runtime, request, CreateCreateTopicActor, path);
+    AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "less than");
+}
+
 Y_UNIT_TEST(CreateTopicWithCodecsWriteSpeedAndRetention) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

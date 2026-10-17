@@ -51,7 +51,9 @@ struct TRunParams {
     std::vector<std::string> DqBlockColumns;
     std::vector<std::string> DqBlockKeyColumns;
     std::vector<std::string> DqBlockAggregations;
+    std::string DqBlockImpl = "DqHashAggregate";
     std::string DqBlockAstFile;
+    std::string DqBlockGeneratorAstFile;
 
     size_t JoinOverlap = 0; // Table generation params for joins
     size_t JoinRightRows = 0;

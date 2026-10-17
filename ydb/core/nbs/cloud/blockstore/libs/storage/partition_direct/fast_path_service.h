@@ -39,14 +39,15 @@ private:
     const TDiskDescription DiskDescription;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
-    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
+    const IArenaAllocatorPtr ArenaAllocator;
     // Chaos controllers are indexed by DirectBlockGroup index.
     const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 
     TLogTitle LogTitle;
     std::atomic<ui64> SequenceGenerator;
+    std::atomic<size_t> InflightWriteCount{0};
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system
     TDuration TraceSamplePeriod;
@@ -62,22 +63,6 @@ private:
     size_t DumpCount = 0;
     TMap<size_t, TDBGDumpResponse> DebugDumps;
 
-    struct TPBufferCleanupGather
-    {
-        std::atomic<bool> Active{false};
-        TVector<std::optional<TPBufferKey>> SafeBarriers;
-        std::atomic<size_t> PendingResponses{0};
-    };
-
-    TPBufferCleanupGather CleanupGather;
-
-    // Result of the last finished cleanup round: the lsn of the minimum safe
-    // barrier across all DBGs. 0 until the first round finishes.
-    std::atomic<ui64> LastSafeBarrier{0};
-
-    TAdaptiveLock PBufferBarrierLock;
-    TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
-
     TAdaptiveLock CopyRangeBucketLock;
     std::optional<TSimpleLeakyBucket> CopyRangeBucket;
 
@@ -91,6 +76,7 @@ public:
         TVector<IDirectBlockGroupPtr> directBlockGroups,
         TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
         const TVChunkConfigs& vChunkConfigs,
+        ITouchedProvider* touchedProvider,
         const TDirtyMapStateProtos& dirtyMapStates,
         TStorageConfigPtr storageConfig,
         ISchedulerPtr scheduler,
@@ -132,11 +118,15 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    TPersistResultFuture UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+    TPersistResultFuture UpdateVChunkState(
+        const TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override;
 
     TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
+
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override;
 
     void QueryAddHost(
         size_t directBlockGroupId,
@@ -147,13 +137,14 @@ public:
         size_t hostIndex,
         ui32 dbgConnectionsConfigGeneration) override;
 
-    ui64 GenerateLsn() override;
+    ui64 OnWriteStarted() override;
+
+    void OnWriteFinished() override;
+
+    // IDiskStateProvider implementation
+    size_t GetInflightWriteCount() const override;
 
     void StopTablet(const TString& reason) override;
-
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override;
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
 
@@ -180,7 +171,8 @@ public:
         std::optional<ui32> dbgIndex,
         TChaosConfig::TChaosNodeConfig::EChaosMode mode);
 
-    // Gathers per-DBG monitoring snapshots: one if dbgIndex is set, else all.
+    // Gathers one detailed per-VChunk DBG snapshot when dbgIndex is set;
+    // otherwise gathers summary snapshots for all DBGs.
     [[nodiscard]] NThreading::TFuture<TVector<TDbgSnapshot>> GatherMonSnapshots(
         std::optional<size_t> dbgIndex) const;
 
@@ -208,18 +200,7 @@ private:
     void ScheduleVChunkCountersUpdate();
     void QueryVChunkStats();
     void OnVChunkStats(const TVChunkStatsGatherResult& result);
-
-    void MaybeTriggerPBufferCleanup(ui64 lsn);
-    void PBufferCleanup();
-    void OnGatherSafeBarrierForErase(
-        size_t dbgIndex,
-        std::optional<TPBufferKey> safeBarrier);
-    void FinishPBufferCleanup();
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-size_t CalcRegionCount(ui64 blockCount, ui32 blockSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 

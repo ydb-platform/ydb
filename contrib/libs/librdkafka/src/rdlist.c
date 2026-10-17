@@ -194,7 +194,7 @@ void *rd_list_remove(rd_list_t *rl, void *match_elem) {
 
 void *rd_list_remove_cmp(rd_list_t *rl,
                          void *match_elem,
-                         int (*cmp)(void *_a, void *_b)) {
+                         int (*cmp)(const void *_a, const void *_b)) {
         void *elem;
         int i;
 
@@ -211,7 +211,7 @@ void *rd_list_remove_cmp(rd_list_t *rl,
 
 int rd_list_remove_multi_cmp(rd_list_t *rl,
                              void *match_elem,
-                             int (*cmp)(void *_a, void *_b)) {
+                             int (*cmp)(const void *_a, const void *_b)) {
 
         void *elem;
         int i;

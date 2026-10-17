@@ -189,8 +189,9 @@ namespace NKikimr::NTestShard {
 
             void Push(TEvStateServerRequest::TPtr ev) {
                 auto& record = ev->Get()->Record;
-                const ui32 type = record.HasWrite() ? TEvTestShard::EvStateServerWriteResult :
-                    record.HasRead() ? TEvTestShard::EvStateServerReadResult : 0;
+                const ui32 type = record.HasWrite() || record.HasInitialize()
+                                  ? TEvTestShard::EvStateServerWriteResult
+                                  : record.HasRead() ? TEvTestShard::EvStateServerReadResult : 0;
                 Y_ABORT_UNLESS(type);
                 ResponseQ.push_back(TResponseInfo{ev->Sender, ev->Cookie, type});
                 auto buffers = ev->ReleaseChainBuffer();

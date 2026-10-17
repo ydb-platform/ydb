@@ -1360,9 +1360,7 @@ LUW24:
 LUW25:
 	
 	FFI_CLOSURE_SAVE_REGS
-	mov	ecx, [esp+(40 + 4)-4] 	
-	mov	eax, [esp+(40 + 4)]		
-	mov	[esp+(40 + 4)], ecx		
+	mov	eax, [esp+(40 + 4)-4] 	
 	jmp	Ldo_closure_REGISTER
 LUW26:
 	

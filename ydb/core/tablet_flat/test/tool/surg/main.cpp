@@ -130,7 +130,7 @@ namespace NTest {
             }
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId)
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId, ui32 savepointSeqNum)
         {
             ui32 keyBytes = 0, opsBytes = 0;
 
@@ -146,6 +146,7 @@ namespace NTest {
                 << ", " << key.size() << " keys (" << keyBytes << "b)"
                 << " " << ops.size() << " ops (" << opsBytes << "b)"
                 << " txId " << txId
+                << " savepointSeqNum " << savepointSeqNum
                 << Endl;
 
             for (const auto& keyValue : key) {

@@ -1,6 +1,7 @@
 PY23_TEST()
 
 TEST_SRCS(
+    test_logging.py
     test_tools.py
 )
 

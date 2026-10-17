@@ -8,13 +8,13 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalFilterBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalFilterBuilder(TIntrusivePtr<TOpFilter> filter, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalFilterBuilder(TOpFilter& filter, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names)
         , Filter(filter) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    TIntrusivePtr<TOpFilter> Filter;
+    TOpFilter& Filter;
 };

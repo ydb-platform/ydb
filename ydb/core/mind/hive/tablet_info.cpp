@@ -201,9 +201,8 @@ bool TTabletInfo::CanBeAlive() const {
              || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_UNKNOWN); // KIKIMR-12558
 }
 
-bool TTabletInfo::IsAliveOnLocal(const TActorId& local) const {
-    return IsReadyToWork()
-            && Node != nullptr
+bool TTabletInfo::IsPresentOnLocal(const TActorId& local) const {
+    return Node != nullptr
             && Node->Local == local
             && (VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STARTING
                 || VolatileState == EVolatileState::TABLET_VOLATILE_STATE_RUNNING
@@ -265,13 +264,13 @@ TNodeInfo* TTabletInfo::GetNode() const {
     return node;
 }
 
-bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
+bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, EHiveEventReason reason, bool forMove) {
     TNodeInfo* node = GetNode();
     TActorId local;
     if (node != nullptr) {
         local = node->Local;
     }
-    if (BecomeStopped()) {
+    if (BecomeStopped(reason)) {
         if (Hive.GetEnableFastTabletMove() && node != nullptr && !node->Freeze && forMove) {
             // we only do it when we are moving from one node to another
             LastNodeId = node->Id;
@@ -282,7 +281,7 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
         if (IsLeader()) {
             for (TFollowerTabletInfo& follower : AsLeader().Followers) {
                 if (follower.FollowerGroup.LocalNodeOnly) {
-                    follower.InitiateStop(sideEffects, forMove);
+                    follower.InitiateStop(sideEffects, reason, forMove);
                 }
             }
         }
@@ -292,48 +291,60 @@ bool TTabletInfo::InitiateStop(TSideEffects& sideEffects, bool forMove) {
     }
 }
 
-bool TTabletInfo::BecomeStarting(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING) {
-        Node = Hive.FindNode(nodeId);
-        Y_ABORT_UNLESS(Node != nullptr);
-        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STARTING);
-        return true;
-    }
-    return false;
-}
-
-bool TTabletInfo::BecomeRunning(TNodeId nodeId) {
-    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING || NodeId != nodeId || (Node != nullptr && Node->Id != nodeId)) {
-        NodeId = nodeId;
-        PreferredNodeId = 0;
-        Y_ABORT_UNLESS(NodeId != 0);
-        if (Node == nullptr) {
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
-        } else if (Node->Id != NodeId) {
-            ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
-            Node = Hive.FindNode(NodeId);
-            Y_ABORT_UNLESS(Node != nullptr);
+void TTabletInfo::ChangeNode(TNodeId nodeId) {
+    if (Node != nullptr) {
+        if (Node->Id == nodeId) {
+            return;
         }
-        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+        // Detach the old node while NodeId still describes its placement.
+        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
+    }
+    Node = Hive.FindNode(nodeId);
+    Y_ABORT_UNLESS(Node != nullptr);
+}
+
+bool TTabletInfo::BecomeStarting(TNodeId nodeId, EHiveEventReason reason) {
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STARTING
+            || (Node != nullptr && Node->Id != nodeId)) {
+        ChangeNode(nodeId);
+        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STARTING);
+        Hive.RecordTabletEvent(*this, EHiveEventType::Starting, reason, TStringBuilder() << "node=" << nodeId);
         return true;
     }
     return false;
 }
 
-bool TTabletInfo::BecomeStopped() {
+bool TTabletInfo::BecomeRunning(TNodeId nodeId, EHiveEventReason reason) {
+    if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_RUNNING
+            || NodeId != nodeId
+            || (Node != nullptr && Node->Id != nodeId))
+    {
+        PreferredNodeId = 0;
+        Y_ABORT_UNLESS(nodeId != 0);
+        ChangeNode(nodeId);
+        NodeId = nodeId;
+        ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_RUNNING);
+        Hive.RecordTabletEvent(*this, EHiveEventType::Running, reason, TStringBuilder() << "node=" << nodeId);
+        return true;
+    }
+    return false;
+}
+
+bool TTabletInfo::BecomeStopped(EHiveEventReason reason) {
     if (VolatileState != EVolatileState::TABLET_VOLATILE_STATE_STOPPED) {
         if (Node == nullptr && NodeId != 0) {
             Node = Hive.FindNode(NodeId);
             Y_ABORT_UNLESS(Node != nullptr);
         }
+        const TNodeId previousNodeId = Node != nullptr ? Node->Id : NodeId;
+        const EVolatileState previousState = VolatileState;
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_STOPPED);
         BootState.clear();
-        if (Node != nullptr && Node->Freeze) {
-            PreferredNodeId = Node->Id;
-        }
+        // Freeze affinity is maintained by OnTabletChangeVolatileState.
         NodeId = 0;
         Node = nullptr;
+        Hive.RecordTabletEvent(*this, EHiveEventType::Stopped, reason,
+            TStringBuilder() << "node=" << previousNodeId << " previousState=" << EVolatileStateName(previousState));
         return true;
     } else {
         return false;
@@ -553,7 +564,7 @@ const TNodeFilter& TTabletInfo::GetNodeFilter() const {
 }
 
 bool TTabletInfo::InitiateStart(TNodeInfo* node) {
-    if (BecomeStarting(node->Id)) {
+    if (BecomeStarting(node->Id, EHiveEventReason::BootQueue)) {
         PostponedStart = {};
         TFullTabletId tabletId = GetFullTabletId();
         Hive.ExecuteStartTablet(tabletId, node->Local, tabletId.first, false);

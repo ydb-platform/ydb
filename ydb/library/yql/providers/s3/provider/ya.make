@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_s3_datasink.cpp
@@ -59,8 +59,6 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/threading
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

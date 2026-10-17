@@ -33,7 +33,7 @@ public:
     }
 
     TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) override
     {
         Y_UNUSED(range);
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
             TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(123));
             TRangeLock lock2 = TRangeLockAccess::Make(
                 mock,
-                TBlockRange64::MakeOneBlock(100),
+                TBlockRange16::MakeOneBlock(100),
                 mask);
             UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
             UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
         {
             TRangeLock lock = TRangeLockAccess::Make(
                 mock,
-                TBlockRange64::MakeOneBlock(100),
+                TBlockRange16::MakeOneBlock(100),
                 mask);
 
             lock.Arm();
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
             TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
             TRangeLock lock2 = TRangeLockAccess::Make(
                 mock,
-                TBlockRange64::MakeOneBlock(100),
+                TBlockRange16::MakeOneBlock(100),
                 mask);
             lock1.Arm();
             lock2.Arm();
@@ -155,7 +155,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
             TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
             TRangeLock lock2 = TRangeLockAccess::Make(
                 mock,
-                TBlockRange64::MakeOneBlock(100),
+                TBlockRange16::MakeOneBlock(100),
                 mask);
             lock1.Arm();
             lock2.Arm();
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
         TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
         TRangeLock lock2 = TRangeLockAccess::Make(
             mock,
-            TBlockRange64::MakeOneBlock(100),
+            TBlockRange16::MakeOneBlock(100),
             mask);
         lock1.Arm();
         lock2.Arm();

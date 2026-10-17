@@ -267,7 +267,10 @@ enum class EProcessorType {
     CheckIndexData,
     CheckHeaderData,
     StreamLogic,
-    ReserveMemory
+    ReserveMemory,
+    // Stateless DISTINCT marker (see distinct_marker.h). Must not be treated as a real Filter:
+    // TGraph::Collapse() AND-merges all Filter nodes, and the marker input is the (non-bool) key column.
+    DistinctMarker
 };
 
 class TFetchingInfo {
@@ -328,20 +331,50 @@ public:
     }
 };
 
-class IResourceProcessor {
+class IAsyncJob {
 public:
-    enum class EExecutionResult: ui8 {
-        Success,
-        Skipped,
-        InBackground
-    };
+    virtual ~IAsyncJob() = default;
+};
 
+class TExecutionResult {
+private:
+    std::shared_ptr<IAsyncJob> AsyncJob;
+
+    TExecutionResult() = default;
+
+public:
+    static TExecutionResult Done() {
+        return TExecutionResult();
+    }
+
+    static TExecutionResult Pending(std::shared_ptr<IAsyncJob>&& job) {
+        AFL_VERIFY(job);
+        TExecutionResult result;
+        result.AsyncJob = std::move(job);
+        return result;
+    }
+
+    bool IsPending() const {
+        return !!AsyncJob;
+    }
+
+    std::shared_ptr<IAsyncJob> ExtractPendingJob() {
+        AFL_VERIFY(AsyncJob);
+        return std::move(AsyncJob);
+    }
+
+    TString DebugString() const {
+        return AsyncJob ? "Pending" : "Done";
+    }
+};
+
+class IResourceProcessor {
 private:
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Input);
     YDB_READONLY_DEF(std::vector<TColumnChainInfo>, Output);
     YDB_READONLY(EProcessorType, ProcessorType, EProcessorType::Unknown);
 
-    virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const = 0;
+    virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const = 0;
 
     virtual NJson::TJsonValue DoDebugJson() const {
         return NJson::JSON_MAP;
@@ -445,7 +478,7 @@ public:
     {
     }
 
-    [[nodiscard]] TConclusion<EExecutionResult> Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
+    [[nodiscard]] TConclusion<TExecutionResult> Execute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const;
 };
 
 class TResourceProcessorStep {

@@ -56,7 +56,5 @@ PEERDIR(
     yql/essentials/providers/common/arrow_resolve
 )
 
-YQL_LAST_ABI_VERSION()
-
 GENERATE_ENUM_SERIALIZATION(interface.h)
 

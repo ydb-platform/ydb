@@ -31,6 +31,7 @@ namespace NKikimr::NGRpcService {
 
     private:
         const NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr BlockStore;
+        NYdbGrpc::TLoggerPtr Logger;
     };
 
 } // namespace NKikimr::NGRpcService

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PROVIDES(
     yql_pg_sql_translator
@@ -35,8 +35,6 @@ CFLAGS(
    -Dstat=microsoft_native_stat
 )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -39,14 +39,22 @@ class OPENTELEMETRY_EXPORT MeterProvider final : public opentelemetry::metrics::
 {
 public:
   /**
+   * Initialize a new meter provider with default configuration.
+   * This will create a MeterProvider with a default ViewRegistry,
+   * a Resource using the OTELResourceDetector, and
+   * a default ScopeConfigurator that applies the default MeterConfig to all Meters.
+   */
+  MeterProvider();
+
+  /**
    * Initialize a new meter provider.
    * @param views The views for this meter provider
    * @param resource  The resources for this meter provider.
    * @param meter_configurator Provides access to a function that computes the MeterConfig for
    * Meters provided by this MeterProvider.
    */
-  MeterProvider(
-      std::unique_ptr<ViewRegistry> views     = std::unique_ptr<ViewRegistry>(new ViewRegistry()),
+  explicit MeterProvider(
+      std::unique_ptr<ViewRegistry> views,
       const sdk::resource::Resource &resource = sdk::resource::Resource::Create({}),
       std::unique_ptr<instrumentationscope::ScopeConfigurator<MeterConfig>> meter_configurator =
           std::make_unique<instrumentationscope::ScopeConfigurator<MeterConfig>>(

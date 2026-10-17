@@ -14,9 +14,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.15.0)
+VERSION(2.15.1)
 
-ORIGINAL_SOURCE(https://github.com/confluentinc/librdkafka/archive/v2.15.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/confluentinc/librdkafka/archive/v2.15.1.tar.gz)
 
 PEERDIR(
     contrib/libs/curl

@@ -146,10 +146,8 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
     TStringBuf str = annotation->GetContent();
     TStringBuf rowPart;
     TStringBuf colPart;
-    TString filePart;
     GetNext(str, ':', rowPart);
     GetNext(str, ':', colPart);
-    filePart = str;
     ui32 row = 0;
     ui32 col = 0;
     if (!TryFromString(rowPart, row) || !TryFromString(colPart, col)) {
@@ -157,7 +155,8 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
     }
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
-    lastNode->SetPosition(TPosition(col, row, filePart));
+    // the file part points into the annotation atom's content, which lives as long as the tree
+    lastNode->SetPosition(col, row, str);
     if (lastNode->IsList()) {
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             if (!ApplyNodePositionAnnotationsInplace(*lastNode->GetChild(index), annotationIndex)) {

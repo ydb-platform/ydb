@@ -94,10 +94,10 @@ using TInputType = NYT::NConcurrency::IAsyncZeroCopyInputStreamPtr;
         const TVector<ui32>& inputGroups, TType* itemType, const TVector<TString>& tableNames,
         TVector<std::pair<NYT::TRichYPath, NYT::TFormat>>&& tables,
         NKikimr::NMiniKQL::IStatsRegistry* jobStats, size_t inflight, size_t timeout,
-        const TVector<ui64>& tableOffsets)
+        const TVector<ui64>& tableOffsets, const TString& optLLVM)
             : TDqYtReadWrapperBase<TDqYtReadWrapperRPC, TParallelFileInputState>(ctx, clusterName, token,
                 inputSpec, samplingSpec, inputGroups, itemType, tableNames, std::move(tables), jobStats,
-                inflight, timeout, tableOffsets) {}
+                inflight, timeout, tableOffsets, optLLVM) {}
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const;
 };

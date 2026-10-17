@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/string_utils/url
     ydb/core/base
     ydb/core/grpc_services/base
+    ydb/core/grpc_services/counters
     ydb/core/mon/audit
     ydb/core/protos
     ydb/library/aclib

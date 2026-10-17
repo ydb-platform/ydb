@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/core
@@ -13,7 +13,5 @@ SRCS(
 )
 
 
-   YQL_LAST_ABI_VERSION()
-
-
+   
 END()

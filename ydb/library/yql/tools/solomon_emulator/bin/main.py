@@ -15,8 +15,13 @@ def parse_args():
     )
 
     parser.add_argument("--auth", type=str, required=False, help="Allowed value for Authorization header")
-    parser.add_argument("--shard", type=str, required=False, action='append',
-                        help="Allowed shard id in form $project_name/$service_name/$cluster_name")
+    parser.add_argument(
+        "--shard",
+        type=str,
+        required=False,
+        action='append',
+        help="Allowed shard id in form $project_name/$service_name/$cluster_name",
+    )
     parser.add_argument("--http-port", type=int, required=False, default=31000, help="Listen HTTP port")
     parser.add_argument("--grpc-port", type=int, required=False, default=32000, help="Listen GRPC port")
     return parser.parse_args()

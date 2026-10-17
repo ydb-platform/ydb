@@ -5494,5 +5494,866 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
     }
 
+    // Write results must carry the cookie of the TEvWrite request on all reply
+    // paths: immediate, parse errors, planned (PREPARED and final COMPLETED),
+    // volatile (PREPARED, deferred COMPLETED and deferred ABORTED)
+    Y_UNIT_TEST(WriteResultsCarryCookie) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10));
+            )"),
+            "SUCCESS"
+        );
+
+        const auto tableId = ResolveTableId(server, sender, "/Root/table");
+        const auto shards = GetTableShards(server, sender, "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const ui64 shard = shards.at(0);
+
+        TVector<TShardedTableOptions::TColumn> columns{
+            {"key", "Int32", true, false},
+            {"value", "Int32", false, false},
+        };
+
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        auto txSender = runtime.AllocateEdgeActor();
+
+        Cout << "========= Send immediate write with a cookie =========\n";
+        {
+            const ui64 txId = 1001;
+            const ui64 cookie = 0xC0FFEE01;
+
+            auto request = MakeWriteRequestOneKeyValue(
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 11);
+
+            runtime.SendToPipe(shard, txSender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                "Immediate write result must carry the cookie of the request");
+        }
+
+        Cout << "========= Send a write with an unsupported lock mode and a cookie =========\n";
+        {
+            const ui64 txId = 1002;
+            const ui64 cookie = 0xC0FFEE02;
+
+            auto request = MakeWriteRequestOneKeyValue(
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 11);
+            request->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+
+            runtime.SendToPipe(shard, txSender, request.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                "Parse error result must carry the cookie of the request");
+        }
+
+        Cout << "========= Prepare a planned write with a cookie =========\n";
+        {
+            const ui64 txId = 1003;
+            const ui64 cookie = 0xC0FFEE03;
+
+            auto req = MakeWriteRequestOneKeyValue(
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                tableId, columns, 2, 1003);
+
+            runtime.SendToPipe(shard, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                "PREPARED reply must carry the cookie of the request");
+
+            Cout << "========= Plan the transaction at the coordinator =========\n";
+            SendProposeToCoordinator(
+                runtime, txSender, {shard}, {
+                    .TxId = txId,
+                    .Coordinator = coordinator,
+                    .MinStep = ev->Get()->Record.GetMinStep(),
+                    .MaxStep = ev->Get()->Record.GetMaxStep(),
+                });
+
+            Cout << "========= Check the final completed result =========\n";
+            auto done = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetTxId(), txId);
+            UNIT_ASSERT_VALUES_EQUAL(done->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL_C(done->Cookie, cookie,
+                "Final COMPLETED write result must carry the cookie of the request");
+        }
+
+        Cout << "========= Prepare volatile writes with a cookie =========\n";
+        {
+            const ui64 txId = 1004;
+            const ui64 cookie = 0xC0FFEE04;
+
+            ui64 minStep = 0;
+            ui64 maxStep = Max<ui64>();
+
+            for (ui64 shardId : shards) {
+                auto req = MakeWriteRequestOneKeyValue(
+                    txId,
+                    NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
+                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                    tableId, columns,
+                    shardId == shards.at(0) ? 3 : 13,
+                    shardId == shards.at(0) ? 1004 : 1005);
+                req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                req->Record.MutableLocks()->AddSendingShards(shards.at(0));
+                req->Record.MutableLocks()->AddSendingShards(shards.at(1));
+                req->Record.MutableLocks()->AddReceivingShards(shards.at(0));
+                req->Record.MutableLocks()->AddReceivingShards(shards.at(1));
+
+                runtime.SendToPipe(shardId, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+            }
+
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "PREPARED reply must carry the cookie of the request");
+                minStep = Max(minStep, ev->Get()->Record.GetMinStep());
+                maxStep = Min(maxStep, ev->Get()->Record.GetMaxStep());
+            }
+
+            Cout << "========= Plan the transaction at the coordinator =========\n";
+            SendProposeToCoordinator(
+                runtime, txSender, shards, {
+                    .TxId = txId,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                    .Volatile = true,
+                });
+
+            Cout << "========= Check the final completed results =========\n";
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "Final COMPLETED volatile write result must carry the cookie of the request");
+            }
+        }
+
+        Cout << "========= Prepare volatile writes that will be aborted =========\n";
+        {
+            const ui64 txId = 1005;
+            const ui64 cookie = 0xC0FFEE05;
+
+            // Block non-expectation readsets so that the distributed commit
+            // cannot resolve and will be aborted with decision unknown
+            TBlockEvents<TEvTxProcessing::TEvReadSet> blockedReadSets(runtime, [&](auto& ev) {
+                auto* msg = ev->Get();
+                return !(msg->Record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET);
+            });
+
+            ui64 minStep = 0;
+            ui64 maxStep = Max<ui64>();
+
+            for (ui64 shardId : shards) {
+                auto req = MakeWriteRequestOneKeyValue(
+                    txId,
+                    NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE,
+                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT,
+                    tableId, columns,
+                    shardId == shards.at(0) ? 4 : 14,
+                    shardId == shards.at(0) ? 1006 : 1007);
+                req->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+                req->Record.MutableLocks()->AddSendingShards(shards.at(0));
+                req->Record.MutableLocks()->AddSendingShards(shards.at(1));
+                req->Record.MutableLocks()->AddReceivingShards(shards.at(0));
+                req->Record.MutableLocks()->AddReceivingShards(shards.at(1));
+
+                runtime.SendToPipe(shardId, txSender, req.release(), 0, GetPipeConfigWithRetries(), TActorId(), cookie);
+            }
+
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "PREPARED reply must carry the cookie of the request");
+                minStep = Max(minStep, ev->Get()->Record.GetMinStep());
+                maxStep = Min(maxStep, ev->Get()->Record.GetMaxStep());
+            }
+
+            Cout << "========= Plan the transaction at the coordinator =========\n";
+            SendProposeToCoordinator(
+                runtime, txSender, shards, {
+                    .TxId = txId,
+                    .Coordinator = coordinator,
+                    .MinStep = minStep,
+                    .MaxStep = maxStep,
+                    .Volatile = true,
+                });
+
+            Cout << "========= Rewrite readsets into decision unknown =========\n";
+            runtime.WaitFor("blocked readsets", [&]{ return blockedReadSets.size() >= 2; });
+            UNIT_ASSERT_VALUES_EQUAL(blockedReadSets.size(), 2u);
+
+            for (auto& ev : blockedReadSets) {
+                auto* msg = ev->Get();
+                msg->Record.ClearReadSet();
+            }
+            blockedReadSets.Unblock();
+
+            Cout << "========= Check the final aborted results =========\n";
+            for (int i = 0; i < 2; ++i) {
+                auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(txSender);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId);
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED);
+                UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie,
+                    "Final ABORTED volatile write result must carry the cookie of the request");
+            }
+        }
+    }
+
+    // Rejected writes must carry the cookie of the TEvWrite request.
+    // Uses MaxTxInFly=0 so that any write arriving while another one is still
+    // in the propose queue gets rejected with STATUS_OVERLOADED.
+    Y_UNIT_TEST(RejectWriteResultCarriesCookie) {
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetMaxTxInFly(0);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetControls(controls);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TShardedTableOptions opts;
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards.at(0);
+        const auto& columns = opts.Columns_;
+        TActorId shardActorId = ResolveTablet(runtime, shard, 0, false);
+
+        const ui64 txId1 = 2001, txId2 = 2002;
+        const ui64 cookie1 = 0x11111111, cookie2 = 0x22222222;
+
+        Cout << "========= Enqueue two immediate writes with cookies =========\n";
+        {
+            // Both writes are sent with viaActorSystem=true — they stay in the
+            // shard mailbox and are not dispatched yet. ProposeQueue sends
+            // TEvDelayedProposeTransaction to the END of the mailbox, so the
+            // order is: write#1 (enqueued), write#2 (rejected while write#1
+            // is still in the propose queue), delayed propose (write#1 runs).
+            auto req1 = MakeWriteRequestOneKeyValue(
+                txId1,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 1, 10);
+            runtime.Send(new IEventHandle(shardActorId, sender, req1.release(), 0, cookie1), 0, true);
+
+            auto req2 = MakeWriteRequestOneKeyValue(
+                txId2,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, columns, 2, 20);
+            runtime.Send(new IEventHandle(shardActorId, sender, req2.release(), 0, cookie2), 0, true);
+        }
+
+        Cout << "========= Check the rejected write result =========\n";
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId2);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie2,
+                "Rejected write result must carry the cookie of the request");
+        }
+
+        Cout << "========= Check the completed write result =========\n";
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), txId1);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL_C(ev->Cookie, cookie1,
+                "Completed write result must carry the cookie of the request");
+        }
+    }
+
+    namespace {
+        std::unique_ptr<NEvents::TDataEvents::TEvWrite> MakeUnsafeTruncateRequest(
+            std::optional<ui64> txId, NKikimrDataEvents::TEvWrite::ETxMode txMode, const TTableId& tableId)
+        {
+            auto evWrite = txId
+                ? std::make_unique<NEvents::TDataEvents::TEvWrite>(*txId, txMode)
+                : std::make_unique<NEvents::TDataEvents::TEvWrite>(txMode);
+            evWrite->AddUnsafeTruncateOperation(tableId);
+            return evWrite;
+        }
+
+        ui64 GetUnsafeTruncateCounter(TTestActorRuntime& runtime, ui64 shard) {
+            auto edge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(shard, edge, new TEvTablet::TEvGetCounters(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(edge);
+            for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+                if (counter.GetName() == "DataShard/UnsafeTruncate") {
+                    return counter.GetValue();
+                }
+            }
+            UNIT_ASSERT_C(false, "DataShard/UnsafeTruncate counter not found");
+            return 0;
+        }
+    }
+
+    Y_UNIT_TEST(UnsafeTruncatePreserveLocksWithoutTruncateRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        for (auto mode : {NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::MODE_PREPARE}) {
+            auto request = MakeWriteRequest(100, mode,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, 1);
+            request->Record.AddPreserveLockTxIds(42);
+
+            Write(runtime, sender, shards[0], std::move(request),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
+    Y_UNIT_TEST(UnsafeTruncateImmediate) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+
+        Write(runtime, sender, shards[0],
+            MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 1u);
+    }
+
+    Y_UNIT_TEST(UnsafeTruncatePrepared) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shards[0],
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetOrigin(), shards[0]);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 1u);
+
+        // The whole point of the data-plane unsafe truncate: the schema version must not move.
+        // A write still carrying the original version would fail with SCHEME_CHANGED otherwise.
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 2, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+    }
+
+    Y_UNIT_TEST(UnsafeTruncateStaleSchemaVersionRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        TTableId staleTableId(tableId.PathId.OwnerId, tableId.PathId.LocalPathId, tableId.SchemaVersion + 1);
+        Write(runtime, sender, shards[0],
+            MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, staleTableId),
+            NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+    }
+
+    // TruncateTable asserts !DataModified, so mixing an unsafe truncate with anything else
+    // touching the same table would abort the tablet. It must be a bad request instead.
+    Y_UNIT_TEST(UnsafeTruncateMixedWithUpsertRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        auto request = MakeWriteRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, 1);
+        request->AddUnsafeTruncateOperation(tableId);
+
+        Write(runtime, sender, shards[0], std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
+    // TruncateTable also asserts !Truncated, so truncating the same table twice in one write
+    // transaction would abort the tablet as well. It must be a bad request instead.
+    Y_UNIT_TEST(UnsafeTruncateDuplicateTableRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        auto request = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        request->AddUnsafeTruncateOperation(tableId);
+
+        Write(runtime, sender, shards[0], std::move(request),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
+    // Unsafe truncate only frees space, so it must keep working once the shard has run out of it.
+    // Only the distributed path depends on the exemption: an immediate truncate has no keys, and
+    // the out-of-space check lets immediate transactions without writes through anyway.
+    Y_UNIT_TEST(UnsafeTruncateOnOutOfSpace) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // The shard learns it is out of space from the status flags of its blob writes. The periodic
+        // blobstorage status check would clear them again, so it is kept from arriving.
+        auto putObserver = runtime.AddObserver<TEvBlobStorage::TEvPutResult>([&](TEvBlobStorage::TEvPutResult::TPtr& ev) {
+            auto* msg = ev->Get();
+            if (msg->Id.TabletID() == shard) {
+                const_cast<TStorageStatusFlags&>(msg->StatusFlags).Raw |= NKikimrBlobStorage::StatusDiskSpaceYellowStop;
+            }
+        });
+        TBlockEvents<TEvTablet::TEvCheckBlobstorageStatusResult> blockedStatusChecks(runtime);
+
+        // The flags come back with the commit of any write.
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // Control: an ordinary distributed write is refused, so the shard really is out of space.
+        Write(runtime, sender, shard,
+            MakeWriteRequest(99, NKikimrDataEvents::TEvWrite::MODE_PREPARE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, 1),
+            NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE);
+
+        const ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shard,
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shard), 1u);
+    }
+
+    // Whether a lock survived is read off its identity: writing again under the same lock id
+    // returns the very same generation:counter while the lock lives, and a fresh one once it is
+    // gone. The control below pins that this signal actually works before it is relied upon.
+    Y_UNIT_TEST(UnsafeTruncatePreservesRequestedLocks) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+
+        const ui64 controlLockTxId = 1234567890000;
+        const ui64 preservedLockTxId = 1234567890001;
+        const ui64 competingLockTxId = 1234567890002;
+        // Without a registered handle the shard un-subscribes and deletes the lock right away,
+        // long before the truncate runs, which would make this test measure nothing.
+        NLongTxService::TLockHandle controlHandle(controlLockTxId, runtime.GetActorSystem(0));
+        NLongTxService::TLockHandle preservedHandle(preservedLockTxId, runtime.GetActorSystem(0));
+        NLongTxService::TLockHandle competingHandle(competingLockTxId, runtime.GetActorSystem(0));
+
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // Writing under a lock that is still alive succeeds; once the lock is broken the shard
+        // refuses the write outright, which is the signal this test reads.
+        auto writeUnderLock = [&](ui64 lockTxId, ui64 key) {
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, opts.Columns_, key, key * 10);
+            req->SetLockId(lockTxId, lockNodeId);
+            runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            return ev->Get()->Record.GetStatus();
+        };
+
+        // Control: nothing disturbs this lock, so a second write under it must still succeed.
+        // If this ever fails the test measures lock bookkeeping rather than the truncate.
+        UNIT_ASSERT_VALUES_EQUAL(writeUnderLock(controlLockTxId, 50),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL_C(writeUnderLock(controlLockTxId, 51),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+            "an undisturbed lock must stay usable, otherwise this test proves nothing");
+
+        UNIT_ASSERT_VALUES_EQUAL(writeUnderLock(preservedLockTxId, 100),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(writeUnderLock(competingLockTxId, 200),
+            NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+
+        {
+            auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+            req->Record.AddPreserveLockTxIds(preservedLockTxId);
+            Write(runtime, sender, shard, std::move(req),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        const auto preservedAfter = writeUnderLock(preservedLockTxId, 101);
+        const auto competingAfter = writeUnderLock(competingLockTxId, 201);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(preservedAfter, NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+            "the issuing transaction's lock must survive its own unsafe truncate");
+        UNIT_ASSERT_VALUES_EQUAL_C(competingAfter, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN,
+            "a competing lock must be broken by the unsafe truncate");
+    }
+
+    // The issuing transaction keeps reading at the snapshot it took before the truncate. That read
+    // must succeed and see an empty table, which is why the truncate must not advance the snapshot
+    // low watermark the way the schema truncate does: the snapshot would be lost.
+    Y_UNIT_TEST(UnsafeTruncateThenReadInSameTransaction) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // The truncate must spare the lock the transaction reads under, as KQP does.
+        ui64 userLockTxId = 0;
+        auto readObserver = runtime.AddObserver<TEvDataShard::TEvRead>([&](TEvDataShard::TEvRead::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTableId().GetTableId() == tableId.PathId.LocalPathId && record.GetLockTxId()) {
+                userLockTxId = record.GetLockTxId();
+            }
+        });
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 0 } items { uint32_value: 1 } }, "
+            "{ items { uint32_value: 2 } items { uint32_value: 3 } }, "
+            "{ items { uint32_value: 4 } items { uint32_value: 5 } }");
+        UNIT_ASSERT(userLockTxId);
+
+        {
+            auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+            req->Record.AddPreserveLockTxIds(userLockTxId);
+            Write(runtime, sender, shards[0], std::move(req),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                SELECT key, value FROM `/Root/table-1` ORDER BY key;
+            )"),
+            "");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }");
+    }
+
+    Y_UNIT_TEST(UnsafeTruncateVolatileRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        Write(runtime, sender, shards[0],
+            MakeUnsafeTruncateRequest(100, NKikimrDataEvents::TEvWrite::MODE_VOLATILE_PREPARE, tableId),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL(ReadTable(server, shards, tableId), "");
+    }
+
+    // A competing write arriving while the truncate is prepared but not yet planned must not be
+    // refused: this is what forbids reaching for a propose blocker the way the schema truncate
+    // does, since that one rejects such transactions outright.
+    //
+    // Note it is not held back either. An unplanned distributed transaction has no step yet, so the
+    // dependency tracker has nothing to order immediate operations against and they run straight
+    // away; the truncate is planned later and wipes what they wrote. The write therefore reports
+    // success and then loses its data - which is the same thing that happens to any write landing
+    // just before a truncate, and is what the word "unsafe" in the syntax stands for.
+    Y_UNIT_TEST(UnsafeTruncateDoesNotRejectCompetingWrite) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        const ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shards[0],
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        auto competingSender = runtime.AllocateEdgeActor();
+        {
+            auto request = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, opts.Columns_, /* key */ 100, /* value */ 1000);
+            runtime.SendToPipe(shards[0], competingSender, request.release(), 0, GetPipeConfigWithRetries());
+        }
+
+        {
+            auto competingResult = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+                competingSender);
+            UNIT_ASSERT_VALUES_EQUAL_C(competingResult->Get()->Record.GetStatus(),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED,
+                "a prepared unsafe truncate must never make a competing write fail");
+        }
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        // The truncate is ordered after that write, so its row goes too.
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadTable(server, shards, tableId), "",
+            "the truncate must be ordered after the write it raced with");
+    }
+
+    // A prepared truncate is persisted, so losing the tablet between prepare and plan must not lose
+    // the transaction: the coordinator plans it afterwards and it still applies.
+    Y_UNIT_TEST(UnsafeTruncateShardRestartBeforePlan) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        const ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shards[0],
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        RebootTablet(runtime, shards[0], sender);
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadTable(server, shards, tableId), "",
+            "a truncate prepared before the restart must still apply after it");
+    }
+
+    // Once planned the truncate is not rollbackable, so a restart right after it applied must not
+    // bring the rows back.
+    Y_UNIT_TEST(UnsafeTruncateShardRestartAfterPlan) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 coordinator = ChangeStateStorage(Coordinator, server->GetSettings().Domain);
+
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        const ui64 txId = 100;
+        ui64 minStep, maxStep;
+        {
+            const auto writeResult = Write(runtime, sender, shards[0],
+                MakeUnsafeTruncateRequest(txId, NKikimrDataEvents::TEvWrite::MODE_PREPARE, tableId),
+                NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+            minStep = writeResult.GetMinStep();
+            maxStep = writeResult.GetMaxStep();
+        }
+
+        SendProposeToCoordinator(
+            runtime, sender, shards, {
+                .TxId = txId,
+                .Coordinator = coordinator,
+                .MinStep = minStep,
+                .MaxStep = maxStep,
+            });
+
+        {
+            auto writeResult = WaitForWriteCompleted(runtime, sender);
+            UNIT_ASSERT_VALUES_EQUAL(writeResult.GetTxId(), txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+
+        RebootTablet(runtime, shards[0], sender);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ReadTable(server, shards, tableId), "",
+            "the truncate is not rollbackable, a restart must not resurrect the rows");
+    }
+
+    // Committing a lock applies that lock's uncommitted rows, which marks the table modified in the
+    // very same tablet transaction the truncate then runs in. NTable's TruncateTable asserts
+    // !DataModified, so this must be refused as a bad request rather than reach the local database.
+    Y_UNIT_TEST(UnsafeTruncateWithLockCommitRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        const ui64 lockTxId = 1234567890123;
+        const ui64 lockNodeId = runtime.GetNodeId(0);
+
+        NLongTxService::TLockHandle lockHandle(lockTxId, runtime.GetActorSystem(0));
+
+        Upsert(runtime, sender, shard, tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        // An uncommitted write under the lock: the table now has an open tx for lockTxId.
+        NKikimrDataEvents::TLock lock;
+        {
+            auto req = MakeWriteRequestOneKeyValue(
+                std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, opts.Columns_, /* key */ 100, /* value */ 1000);
+            req->SetLockId(lockTxId, lockNodeId);
+            runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
+            auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(),
+                NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TxLocksSize(), 1u);
+            lock = ev->Get()->Record.GetTxLocks(0);
+        }
+
+        auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        auto* kqpLocks = req->Record.MutableLocks();
+        kqpLocks->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
+        *kqpLocks->AddLocks() = lock;
+
+        runtime.SendToPipe(shard, sender, req.release(), 0, GetPipeConfigWithRetries());
+        auto ev = runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "committing a lock together with an unsafe truncate must not reach the local database");
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(ReadTable(server, shards, tableId), "",
+            "a refused truncate must not have wiped anything");
+    }
+
+    // The operation is applied unconditionally and cannot be rolled back, so it must not be
+    // accepted as an uncommitted write: the caller would believe it still holds the decision.
+    Y_UNIT_TEST(UnsafeTruncateUnderLockRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        Upsert(runtime, sender, shards[0], tableId, opts.Columns_, 3, {}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+
+        auto req = MakeUnsafeTruncateRequest({}, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, tableId);
+        req->SetLockId(1234567890123, runtime.GetNodeId(0));
+
+        Write(runtime, sender, shards[0], std::move(req),
+            NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+
+        UNIT_ASSERT_VALUES_UNEQUAL_C(ReadTable(server, shards, tableId), "",
+            "a refused truncate must not have wiped anything");
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

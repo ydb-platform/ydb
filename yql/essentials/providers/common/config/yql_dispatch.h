@@ -430,17 +430,19 @@ public:
         bool IgnoreInFullReplay_ = false;
     };
 
-    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {})
+    explicit TSettingDispatcher(const TStringBuf& providerName = "", const TQContext& qContext = {}, bool strictConfigValidation = false)
         : ProviderName_(providerName)
         , QContext_(qContext)
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
     TSettingDispatcher(const TSettingDispatcher&) = delete;
 
     template <NPrivate::StringContainer TContainer>
-    explicit TSettingDispatcher(const TContainer& validClusters)
+    explicit TSettingDispatcher(const TContainer& validClusters, bool strictConfigValidation = false)
         : ValidClusters(validClusters.begin(), validClusters.end())
+        , StrictConfigValidation_(strictConfigValidation)
     {
     }
 
@@ -542,6 +544,7 @@ protected:
 
     const TString ProviderName_;
     const TQContext QContext_;
+    bool StrictConfigValidation_ = false;
 };
 
 } // namespace NYql::NCommon

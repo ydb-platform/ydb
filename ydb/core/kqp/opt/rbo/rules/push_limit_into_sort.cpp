@@ -5,7 +5,7 @@ namespace NKqp {
 
 bool TPushLimitIntoSortRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Limit &&
-        input->Children.front()->Kind == EOperator::Sort;
+        input->GetChildren().front()->Kind == EOperator::Sort;
 }
 
 TIntrusivePtr<IOperator> TPushLimitIntoSortRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {

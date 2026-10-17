@@ -28,6 +28,11 @@ namespace NKikimr {
                     const TString &value,
                     NPDisk::EDeviceType type);
 
+            TLtcHisto(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                    const TString &name,
+                    const TString &value,
+                    NMonitoring::TBucketBounds bounds);
+
             // update histogram with with an operation with duration 'd'
             void Collect(TDuration d, ui64 size = 0);
             void AddInFlightRequest(ui64 requestId, TInstant receivedTime);

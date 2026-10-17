@@ -124,8 +124,7 @@ def do(args):
             _, row['PDiskSlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
             row['UsedSize'] = vslot.VDiskMetrics.AllocatedSize
             row['AvailableSize'] = vslot.VDiskMetrics.AvailableSize
-            weight = common.get_vslot_owner_weight(row['GroupSizeInUnits'], row['PDiskSlotSizeInUnits'])
-            row['SlotSize'] = pdisk.PDiskMetrics.EnforcedDynamicSlotSize * weight
+            row['SlotSize'] = common.get_vslot_quota_from_pdisk(row['GroupSizeInUnits'], pdisk)
             row['TotalSize'] = row['UsedSize'] + row['AvailableSize']
             row['VDiskSlotUsage'] = None
             row['VDiskRawUsage'] = None
@@ -143,8 +142,9 @@ def do(args):
                 #
                 # Formula matches blobstorage_pdisk_keeper.h GetVDiskRawUsage()
                 #   VDiskRawUsage = 100.0 * (used / hardLimit)
-                # Per blobstorage_pdisk_impl.cpp TPDisk::WhiteboardReport(), EnforcedDynamicSlotSize is calculated as:
+                # For slot-weight-based quotas, TPDisk::WhiteboardReport() uses:
                 #   EnforcedDynamicSlotSize = min(HardLimit / Weight) across all owners
+                # Fixed quotas instead scale by group units and are capped by the user chunk pool.
                 #
                 row['VDiskRawUsage'] = row['UsedSize'] / row['SlotSize']
 

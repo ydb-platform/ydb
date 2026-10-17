@@ -22,7 +22,15 @@ namespace NKikimr::NDDisk {
     constexpr size_t MinSectorSize = 4096;
     constexpr size_t DataAlignment = MinSectorSize;
 
+    // Public TEvWrite requests larger than this are rejected before allocation or I/O.
+    constexpr ui32 MaxWriteSize = 1u << 20;
+
     static_assert(MinSectorSize == IntegrityUnitSize);
+
+    // DDisk uses the whole physical PDisk chunk and needs no room for PDisk per-sector metadata, so a
+    // PDisk formatted with PhysicalChunkSize gives it exactly this much usable space per chunk. A bigger
+    // physical chunk still works, it only means the space PDisk reserved for metadata is left unused.
+    constexpr ui64 ExpectedPDiskChunkSize = 128_MB;
 
     struct TConnectionToken {
         ui64 Low = 0;
@@ -134,6 +142,13 @@ namespace NKikimr::NDDisk {
             EvRegisterPersistentBufferResult,
             EvUnregisterPersistentBuffer,
             EvUnregisterPersistentBufferResult,
+            EvGetPersistentBufferRegistrationToken,
+            EvGetPersistentBufferRegistrationTokenResult,
+            EvTabletStatsBatch,
+            EvCollectTabletStats,
+            EvGetTabletStats,
+            EvTabletStats,
+            EvTabletStatsChanged,
         };
     };
 
@@ -505,8 +520,11 @@ struct TPersistentBufferFormat {
     // are saved in the header. Existing checksum-formatted records remain readable.
     // Kept last to preserve existing positional aggregate initialization.
     bool EnableChecksums = true;
-    // Registration age limit. Closed registrations are retained for twice this interval.
+    // Registration token lifetime on the PB monotonic clock.
+    // Closed registrations are retained for twice this interval.
     ui32 RegistrationTimeoutMilliseconds = 5000;
+    // Actor-wide admission limit; token exhaustion returns OVERLOADED.
+    ui32 MaxRegistrationTokens = 1024;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -541,12 +559,33 @@ struct TPersistentBufferFormat {
     struct TEvRegisterPersistentBufferResult;
     struct TEvUnregisterPersistentBufferResult;
 
+    struct TEvGetPersistentBufferRegistrationTokenResult;
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationToken) {
+        using TResult = TEvGetPersistentBufferRegistrationTokenResult;
+        TEvGetPersistentBufferRegistrationToken() = default;
+        explicit TEvGetPersistentBufferRegistrationToken(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationTokenResult) {
+        TEvGetPersistentBufferRegistrationTokenResult() = default;
+        TEvGetPersistentBufferRegistrationTokenResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
     DECLARE_DDISK_EVENT(RegisterPersistentBuffer) {
         using TResult = TEvRegisterPersistentBufferResult;
         TEvRegisterPersistentBuffer() = default;
-        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, TInstant timestamp) {
+        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, ui64 token) {
             creds.SerializeForRequest(Record.MutableCredentials());
-            Record.SetTimestampMicroseconds(timestamp.MicroSeconds());
+            Record.SetToken(token);
         }
     };
 
@@ -691,7 +730,8 @@ struct TPersistentBufferFormat {
 
         TEvReadResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
-                TRope data = {}, const std::vector<ui64>& checksums = {}) {
+                TRope data = {}, TConstArrayRef<ui64> checksums = {})
+        {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
@@ -972,8 +1012,11 @@ struct TPersistentBufferFormat {
         ui32 DiskOperationsInflight;
         ui32 PendingEvents;
         ui64 PerTabletStorageLimit;
+        ui64 TabletsTotal = 0;
+        ui64 TabletsOffset = 0;
         std::vector<TTabletInfo> TabletInfos;
-        // Keyed by (TabletId, DirectBlockGroupIndex), matching TPersistentBufferBarriersManager::GetBarriers().
+        // Keyed by (TabletId, DirectBlockGroupIndex). Unbounded, unfiltered requests return all
+        // barriers from GetBarriers(); limited or filtered requests include only returned namespaces.
         std::map<std::pair<ui64, ui8>, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
         std::vector<TOpStats> OpStats;
@@ -982,6 +1025,10 @@ struct TPersistentBufferFormat {
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
         bool DescribeFreeSpace = false;
         bool DescribeTablets = false;
+        ui64 TabletsOffset = 0;
+        // Zero returns all matching namespaces and ignores TabletsOffset.
+        ui32 TabletsLimit = 0;
+        std::optional<ui64> TabletIdFilter;
         TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
             : DescribeFreeSpace(describeFreeSpace)
             , DescribeTablets(describeTablets)

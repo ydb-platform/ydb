@@ -1,66 +1,21 @@
 (module
     (import "env" "memory" (memory i64 8 2097152))
-
-    ;; Static data lives below the default bump-heap base (65536 in
-    ;; DefaultRegistrySdkWast / sdk_stub). Marshalling malloc must not land here.
+    (import "env" "BridgeGetInt64" (func $get (param i64) (result i64)))
+    (import "env" "BridgeGetStringLen" (func $len (param i64) (result i64)))
+    (import "env" "BridgeIsNull" (func $null (param i64) (result i32)))
+    (import "env" "BridgeMakeInt64" (func $int (param i64) (result i64)))
+    (import "env" "BridgeMakeUint64" (func $uint (param i64) (result i64)))
+    ;; Below the default allocator break; must survive resident allocations.
     (data (i64.const 1024) "\08\07\06\05\04\03\02\01")
-
-    (type $t_add (func (param i64 i64 i64 i64)))
-    (type $t_strlen (func (param i64 i64 i64)))
-    (type $t_rodata_cookie (func (param i64 i64)))
-
-    (func $udf_add (type $t_add)
-        (param $context i64)
-        (param $result i64)
-        (param $left i64)
-        (param $right i64)
-
-        (i32.store8
-            (i64.add (local.get $result) (i64.const 2))
-            (i32.const 3))
-        (i64.store
-            (i64.add (local.get $result) (i64.const 8))
-            (i64.add
-                (i64.load (i64.add (local.get $left) (i64.const 8)))
-                (i64.load (i64.add (local.get $right) (i64.const 8)))))
-    )
-
-    (func $udf_strlen (type $t_strlen)
-        (param $context i64)
-        (param $result i64)
-        (param $value i64)
-
-        (if
-            (i32.eq
-                (i32.load8_u (i64.add (local.get $value) (i64.const 2)))
-                (i32.const 16))
-            (then
-                (i32.store8
-                    (i64.add (local.get $result) (i64.const 2))
-                    (i32.const 4))
-                (i64.store
-                    (i64.add (local.get $result) (i64.const 8))
-                    (i64.extend_i32_u
-                        (i32.load (i64.add (local.get $value) (i64.const 4))))))
-            (else
-                (i32.store8
-                    (i64.add (local.get $result) (i64.const 2))
-                    (i32.const 2))))
-    )
-
-    (func $udf_rodata_cookie (type $t_rodata_cookie)
-        (param $context i64)
-        (param $result i64)
-
-        (i32.store8
-            (i64.add (local.get $result) (i64.const 2))
-            (i32.const 3))
-        (i64.store
-            (i64.add (local.get $result) (i64.const 8))
-            (i64.load (i64.const 1024)))
-    )
-
-    (export "udf_add" (func $udf_add))
-    (export "udf_strlen" (func $udf_strlen))
-    (export "udf_rodata_cookie" (func $udf_rodata_cookie))
+    (func (export "udf_add") (param i64) (param $result i64) (param $left i64) (param $right i64)
+        (if (i32.or (call $null (local.get $left)) (call $null (local.get $right)))
+            (then (i64.store (local.get $result) (i64.const 0)))
+            (else (i64.store (local.get $result)
+                (call $int (i64.add (call $get (local.get $left)) (call $get (local.get $right))))))))
+    (func (export "udf_strlen") (param i64) (param $result i64) (param $value i64)
+        (if (call $null (local.get $value))
+            (then (i64.store (local.get $result) (i64.const 0)))
+            (else (i64.store (local.get $result) (call $uint (call $len (local.get $value)))))))
+    (func (export "udf_rodata_cookie") (param i64) (param $result i64)
+        (i64.store (local.get $result) (call $int (i64.load (i64.const 1024)))))
 )

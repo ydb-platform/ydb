@@ -126,6 +126,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
+        TBlockChecksums(),
         Bundle->GetSpan().GetTraceId(),
         [self = shared_from_this()]   //
         (const TDBGWriteBlocksToManyPBuffersResponse& response)
@@ -166,15 +167,11 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (IsQuorumReached()) {
-        ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
-        return;
-    }
-
-    SendAdditionalDirectWrites();
+    MaybeReplyOrNotifyBelated(completedWritesOfCurrentResponse);
+    MaybeSendAdditionalDirectWrites();
 }
 
-void TWriteRequestExecutor::SendAdditionalDirectWrites()
+void TWriteRequestExecutor::MaybeSendAdditionalDirectWrites()
 {
     if (IsReplied) {
         return;
@@ -183,7 +180,7 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
     LOG_TRACE(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s SendAdditionalDirectWrites %s",
+        "%s MaybeSendAdditionalDirectWrites %s",
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
@@ -219,7 +216,8 @@ void TWriteRequestExecutor::SendAdditionalDirectWrites()
 
 void TWriteRequestExecutor::SendDirectWriteRequestsToDesired(size_t count)
 {
-    if (IsReplied || !count) {
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
+    if (!count) {
         return;
     }
 
@@ -239,7 +237,8 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToDesired(size_t count)
 
 void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 {
-    if (IsReplied || !count) {
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
+    if (!count) {
         return;
     }
 
@@ -253,7 +252,7 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
         LOG_TRACE(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s SendAdditionalDirectWrites %s",
+            "%s SendDirectWriteRequestsToHandoffs %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str());
 
@@ -266,9 +265,7 @@ void TWriteRequestExecutor::SendDirectWriteRequestsToHandoffs(size_t count)
 
 void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
 {
-    if (IsReplied) {
-        return;
-    }
+    Y_DEBUG_ABORT_UNLESS(!IsReplied);
 
     LOG_DEBUG(
         *ActorSystem,
@@ -293,6 +290,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
         Bundle->GetPBufferKey(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
+        TBlockChecksums(),
         span ? span->GetTraceId() : NWilson::TTraceId());
 
     future.Subscribe(
@@ -317,15 +315,18 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (IsQuorumReached()) {
-            ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
-        }
+        MaybeReplyOrNotifyBelated(THostMask::MakeOne(host));
         return;
     }
 
     FailedWrites.Set(host);
     auto ender = TEndSpanWithError(std::move(span), response.Error);
+    MaybeSendReplacementDirectWrite(response.Error);
+}
 
+void TWriteRequestExecutor::MaybeSendReplacementDirectWrite(
+    const NProto::TError& error)
+{
     if (IsReplied) {
         return;
     }
@@ -337,8 +338,8 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s It is impossible to reach a quorum. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).Quote().c_str());
-        Reply(response.Error);
+            FormatError(error).Quote().c_str());
+        Reply(error);
         return;
     }
 
@@ -356,22 +357,26 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s All hand-offs attempts are over. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).Quote().c_str());
+            FormatError(error).Quote().c_str());
         return;
     }
 
     SendDirectWriteRequest(*candidates.First());
 }
 
-void TWriteRequestExecutor::ReplyOrNotifyBelated(
-    NProto::TError error,
+void TWriteRequestExecutor::MaybeReplyOrNotifyBelated(
     THostMask completedOnCurrentResponse)
 {
-    if (!IsReplied) {
-        Reply(std::move(error));
+    if (IsReplied) {
+        // A write completed after the reply is belated: its copy is on the
+        // PBuffer and has to be erased from there.
+        NotifyBelated(completedOnCurrentResponse);
         return;
     }
-    NotifyBelated(completedOnCurrentResponse);
+
+    if (IsQuorumReached()) {
+        Reply(MakeError(S_OK));
+    }
 }
 
 void TWriteRequestExecutor::Reply(NProto::TError error)
@@ -490,9 +495,13 @@ void TWriteRequestExecutor::OnHedgingTimeout()
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
+    if (IsReplied) {
+        return;
+    }
+
     switch (WriteMode) {
         case EWriteMode::IndirectWrite: {
-            SendAdditionalDirectWrites();
+            MaybeSendAdditionalDirectWrites();
             break;
         }
         case EWriteMode::DirectWrite: {
@@ -511,7 +520,11 @@ void TWriteRequestExecutor::OnRequestTimeout()
         LogTitle.GetWithTime().c_str(),
         ExtendedDebugState().c_str());
 
-    ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
+    if (IsReplied) {
+        return;
+    }
+
+    Reply(MakeError(E_TIMEOUT, "Write request timeout"));
 }
 
 bool TWriteRequestExecutor::IsQuorumReached() const
@@ -572,7 +585,7 @@ TWriteRequestExecutorPtr CreateWriteRequestExecutor(
         logTitle,
         vChunkConfig,
         std::move(directBlockGroup),
-        bundle);
+        std::move(bundle));
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

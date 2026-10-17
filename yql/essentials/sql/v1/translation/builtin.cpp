@@ -10,6 +10,7 @@
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
+#include <yql/essentials/core/sql_types/spark_functions.h>
 #include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -30,6 +31,44 @@
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
+
+namespace {
+
+TNodePtr ApplySparkBinding(TPosition pos, TStringBuf binding, const TVector<TNodePtr>& args) {
+    TVector<TNodePtr> applyArgs = {BuildBind(pos, "spark_module", TString(binding))};
+    applyArgs.insert(applyArgs.end(), args.begin(), args.end());
+    return new TCallNodeImpl(pos, "Apply", applyArgs);
+}
+
+TNodeResult BuildSparkAggregation(TPosition pos, TStringBuf name, TNodePtr input, EAggregateMode mode) {
+    const auto& function = NYql::NSpark::GetAggregateFunction(name);
+    if (!function.PreprocessorBinding.empty()) {
+        input = ApplySparkBinding(pos, function.PreprocessorBinding, {input});
+    }
+    TVector<TNodePtr> aggregates(Reserve(function.Arity));
+    for (ui32 index = 0; index < function.Arity; ++index) {
+        TNodePtr argument = function.Arity == 1
+                                ? input
+                                : new TCallNodeImpl(pos, "Nth", {input, BuildQuotedAtom(pos, ToString(index))});
+        TYqlAggregationArgs args = {
+            .FunctionName = TString(name),
+            .FactoryName = TStringBuilder() << function.YqlNames[index] << "_traits_factory",
+            .Type = function.YqlNames[index] == "count" ? COUNT : NORMAL,
+            .Mode = mode,
+            .Args = {argument},
+        };
+        auto aggregate = BuildYqlAggregation(pos, std::move(args));
+        if (!aggregate) {
+            return aggregate;
+        }
+        aggregates.push_back(aggregate->Get());
+    }
+    return TNonNull(function.PostprocessorBinding.empty()
+                        ? aggregates.front()
+                        : ApplySparkBinding(pos, function.PostprocessorBinding, aggregates));
+}
+
+} // namespace
 
 extern const char SubqueryExtendFor[] = "SubqueryExtendFor";
 extern const char SubqueryUnionAllFor[] = "SubqueryUnionAllFor";
@@ -2964,7 +3003,33 @@ struct TAggrFuncFactoryInfo {
 };
 
 using TAggrFuncFactoryCallbackMap = std::unordered_map<TString, TAggrFuncFactoryInfo, THash<TString>>;
-using TBuiltinFactoryCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>;
+struct TBuiltinFactoryCallback {
+    using TCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>;
+
+    template <class T>
+    TBuiltinFactoryCallback(T callback) // NOLINT(google-explicit-constructor)
+        : Callback(std::move(callback))
+    {
+    }
+
+    template <class T>
+    TBuiltinFactoryCallback(T callback, i32 minArgs, i32 maxArgs)
+        : Callback(std::move(callback))
+    {
+        if (maxArgs >= 0) {
+            ArgCount = maxArgs;
+            OptionalArgCount = maxArgs - minArgs;
+        }
+    }
+
+    TNodePtr operator()(TPosition pos, const TVector<TNodePtr>& args) const {
+        return Callback(pos, args);
+    }
+
+    TCallback Callback;
+    TMaybe<size_t> ArgCount;
+    TMaybe<size_t> OptionalArgCount;
+};
 
 struct TBuiltinFuncInfo {
     std::string_view CanonicalSqlName;
@@ -3015,7 +3080,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, errorText)));
         }
 
-        if (isYqlSelect) {
+        if (isYqlSelect && !isFactory) {
             TYqlAggregationArgs aggregation = {
                 .FunctionName = realFunctionName,
                 .FactoryName = factoryName,
@@ -3063,16 +3128,18 @@ TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) {
 
 template <typename TType>
 TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) {
-    return [minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
+    auto callback = [minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, minArgs, maxArgs, args);
     };
+    return {std::move(callback), minArgs, maxArgs};
 }
 
 template <typename TType>
 TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) {
-    return [name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
+    auto callback = [name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, minArgs, maxArgs, args);
     };
+    return {std::move(callback), minArgs, maxArgs};
 }
 
 template <typename TType>
@@ -3893,6 +3960,32 @@ TNodeResult BuildBuiltinFunc(
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
     }
 
+    if (ns == "spark") {
+        if (!ctx.EnsureAvailable(pos, NYql::NFeature::SparkTranslator)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+        const NYql::NSpark::TFunction* functionInfo = NYql::NSpark::FindFunction(lowerName);
+        if (!functionInfo || (!functionInfo->IsAggregate && functionInfo->BindingName.empty())) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << "Unknown Spark function: " << name)));
+        }
+        if (args.size() < functionInfo->MinArgs || args.size() > functionInfo->MaxArgs) {
+            return TNonNull(TNodePtr(new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
+                                                                               << functionInfo->MinArgs << " to " << functionInfo->MaxArgs << " arguments, but got: " << args.size())));
+        }
+        ctx.RequiredModules.emplace("spark_module", "/lib/yql/spark.yqls");
+        if (functionInfo->IsAggregate) {
+            if (!isYqlSelect) {
+                return TNonNull(TNodePtr(new TInvalidBuiltin(pos, "Spark aggregate functions require YqlSelect mode")));
+            }
+            if (aggMode == EAggregateMode::OverWindow || aggMode == EAggregateMode::OverWindowDistinct) {
+                ctx.Error(pos) << "Spark aggregate functions do not support OVER";
+                return std::unexpected(ESQLError::Basic);
+            }
+            return BuildSparkAggregation(pos, lowerName, args.front(), aggMode);
+        }
+        return TNonNull(ApplySparkBinding(pos, functionInfo->GetBindingName(args.size()), args));
+    }
+
     if (ns == "js") {
         ns = "javascript";
         nameSpace = "JavaScript";
@@ -4082,6 +4175,13 @@ TNodeResult BuildBuiltinFunc(
                 }
 
                 settings(label, item->GetLiteralValue());
+            } else if (label == "DisableStatistics") {
+                if (!item->IsLiteral() || item->GetLiteralType() != "Bool") {
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " disable statistics must be bool literal")));
+                }
+
+                settings(label, FromString<bool>(item->GetLiteralValue()));
             } else if (EqualToOneOf(label, "BlockstatDict", "ParseWithFat")) {
                 continue;
             } else {
@@ -4089,7 +4189,7 @@ TNodeResult BuildBuiltinFunc(
                     pos,
                     TStringBuilder()
                         << name << " got unsupported setting: " << label
-                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat")));
+                        << "; supported: Entities, EntitiesStrategy, Mode, DisableStatistics, BlockstatDict, ParseWithFat")));
             }
         }
 
@@ -4488,20 +4588,27 @@ TNodeResult BuildBuiltinFunc(
         } else {
             TStringBuilder b;
             b << "Unknown builtin: " << name;
-            auto simplePgFunc = simplePgFuncs.find(lowerName);
-            if (simplePgFunc != simplePgFuncs.end()) {
+            const NYql::NSpark::TFunction* sparkFunction = NYql::NSpark::FindFunction(lowerName);
+            const bool hasSparkAlias = sparkFunction && !sparkFunction->IsAggregate && !sparkFunction->BindingName.empty() && ctx.IsAvailable(NYql::NFeature::SparkTranslator);
+            const bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+            const bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
+            if (hasSparkAlias) {
+                b << ", consider using Spark::" << lowerName;
+                if (isAggregateFunc) {
+                    b << " or PgAgg::" << name;
+                } else if (isNormalFunc) {
+                    b << " or Pg::" << name;
+                }
+                b << " instead.";
+            } else if (auto simplePgFunc = simplePgFuncs.find(lowerName); simplePgFunc != simplePgFuncs.end()) {
                 b << ", consider using " << simplePgFunc->second.NativeFuncName << " function instead.";
                 b << " It's possible to use SimplePg::" << lowerName << " function as well but with some performance overhead.";
             } else if (auto it = missingFuncs.find(lowerName); it != missingFuncs.end()) {
                 b << ", consider using " << it->second.Suggestion << " function(s) instead.";
-            } else {
-                bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
-                bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
-                if (isAggregateFunc) {
-                    b << ", consider using PgAgg::" << name;
-                } else if (isNormalFunc) {
-                    b << ", consider using Pg::" << name;
-                }
+            } else if (isAggregateFunc) {
+                b << ", consider using PgAgg::" << name;
+            } else if (isNormalFunc) {
+                b << ", consider using Pg::" << name;
             }
 
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, b)));
@@ -4578,7 +4685,7 @@ TNodeResult BuildBuiltinFunc(
         }
     }
 
-    if (ns == "datetime2" && lowerName == "update") {
+    if (ns == "datetime2" && (lowerName == "update" || lowerName == "init" || lowerName == "init64")) {
         if (namedArgs) {
             TStructNode* castedNamedArgs = namedArgs->GetStructNode();
             Y_DEBUG_ABORT_UNLESS(castedNamedArgs);
@@ -4629,13 +4736,7 @@ TNodeResult BuildBuiltinFunc(
                              TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {}));
 }
 
-void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind, NYql::TLangVersion minLangVer, NYql::TLangVersion maxLangVer)>& callback) {
-    struct TFuncInfo {
-        TString Kind;
-        NYql::TLangVersion MinLangVer = NYql::UnknownLangVersion;
-        NYql::TLangVersion MaxLangVer = NYql::UnknownLangVersion;
-    };
-
+void EnumerateBuiltins(const std::function<void(std::string_view name, const TFuncInfo& info)>& callback) {
     const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>();
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
@@ -4647,6 +4748,8 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
         if (!info.CanonicalSqlName.empty()) {
             map[TString(info.CanonicalSqlName)] = {
                 .Kind = TString(info.Kind),
+                .ArgCount = info.Callback.ArgCount,
+                .OptionalArgCount = info.Callback.OptionalArgCount,
                 .MinLangVer = info.MinLangVer,
                 .MaxLangVer = info.MaxLangVer,
             };
@@ -4666,6 +4769,8 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     for (const auto& [key, info] : coreFuncs) {
         map[TString(info.Name)] = {
             .Kind = "Normal",
+            .ArgCount = info.MaxArgs,
+            .OptionalArgCount = info.MaxArgs - info.MinArgs,
         };
     }
 
@@ -4675,8 +4780,16 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
         };
     }
 
+    NYql::NSpark::EnumerateFunctions([&map](const TString& name, const TString& bindingName) {
+        if (!bindingName.empty()) {
+            map[TString("Spark::") + name] = {
+                .Kind = "Normal",
+            };
+        }
+    });
+
     for (const auto& [name, info] : map) {
-        callback(name, info.Kind, info.MinLangVer, info.MaxLangVer);
+        callback(name, info);
     }
 }
 

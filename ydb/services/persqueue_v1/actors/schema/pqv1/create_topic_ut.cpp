@@ -265,8 +265,9 @@ Y_UNIT_TEST(FederationRemoteCopyWithRemoteMirrorRule) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     EnableFederation(runtime);
+    setup->GetServer().AnnoyingClient->MkDir("/Root", "account");
 
-    const TString path = "/Root/PQ/rt3.dc2--account--remote-copy";
+    const TString path = "/Root/account/remote-copy-mirrored-from-dc2";
     const TString database = "/Root";
 
     Ydb::PersQueue::V1::CreateTopicRequest request;
@@ -275,6 +276,7 @@ Y_UNIT_TEST(FederationRemoteCopyWithRemoteMirrorRule) {
     auto& settings = *request.mutable_settings();
     FillBaseCreateSettings(settings);
     settings.set_client_write_disabled(true);
+    settings.mutable_attributes()->insert({"_federation_account", "account"});
     FillRemoteMirrorRule(settings);
 
     auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
@@ -299,8 +301,9 @@ Y_UNIT_TEST(FederationLocalDcMirrorWithRemoteMirrorRule) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
     EnableFederation(runtime);
+    setup->GetServer().AnnoyingClient->MkDir("/Root", "account");
 
-    const TString path = "/Root/PQ/rt3.dc1--account--local-mirror";
+    const TString path = "/Root/account/local-mirror";
     const TString database = "/Root";
 
     Ydb::PersQueue::V1::CreateTopicRequest request;
@@ -308,6 +311,7 @@ Y_UNIT_TEST(FederationLocalDcMirrorWithRemoteMirrorRule) {
 
     auto& settings = *request.mutable_settings();
     FillBaseCreateSettings(settings);
+    settings.mutable_attributes()->insert({"_federation_account", "account"});
     FillRemoteMirrorRule(settings);
 
     auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(

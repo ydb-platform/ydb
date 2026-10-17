@@ -163,7 +163,7 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
     } else {
         LOG_E(
             "Attempt to make the inflight counter below zero. Topic partition readCookie",
-            {"clientSideName", TopicConverter->GetClientsideName()},
+            {"topicPath", TopicConverter->GetPrimaryPath()},
                     {"partition",
             Partition},
                     {"requestCookie",

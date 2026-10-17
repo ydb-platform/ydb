@@ -1,6 +1,7 @@
 library("skiff_ext") {
   public_deps = [
     # "//library/cpp/skiff",
+    # "//library/cpp/yt/misc",
     # "//yt/yt/core",
   ]
 

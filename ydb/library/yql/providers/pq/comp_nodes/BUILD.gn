@@ -1,0 +1,14 @@
+library("comp_nodes") {
+  public_deps = [
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql",
+  ]
+
+  sources = [
+    "dq_pq_parsing_wrapper.cpp",
+    "yql_pq_factory.cpp",
+  ]
+}

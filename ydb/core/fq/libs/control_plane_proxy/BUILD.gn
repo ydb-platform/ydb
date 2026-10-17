@@ -2,7 +2,6 @@ library("actors") {
   public_deps = [
     "//contrib/libs/fmt",
     # "//library/cpp/monlib/dynamic_counters",
-    # "//ydb/core/fq/libs/actors/logging",
     "//ydb/core/fq/libs/common",
     "//ydb/core/fq/libs/compute/common",
     # "//ydb/core/fq/libs/config",
@@ -42,7 +41,6 @@ library("actors") {
 library("control_plane_proxy") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
-    "//ydb/core/fq/libs/actors/logging",
     "//ydb/core/fq/libs/config/protos",
     # "//ydb/core/fq/libs/shared_resources",
     # "//ydb/core/fq/libs/signer",

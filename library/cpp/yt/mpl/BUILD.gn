@@ -1,0 +1,5 @@
+group("mpl") {
+  public_deps = [
+    # "//library/cpp/yt/assert",
+  ]
+}

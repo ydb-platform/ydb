@@ -3,6 +3,7 @@ library("common") {
     # "//library/cpp/string_utils/parse_size",
     "//library/cpp/yson/node",
     # "//yql/essentials/ast",
+    # "//yql/essentials/core",
     "//yql/essentials/providers/common/config",
     # "//yql/essentials/public/udf",
     "//yt/cpp/mapreduce/interface",
@@ -12,6 +13,7 @@ library("common") {
     # "//library/cpp/json",
     "//library/cpp/regex/pcre",
     "//yql/essentials/providers/common/codec",
+    # "//yql/essentials/providers/common/provider",
     "//yql/essentials/utils/log",
     "//yt/cpp/mapreduce/common",
   ]

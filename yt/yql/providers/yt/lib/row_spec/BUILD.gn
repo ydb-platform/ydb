@@ -4,13 +4,13 @@ library("row_spec") {
     # "//yql/essentials/ast",
     # "//yql/essentials/core",
     # "//yql/essentials/core/expr_nodes_gen",
+    # "//yql/essentials/providers/common/codec",
     "//yql/essentials/providers/common/schema/expr",
   ]
 
   deps = [
     # "//yql/essentials/core/expr_nodes",
     # "//yql/essentials/core/issue",
-    # "//yql/essentials/providers/common/codec",
     "//yql/essentials/providers/common/provider",
     "//yql/essentials/providers/common/schema",
     "//yql/essentials/utils/log",

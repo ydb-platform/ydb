@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>

@@ -1,24 +1,25 @@
 library("blobs_reader") {
   public_deps = [
+    # "//library/cpp/retry",
+    # "//library/cpp/time_provider",
     "//ydb/core/protos",
     # "//ydb/core/tx/columnshard",
     "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/resource_subscriber",
-    # "//ydb/core/tx/columnshard:ev_ids",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/conclusion",
     "//ydb/library/signals",
   ]
 
   deps = [
+    # "//ydb/core/base",
     # "//ydb/core/tablet_flat",  # peerdir only
   ]
 
   sources = [
     "actor.cpp",
-    "events.cpp",
-    "read_coordinator.cpp",
     "task.cpp",
   ]
 }

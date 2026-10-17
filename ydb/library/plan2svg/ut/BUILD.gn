@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/xml/document",
+    "//ydb/library/plan2svg",
+  ]
+
+  sources = [ "plan2svg_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/plan2svg" ]
+
+  data = [ "data/" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

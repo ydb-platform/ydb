@@ -1,11 +1,11 @@
 YQL_LIBRARY()
 
 SRCS(
-    kqp_opt.cpp
+    kqp_opt.cpp  # gn: helpers
     kqp_opt_build_phy_query.cpp
     kqp_opt_build_txs.cpp
     kqp_opt_effects.cpp
-    kqp_opt_generated_columns.cpp
+    kqp_opt_generated_columns.cpp  # gn: helpers
     kqp_opt_kql.cpp
     kqp_opt_phase.cpp
     kqp_opt_phy_check.cpp
@@ -14,12 +14,13 @@ SRCS(
     kqp_query_blocks_transformer.cpp
     kqp_query_plan.cpp
     kqp_statistics_transformer.cpp
-    kqp_column_statistics_utils.cpp
+    kqp_column_statistics_utils.cpp  # gn: helpers
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
     kqp_opt_hash_func_propagate_transformer.cpp
     kqp_type_ann.cpp
 )
+# gn: helpers headers kqp_opt.h kqp_opt_generated_columns.h kqp_opt_impl.h kqp_column_statistics_utils.h
 
 PEERDIR(
     ydb/core/kqp/common
@@ -28,6 +29,7 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/physical/effects
     ydb/core/kqp/opt/rbo
     ydb/library/mkql_proto
     ydb/library/yql/dq/common
@@ -40,7 +42,10 @@ PEERDIR(
     ydb/library/formats/arrow/protos
     ydb/library/json_index
     yql/essentials/providers/common/mkql
+    yql/essentials/core/services
+    yql/essentials/types/uuid
 )
+# gn: peerdir ydb/core/statistics/service:service_id
 
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 

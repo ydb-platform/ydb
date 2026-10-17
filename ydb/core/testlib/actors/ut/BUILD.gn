@@ -14,10 +14,7 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/testlib/actors" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

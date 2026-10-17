@@ -27,7 +27,7 @@ SRCS(
     blobstorage_syncfull.h
     blobstorage_syncfullhandler.cpp
     blobstorage_syncfullhandler.h
-    blobstorage_takedbsnap.h
+    blobstorage_takedbsnap.h  # gn: into ydb/core/blobstorage/vdisk/hulldb
     skeleton_block_and_get.cpp
     skeleton_block_and_get.h
     skeleton_capturevdisklayout.h

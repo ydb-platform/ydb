@@ -1,0 +1,15 @@
+library("common") {
+  public_deps = [
+    # "//ydb/public/lib/scheme_types",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/public/decimal",
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "stable_pickle.cpp" ]
+}

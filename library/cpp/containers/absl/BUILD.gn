@@ -1,0 +1,3 @@
+group("absl") {
+  public_deps = [ "//contrib/restricted/abseil-cpp" ]
+}

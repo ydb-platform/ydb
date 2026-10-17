@@ -13,7 +13,7 @@ library("base") {
     # "//ydb/public/lib/deprecated/kicli",
     # "//ydb/public/lib/scheme_types",
     "//ydb/public/sdk/cpp/src/client/proto",
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/aligned_page_pool",
   ]
 
   deps = [
@@ -25,6 +25,7 @@ library("base") {
     "//library/cpp/string_utils/base64",
     "//library/cpp/unified_agent_client",
     # "//ydb/core/base",
+    # "//ydb/core/persqueue/public/mlp",
     # "//ydb/library/http_proxy/authorization",  # peerdir only
     "//ydb/library/protobuf_printer",
   ]
@@ -42,6 +43,7 @@ library("base") {
     "queue_id.cpp",
     "run_query.cpp",
     "secure_protobuf_printer.cpp",
+    "utils.cpp",
   ]
 
   serialize_enum_headers = [

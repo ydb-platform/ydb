@@ -1093,6 +1093,7 @@ public:
     TTabletId ResolveHive(TShardIdx shardIdx) const;
     TShardIdx GetShardIdx(TTabletId tabletId) const;
     TShardIdx MustGetShardIdx(TTabletId tabletId) const;
+    std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards) const;
     TTabletTypes::EType GetTabletType(TTabletId tabletId) const;
 
     struct TTxMonitoring;

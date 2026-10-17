@@ -1,0 +1,7 @@
+library("impl") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/tvm/interface",
+  ]
+
+  sources = [ "yql_yt_fmr_no_tvm.cpp" ]
+}

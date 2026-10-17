@@ -1,10 +1,11 @@
 library("actors") {
   public_deps = [
     # "//library/cpp/monlib/encode",
-    # "//ydb/library/actors/core",
+    "//ydb/library/actors/core",
     # "//ydb/library/actors/http",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/providers/common/token_accessor/client",
+    # "//ydb/library/yql/providers/solomon/common",
     "//ydb/library/yql/providers/solomon/proto",
     "//ydb/library/yql/utils/actors",
     # "//ydb/public/sdk/cpp/src/client/types/credentials",
@@ -18,7 +19,6 @@ library("actors") {
     "//library/cpp/monlib/encode/json",
     "//library/cpp/protobuf/util",
     # "//library/cpp/retry",
-    # "//ydb/core/base",
     "//ydb/library/services",
     # "//ydb/library/yql/dq/actors/common",
     "//ydb/library/yql/dq/actors/protos",
@@ -26,6 +26,7 @@ library("actors") {
     # "//ydb/library/yql/providers/solomon/scheme",
     "//ydb/library/yql/providers/solomon/solomon_accessor/client",
     # "//ydb/library/yql/utils/actor_log",
+    # "//ydb/library/yverify_stream",
     # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/minikql:alloc",

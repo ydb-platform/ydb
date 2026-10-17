@@ -1,0 +1,62 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "data/throw_with_dwarf.wasm"
+      key = "/throw_with_dwarf.wasm"
+    },
+  ]
+}
+
+unittest_executable("ut") {
+  deps = [
+    ":ut_resources",
+    "//library/cpp/digest/md5",
+    "//library/cpp/json",
+    "//library/cpp/resource",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/library/wasm/api",
+    "//ydb/library/wasm/engine",  # peerdir only
+    "//ydb/public/lib/udf/manifest",
+    "//ydb/services/udf_store",
+    "//ydb/services/udf_store/wasm",
+    "//ydb/services/udf_store/wasm/object_framework",
+    "//yql/essentials/ast",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/minikql:terminator",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/services/udf_store/blob_chunks.cpp",
+    "//ydb/services/udf_store/udf_name.cpp",
+    "//ydb/services/udf_store/wasm/manifest.cpp",
+    "blob_chunks_ut.cpp",
+    "bridge_abi_ut.cpp",
+    "bridge_dict_ut.cpp",
+    "bridge_leak_ut.cpp",
+    "bridge_node_table_ut.cpp",
+    "bridge_typecheck_ut.cpp",
+    "compartment_manager_ut.cpp",
+    "exact_bridge_runtime_ut.cpp",
+    "manifest_ut.cpp",
+    "object_framework_ut.cpp",
+    "objects_abi_ut.cpp",
+    "shared_ctx_ut.cpp",
+    "throw_exception_ut.cpp",
+    "udf_name_ut.cpp",
+    "with_helpers_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

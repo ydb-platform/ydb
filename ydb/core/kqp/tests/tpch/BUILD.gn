@@ -162,10 +162,7 @@ linked_executable("tpch") {
   ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

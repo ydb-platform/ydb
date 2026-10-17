@@ -14,7 +14,9 @@ expand_template("stg") {
   # cwd it is started from (templates_dir).
   output_dir = "$target_gen_dir/org/antlr/v4/tool/templates/codegen/Cpp"
   substitutions = [
+    "ANTLR_AST_NAME=TSQLv1ParserAST",
     "ANTLR_PACKAGE_NAME=NSQLv1Generated",
+    "ANTLR_PARSER_NAME=SQLv1Antlr4Parser",
     "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
     "PROTOBUF_SUFFIX_PATH=.pb.h",
   ]

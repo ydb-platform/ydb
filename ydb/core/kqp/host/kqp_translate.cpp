@@ -329,7 +329,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         sqlVersion = 1;
         keepInCache = stmtParseInfo.KeepInCache;
         commandTagName = stmtParseInfo.CommandTagName;
-        return std::move(ast);
+        return ast;
     } else {
         sqlVersion = {};
         deprecatedSQL = true;

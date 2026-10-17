@@ -68,7 +68,7 @@ inline void SendWithUndeliveryTracking(
         NActors::IEventHandle::FlagForwardOnNondelivery,    // flags
         cookie,  // cookie
         &ctx.SelfID,    // forwardOnNondelivery
-        std::move(span.GetTraceId())
+        span.GetTraceId()
     );
 
     span.Event("SendRequest");
@@ -287,7 +287,7 @@ public:
         requestCallbacks.NotifyCompleted = std::move(notifyTestCompleted);
         requestCallbacks.Write = std::move(sendWriteRequest);
 
-        return std::move(requestCallbacks);
+        return requestCallbacks;
     }
 
     void RunTest(const TActorContext& ctx) {
@@ -305,7 +305,7 @@ public:
                 NYdb::NBS::NBlockStore::NLoadTest::CreateArtificialRequestGenerator(logging, RangeTest),
                 RangeTest.GetIoDepth(),
                 TestContext.ShouldStop,
-                std::move(GetLoadTestCallbacks()),
+                GetLoadTestCallbacks(),
                 reinterpret_cast<const void*>(&ctx));
             TestRunner->Start();
         } catch (std::exception& e) {

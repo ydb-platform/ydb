@@ -2,10 +2,11 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
-    "//ydb/core/fq/libs/actors/logging",
+    "//ydb/core/fq/libs/config/protos",
     "//ydb/core/fq/libs/control_plane_config",
     "//ydb/core/fq/libs/control_plane_proxy",
     "//ydb/core/fq/libs/control_plane_proxy/events",
+    "//ydb/core/fq/libs/control_plane_proxy:actors",
     "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
     "//ydb/core/fq/libs/control_plane_storage/events",
     "//ydb/core/fq/libs/control_plane_storage:service_id",
@@ -23,9 +24,13 @@ unittest_executable("ut") {
     "//ydb/library/actors/core",
     "//ydb/library/folder_service",
     "//ydb/library/folder_service/mock",
+    "//ydb/public/api/protos",
   ]
 
-  sources = [ "control_plane_proxy_ut.cpp" ]
+  sources = [
+    "control_plane_proxy_ut.cpp",
+    "query_utils_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/fq/libs/control_plane_proxy" ]
 
@@ -33,6 +38,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -1,4 +1,6 @@
 PROTO_LIBRARY(yaml-config-protos)
+
+# gn: move into parent
 PROTOC_FATAL_WARNINGS()
 
 SRCS(

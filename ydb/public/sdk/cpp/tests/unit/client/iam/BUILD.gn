@@ -1,0 +1,25 @@
+gtest_executable("iam") {
+  deps = [
+    "//contrib/libs/grpc",  # peerdir only
+    "//contrib/restricted/googletest/googletest",
+    "//library/cpp/http/server",  # peerdir only
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/testing/common",  # peerdir only
+    "//ydb/public/api/client/yc_public/iam",
+    "//ydb/public/sdk/cpp/src/client/iam",
+    "//ydb/public/sdk/cpp/src/client/iam:common",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/status",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/issue",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/time",  # peerdir only
+    "//ydb/public/sdk/cpp/tests/common/iam_mocks",
+  ]
+
+  sources = [
+    "grpc_iam_ut.cpp",
+    "http_iam_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

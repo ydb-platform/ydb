@@ -11,6 +11,7 @@ library("recovery") {
     # "//contrib/libs/protobuf",
     # "//ydb/core/blobstorage/base",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
     # "//ydb/core/protos",  # peerdir only
   ]
 

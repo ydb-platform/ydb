@@ -1,0 +1,8 @@
+library("actors") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  sources = [
+    "helpers.cpp",
+    "poison_pill_helper.cpp",
+  ]
+}

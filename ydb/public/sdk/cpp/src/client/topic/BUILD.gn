@@ -5,6 +5,7 @@ library("_self") {
     # "//library/cpp/retry",
     "//ydb/public/api/protos",
     # "//ydb/public/sdk/cpp/src/client/common_client",
+    # "//ydb/public/sdk/cpp/src/client/driver",
     "//ydb/public/sdk/cpp/src/client/scheme",
     # "//ydb/public/sdk/cpp/src/client/types",
     # "//ydb/public/sdk/cpp/src/client/types/exceptions",
@@ -16,7 +17,6 @@ library("_self") {
     # "//library/cpp/streams/zstd",  # peerdir only
     # "//ydb/public/api/grpc",  # peerdir only
     # "//ydb/public/api/grpc/draft",  # peerdir only
-    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
   ]
 
@@ -25,6 +25,7 @@ library("_self") {
   serialize_enum_headers = [
     "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h",
     "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h",
+    "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h",
     "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h",
     "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h",
   ]
@@ -36,7 +37,6 @@ group("topic") {
     # "//library/cpp/streams/zstd",  # peerdir only
     # "//ydb/public/api/grpc",  # peerdir only
     # "//ydb/public/api/grpc/draft",  # peerdir only
-    # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/topic/codecs",  # peerdir only

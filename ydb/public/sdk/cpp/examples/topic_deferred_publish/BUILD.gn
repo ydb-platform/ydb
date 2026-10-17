@@ -1,0 +1,7 @@
+linked_executable("topic_deferred_publish") {
+  deps = [ "//ydb/public/sdk/cpp/src/client/topic" ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

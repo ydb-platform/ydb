@@ -381,4 +381,21 @@ void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
 #endif
 }
 
+const TKikimrTableDescription& GetTableData(const TKikimrTablesData& tablesData,
+    TStringBuf cluster, TStringBuf table)
+{
+    const auto& tableData = tablesData.ExistingTable(cluster, table);
+    YQL_ENSURE(tableData.Metadata);
+
+    return tableData;
+}
+
+TIntrusivePtr<TKikimrTableMetadata> GetIndexMetadata(const TKqlReadTableIndex& read,
+    const TKikimrTablesData& tables, TStringBuf cluster)
+{
+    const auto& tableDesc = GetTableData(tables, cluster, read.Table().Path());
+    const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(read.Index().Value());
+    return indexMeta;
+}
+
 } // namespace NKikimr::NKqp::NOpt

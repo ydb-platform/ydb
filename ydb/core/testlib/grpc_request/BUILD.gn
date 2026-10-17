@@ -1,0 +1,18 @@
+library("grpc_request") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/ydb_issue",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/testlib",  # peerdir only
+  ]
+
+  sources = [ "grpc_request.cpp" ]
+}

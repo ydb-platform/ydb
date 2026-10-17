@@ -1,0 +1,3 @@
+library("flags") {
+  sources = [ "flags.cpp" ]
+}

@@ -339,7 +339,7 @@ namespace NKikimr::NTable::NPage {
                 TString key = std::move(Keys.front());
                 KeysSize -= key.size();
                 Keys.pop_front();
-                return std::move(key);
+                return key;
             }
 
             void PushChild(TChildT child) {

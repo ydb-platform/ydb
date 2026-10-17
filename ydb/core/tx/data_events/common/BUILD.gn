@@ -6,7 +6,7 @@ library("common") {
     "//ydb/library/signals",
     "//ydb/library/yverify_stream",
     "//ydb/public/api/protos",
-    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [

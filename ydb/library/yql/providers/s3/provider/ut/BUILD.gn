@@ -18,7 +18,7 @@ unittest_executable("ut") {
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg_dummy",
   ]

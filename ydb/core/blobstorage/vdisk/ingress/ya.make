@@ -3,6 +3,7 @@ LIBRARY()
 PEERDIR(
     library/cpp/lwtrace
     ydb/core/base
+    ydb/core/blobstorage/groupinfo
     ydb/core/protos
 )
 
@@ -11,6 +12,7 @@ SRCS(
     blobstorage_ingress.h
     blobstorage_ingress_matrix.cpp
     blobstorage_ingress_matrix.h
+    blobstorage_ingress_partlayout.cpp
     defs.h
 )
 

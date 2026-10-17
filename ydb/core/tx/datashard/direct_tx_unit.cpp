@@ -68,7 +68,7 @@ public:
             return EExecutionStatus::Continue;
         }
 
-        op->ChangeRecords() = std::move(tx->GetCollectedChanges());
+        op->ChangeRecords() = tx->GetCollectedChanges();
 
         DataShard.SysLocksTable().ApplyLocks();
         DataShard.SubscribeNewLocks(ctx);

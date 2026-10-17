@@ -1,12 +1,18 @@
 library("download") {
+  public_deps = [ "//library/cpp/string_utils/parse_size" ]
+
   deps = [
-    # "//contrib/libs/protobuf",
+    "//contrib/libs/protobuf",
     "//library/cpp/protobuf/util",
+    "//library/cpp/streams/special",
     "//yql/essentials/core/file_storage/proto",
+    "//yql/essentials/utils",
   ]
 
   sources = [
     "download_config.cpp",
+    "download_limiter.cpp",
+    "download_output_file_stream.cpp",
     "download_stream.cpp",
   ]
 }

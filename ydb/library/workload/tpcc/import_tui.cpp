@@ -163,7 +163,7 @@ Component TImportTui::BuildComponent() {
     try {
         // Main layout
         return Container::Vertical({
-            Renderer([=]{ return BuildUpperPart(); }),
+            Renderer([=, this]{ return BuildUpperPart(); }),
             LogsScroller(LogBackend),
         });
     } catch (const std::exception& ex) {

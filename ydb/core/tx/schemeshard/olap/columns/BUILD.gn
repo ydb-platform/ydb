@@ -9,11 +9,11 @@ library("columns") {
   ]
 
   deps = [
-    # "//ydb/core/base",
+    # "//ydb/core/formats/arrow/accessor/common",
     "//ydb/core/scheme",
+    # "//ydb/core/tx/schemeshard",
     "//yql/essentials/minikql",
     # "//yql/essentials/parser/pg_wrapper",
-    "//yql/essentials/parser/pg_wrapper/interface",
   ]
 
   sources = [

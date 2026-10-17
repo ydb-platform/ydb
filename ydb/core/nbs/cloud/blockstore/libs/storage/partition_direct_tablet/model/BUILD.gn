@@ -1,0 +1,7 @@
+library("model") {
+  public_deps = [
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+  ]
+
+  sources = [ "touched_vchunks.cpp" ]
+}

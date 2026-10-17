@@ -1,0 +1,34 @@
+library("lookup_actor") {
+  public_deps = [
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/control/lib",  # peerdir only
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/actors/core",
+    # "//ydb/library/mkql_proto",
+    # "//ydb/library/yql/dq/actors",
+    # "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/core",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "kikimr_lookup_actor.cpp",
+    "kikimr_lookup_factories.cpp",
+  ]
+}

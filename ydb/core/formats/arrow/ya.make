@@ -13,6 +13,7 @@ PEERDIR(
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber
 )
+# gn: peerdir yql/essentials/public/issue/protos
 
 SRCS(
     arrow_batch_builder.cpp

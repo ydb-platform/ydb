@@ -15,6 +15,7 @@ SRCS(
     tx_init_schema.cpp
     tx_register_worker.cpp
 )
+# gn: events headers events.h
 
 PEERDIR(
     ydb/core/base

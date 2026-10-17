@@ -1,0 +1,64 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/program",
+    "//ydb/core/tx/columnshard/blobs_action",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action/counters",  # peerdir only
+    "//ydb/core/tx/columnshard/column_fetching",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_accessor",
+    "//ydb/core/tx/columnshard/data_accessor/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/data_sharing/manager",  # peerdir only
+    "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/reader/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/common",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor",
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates",
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/engines/scheme/abstract",
+    "//ydb/core/tx/columnshard/engines/scheme/common",
+    "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    "//ydb/core/tx/columnshard/engines/scheme/versions",
+    "//ydb/core/tx/columnshard/engines/storage/indexes",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes/bits_storage",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/bloom",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
+    "//ydb/core/tx/columnshard/splitter",  # peerdir only
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/conveyor_composite/common/config",
+    "//ydb/core/tx/conveyor_composite/service",
+    "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/core/tx/general_cache/usage",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/services",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "ut_filters.cpp",
+    "ut_index_memory.cpp",
+    "ut_manager.cpp",
+  ]
+
+  include_dirs =
+      [ "//ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

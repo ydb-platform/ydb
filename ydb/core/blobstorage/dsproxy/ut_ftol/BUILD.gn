@@ -10,11 +10,13 @@ unittest_executable("ut_ftol") {
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/ut_vdisk/lib",
     "//ydb/core/scheme",
-    "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/core",
     "//ydb/library/actors/protos",
     "//yql/essentials/minikql",
     "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/invoke_builtins/llvm16",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
   sources = [ "dsproxy_fault_tolerance_ut.cpp" ]
@@ -23,10 +25,10 @@ unittest_executable("ut_ftol") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
-    "yt_codegen=llvm16",
   ]
 
   configs = [ ":ut_ftol_private_config" ]

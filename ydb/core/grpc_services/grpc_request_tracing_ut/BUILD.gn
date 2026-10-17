@@ -1,0 +1,26 @@
+unittest_executable("grpc_request_tracing_ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/counters",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/wilson:test_util",
+  ]
+
+  sources = [ "grpc_request_tracing_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/grpc_services" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

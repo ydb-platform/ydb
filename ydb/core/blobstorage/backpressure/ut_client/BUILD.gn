@@ -3,14 +3,14 @@ unittest_executable("ut_client") {
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/blobstorage/backpressure",
-    "//ydb/core/blobstorage/base",  # peerdir only
-    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/vdisk",  # peerdir only
     "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/testlib/basics",
     "//ydb/core/tx/scheme_board",  # peerdir only
     "//ydb/core/util/actorsys_test",
     "//ydb/library/actors/core",
-    "//ydb/library/actors/interconnect/mock",  # peerdir only
+    "//ydb/library/actors/interconnect",  # peerdir only
     "//yql/essentials/public/udf/service/stub",  # peerdir only
   ]
 
@@ -19,7 +19,9 @@ unittest_executable("ut_client") {
   link_select = [
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
   ]

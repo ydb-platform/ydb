@@ -1,0 +1,11 @@
+linked_executable("metric_buffer_benchmark") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/metrics",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

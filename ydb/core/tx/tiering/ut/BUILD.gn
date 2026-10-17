@@ -11,6 +11,7 @@ unittest_executable("ut") {
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard/blobs_action/tier",
     "//ydb/core/tx/columnshard/hooks/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/schemeshard",
@@ -21,9 +22,10 @@ unittest_executable("ut") {
     "//ydb/core/wrappers:ut_helpers",
     "//ydb/library/accessor",
     "//ydb/library/actors/core",
-    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/lib/yson_value",
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/services/metadata",
+    "//ydb/services/metadata/abstract",
     "//ydb/services/metadata/manager",
   ]
 
@@ -38,6 +40,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

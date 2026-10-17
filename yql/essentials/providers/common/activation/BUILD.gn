@@ -1,7 +1,10 @@
 library("activation") {
+  public_deps = [ "//yql/essentials/core/credentials" ]
+
   deps = [
     "//library/cpp/svnversion",
     "//yql/essentials/providers/common/proto",
+    "//yql/essentials/utils",
   ]
 
   sources = [ "yql_activation.cpp" ]

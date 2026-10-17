@@ -11,20 +11,21 @@ library("client") {
     # "//library/cpp/iterator",
     # "//library/cpp/json",
     "//library/cpp/sighandler",
+    "//library/cpp/string_utils/base64",
     # "//library/cpp/threading/blocking_queue",
     # "//library/cpp/threading/future",
     # "//library/cpp/type_info",
     # "//library/cpp/yson",
     # "//library/cpp/yson/node",
     # "//library/cpp/yt/assert",
-    "//library/cpp/yt/threading",
+    # "//library/cpp/yt/system",
     "//yt/cpp/mapreduce/http_client",
     "//yt/cpp/mapreduce/interface/logging",
     "//yt/cpp/mapreduce/io",
     # "//yt/cpp/mapreduce/rpc_client",  # peerdir only
     "//yt/yt/core",
-    "//yt/yt/core/http",
-    "//yt/yt/core/https",
+    "//yt/yt/core/http",  # peerdir only
+    "//yt/yt/core/https",  # peerdir only
   ]
 
   sources = [
@@ -44,6 +45,7 @@ library("client") {
     "operation_helpers.cpp",
     "operation_preparer.cpp",
     "operation_tracker.cpp",
+    "pack_jobstate.cpp",
     "partition_reader.cpp",
     "prepare_operation.cpp",
     "py_helpers.cpp",

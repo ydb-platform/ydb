@@ -6,6 +6,7 @@ library("persqueue_v1") {
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/grpc_services:topic_rpc",
     # "//ydb/core/mind/address_classification",
+    # "//ydb/core/persqueue/common",
     # "//ydb/core/persqueue/public/cluster_tracker",
     # "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
@@ -13,36 +14,42 @@ library("persqueue_v1") {
     "//ydb/public/api/grpc/draft",
     "//ydb/public/api/protos",
     "//ydb/services/persqueue_v1/actors",
+    "//ydb/services/persqueue_v1/actors/schema/topic",
   ]
 
   deps = [
+    # "//contrib/libs/protobuf",
     # "//library/cpp/containers/disjoint_interval_tree",  # peerdir only
     # "//library/cpp/json",  # peerdir only
     # "//ydb/core/base",
     # "//ydb/core/kqp/common",  # peerdir only
     # "//ydb/core/kqp/common/events",  # peerdir only
     # "//ydb/core/kqp/common/simple",  # peerdir only
+    "//ydb/core/persqueue/deferred_publish",
     # "//ydb/core/persqueue/events",  # peerdir only
     # "//ydb/core/persqueue/public/codecs",  # peerdir only
     # "//ydb/core/persqueue/writer",  # peerdir only
-    # "//ydb/core/protos",  # peerdir only
+    "//ydb/core/protos",
     # "//ydb/core/tx/scheme_board",
     # "//ydb/core/ydb_convert",  # peerdir only
-    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/aclib",
     # "//ydb/library/cloud_permissions",
     # "//ydb/library/persqueue/topic_parser",  # peerdir only
     # "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",  # peerdir only
     # "//ydb/services/lib/actors",  # peerdir only
     # "//ydb/services/lib/sharding",  # peerdir only
+    "//ydb/services/persqueue_v1/actors/schema/pqv1",
   ]
 
   sources = [
+    "//ydb/core/grpc_services/rpc_topic_deferred_publish.cpp",
     "grpc_pq_read.cpp",
     "grpc_pq_schema.cpp",
     "grpc_pq_write.cpp",
     "persqueue.cpp",
     "services_initializer.cpp",
     "topic.cpp",
+    "topic_deferred_publish.cpp",
   ]
 
   link_slot_provides = [ "topic_rpc" ]

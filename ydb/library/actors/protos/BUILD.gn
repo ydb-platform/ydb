@@ -1,8 +1,12 @@
 protobuf_library("protos") {
+  public_deps = [ "//ydb/public/api/protos/annotations" ]
+
   sources = [
     "actors.proto",
     "interconnect.proto",
     "services_common.proto",
     "unittests.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

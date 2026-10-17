@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 PEERDIR(
     ydb/core/blobstorage/vdisk/hulldb/base
     ydb/core/blobstorage/vdisk/hulldb/generic

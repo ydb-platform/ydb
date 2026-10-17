@@ -38,8 +38,8 @@ SRCS(
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
     flat_bio_actor.cpp
-    flat_executor_recovery.cpp
-    flat_executor_recovery.h
+    flat_executor_recovery.cpp  # gn: into ydb/core/engine/minikql
+    flat_executor_recovery.h  # gn: into ydb/core/engine/minikql
     flat_executor_snapshot.cpp
     flat_executor_tx_env.cpp
     flat_executor_tx_env.h

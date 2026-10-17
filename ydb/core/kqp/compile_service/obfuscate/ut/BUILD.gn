@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/compile_service/obfuscate",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "obfuscate_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/compile_service/obfuscate" ]
+
+  data = [ "data/" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

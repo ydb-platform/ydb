@@ -6,7 +6,7 @@ library("abstract") {
   ]
 
   deps = [
-    # "//ydb/core/tx/columnshard/engines/scheme",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",  # peerdir only
   ]
 
   sources = [

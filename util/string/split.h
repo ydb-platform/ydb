@@ -502,7 +502,7 @@ namespace NStringSplitPrivate {
     };
 
     // reserve an address that never aliases with user-provided strings
-    alignas(wchar32) Y_HIDDEN extern const char SPLITTER_EMPTY_SENTINEL;
+    alignas(wchar32) extern const char SPLITTER_EMPTY_SENTINEL;
 
     template <>
     struct TIteratorStateTokenCounter<true> {

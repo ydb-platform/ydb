@@ -1,13 +1,13 @@
 protobuf_library("protos") {
-  public_deps = [ "//ydb/core/nbs/cloud/storage/core/protos" ]
-
-  deps = [
-    # "//library/cpp/lwtrace/protos",  # peerdir only
+  public_deps = [
+    "//library/cpp/lwtrace/protos",
+    "//ydb/core/nbs/cloud/storage/core/protos",
   ]
 
   sources = [
     "headers.proto",
     "io.proto",
+    "partition.proto",
   ]
 
   extra_plugins = [

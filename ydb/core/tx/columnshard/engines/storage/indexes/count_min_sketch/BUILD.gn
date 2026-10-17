@@ -1,6 +1,5 @@
 library("count_min_sketch") {
   public_deps = [
-    "//ydb/core/tx/columnshard/engines/scheme",
     "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
   ]
@@ -20,7 +19,6 @@ library("count_min_sketch") {
 
   sources = [
     "constructor.cpp",
-    "index_info_ext.cpp",
     "meta.cpp",
   ]
 }

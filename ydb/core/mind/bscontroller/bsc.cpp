@@ -1448,11 +1448,6 @@ void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::T
 } // NKikimr
 
 template<>
-void Out<NKikimr::NBsController::TPDiskId>(IOutputStream &str, const NKikimr::NBsController::TPDiskId &value) {
-    str << value.ToString();
-}
-
-template<>
 void Out<NKikimr::NBsController::TVSlotId>(IOutputStream &str, const NKikimr::NBsController::TVSlotId &value) {
     str << value.ToString();
 }

@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     erasure.cpp
     erasure.h
-    erasure_perf_test.cpp
     erasure_split.cpp
     erasure_restore.cpp
 )

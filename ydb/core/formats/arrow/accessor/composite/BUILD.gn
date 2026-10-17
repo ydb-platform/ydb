@@ -1,0 +1,14 @@
+library("composite") {
+  public_deps = [
+    "//ydb/core/formats/arrow",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/common",  # peerdir only
+  ]
+
+  sources = [ "accessor.cpp" ]
+}

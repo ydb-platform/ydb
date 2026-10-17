@@ -1,0 +1,28 @@
+linked_executable("hash_test") {
+  deps = [
+    "//contrib/restricted/cityhash-1.0.2",
+    "//library/cpp/getopt",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/crypto:chacha_512",
+    "//ydb/library/actors/util",
+    "//ydb/tests/hash_test/xxHash",
+  ]
+
+  sources = [
+    "bench.cpp",
+    "func.cpp",
+    "kernel_chacha.cpp",
+    "kernel_chacha512.cpp",
+    "kernel_chacha_vec.cpp",
+    "kernel_city.cpp",
+    "kernel_mem.cpp",
+    "kernel_mem_avx2.cpp",
+    "kernel_xxh_avx2.cpp",
+    "kernel_xxh_scalar.cpp",
+    "kernel_xxh_sse2.cpp",
+    "main.cpp",
+    "variants.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

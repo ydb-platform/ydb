@@ -1,8 +1,8 @@
 library("common") {
   public_deps = [
+    ":types",
     "//contrib/libs/openssl",
     # "//contrib/libs/protobuf",
-    "//library/cpp/json",
     "//library/cpp/lwtrace",
     "//library/cpp/string_utils/base64",
     "//ydb/core/base",
@@ -24,17 +24,16 @@ library("common") {
     # "//ydb/core/scheme_types",
     # "//ydb/core/tx/data_events",
     # "//ydb/core/tx/datashard",
+    "//ydb/core/tx/long_tx_service/public",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/sharding",
     # "//ydb/core/util",
     # "//ydb/library/aclib",
     "//ydb/library/actors/core",
-    # "//ydb/library/mkql_proto",
     "//ydb/library/mkql_proto/protos",
     "//ydb/library/services",
     "//ydb/library/yql/dq/actors",
     "//ydb/public/api/protos",
-    "//ydb/public/sdk/cpp/src/library/operation_id",
     "//yql/essentials/ast",
     "//yql/essentials/minikql",
     "//yql/essentials/public/issue",
@@ -42,15 +41,17 @@ library("common") {
   ]
 
   deps = [
-    "//library/cpp/protobuf/json",
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/protobuf/json",  # peerdir only
+    # "//library/cpp/threading/hot_swap",
+    # "//ydb/core/kqp/script_executions/common",  # peerdir only
     "//ydb/core/kqp/topics",  # peerdir only
     # "//ydb/core/tx/datashard:range_ops",
     # "//ydb/core/tx/locks",
-    "//ydb/core/tx/long_tx_service/public",  # peerdir only
     # "//ydb/library/yql/dq/common",  # peerdir only
     # "//ydb/library/yql/dq/expr_nodes",  # peerdir only
-    "//ydb/library/yql/public/ydb_issue",  # peerdir only
-    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
+    "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",  # peerdir only
     # "//yql/essentials/core",
     "//yql/essentials/core/dq_integration",
     # "//yql/essentials/core/expr_nodes",
@@ -58,10 +59,12 @@ library("common") {
     "//yql/essentials/core/services",  # peerdir only
     "//yql/essentials/core/services:pipeline",
     # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
   ]
 
   sources = [
     "control.cpp",
+    "dynamic_function_registry.cpp",
     "kqp.cpp",
     "kqp_batch_operations.cpp",
     "kqp_event_impl.cpp",
@@ -69,7 +72,6 @@ library("common") {
     "kqp_resolve.cpp",
     "kqp_row_builder.cpp",
     "kqp_ru_calc.cpp",
-    "kqp_script_executions.cpp",
     "kqp_timeouts.cpp",
     "kqp_tx.cpp",
     "kqp_tx_manager.cpp",
@@ -82,4 +84,16 @@ library("common") {
     "kqp_tx_info.h",
     "kqp_yql.h",
   ]
+}
+
+library("types") {
+  public_deps = [
+    "//ydb/core/scheme_types",
+    "//ydb/library/mkql_proto/protos",
+    "//yql/essentials/minikql",
+  ]
+
+  deps = [ "//yql/essentials/parser/pg_wrapper/interface/type_desc" ]
+
+  sources = [ "kqp_types.cpp" ]
 }

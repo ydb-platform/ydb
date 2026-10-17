@@ -1,4 +1,6 @@
 PROTO_LIBRARY()
+
+# gn: move into parent
 PROTOC_FATAL_WARNINGS()
 
 ONLY_TAGS(CPP_PROTO)

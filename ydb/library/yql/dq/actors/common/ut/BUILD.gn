@@ -1,0 +1,24 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/dq/common",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "retry_events_queue_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/dq/actors/common" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

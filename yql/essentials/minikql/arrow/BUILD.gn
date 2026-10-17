@@ -2,7 +2,12 @@ library("arrow") {
   public_deps = [
     # "//contrib/libs/apache/arrow",
     "//yql/essentials/minikql",
+    # "//yql/essentials/public/udf",
     "//yql/essentials/public/udf/arrow",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql:alloc",
   ]
 
   sources = [

@@ -1,0 +1,17 @@
+linked_executable("ic_bench") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/getopt/small",
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/ut/lib",
+    "//ydb/library/actors/interconnect/ut/lib:port_manager",  # peerdir only
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

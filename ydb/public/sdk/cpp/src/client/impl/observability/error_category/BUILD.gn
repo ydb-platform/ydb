@@ -1,0 +1,7 @@
+library("error_category") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types",
+  ]
+
+  sources = [ "error_category.cpp" ]
+}

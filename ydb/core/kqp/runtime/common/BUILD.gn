@@ -1,0 +1,22 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/library/aclib",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/comp_nodes",
+    # "//ydb/library/yql/dq/runtime",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/common",
+    # "//yql/essentials/minikql",
+  ]
+
+  sources = [
+    "kqp_compute_context.cpp",
+    "kqp_program_builder.cpp",
+  ]
+}

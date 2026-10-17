@@ -1,8 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
-    login_page.cpp
-    login_page.h
+    login_page.cpp  # gn: into ydb/core/grpc_services
+    login_page.h  # gn: into ydb/core/grpc_services
     login_shared_func.cpp
     secure_request.h
     ticket_parser_impl.h

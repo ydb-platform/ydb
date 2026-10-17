@@ -1,0 +1,8 @@
+library("aws_init") {
+  deps = [
+    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    # "//contrib/libs/curl",
+  ]
+
+  sources = [ "aws.cpp" ]
+}

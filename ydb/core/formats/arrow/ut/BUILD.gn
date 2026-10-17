@@ -7,6 +7,7 @@ unittest_executable("ut") {
     "//ydb/core/formats/arrow",
     "//ydb/core/formats/arrow/printer",
     "//ydb/core/formats/arrow/program",
+    "//ydb/core/formats/arrow/program/ascii_contains",
     "//ydb/library/actors/core",
     "//ydb/library/arrow_kernels",
     "//ydb/library/formats/arrow",  # peerdir only
@@ -20,15 +21,14 @@ unittest_executable("ut") {
   ]
 
   sources = [
-    "//ydb/library/arrow_kernels/ut_common.cpp",
     "ut_arrow.cpp",
+    "ut_buffer_over_string.cpp",
     "ut_column_filter.cpp",
     "ut_dictionary.cpp",
     "ut_hash.cpp",
     "ut_printer.cpp",
     "ut_program_step.cpp",
     "ut_reader.cpp",
-    "ut_slicer.cpp",
   ]
 
   include_dirs = [ "//ydb/core/formats/arrow" ]

@@ -8,4 +8,6 @@ protobuf_library("proto") {
     "partition.proto",
     "source.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

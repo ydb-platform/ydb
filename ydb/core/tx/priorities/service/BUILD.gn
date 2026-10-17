@@ -3,6 +3,7 @@ library("service") {
     # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/tx/priorities/usage",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
     "//ydb/library/signals",
   ]
 

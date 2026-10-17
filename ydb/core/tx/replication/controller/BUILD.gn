@@ -1,5 +1,6 @@
 library("controller") {
   public_deps = [
+    # "//library/cpp/sliding_window",
     "//ydb/core/base",
     "//ydb/core/discovery",
     "//ydb/core/protos",
@@ -18,14 +19,15 @@ library("controller") {
 
   deps = [
     # "//library/cpp/json",
+    "//library/cpp/protobuf/interop",
     # "//ydb/core/cms/console",
     "//ydb/core/engine/minikql",
     # "//ydb/core/kqp/common/events",
-    "//ydb/core/kqp/federated_query/actors",
     "//ydb/core/protos/schemeshard",
+    "//ydb/core/tx/replication/controller/protos",
     # "//ydb/core/tx/replication/ydb_proxy",
     "//ydb/core/tx/replication/ydb_proxy/local_proxy",  # peerdir only
-    # "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/scheme_board",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
     # "//ydb/core/util",
@@ -34,6 +36,7 @@ library("controller") {
     # "//ydb/public/sdk/cpp/src/client/types/status",
     # "//ydb/services/metadata",
     "//ydb/services/metadata/secret",
+    "//ydb/services/scheme_secret",
     # "//yql/essentials/public/issue",
   ]
 
@@ -42,6 +45,7 @@ library("controller") {
     "dst_alterer.cpp",
     "dst_creator.cpp",
     "dst_remover.cpp",
+    "dst_schema_changer.cpp",
     "event_util.cpp",
     "lag_provider.cpp",
     "logging.cpp",
@@ -74,11 +78,14 @@ library("controller") {
     "tx_drop_replication.cpp",
     "tx_drop_stream_result.cpp",
     "tx_heartbeat.cpp",
+    "tx_index_build.cpp",
     "tx_init.cpp",
     "tx_init_schema.cpp",
     "tx_resolve_database_result.cpp",
     "tx_resolve_resource_id_result.cpp",
     "tx_resolve_secret_result.cpp",
+    "tx_run_worker.cpp",
+    "tx_schema_change.cpp",
     "tx_worker_error.cpp",
   ]
 

@@ -1,0 +1,14 @@
+library("tables") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/library/query_actor",
+    "//ydb/library/table_creator",
+    "//ydb/services/workload_manager/common",
+    # "//ydb/services/workload_manager/service:ids",
+  ]
+
+  sources = [ "table_queries.cpp" ]
+}

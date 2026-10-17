@@ -1,9 +1,9 @@
 YQL_LIBRARY()
 
 SRCS(
-    cpu_load_actors.cpp
+    cpu_load_actors.cpp  # gn: cpu_load_actors
     pool_handlers_actors.cpp
-    scheme_actors.cpp
+    scheme_actors.cpp  # gn: scheme_actors
 )
 
 PEERDIR(

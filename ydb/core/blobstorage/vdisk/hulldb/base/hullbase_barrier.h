@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "blobstorage_hulldefs.h"
+#include "hullbase_data_parts.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>

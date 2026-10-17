@@ -6,15 +6,18 @@ library("util") {
   public_deps = [
     "//library/cpp/containers/stack_vector",
     "//library/cpp/deprecated/atomic",
+    "//library/cpp/random_provider",
     "//library/cpp/sse",
   ]
 
-  deps = [ "//library/cpp/containers/absl_flat_hash" ]
+  deps = [ "//library/cpp/containers/absl" ]
 
   sources = [
     "affinity.cpp",
+    "cpu_topology.cpp",
     "memory_track.cpp",
     "memory_tracker.cpp",
+    "mutex_guarded_deterministic_random_provider.cpp",
     "rc_buf.cpp",
     "rope.cpp",
     "shared_data.cpp",

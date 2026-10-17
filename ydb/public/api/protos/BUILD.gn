@@ -9,6 +9,7 @@ protobuf_library("protos") {
     "draft/persqueue_error_codes.proto",
     "draft/ydb_backup.proto",
     "draft/ydb_bridge.proto",
+    "draft/ydb_distributed_storage.proto",
     "draft/ydb_dynamic_config.proto",
     "draft/ydb_logstore.proto",
     "draft/ydb_maintenance.proto",
@@ -16,7 +17,7 @@ protobuf_library("protos") {
     "draft/ydb_object_storage.proto",
     "draft/ydb_replication.proto",
     "draft/ydb_tablet.proto",
-    "draft/ydb_test_shard.proto",
+    "draft/ydb_topic_deferred_publish.proto",
     "draft/ydb_view.proto",
     "draft/ymq.proto",
     "out/out.cpp",
@@ -45,9 +46,12 @@ protobuf_library("protos") {
     "ydb_rate_limiter.proto",
     "ydb_scheme.proto",
     "ydb_scripting.proto",
+    "ydb_secret.proto",
     "ydb_status_codes.proto",
     "ydb_table.proto",
+    "ydb_test_shard.proto",
     "ydb_topic.proto",
+    "ydb_udf.proto",
     "ydb_value.proto",
   ]
 
@@ -57,6 +61,8 @@ protobuf_library("protos") {
     "ydb_persqueue_cluster_discovery.pb.h",
     "ydb_topic.pb.h",
   ]
+
+  protoc_fatal_warnings = true
 
   extra_plugins = [
     {

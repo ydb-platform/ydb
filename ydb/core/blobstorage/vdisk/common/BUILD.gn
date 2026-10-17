@@ -10,7 +10,6 @@ library("common") {
     # "//library/cpp/time_provider",
     "//ydb/core/base",
     "//ydb/core/blobstorage/base",
-    # "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/storagepoolmon",
@@ -27,10 +26,13 @@ library("common") {
 
   deps = [
     # "//contrib/libs/protobuf",
+    # "//ydb/core/base/services",
     "//ydb/core/blobstorage/lwtrace_probes",
     # "//ydb/core/blobstorage/vdisk/huge",
     "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     # "//ydb/core/blobstorage/vdisk/skeleton",
+    # "//ydb/core/control",
+    # "//ydb/library/actors/core",
     "//ydb/library/actors/protos",
   ]
 
@@ -48,7 +50,9 @@ library("common") {
     "vdisk_histograms.cpp",
     "vdisk_hugeblobctx.cpp",
     "vdisk_log.cpp",
+    "vdisk_log_context.cpp",
     "vdisk_mongroups.cpp",
+    "vdisk_operation_broker.cpp",
     "vdisk_outofspace.cpp",
     "vdisk_performance_params.cpp",
     "vdisk_recoverylogwriter.cpp",

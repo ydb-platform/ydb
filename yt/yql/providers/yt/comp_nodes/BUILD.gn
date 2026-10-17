@@ -25,7 +25,6 @@ slot_interface_group("comp_nodes") {
   link_slot_flags_from = [ "yql_mkql_block_table_content.cpp" ]
 
   link_slot_codegen = [
-    "//yql/essentials/core/issue/protos",
     "//yql/essentials/public/issue/protos",
     "//yql/essentials/public/types",
   ]

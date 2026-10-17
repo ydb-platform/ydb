@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/lib/ydb_cli/common
+    ydb/public/lib/ydb_cli/common  # gn: :retry_func
     ydb/public/sdk/cpp/src/client/cms
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/scheme

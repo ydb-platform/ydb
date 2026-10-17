@@ -19,6 +19,7 @@ library("common") {
 
   deps = [
     "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/reader/abstract",
     # "//ydb/library/actors/core",
     "//ydb/library/services",
@@ -30,6 +31,7 @@ library("common") {
     "description.cpp",
     "queue.cpp",
     "result.cpp",
+    "scan_memory_limiter.cpp",
     "stats.cpp",
   ]
 

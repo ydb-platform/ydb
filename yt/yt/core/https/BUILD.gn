@@ -7,6 +7,7 @@ library("https") {
   deps = [
     # "//library/cpp/http/io",  # peerdir only
     "//library/cpp/openssl/io",
+    # "//yt/yt/library/profiling",
   ]
 
   sources = [

@@ -1,0 +1,10 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [
+    "//ydb/udfs/wasm/log_parsing/protoseq.cpp",
+    "protoseq_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

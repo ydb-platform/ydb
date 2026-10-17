@@ -1,15 +1,24 @@
 unittest_executable("ut") {
   deps = [
+    "//library/cpp/protobuf/interop",
     "//library/cpp/testing/unittest",
     "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/testlib/basics",
     "//ydb/core/testlib/basics:default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
     "//ydb/library/actors/testlib",
+    "//ydb/library/testlib/common",
     "//ydb/library/testlib/pq_helpers",
-    "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/common",
     "//ydb/library/yql/providers/common/ut_helpers",  # peerdir only
-    "//ydb/library/yql/providers/pq/async_io",  # peerdir only
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/gateway/clients/message_stream",
     "//ydb/library/yql/providers/pq/gateway/native",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/datastreams",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
     "//ydb/tests/fq/pq_async_io",
@@ -28,14 +37,14 @@ unittest_executable("ut") {
   data_deps = [ "//ydb/apps/ydbd" ]
 
   sources = [
+    "dq_pq_control_plane_ut.cpp",
+    "dq_pq_info_aggregator_ut.cpp",
     "dq_pq_rd_read_actor_ut.cpp",
     "dq_pq_read_actor_ut.cpp",
     "dq_pq_write_actor_ut.cpp",
   ]
 
-  include_dirs = [
-    "//ydb/library/yql/providers/pq/async_io",  # peerdir only
-  ]
+  include_dirs = [ "//ydb/library/yql/providers/pq/async_io" ]
 
   test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
 
@@ -43,6 +52,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -1,11 +1,20 @@
-protobuf_library("protos") {
+library("protos") {
   public_deps = [
     "//ydb/core/protos",
     "//ydb/core/scheme/protos",
   ]
 
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+  ]
+
   sources = [
     "flat_table_part.proto",
     "flat_table_shard.proto",
+  ]
+
+  proto_imports = [
+    "//ydb/core/protos",
+    "//ydb/core/scheme/protos",
   ]
 }

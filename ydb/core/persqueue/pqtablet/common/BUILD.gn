@@ -3,6 +3,8 @@ library("common") {
     # "//ydb/core/jaeger_tracing",
     # "//ydb/core/persqueue/common",
     # "//ydb/core/persqueue/public",
+    # "//ydb/core/persqueue/public:utils",
+    "//ydb/core/protos",
     # "//ydb/core/tablet",
     # "//ydb/library/actors/core",
     "//ydb/library/actors/wilson",
@@ -13,7 +15,6 @@ library("common") {
   deps = [
     # "//ydb/core/base",  # peerdir only
     "//ydb/core/persqueue/events",
-    "//ydb/core/protos",
     # "//ydb/library/logger",  # peerdir only
     # "//ydb/library/wilson_ids",
     # "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only

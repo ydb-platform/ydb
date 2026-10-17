@@ -207,9 +207,9 @@ public:
 
                 if (!lastKeyEmpty) {
                     // It is range, where read was interrupted. Restart operation from last read key.
-                    result.emplace_back(std::move(TSerializedTableRange(
+                    result.emplace_back(TSerializedTableRange(
                         rangeIt->From.GetBuffer(), TSerializedCellVec::Serialize(LastKey), rangeIt->ToInclusive, false
-                        )));
+                        ));
                 } else {
                     ++rangeIt;
                 }
@@ -220,9 +220,9 @@ public:
 
                 if (!lastKeyEmpty) {
                     // It is range, where read was interrupted. Restart operation from last read key.
-                    result.emplace_back(std::move(TSerializedTableRange(
+                    result.emplace_back(TSerializedTableRange(
                         TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), ResumeInclusive(), rangeIt->ToInclusive
-                        )));
+                        ));
                     ++rangeIt;
                 }
 

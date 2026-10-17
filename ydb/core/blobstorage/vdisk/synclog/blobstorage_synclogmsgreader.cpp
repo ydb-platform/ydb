@@ -17,7 +17,7 @@ namespace NKikimr {
 
             ForEach(Data, writeToList, writeToList, writeToList, writeToList);
 
-            return std::move(records);
+            return records;
         }
 
         bool TNaiveFragmentReader::Check(TString &errorString) {
@@ -53,7 +53,7 @@ namespace NKikimr {
 
             TNaiveFragmentReader::ForEach(Uncompressed, writeToList, writeToList, writeToList, writeToList);
 
-            return std::move(records);
+            return records;
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -69,7 +69,7 @@ namespace NKikimr {
             TWriteRecordToList writeToList{records};
 
             ForEachImpl(writeToList, writeToList, writeToList, writeToList);
-            return std::move(records);
+            return records;
         }
 
         ////////////////////////////////////////////////////////////////////////////

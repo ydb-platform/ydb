@@ -12,6 +12,7 @@ library("common") {
   ]
 
   sources = [
+    "errors.cpp",
     "executor_impl.cpp",
     "retry_policy.cpp",
   ]

@@ -1,0 +1,34 @@
+library("volume") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/blockstore/core",
+    # "//ydb/core/nbs/cloud/blockstore/libs/kikimr",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//library/cpp/lwtrace",  # peerdir only
+    # "//library/cpp/monlib/service/pages",  # peerdir only
+    # "//library/cpp/protobuf/util",  # peerdir only
+    # "//ydb/core/mind",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",  # peerdir only
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/core/scheme",  # peerdir only
+  ]
+
+  sources = [
+    "volume.cpp",
+    "volume_actor.cpp",
+    "volume_database.cpp",
+    "volume_initschema.cpp",
+    "volume_loadstate.cpp",
+    "volume_store_partition_tablet_id.cpp",
+  ]
+}

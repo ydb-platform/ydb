@@ -3,5 +3,9 @@ config("public_config") {
 }
 
 contrib_library("conversion") {
+    public_deps = [
+        "//contrib/restricted/boost/smart_ptr",
+    ]
+
     public_configs = [ ":public_config" ]
 }

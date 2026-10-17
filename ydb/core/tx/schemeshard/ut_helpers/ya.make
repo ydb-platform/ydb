@@ -9,7 +9,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/filestore/core
     ydb/core/metering
-    ydb/core/persqueue/ut/common
+    ydb/core/persqueue/ut/common  # gn: :pq_ut_common
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet_flat

@@ -1,5 +1,6 @@
 unittest_executable("ut") {
   deps = [
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/library/actors/core",
     "//ydb/library/pdisk_io",

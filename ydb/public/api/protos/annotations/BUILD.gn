@@ -3,4 +3,6 @@ protobuf_library("annotations") {
     "sensitive.proto",
     "validation.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

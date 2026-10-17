@@ -34,4 +34,6 @@ protobuf_library("protos") {
     "test_connection.proto",
     "token_accessor.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

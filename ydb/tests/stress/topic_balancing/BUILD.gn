@@ -1,0 +1,13 @@
+linked_executable("workload_topic_balancing") {
+  deps = [
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [
+    "auto_partitioning.cpp",
+    "main.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

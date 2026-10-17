@@ -1,15 +1,16 @@
 library("retry") {
   public_deps = [
     # "//library/cpp/threading/future",
-    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",
     "//ydb/public/sdk/cpp/src/client/types/status",
+    "//ydb/public/sdk/cpp/src/client/value",
     # "//ydb/public/sdk/cpp/src/library/time",
   ]
 
-  deps = [
-    # "//ydb/public/sdk/cpp/src/client/common_client/impl",
-    # "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",  # peerdir only
-  ]
+  deps = [ "//ydb/public/api/protos" ]
 
-  sources = [ "retry.cpp" ]
+  sources = [
+    "bulk_upsert_retry_state.cpp",
+    "retry.cpp",
+  ]
 }

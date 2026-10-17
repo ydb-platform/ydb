@@ -4,34 +4,33 @@ unittest_executable("ut_fat") {
     "//library/cpp/svnversion",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
-    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/dsproxy",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk",
     "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/driver_lib/version",  # peerdir only
     "//ydb/core/mon_alloc",
     "//ydb/core/protos",
-    "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
-    "//ydb/library/actors/interconnect/mock",
+    "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/actors/util",
     "//ydb/library/pdisk_io",
     "//ydb/library/services",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
   sources = [ "dsproxy_ut.cpp" ]
 
   link_select = [
-    "YqlServicePolicy=exception_policy",
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=llvm16",
-    "topic_rpc=persqueue_v1",
+    "minikql_codegen=no_llvm",
+    "retro_spans=spans",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
-    "yt_codegen=llvm16",
   ]
 }

@@ -1,0 +1,3 @@
+library("top_keeper") {
+  sources = [ "top_keeper.cpp" ]
+}

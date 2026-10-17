@@ -1,6 +1,6 @@
 library("events") {
   public_deps = [
-    # "//ydb/core/base",
+    "//ydb/core/base",
     "//ydb/core/tx/schemeshard/olap/bg_tasks/protos",
     # "//ydb/library/actors/core",
   ]

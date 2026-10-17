@@ -7,7 +7,12 @@ library("usage") {
 
   deps = [
     # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/services",
   ]
 
-  sources = [ "tracing.cpp" ]
+  sources = [
+    "//ydb/core/tx/tracing/service/actor.cpp",
+    "//ydb/core/tx/tracing/service/global.cpp",
+    "tracing.cpp",
+  ]
 }

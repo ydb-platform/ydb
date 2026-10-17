@@ -1,0 +1,33 @@
+unittest_executable("scheme") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/protobuf/interop",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/services/workload_manager/ut/common",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+  ]
+
+  sources = [
+    "external_data_source_ut.cpp",
+    "external_table_ut.cpp",
+    "streaming_query_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -49,7 +49,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, std::move(Stream_->GetValue(ctx)),
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream_->GetValue(ctx),
                                                       TableIndexField_, KeyColumns_,
                                                       LeftColumns_, RightColumns_, NeedUnwrap_,
                                                       LeftArgmapLambdaArg_, LeftArgmapLambdaRoot_,
@@ -125,7 +125,7 @@ private:
                         KeyArg_->SetValue(CompCtx_, std::move(KeyValue_));
                         LeftListArg_->SetValue(CompCtx_, CompCtx_.HolderFactory.CreateDirectListHolder(std::move(LeftListValue_)));
                         RightListArg_->SetValue(CompCtx_, CompCtx_.HolderFactory.CreateDirectListHolder(std::move(RightListValue_)));
-                        JoinedStreamValue_ = std::move(JoinResult_->GetValue(CompCtx_));
+                        JoinedStreamValue_ = JoinResult_->GetValue(CompCtx_);
                         break;
                 }
             }

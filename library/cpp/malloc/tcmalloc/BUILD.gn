@@ -1,6 +1,7 @@
 contrib_library("tcmalloc") {
   deps = [
-    # "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    # "//contrib/libs/tcmalloc",
+    "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
     "//library/cpp/malloc/api",
   ]
 

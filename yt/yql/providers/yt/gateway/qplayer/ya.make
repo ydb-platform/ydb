@@ -1,7 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
-    yql_yt_qplayer_gateway.cpp
+    yql_yt_qplayer_gateway.cpp  # gn: into yt/yql/providers/yt/provider
+    yql_yt_qplayer_gateway.h  # gn: into yt/yql/providers/yt/provider
 )
 
 PEERDIR(

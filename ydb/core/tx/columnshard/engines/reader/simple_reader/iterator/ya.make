@@ -17,11 +17,12 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections
     ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sync_points
-    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view
+    ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view  # gn: plugin
     ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates
     ydb/core/tx/conveyor/usage
     ydb/core/tx/limiter/grouped_memory/usage
 )
+# gn: peerdir ydb/core/tx/columnshard/engines:filter
 
 GENERATE_ENUM_SERIALIZATION(source.h)
 

@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/udf/manifest",
+  ]
+
+  sources = [ "manifest_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/udf/manifest" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

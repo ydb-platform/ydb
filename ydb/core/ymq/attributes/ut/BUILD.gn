@@ -1,10 +1,23 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public",
     "//ydb/core/ymq/attributes",
+    "//ydb/public/api/protos",  # peerdir only
   ]
 
-  sources = [ "attributes_md5_ut.cpp" ]
+  sources = [
+    "attributes_md5_ut.cpp",
+    "attributes_ut.cpp",
+  ]
 
-  link_select = [ "allocator=tcmalloc" ]
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
 }

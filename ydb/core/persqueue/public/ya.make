@@ -5,10 +5,11 @@ SRCS(
     inflight_limiter.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
-    pqdata_transaction_compat.cpp
-    utils.cpp
+    pqdata_transaction_compat.cpp  # gn: utils
+    utils.cpp  # gn: utils
     write_id.cpp
 )
+# gn: utils headers pqdata_transaction_compat.h utils.h
 
 PEERDIR(
     ydb/core/base

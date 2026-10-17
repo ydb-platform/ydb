@@ -1,0 +1,25 @@
+library("poller") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//contrib/libs/libc_compat",  # peerdir only
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/prof",
+    "//ydb/library/actors/protos",
+    # "//ydb/library/actors/wilson",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/library/actors/core/scheduler_actor.cpp",
+    "poller_actor.cpp",
+    "poller_tcp.cpp",
+    "poller_tcp_unit.cpp",
+    "poller_tcp_unit_epoll.cpp",
+    "poller_tcp_unit_select.cpp",
+  ]
+}

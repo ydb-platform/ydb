@@ -5,12 +5,12 @@ ADDINCL(
 )
 
 SRCS(
-    transfer_workload.cpp
-    transfer_workload_topic_to_table.cpp
-    transfer_workload_topic_to_table_init.cpp
-    transfer_workload_topic_to_table_clean.cpp
-    transfer_workload_topic_to_table_run.cpp
-    transfer_workload_defines.cpp
+    transfer_workload.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transfer_workload_topic_to_table.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transfer_workload_topic_to_table_init.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transfer_workload_topic_to_table_clean.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transfer_workload_topic_to_table_run.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transfer_workload_defines.cpp  # gn: into ydb/public/lib/ydb_cli/commands
 )
 
 PEERDIR(

@@ -1,0 +1,30 @@
+library("flow_control_manager") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/long_tx_service/public",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/library/signals",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//ydb/core/tablet",  # peerdir only
+    # "//ydb/core/tx/data_events",  # peerdir only
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [
+    "delayed_reject_queue.cpp",
+    "drain_rate_controller.cpp",
+    "flow_control_manager_actor.cpp",
+    "flow_control_manager_service.cpp",
+    "node_state_map.cpp",
+    "rate_bucket.cpp",
+    "wait_queue.cpp",
+  ]
+}

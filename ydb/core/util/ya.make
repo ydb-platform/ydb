@@ -40,7 +40,7 @@ SRCS(
     intrusive_heap.h
     intrusive_stack.h
     log_priority_mute_checker.h
-    memory_tracker.cpp
+    memory_tracker.cpp  # gn: into ydb/core/driver_lib/run
     memory_tracker.h
     numerical_maybe.h
     operation_queue.h

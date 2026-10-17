@@ -10,4 +10,6 @@ protobuf_library("protos") {
     "dq_effects.proto",
     "fq_private.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

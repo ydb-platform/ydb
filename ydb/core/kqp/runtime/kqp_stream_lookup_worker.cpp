@@ -287,7 +287,7 @@ public:
 
         std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
         ScheduledReads.pop_front();
-        return std::move(next);
+        return next;
     }
 
     void BuildRequests(const TPartitionInfo& partitioning, ui64& readId) final {
@@ -679,7 +679,7 @@ public:
             }
         }
 
-        TSizedUnboxedValue row{.Data=std::move(std::move(inputRow.GetElement(0))), .StorageBytes=0};
+        TSizedUnboxedValue row{.Data=inputRow.GetElement(0), .StorageBytes=0};
         row.ComputeSize = NYql::NDq::TDqDataSerializer::EstimateSize(row.Data, GetLeftRowType());
         ui64 joinKeyId = JoinKeySeqNo++;
         TOwnedCellVec cellVec(std::move(joinKeyCells));
@@ -741,7 +741,7 @@ public:
 
         std::pair<ui64, THolder<TEvDataShard::TEvRead>> next = std::move(ScheduledReads.front());
         ScheduledReads.pop_front();
-        return std::move(next);
+        return next;
     }
 
     void RebuildRequest(const ui64 shardId, const ui64& prevReadId, ui64& newReadId) final {
@@ -1199,7 +1199,7 @@ private:
             NUdf::TUnboxedValue* rightRowItems = nullptr;
             CachedRows.emplace_back();
             TSizedUnboxedValue& row = CachedRows.back();
-            row.Data = std::move(HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems));
+            row.Data = HolderFactory.CreateDirectArrayHolder(Settings.Columns.size(), rightRowItems);
             row.ComputeSize = 0;
             row.StorageBytes = 0;
 

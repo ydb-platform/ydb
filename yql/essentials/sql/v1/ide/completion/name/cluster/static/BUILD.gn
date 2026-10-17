@@ -1,0 +1,7 @@
+library("static") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/ide/completion/name/cluster",
+  ]
+
+  sources = [ "discovery.cpp" ]
+}

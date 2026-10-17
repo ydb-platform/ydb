@@ -16,6 +16,7 @@ unittest_executable("ut_vdisk") {
     "//ydb/core/scheme_types",
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/pdisk_io",
     "//yql/essentials/minikql",
@@ -35,7 +36,9 @@ unittest_executable("ut_vdisk") {
   link_select = [
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
   ]

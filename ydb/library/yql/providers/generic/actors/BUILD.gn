@@ -1,5 +1,6 @@
 library("actors") {
   public_deps = [
+    # "//library/cpp/threading/future",
     # "//ydb/library/actors/core",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/providers/common/token_accessor/client",

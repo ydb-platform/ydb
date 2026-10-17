@@ -35,6 +35,7 @@ contrib_library("orc") {
         "c++/src/ConvertColumnReader.cc",
         "c++/src/CpuInfoUtil.cc",
         "c++/src/Dictionary.cc",
+        "c++/src/DictionaryLoader.cc",
         "c++/src/Exceptions.cc",
         "c++/src/Geospatial.cc",
         "c++/src/Int128.cc",

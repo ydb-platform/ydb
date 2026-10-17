@@ -3,11 +3,20 @@ config("public_config") {
 }
 
 config("private_config") {
+    cflags = [ "-Wno-implicit-function-declaration" ]
     defines = [ "HAVE_CONFIG_H" ]
 }
 
 contrib_library("expat") {
+    deps = [
+        "//contrib/libs/libc_compat",
+        "//library/cpp/sanitizer/include",
+    ]
+
     sources = [
+        "lib/random_dev_urandom.c",
+        "lib/random_getentropy.c",
+        "lib/random_getrandom.c",
         "lib/xmlparse.c",
         "lib/xmlrole.c",
         "lib/xmltok.c",

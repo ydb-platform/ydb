@@ -5,4 +5,8 @@ group("optimizer") {
     "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets",  # peerdir only
     "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling",  # peerdir only
   ]
+
+  deps = [
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp",  # peerdir only
+  ]
 }

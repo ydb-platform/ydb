@@ -128,8 +128,8 @@ private:
             [limit, name](TListResult& state, TListResult&& chunk) {
                 return std::visit(
                     TOverloaded{
-                        std::move(MakeNewListingChunkHandler(state, limit, std::move(name))),
-                        std::move(MakeIssuesHandler(state))},
+                        MakeNewListingChunkHandler(state, limit, std::move(name)),
+                        MakeIssuesHandler(state)},
                     std::move(chunk));
             },
             ExceptionHandler);

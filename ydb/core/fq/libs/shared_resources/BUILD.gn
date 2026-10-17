@@ -18,6 +18,7 @@ library("shared_resources") {
     # "//ydb/core/fq/libs/control_plane_storage/proto",  # peerdir only
     # "//ydb/core/fq/libs/quota_manager/events",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/db_pool/protos",
     "//ydb/library/logger",
     "//ydb/library/services",
     "//ydb/public/api/protos",

@@ -4,22 +4,24 @@ library("profiling") {
     "//library/cpp/yt/cpu_clock",
     "//library/cpp/yt/memory",
     # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/rseq",
     "//library/cpp/yt/string",
-    "//library/cpp/yt/threading",
-    # "//yt/yt/core",
+    # "//library/cpp/yt/system",
   ]
 
   deps = [
     "//library/cpp/yt/assert",
-    "//library/cpp/yt/error",  # peerdir only
+    "//library/cpp/yt/threading",  # peerdir only
   ]
 
   sources = [
     "histogram_snapshot.cpp",
     "impl.cpp",
-    "percpu.cpp",
+    "per_cpu_sensor_impl.cpp",
     "producer.cpp",
+    "rseq_sensor_impl.cpp",
     "sensor.cpp",
+    "simple_sensor_impl.cpp",
     "tag.cpp",
     "testing.cpp",
   ]

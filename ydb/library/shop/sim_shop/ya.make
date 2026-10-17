@@ -1,5 +1,7 @@
 PROGRAM()
 
+# gn: move into parent
+
 RESOURCE(
     one.pb.txt one
     two.pb.txt two

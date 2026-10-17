@@ -17,6 +17,7 @@ library("splitter") {
     "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/splitter/abstract",
     "//ydb/library/accessor",
+    # "//ydb/library/actors/struct_log",
     "//ydb/library/formats/arrow/splitter",
   ]
 

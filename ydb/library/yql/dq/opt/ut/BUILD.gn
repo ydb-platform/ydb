@@ -2,9 +2,11 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/hook",
     "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/expr_nodes",
     "//ydb/library/yql/dq/opt",
     "//yql/essentials/core",
     "//yql/essentials/core/cbo",
+    "//yql/essentials/core/expr_nodes",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/parser/pg_wrapper/interface:yql_pg_sql_translator",
     "//yql/essentials/providers/common/provider",
@@ -15,6 +17,7 @@ unittest_executable("ut") {
 
   sources = [
     "dq_cbo_ut.cpp",
+    "dq_opt_equal_nulls_ut.cpp",
     "dq_opt_hypergraph_ut.cpp",
     "dq_opt_interesting_orderings_ut.cpp",
   ]

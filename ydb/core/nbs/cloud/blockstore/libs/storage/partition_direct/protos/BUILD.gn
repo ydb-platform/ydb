@@ -1,0 +1,11 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/nbs/cloud/blockstore/config/protos",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "dirty_map.proto",
+    "partition_direct.proto",
+  ]
+}

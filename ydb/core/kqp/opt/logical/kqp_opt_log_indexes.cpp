@@ -2342,7 +2342,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
 
     auto newLambdaBody = TCoLambda{ctx.NewLambda(
         flatMap.Lambda().Pos(),
-        std::move(flatMap.Lambda().Args().Ptr()),
+        flatMap.Lambda().Args().Ptr(),
         ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, result.Replaces))};
 
     auto res = Build<TCoFlatMap>(ctx, read.Pos())
@@ -4043,7 +4043,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
 
             auto newLambdaBody = TCoLambda{ctx.NewLambda(
                 flatMap.Lambda().Pos(),
-                std::move(flatMap.Lambda().Args().Ptr()),
+                flatMap.Lambda().Args().Ptr(),
                 ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
 
             return Build<TCoFlatMap>(ctx, node.Pos())
@@ -4063,7 +4063,7 @@ TExprBase KqpRewriteFlatMapOverIndexRead(const TExprBase& node, TExprContext& ct
 
         auto newLambdaBody = TCoLambda{ctx.NewLambda(
             flatMap.Lambda().Pos(),
-            std::move(flatMap.Lambda().Args().Ptr()),
+            flatMap.Lambda().Args().Ptr(),
             ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
 
         return Build<TCoMap>(ctx, node.Pos())
@@ -4123,7 +4123,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
                 auto newLambdaBody = TCoLambda{ctx.NewLambda(
                     flatMap.Lambda().Pos(),
-                    std::move(flatMap.Lambda().Args().Ptr()),
+                    flatMap.Lambda().Args().Ptr(),
                     ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
 
                 takeChild = Build<TCoFlatMap>(ctx, node.Pos())
@@ -4152,7 +4152,7 @@ TExprBase KqpRewriteTakeOverIndexRead(const TExprBase& node, TExprContext& ctx, 
 
         auto newLambdaBody = TCoLambda{ctx.NewLambda(
             flatMap.Lambda().Pos(),
-            std::move(flatMap.Lambda().Args().Ptr()),
+            flatMap.Lambda().Args().Ptr(),
             ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, replaces))};
 
         return Build<TCoMap>(ctx, node.Pos())

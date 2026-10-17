@@ -1,0 +1,7 @@
+library("computation_graph_renderer") {
+  public_deps = [
+    "//library/cpp/json",
+  ]
+
+  sources = [ "computation_graph_renderer.cpp" ]
+}

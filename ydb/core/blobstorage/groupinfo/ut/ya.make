@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/blobstorage/base
     ydb/core/blobstorage/groupinfo
+    ydb/core/blobstorage/vdisk/ingress
     ydb/core/erasure
 )
 

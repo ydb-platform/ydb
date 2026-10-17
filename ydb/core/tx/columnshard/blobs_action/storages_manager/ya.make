@@ -5,7 +5,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/columnshard/data_sharing/manager
+    ydb/core/tx/columnshard/data_sharing/manager  # gn: :shared_blobs
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/core/tx/columnshard/blobs_action/local
 )

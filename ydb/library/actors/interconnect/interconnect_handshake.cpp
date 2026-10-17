@@ -911,7 +911,7 @@ namespace NActors {
                 Params.AllowRdmaSendReceive = false;
                 return {};
             } else {
-                return std::move(ev->Get()->ExtractSession());
+                return ev->Get()->ExtractSession();
             }
         }
 
@@ -961,7 +961,7 @@ namespace NActors {
                         Params.AllowRdmaSendReceive = false;
                         return {};
                     } else {
-                        return std::move(ev->Get()->ExtractSession());
+                        return ev->Get()->ExtractSession();
                     }
                 } else {
                     return {};
@@ -1175,7 +1175,7 @@ namespace NActors {
 
                 if (Rdma) {
                     if (success.HasQpPrepared()) {
-                        rdmaSession = std::move(RunRdmaOutgoingHandshakePart(success));
+                        rdmaSession = RunRdmaOutgoingHandshakePart(success);
                     } else {
                         YDB_LOG_ERROR_CTX_COMP(this->GetActorContext(), NActorsServices::INTERCONNECT, "Non success qp response from remote side",
                             {"marker", "ICRDMA"});
@@ -1566,7 +1566,7 @@ namespace NActors {
                     const auto& str = success.GetSenderActorId();
                     SelfVirtualId.Parse(str.data(), str.size());
                     if (Params.AllowRdmaSendReceive) {
-                        rdmaSession = std::move(RunRdmaIncomingHandshakePart());
+                        rdmaSession = RunRdmaIncomingHandshakePart();
                     }
                 } else if (auto ev = reply->CastAsLocal<TEvHandshakeReplyError>()) {
                     // in case of error just send reply to the peer and terminate handshake

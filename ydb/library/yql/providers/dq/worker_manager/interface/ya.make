@@ -10,15 +10,11 @@ PEERDIR(
     ydb/library/yql/providers/dq/api/protos
 )
 
-SET(
-    SOURCE
+SRCS(
     events.cpp
     worker_info.cpp
     counters.cpp
 )
-
-SRCS(
-    ${SOURCE}
-)
+# gn: peerdir ydb/library/yql/providers/dq/common:attrs
 
 END()

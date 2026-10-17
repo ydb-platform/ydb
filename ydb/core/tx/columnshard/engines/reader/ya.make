@@ -11,10 +11,10 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/abstract
     ydb/core/tx/columnshard/engines/reader/actor
     ydb/core/tx/columnshard/engines/reader/common
-    ydb/core/tx/columnshard/engines/reader/common_reader
-    ydb/core/tx/columnshard/engines/reader/plain_reader
-    ydb/core/tx/columnshard/engines/reader/simple_reader
-    ydb/core/tx/columnshard/engines/reader/trivial_reader
+    ydb/core/tx/columnshard/engines/reader/common_reader  # gn: plugin
+    ydb/core/tx/columnshard/engines/reader/plain_reader  # gn: plugin
+    ydb/core/tx/columnshard/engines/reader/simple_reader  # gn: plugin
+    ydb/core/tx/columnshard/engines/reader/trivial_reader  # gn: plugin
     ydb/core/tx/columnshard/engines/reader/tracing
     ydb/core/tx/columnshard/engines/reader/transaction
     ydb/core/tx/columnshard/engines/scheme

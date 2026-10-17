@@ -14,7 +14,7 @@ library("compaction") {
     # "//ydb/core/tx/columnshard/common",
     "//ydb/core/tx/columnshard/engines/changes/abstract",
     # "//ydb/core/tx/columnshard/engines/portions",
-    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/library/formats/arrow/splitter",
   ]
 
@@ -36,14 +36,16 @@ library("compaction") {
 library("dictionary") {
   deps = [
     ":abstract",
+    # "//contrib/libs/apache/arrow",
     "//ydb/core/formats/arrow",
     # "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/composite",
+    "//ydb/core/formats/arrow/accessor/dictionary",
     # "//ydb/core/formats/arrow/accessor/sparsed",
-    "//ydb/core/formats/arrow/accessor:composite",
-    "//ydb/core/formats/arrow/accessor:dictionary",
     # "//ydb/core/formats/arrow/switch",
     # "//ydb/core/tx/columnshard/engines/changes/compaction/common",  # peerdir only
     "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/library/formats/arrow",
   ]
 
   sources = [ "dictionary/logic.cpp" ]

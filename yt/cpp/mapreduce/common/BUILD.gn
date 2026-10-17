@@ -3,7 +3,8 @@ library("common") {
     # "//library/cpp/yson",
     # "//library/cpp/yson/node",
     "//yt/cpp/mapreduce/interface",
-    # "//yt/cpp/mapreduce/interface/logging",
+    "//yt/cpp/mapreduce/interface/logging",
+    "//yt/yt/core",
   ]
 
   deps = [
@@ -11,12 +12,18 @@ library("common") {
     # "//library/cpp/svnversion",  # peerdir only
     # "//library/cpp/threading/future",
     # "//library/cpp/yson/json",  # peerdir only
+    # "//library/cpp/yt/logging",
+    "//library/cpp/yt/memory",
   ]
 
   sources = [
+    "abortable_stream.cpp",
     "debug_metrics.cpp",
+    "expected_error_guard.cpp",
+    "halting_stream.cpp",
     "helpers.cpp",
     "retry_lib.cpp",
+    "trace_context.cpp",
     "wait_proxy.cpp",
   ]
 }

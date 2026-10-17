@@ -1,13 +1,16 @@
 library("security") {
   public_deps = [
     "//library/cpp/digest/md5",
+    "//library/cpp/html/pcdata",
     "//library/cpp/string_utils/base64",
     "//ydb/core/base",
     "//ydb/core/mon",
     "//ydb/core/protos",
     "//ydb/core/security/certificate_check",
+    "//ydb/core/security/external_idp",
     # "//ydb/core/security/ldap_auth_provider",
     # "//ydb/core/security/token_manager",
+    "//ydb/core/security/util",
     "//ydb/library/aclib",
     # "//ydb/library/actors/core",
     # "//ydb/library/grpc/actor_client",
@@ -21,7 +24,9 @@ library("security") {
   deps = [
     # "//library/cpp/monlib/service/pages",  # peerdir only
     # "//library/cpp/openssl/io",  # peerdir only
+    "//ydb/core/audit",  # peerdir only
     # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/actors/http",  # peerdir only
     # "//ydb/library/login",  # peerdir only
   ]
 

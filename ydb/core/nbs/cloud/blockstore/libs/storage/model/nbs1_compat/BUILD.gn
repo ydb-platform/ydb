@@ -1,0 +1,8 @@
+library("nbs1_compat") {
+  public_deps = [
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "classic_volume.cpp" ]
+}

@@ -1,7 +1,9 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
-    actor2.cpp
+    actor2.cpp  # gn: into ydb/core/tx/columnshard
     events.cpp
 )
 

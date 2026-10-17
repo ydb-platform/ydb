@@ -4,12 +4,11 @@ unittest_executable("ut") {
     "//library/cpp/digest/md5",
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/json",
-    "//library/cpp/string_utils/base64",
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/formats/arrow",
     "//ydb/core/persqueue/ut/common",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
@@ -25,6 +24,7 @@ unittest_executable("ut") {
     "//ydb/public/sdk/cpp/src/client/types",
     "//ydb/public/sdk/cpp/src/client/value",
     "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/kafka",
     "//ydb/services/datastreams",  # peerdir only
     "//ydb/services/lib/sharding",
     "//ydb/services/ydb",
@@ -40,6 +40,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

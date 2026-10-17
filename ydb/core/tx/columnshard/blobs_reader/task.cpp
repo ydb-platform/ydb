@@ -164,7 +164,7 @@ TCompositeReadBlobs ITask::ExtractBlobsData() {
     for (auto&& i : Agents) {
         result.Add(i.second->GetStorageId(), i.second->ExtractBlobsData());
     }
-    return std::move(result);
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NRead

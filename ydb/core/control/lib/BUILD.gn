@@ -4,18 +4,18 @@ config("lib_public_config") {
 
 library("lib") {
   public_deps = [
+    # "//library/cpp/deprecated/atomic",
     "//library/cpp/monlib/service/pages",
     "//library/cpp/threading/hot_swap",
-    # "//ydb/core/base",
     "//ydb/core/control/lib/base",
     "//ydb/core/control/lib/generated",
     # "//ydb/core/util",
   ]
 
   deps = [
-    # "//library/cpp/containers/absl_flat_hash",  # peerdir only
-    # "//library/cpp/deprecated/atomic",  # peerdir only
+    # "//library/cpp/containers/absl",  # peerdir only
     "//library/cpp/iterator",
+    # "//ydb/core/base",
   ]
 
   sources = [

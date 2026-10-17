@@ -1036,7 +1036,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
             showCreateReadReplacements[input] = showCreateRead;
         }
-        auto res = ctx.ReplaceNodes(std::move(node.Ptr()), showCreateReadReplacements);
+        auto res = ctx.ReplaceNodes(node.Ptr(), showCreateReadReplacements);
 
         TExprBase resNode(res);
 
@@ -1158,7 +1158,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             .Repeat(TExprStep::LoadTablesMetadata)
             .Repeat(TExprStep::RewriteIO);
 
-        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateRightReplacements);
+        return ctx.ReplaceNodes(resNode.Ptr(), showCreateRightReplacements);
     }
 
     TKiExploreTxResults txExplore;

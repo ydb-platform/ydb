@@ -24,8 +24,8 @@ TConclusionStatus TInStoreShardingUpdate::DoInitialize(const TUpdateInitializati
     TConclusion<std::vector<NKikimrSchemeOp::TAlterShards>> alters = std::vector<NKikimrSchemeOp::TAlterShards>();
     auto& storeInfo = *inStoreTable.GetStoreInfo();
     auto layoutPolicy = storeInfo.GetTablesLayoutPolicy();
-    auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(TColumnTablesLayout::ShardIdxToTabletId(
-        storeInfo.GetColumnShards(), *context.GetSSOperationContext()->SS));
+    auto currentLayout = context.GetSSOperationContext()->SS->ColumnTables.GetTablesLayout(
+        context.GetSSOperationContext()->SS->ShardIdxToTabletId(storeInfo.GetColumnShards()));
     currentLayout.RemoveGroupsWithPathId(context.GetOriginalEntity().GetPathId());
     auto tablePtr = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(context.GetOriginalEntity().GetPathId());
     if (context.GetModification()->GetAlterColumnTable().GetReshardColumnTable().GetIncrease()) {

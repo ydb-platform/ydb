@@ -12,6 +12,7 @@ library("session") {
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/data_locks/locks",
     "//ydb/core/tx/columnshard/engines",
+    # "//ydb/library/actors/struct_log",
   ]
 
   sources = [ "common.cpp" ]

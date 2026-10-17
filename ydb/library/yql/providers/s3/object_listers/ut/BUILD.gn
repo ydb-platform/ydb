@@ -9,11 +9,5 @@ unittest_executable("ut") {
 
   include_dirs = [ "//ydb/library/yql/providers/s3/object_listers" ]
 
-  link_select = [
-    "YqlServicePolicy=stub",
-    "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
-    "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
-  ]
+  link_select = [ "allocator=tcmalloc" ]
 }

@@ -1,0 +1,33 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/basics",  # peerdir only
+    "//ydb/library/testlib/common",
+    "//ydb/library/testlib/pq_helpers",
+    "//ydb/library/yql/providers/abstract/message_stream",
+    "//ydb/library/yql/providers/pq/async_io",
+    "//ydb/library/yql/providers/pq/gateway/clients/composite",
+    "//ydb/library/yql/providers/pq/gateway/clients/message_stream",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "composite_client_ut.cpp",
+    "message_stream_client_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/pq/gateway" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

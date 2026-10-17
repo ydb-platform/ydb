@@ -1,0 +1,14 @@
+library("json_index") {
+  public_deps = [
+    "//yql/essentials/minikql/jsonpath/parser",
+    # "//yql/essentials/public/issue",
+    "//yql/essentials/types/binary_json",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "json_index.cpp" ]
+}

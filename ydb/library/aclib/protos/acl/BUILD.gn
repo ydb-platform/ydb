@@ -1,0 +1,5 @@
+protobuf_library("acl") {
+  sources = [ "acl.proto" ]
+
+  protoc_fatal_warnings = true
+}

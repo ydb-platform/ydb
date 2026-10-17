@@ -1,0 +1,14 @@
+library("udf_modules") {
+  public_deps = [
+    # "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/sys_view/common",
+    # "//ydb/library/query_actor",
+  ]
+
+  sources = [ "udf_modules.cpp" ]
+}

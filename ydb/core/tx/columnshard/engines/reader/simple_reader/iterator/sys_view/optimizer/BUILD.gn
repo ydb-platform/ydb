@@ -11,7 +11,6 @@ library("optimizer") {
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
     # "//ydb/core/tx/columnshard/engines/scheme",
-    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/library/formats/arrow",
     # "//ydb/library/formats/arrow/switch",

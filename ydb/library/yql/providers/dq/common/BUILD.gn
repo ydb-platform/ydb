@@ -17,9 +17,10 @@ library("common") {
 
   deps = [
     # "//yql/essentials/core/dq_integration",  # peerdir only
-    "//yql/essentials/core/issue/protos",
     # "//yql/essentials/minikql:alloc",
     "//yql/essentials/providers/common/mkql",
+    # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/issue/protos",
     # "//yql/essentials/sql",
     # "//yql/essentials/sql/settings",
     # "//yql/essentials/utils",

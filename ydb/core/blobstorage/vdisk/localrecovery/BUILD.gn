@@ -2,6 +2,7 @@ library("localrecovery") {
   public_deps = [
     "//ydb/core/base",
     "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/chunk_keeper",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/common:guids",
     # "//ydb/core/blobstorage/vdisk:defs",
@@ -20,6 +21,7 @@ library("localrecovery") {
     "//ydb/core/blobstorage/vdisk/hullop",
     "//ydb/core/blobstorage/vdisk/syncer",
     "//ydb/core/blobstorage/vdisk/synclog",
+    # "//ydb/core/control",  # peerdir only
   ]
 
   sources = [

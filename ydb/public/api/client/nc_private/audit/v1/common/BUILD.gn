@@ -7,4 +7,6 @@ protobuf_library("common") {
   ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

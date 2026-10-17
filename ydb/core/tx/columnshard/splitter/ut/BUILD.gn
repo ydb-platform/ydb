@@ -3,6 +3,7 @@ unittest_executable("ut") {
     "//contrib/libs/apache/arrow",
     "//library/cpp/testing/unittest",
     "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/dictionary",
     "//ydb/core/kqp/common",  # peerdir only
     "//ydb/core/kqp/session_actor",  # peerdir only
     "//ydb/core/mind",  # peerdir only
@@ -14,8 +15,11 @@ unittest_executable("ut") {
     "//ydb/core/tx/columnshard/data_sharing",  # peerdir only
     "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/scheme/column",
     "//ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch",  # peerdir only
     "//ydb/core/tx/columnshard/engines/storage/indexes/max",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",  # peerdir only
     "//ydb/core/tx/columnshard/splitter",
     "//ydb/core/tx/columnshard/splitter:settings",
     "//ydb/core/tx/tx_proxy",  # peerdir only
@@ -46,6 +50,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

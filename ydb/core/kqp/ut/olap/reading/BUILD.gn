@@ -16,6 +16,7 @@ unittest_executable("reading") {
   ]
 
   sources = [
+    "limit_ut.cpp",
     "simple_reader_ut.cpp",
     "sparsed_ut.cpp",
   ]
@@ -28,6 +29,7 @@ unittest_executable("reading") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

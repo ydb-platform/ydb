@@ -2,6 +2,7 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
     "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
     "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
     "//ydb/core/nbs/cloud/blockstore/libs/service",
     "//ydb/core/nbs/cloud/blockstore/libs/vhost",

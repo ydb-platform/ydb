@@ -3,7 +3,8 @@ unittest_executable("ut_comp_defrag") {
     "//library/cpp/protobuf/util",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
     "//ydb/core/blobstorage/vdisk/defrag",
-    "//ydb/core/load_test",
+    "//ydb/core/blobstorage/vdisk/hullop",
+    "//ydb/core/load_test/common",
     "//ydb/core/util",
   ]
 
@@ -15,6 +16,7 @@ unittest_executable("ut_comp_defrag") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

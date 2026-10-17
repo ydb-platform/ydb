@@ -1,0 +1,11 @@
+library("kikimr") {
+  public_deps = [
+    "//ydb/core/nbs/cloud/storage/core/libs/actors",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "helpers.cpp" ]
+}

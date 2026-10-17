@@ -6,8 +6,10 @@ library("fetcher") {
   ]
 
   deps = [
+    # "//library/cpp/containers/absl",
     # "//ydb/core/actorlib_impl",
     # "//ydb/core/client/server",
+    # "//ydb/core/persqueue/common",
     # "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/public/describer",
     "//ydb/core/persqueue/public/write_meta",

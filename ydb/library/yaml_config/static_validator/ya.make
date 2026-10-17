@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 PEERDIR(
     ydb/library/yaml_config/validator
 )

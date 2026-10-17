@@ -1,0 +1,5 @@
+library("json") {
+  public_deps = [ "//library/cpp/json" ]
+
+  sources = [ "json.cpp" ]
+}

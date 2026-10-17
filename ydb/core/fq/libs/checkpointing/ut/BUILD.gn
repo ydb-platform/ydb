@@ -9,9 +9,11 @@ unittest_executable("ut") {
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/basics:default",  # peerdir only
     "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/providers/dq/api/protos",
     "//ydb/library/yql/providers/dq/common",
+    "//ydb/library/yql/providers/pq/common",
   ]
 
   sources = [ "checkpoint_coordinator_ut.cpp" ]
@@ -22,6 +24,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -7,7 +7,7 @@ library("arrow") {
     "//ydb/library/accessor",
     "//ydb/library/actors/core",
     "//ydb/library/conclusion",
-    # "//ydb/library/formats/arrow/switch",
+    "//ydb/library/formats/arrow/switch",
   ]
 
   deps = [
@@ -25,7 +25,7 @@ library("arrow") {
     "//ydb/library/formats/arrow/validation",
     "//ydb/library/services",
     # "//ydb/library/yverify_stream",
-    # "//yql/essentials/core/arrow_kernels/request",  # peerdir only
+    # "//yql/essentials/public/types",  # peerdir only
     # "//yql/essentials/types/binary_json",  # peerdir only
     # "//yql/essentials/types/dynumber",  # peerdir only
   ]
@@ -42,7 +42,7 @@ library("arrow") {
 library("modifier") {
   public_deps = [
     "//contrib/libs/apache/arrow",
-    # "//ydb/library/accessor",
+    "//ydb/library/accessor",
     "//ydb/library/actors/core",
     "//ydb/library/conclusion",
     # "//ydb/library/formats/arrow/common",

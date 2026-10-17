@@ -1,0 +1,33 @@
+unittest_executable("index_lookup") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//library/cpp/json",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_complex_join_query_ut.cpp",
+    "kqp_flip_join_ut.cpp",
+    "kqp_index_lookup_join_ut.cpp",
+    "kqp_join_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

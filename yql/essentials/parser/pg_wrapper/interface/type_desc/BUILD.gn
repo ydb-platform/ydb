@@ -1,0 +1,6 @@
+slot_interface_group("type_desc") {
+  link_slot_interface = "yql_pg_runtime"
+
+  link_slot_headers =
+      [ "//yql/essentials/parser/pg_wrapper/interface/type_desc.h" ]
+}

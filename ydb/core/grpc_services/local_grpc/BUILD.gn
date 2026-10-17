@@ -1,0 +1,6 @@
+group("local_grpc") {
+  public_deps = [
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/library/grpc/server",
+  ]
+}

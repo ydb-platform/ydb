@@ -1,6 +1,7 @@
 library("simple_builder") {
   public_deps = [
     "//contrib/libs/apache/arrow",
+    # "//library/cpp/testing/unittest",
     # "//ydb/library/accessor",
   ]
 

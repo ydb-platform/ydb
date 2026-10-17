@@ -6,7 +6,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
 
-#include <ydb/services/workload_manager/service/service.h>
+#include <ydb/services/workload_manager/service/service_id.h>
 #include <ydb/services/workload_manager/common/events.h>
 #include <ydb/services/workload_manager/common/helpers.h>
 

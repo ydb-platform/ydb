@@ -1,9 +1,10 @@
 LIBRARY()
 
 SRCS(
-    consumers_advanced_monitoring_settings.cpp
+    consumers_advanced_monitoring_settings.cpp  # gn: monitoring_settings
     pq_schema_actor.cpp
 )
+# gn: monitoring_settings headers consumers_advanced_monitoring_settings.h
 
 PEERDIR(
     ydb/library/grpc/server

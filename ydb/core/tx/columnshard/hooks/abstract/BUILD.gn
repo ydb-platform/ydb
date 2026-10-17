@@ -1,6 +1,6 @@
 library("abstract") {
   public_deps = [
-    "//ydb/core/protos",
+    # "//library/cpp/threading/atomic_shared_ptr",
     "//ydb/core/tablet_flat",
     "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/engines/writer",
@@ -11,9 +11,9 @@ library("abstract") {
   ]
 
   deps = [
+    # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
-    # "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/public/sdk/cpp/src/client/resources",  # peerdir only
     # "//yql/essentials/core/expr_nodes",  # peerdir only
   ]

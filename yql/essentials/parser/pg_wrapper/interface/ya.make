@@ -1,18 +1,23 @@
 YQL_LIBRARY()
 
 SRCS(
-    codec.h
-    compare.h
-    comp_factory.h
-    context.h
+    arrow.h  # gn: slot yql_pg_runtime
+    codec.h  # gn: slot yql_pg_runtime
+    compare.h  # gn: slot yql_pg_runtime
+    comp_factory.h  # gn: slot yql_pg_runtime
+    config.h  # gn: slot yql_pg_runtime
+    context.h  # gn: slot yql_pg_runtime
     interface.h
     interface.cpp
-    pack.h
-    parser.h
-    in_range.h
-    sign.h
-    utils.h
+    optimizer.h  # gn: slot yql_pg_sql_translator
+    pack.h  # gn: slot yql_pg_runtime
+    parser.h  # gn: slot yql_pg_sql_translator
+    in_range.h  # gn: slot yql_pg_runtime
+    raw_parser.h  # gn: slot yql_pg_runtime
+    sign.h  # gn: slot yql_pg_runtime
+    utils.h  # gn: slot yql_pg_runtime
 )
+# gn: yql_pg_sql_translator headers optimizer.h parser.h
 
 PEERDIR(
     util

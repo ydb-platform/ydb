@@ -10,10 +10,11 @@ library("iterator") {
     # "//ydb/core/tx/columnshard/engines/reader/abstract",
     # "//ydb/core/tx/columnshard/engines/reader/common",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
-    # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates",
     # "//ydb/core/tx/columnshard/engines/scheme",
-    "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",
+    # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/core/tx/columnshard/resource_subscriber",
     # "//ydb/core/tx/limiter/grouped_memory/service",
@@ -21,34 +22,38 @@ library("iterator") {
   ]
 
   deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/lwtrace",
     # "//ydb/core/formats/arrow/accessor/sub_columns",
     # "//ydb/core/tx/columnshard/blobs_action",  # peerdir only
     # "//ydb/core/tx/columnshard/blobs_reader",
-    # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    # "//ydb/core/tx/columnshard/engines/reader/tracing",
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
-    "//ydb/core/tx/columnshard/engines:filter",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",
+    "//ydb/core/tx/columnshard/engines:filter",  # peerdir only
     # "//ydb/core/tx/conveyor/usage",  # peerdir only
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/formats/arrow",
   ]
 
   sources = [
     "collections/abstract.cpp",
     "collections/constructors.cpp",
-    "collections/full_scan_sorted.cpp",
-    "collections/limit_sorted.cpp",
-    "collections/not_sorted.cpp",
+    "collections/ordered_result_no_limit.cpp",
+    "collections/ordered_result_with_limit.cpp",
+    "collections/unordered_result.cpp",
     "context.cpp",
     "fetched_data.cpp",
     "fetching.cpp",
-    "index_fetcher.cpp",
     "iterator.cpp",
     "plain_read_data.cpp",
     "scanner.cpp",
     "source.cpp",
     "sync_points/abstract.cpp",
     "sync_points/aggr.cpp",
+    "sync_points/distinct_limit.cpp",
     "sync_points/limit.cpp",
     "sync_points/result.cpp",
   ]

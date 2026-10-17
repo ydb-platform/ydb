@@ -1,22 +1,23 @@
 library("mirrorer") {
   public_deps = [
+    "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public/counters",
+    "//ydb/core/protos",
     # "//ydb/library/actors/core",
+    # "//ydb/library/persqueue/counter_time_keeper",
+    # "//ydb/public/sdk/cpp/src/client/topic",
   ]
 
   deps = [
-    "//library/cpp/string_utils/base64",
-    "//ydb/core/persqueue/common",
     "//ydb/core/persqueue/common/proxy",
-    # "//ydb/core/persqueue/events",
     # "//ydb/core/persqueue/pqtablet/common",  # peerdir only
-    "//ydb/core/persqueue/public/counters",
     "//ydb/core/persqueue/public/write_meta",
     "//ydb/core/persqueue/writer",
-    "//ydb/core/protos",
-    # "//ydb/library/persqueue/counter_time_keeper",
+    # "//ydb/library/actors/struct_log",
     "//ydb/library/persqueue/topic_parser",
     # "//ydb/public/lib/base",
-    # "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/library/kafka",
   ]
 
   sources = [ "mirrorer.cpp" ]

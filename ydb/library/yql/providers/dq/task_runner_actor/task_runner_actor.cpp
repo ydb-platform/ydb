@@ -78,7 +78,7 @@ private:
         TVector<TDqSerializedBatch> chunks;
         for (;maxChunks && remain > 0 && !isFinished && hasData; maxChunks--, remain -= dataSize) {
             TDqSerializedBatch data;
-            const auto lastPop = std::move(Channel->Pop(data));
+            const auto lastPop = Channel->Pop(data);
 
             for (auto& metric : lastPop.GetMetric()) {
                 result.Metrics.push_back(metric);

@@ -1,12 +1,21 @@
 unittest_executable("ut_ddisk") {
   deps = [
+    "//library/cpp/monlib/service",
+    "//ydb/core/base",
     "//ydb/core/blobstorage/ddisk",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/load_test",
+    "//ydb/core/load_test/common",
+    "//ydb/core/nbs/cloud/blockstore/config/protos",
+    "//ydb/core/protos",
+    "//ydb/core/sys_view/common",
+    "//ydb/core/tablet",
   ]
 
   sources = [
     "//ydb/core/blobstorage/ut_blobstorage/ddisk.cpp",
     "//ydb/core/blobstorage/ut_blobstorage/persistent_buffer_space_allocator.cpp",
+    "nbs_dbg_like_load_tablet_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/blobstorage/ut_blobstorage" ]
@@ -15,6 +24,7 @@ unittest_executable("ut_ddisk") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

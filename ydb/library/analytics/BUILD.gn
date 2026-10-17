@@ -8,4 +8,6 @@ library("analytics") {
 
 protobuf_library("protos") {
   sources = [ "protos/data.proto" ]
+
+  protoc_fatal_warnings = true
 }

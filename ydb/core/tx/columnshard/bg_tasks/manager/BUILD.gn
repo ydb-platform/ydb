@@ -6,9 +6,11 @@ library("manager") {
     "//ydb/core/tx/columnshard/bg_tasks/session",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
   ]
 
   deps = [
+    "//ydb/core/protos",
     "//ydb/core/tx/columnshard/bg_tasks/protos",
     "//ydb/core/tx/columnshard/bg_tasks/transactions",
   ]

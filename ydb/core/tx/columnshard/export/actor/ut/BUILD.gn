@@ -1,0 +1,46 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/hook",
+    "//ydb/core/base",
+    "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/bg_tasks/events",
+    "//ydb/core/tx/columnshard/engines/reader/actor",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/operations",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/datashard",
+    "//ydb/library/testlib/s3_recipe_helper",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/services/metadata",  # peerdir only
+  ]
+
+  sources = [ "ut_export_actor_lifecycle.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/columnshard" ]
+
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

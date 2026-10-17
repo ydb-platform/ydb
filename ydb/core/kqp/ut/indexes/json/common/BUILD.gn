@@ -1,0 +1,18 @@
+library("common") {
+  testonly = true
+
+  deps = [
+    # "//contrib/libs/fmt",
+    # "//library/cpp/json",
+    # "//ydb/core/base",
+    # "//ydb/core/kqp/ut/common",
+    # "//ydb/core/kqp/ut/indexes/common",
+    # "//ydb/library/json_index",
+  ]
+
+  sources = [
+    "kqp_indexes_json_corpus.cpp",
+    "kqp_indexes_json_predicate.cpp",
+    "kqp_indexes_json_ut_common.cpp",
+  ]
+}

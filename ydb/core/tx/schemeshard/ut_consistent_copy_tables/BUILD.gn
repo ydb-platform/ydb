@@ -1,9 +1,13 @@
 unittest_executable("ut_consistent_copy_tables") {
   deps = [
+    "//ydb/core/base",
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/tx/datashard",
     "//ydb/core/tx/schemeshard",  # peerdir only
     "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
   ]
@@ -18,6 +22,7 @@ unittest_executable("ut_consistent_copy_tables") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

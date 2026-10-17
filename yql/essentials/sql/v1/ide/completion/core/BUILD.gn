@@ -1,0 +1,17 @@
+library("core") {
+  public_deps = [
+    "//yql/essentials/sql/v1/ide/pure_ast",
+    # "//yql/essentials/utils/meta",
+  ]
+
+  deps = [
+    "//yql/essentials/core/sql_types",
+    # "//yql/essentials/sql/v1/ide/core",  # peerdir only
+  ]
+
+  sources = [
+    "input.cpp",
+    "name.cpp",
+    "statement.cpp",
+  ]
+}

@@ -1,3 +1,5 @@
 protobuf_library("proto") {
   sources = [ "quota_internal.proto" ]
+
+  protoc_fatal_warnings = true
 }

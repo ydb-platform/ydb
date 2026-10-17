@@ -17,4 +17,6 @@ protobuf_library("protos") {
     "links.proto",
     "sessions.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

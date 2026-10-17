@@ -6,6 +6,7 @@ unittest_executable("ut_erase_rows") {
     "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/testlib",  # peerdir only
+    "//ydb/core/testlib/actors",
     "//ydb/core/tx",
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/datashard/ut_common",
@@ -13,6 +14,7 @@ unittest_executable("ut_erase_rows") {
     "//ydb/core/tx/tx_proxy:public",
     "//ydb/library/ut",
     "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
     "//ydb/public/sdk/cpp/src/client/result",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
@@ -27,6 +29,7 @@ unittest_executable("ut_erase_rows") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

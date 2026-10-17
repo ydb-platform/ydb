@@ -6,6 +6,7 @@ unittest_executable("with_offset_ranges_mode_ut") {
     "//library/cpp/threading/future",
     "//ydb/public/lib/json_value",  # peerdir only
     "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/public/sdk/cpp/adapters/executor",
     "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
     "//ydb/public/sdk/cpp/src/client/persqueue_public",
@@ -26,6 +27,7 @@ unittest_executable("with_offset_ranges_mode_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

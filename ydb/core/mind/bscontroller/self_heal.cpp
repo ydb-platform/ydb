@@ -724,7 +724,7 @@ namespace NKikimr::NBsController {
                 groupDefinition[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = vdisk.Location.ComprisingPDiskId();
             }
 
-            return std::move(groupDefinition);
+            return groupDefinition;
         }
 
         void HandleWakeup() {

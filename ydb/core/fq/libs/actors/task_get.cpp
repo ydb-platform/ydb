@@ -38,7 +38,7 @@ public:
         : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
-        , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "GetTask")))
+        , Counters(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "GetTask"))
         , LifetimeDuration(Counters->GetHistogram("LifetimeDurationMs",  ExponentialHistogram(10, 2, 50)))
         , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())

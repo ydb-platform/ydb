@@ -1,0 +1,21 @@
+library("spans") {
+  public_deps = [
+    "//ydb/library/actors/retro_tracing/span",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/protos",  # peerdir only
+    "//ydb/library/actors/interconnect/retro_tracing",
+    # "//ydb/library/actors/retro_tracing",  # peerdir only
+    "//ydb/library/actors/retro_tracing/collector",
+  ]
+
+  sources = [
+    "named_span.cpp",
+    "retro_tracing.cpp",
+  ]
+
+  link_slot_provides = [ "retro_spans" ]
+}

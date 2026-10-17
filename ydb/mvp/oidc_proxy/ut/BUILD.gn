@@ -1,33 +1,35 @@
 unittest_executable("ut") {
   deps = [
     "//contrib/libs/openssl",
+    "//contrib/libs/yaml-cpp",
+    "//library/cpp/cgiparam",
     "//library/cpp/json",
     "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/testlib/actors",
     "//ydb/core/util",
-    "//ydb/library/actors/core",
-    "//ydb/library/actors/testlib",
     "//ydb/library/security",
     "//ydb/library/testlib/service_mocks",
     "//ydb/mvp/core",
     "//ydb/mvp/core:protos",
     "//ydb/mvp/oidc_proxy",
+    "//ydb/public/api/client/nc_private/iam/v1",
   ]
 
   sources = [
-    "//ydb/mvp/core/mvp_test_runtime.cpp",
+    "//ydb/mvp/oidc_proxy/mvp_config_validation_ut.cpp",
     "//ydb/mvp/oidc_proxy/oidc_proxy_ut.cpp",
     "//ydb/mvp/oidc_proxy/openid_connect.cpp",
+    "//ydb/mvp/oidc_proxy/tokenator_integration_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/mvp/oidc_proxy" ]
 
+  data = [ "//ydb/mvp/oidc_proxy/examples/" ]
+
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

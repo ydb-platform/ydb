@@ -13,7 +13,8 @@ PEERDIR(
 )
 
 SRCS(
-    container.cpp
+    container.cpp  # gn: into ydb/core/formats/arrow
+    container.h  # gn: into ydb/core/formats/arrow
 )
 
 END()

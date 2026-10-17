@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    defs.h
+    defs.h  # gn: defs
     vdisk_actor.cpp
     vdisk_actor.h
     vdisk_services.h

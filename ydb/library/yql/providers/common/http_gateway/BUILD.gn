@@ -4,6 +4,8 @@ library("http_gateway") {
     # "//library/cpp/containers/stack_vector",
     "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/retry",
+    "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
     "//yql/essentials/providers/common/proto",
     "//yql/essentials/public/issue",
     "//yql/essentials/utils/log",
@@ -21,6 +23,7 @@ library("http_gateway") {
     "yql_aws_signature.cpp",
     "yql_http_default_retry_policy.cpp",
     "yql_http_gateway.cpp",
+    "yql_http_pool_cap_pusher.cpp",
   ]
 }
 

@@ -2,14 +2,16 @@ library("type_ann") {
   public_deps = [
     # "//yql/essentials/ast",
     "//yql/essentials/core",
+    # "//yql/essentials/public/udf_meta",
   ]
 
   deps = [
+    # "//library/cpp/string_utils/parse_size",
     # "//library/cpp/yson/node",
     # "//yql/essentials/core/expr_nodes",
     # "//yql/essentials/core/expr_nodes_gen",
     # "//yql/essentials/core/issue",
-    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/core/poly_args",
     # "//yql/essentials/core/sql_types",
     # "//yql/essentials/minikql",
     "//yql/essentials/minikql/dom",
@@ -17,7 +19,7 @@ library("type_ann") {
     # "//yql/essentials/parser/pg_wrapper/interface",
     # "//yql/essentials/providers/common/provider",
     "//yql/essentials/providers/common/schema/expr",
-    "//yql/essentials/public/decimal",
+    "//yql/essentials/public/issue/protos",
     "//yql/essentials/public/langver",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/utils",
@@ -33,7 +35,9 @@ library("type_ann") {
     "type_ann_join.cpp",
     "type_ann_list.cpp",
     "type_ann_match_recognize.cpp",
+    "type_ann_partial.cpp",
     "type_ann_pg.cpp",
+    "type_ann_sql.cpp",
     "type_ann_types.cpp",
     "type_ann_wide.cpp",
     "type_ann_yql.cpp",

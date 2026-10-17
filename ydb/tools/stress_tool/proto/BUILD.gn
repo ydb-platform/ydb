@@ -4,4 +4,6 @@ protobuf_library("proto") {
   sources = [ "device_perf_test.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

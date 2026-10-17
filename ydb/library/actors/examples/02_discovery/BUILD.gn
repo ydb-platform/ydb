@@ -4,6 +4,7 @@ linked_executable("example_02_discovery") {
     "//ydb/library/actors/dnsresolver",
     "//ydb/library/actors/http",
     "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/actors/util",
   ]

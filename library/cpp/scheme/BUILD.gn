@@ -3,6 +3,7 @@ library("scheme") {
 
   deps = [
     "//contrib/libs/protobuf",
+    # "//library/cpp/protobuf/runtime",  # peerdir only
     # "//library/cpp/string_utils/relaxed_escaper",
   ]
 

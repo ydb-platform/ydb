@@ -19,6 +19,7 @@ PEERDIR(
     ydb/public/lib/udf/manifest
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/grpc_services
     ydb/core/kqp/common
     ydb/core/keyvalue
     ydb/core/tx/scheme_cache

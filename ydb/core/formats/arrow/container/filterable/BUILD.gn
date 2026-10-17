@@ -1,0 +1,9 @@
+library("filterable") {
+  public_deps = [ "//ydb/core/formats/arrow" ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+  ]
+
+  sources = [ "filterable.cpp" ]
+}

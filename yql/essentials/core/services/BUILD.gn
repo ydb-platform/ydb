@@ -2,6 +2,7 @@ library("pipeline") {
   public_deps = [
     # ":services",
     # "//library/cpp/yson",
+    # "//yql/essentials/ast",
     "//yql/essentials/core",
     # "//yql/essentials/core/issue",
     "//yql/essentials/core/type_ann",
@@ -9,12 +10,19 @@ library("pipeline") {
   ]
 
   deps = [
-    # "//yql/essentials/ast",
+    # "//library/cpp/yson/node",
     "//yql/essentials/core/common_opt",
+    # "//yql/essentials/minikql:alloc",
+    "//yql/essentials/providers/common/codec",
+    "//yql/essentials/providers/common/mkql",
     # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/schema/expr",
+    # "//yql/essentials/utils",
   ]
 
   sources = [
+    "yql_eval_params.cpp",
+    "yql_lineage.cpp",
     "yql_out_transformers.cpp",
     "yql_transform_pipeline.cpp",
   ]
@@ -31,13 +39,13 @@ library("services") {
 
   deps = [
     "//library/cpp/string_utils/base64",
+    # "//library/cpp/time_provider",
     # "//library/cpp/yson/node",
     "//yql/essentials/ast/serialize",
     "//yql/essentials/core/common_opt",  # peerdir only
     "//yql/essentials/core/peephole_opt",
     # "//yql/essentials/core/sql_types",
     # "//yql/essentials/minikql",  # peerdir only
-    # "//yql/essentials/minikql:alloc",
     "//yql/essentials/providers/common/codec",
     "//yql/essentials/providers/common/mkql",
     # "//yql/essentials/providers/common/provider",
@@ -50,8 +58,6 @@ library("services") {
 
   sources = [
     "yql_eval_expr.cpp",
-    "yql_eval_params.cpp",
-    "yql_lineage.cpp",
     "yql_plan.cpp",
     "yql_transform_pipeline_eval.cpp",
   ]

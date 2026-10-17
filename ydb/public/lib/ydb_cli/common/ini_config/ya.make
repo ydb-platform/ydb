@@ -1,5 +1,7 @@
 LIBRARY(ini_config)
 
+# gn: move into parent
+
 SRCS(
     config.cpp
     ini.cpp

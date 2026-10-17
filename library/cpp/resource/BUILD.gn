@@ -2,7 +2,7 @@ library("resource") {
   deps = [
     "//library/cpp/blockcodecs/codecs/zstd",  # peerdir only
     "//library/cpp/blockcodecs/core",
-    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/containers/absl",
   ]
 
   sources = [

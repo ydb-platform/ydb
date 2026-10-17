@@ -1,0 +1,7 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/mvp/core:protos" ]
+
+  sources = [ "config.proto" ]
+
+  protoc_fatal_warnings = true
+}

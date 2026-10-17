@@ -1,21 +1,29 @@
 unittest_executable("ut_streaming_query") {
   deps = [
+    "//ydb/core/base",
     "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
-    "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/core",
   ]
 
-  sources = [ "ut_streaming_query.cpp" ]
-
-  include_dirs = [
-    "//ydb/core/tx/schemeshard",  # peerdir only
+  sources = [
+    "ut_operation_tracking.cpp",
+    "ut_streaming_query.cpp",
   ]
+
+  include_dirs = [ "//ydb/core/tx/schemeshard" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

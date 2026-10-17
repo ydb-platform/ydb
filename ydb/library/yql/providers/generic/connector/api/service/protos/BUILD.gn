@@ -8,4 +8,6 @@ protobuf_library("protos") {
     "connector.proto",
     "error.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

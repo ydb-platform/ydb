@@ -12,6 +12,7 @@
 #include <yt/yql/providers/yt/gateway/lib/reduce_builder.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/common/yql_yt_ypath_attrs.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>

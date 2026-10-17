@@ -6,6 +6,8 @@ library("impl") {
   ]
 
   deps = [
+    # "//library/cpp/yson/node",  # peerdir only
+    # "//yql/essentials/utils",
     # "//yql/essentials/utils/log",
     # "//yt/yql/providers/yt/fmr/request_options",  # peerdir only
   ]

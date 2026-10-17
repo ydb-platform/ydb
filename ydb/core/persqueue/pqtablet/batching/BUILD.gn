@@ -1,0 +1,24 @@
+library("batching") {
+  public_deps = [
+    # "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//library/cpp/streams/zstd",
+    # "//ydb/core/persqueue/public",
+    # "//ydb/core/persqueue/public/codecs",
+    # "//ydb/core/persqueue/public/write_meta",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/persqueue/counter_time_keeper",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/library/kafka",
+  ]
+
+  sources = [
+    "batch_cutter.cpp",
+    "batch_processor.cpp",
+    "consumer_batch_processor.cpp",
+  ]
+}

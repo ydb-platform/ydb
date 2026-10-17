@@ -1,6 +1,7 @@
 LIBRARY(client-iam-common-include)
 
 SRCS(
+    generic_provider.h
     types.h
 )
 

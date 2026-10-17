@@ -5,14 +5,16 @@ library("settings") {
     "//yql/essentials/parser/lexer_common",
     # "//yql/essentials/public/issue",
     "//yql/essentials/public/langver",
+    # "//yql/essentials/public/udf_meta",
+    # "//yql/essentials/sql/settings/flags",
   ]
 
   deps = [
     "//library/cpp/deprecated/split",
     "//library/cpp/json",
     "//yql/essentials/core/issue",
-    # "//yql/essentials/core/issue/protos",  # peerdir only
     # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/public/issue/protos",  # peerdir only
     "//yql/essentials/utils",
   ]
 
@@ -21,4 +23,6 @@ library("settings") {
     "translation_settings.cpp",
     "translator.cpp",
   ]
+
+  serialize_enum_headers = [ "translation_settings.h" ]
 }

@@ -99,7 +99,7 @@ private:
         ui64 estimatedPackedSize = Packer_.PackedSizeEstimate();
         ReportPackerSize(estimatedPackedSize, forced);
         if (estimatedPackedSize > SizeLimit_ || forced) {
-            return Spiller_->Put(std::move(Packer_.Finish()));
+            return Spiller_->Put(Packer_.Finish());
         }
 
         return std::nullopt;

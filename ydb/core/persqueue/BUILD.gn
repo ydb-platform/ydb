@@ -1,6 +1,6 @@
 library("persqueue") {
   public_deps = [
-    # "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/containers/absl",
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/sliding_window",
     # "//library/cpp/time_provider",
@@ -10,6 +10,7 @@ library("persqueue") {
     "//ydb/core/persqueue/common",
     "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/pqrb",
+    # "//ydb/core/persqueue/pqtablet/batching",
     "//ydb/core/persqueue/pqtablet/blob",
     # "//ydb/core/persqueue/pqtablet/cache",
     "//ydb/core/persqueue/pqtablet/quota",
@@ -24,6 +25,7 @@ library("persqueue") {
     "//ydb/library/actors/core",
     # "//ydb/library/persqueue/counter_time_keeper",
     "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/api/protos",
   ]
 
   deps = [
@@ -53,12 +55,13 @@ library("persqueue") {
     # "//ydb/core/tx/scheme_cache",
     "//ydb/core/tx/time_cast",
     # "//ydb/library/actors/interconnect",
+    # "//ydb/library/kll_median",  # peerdir only
     # "//ydb/library/protobuf_printer",
     "//ydb/library/services",
     # "//ydb/library/wilson_ids",
     # "//ydb/library/yverify_stream",
-    "//ydb/public/api/protos",
     # "//ydb/public/lib/base",
+    # "//ydb/public/sdk/cpp/src/library/kafka",
     "//ydb/services/persqueue_v1/actors",
   ]
 
@@ -69,7 +72,7 @@ library("persqueue") {
     "pqtablet/metering_sink.cpp",
     "pqtablet/partition/autopartitioning_manager.cpp",
     "pqtablet/partition/consumer_offset_tracker.cpp",
-    "pqtablet/partition/explicit_message_groups.cpp",
+    "pqtablet/partition/deduplication_write_queue.cpp",
     "pqtablet/partition/message_id_deduplicator.cpp",
     "pqtablet/partition/offload_actor.cpp",
     "pqtablet/partition/ownerinfo.cpp",
@@ -81,6 +84,7 @@ library("persqueue") {
     "pqtablet/partition/partition_mlp.cpp",
     "pqtablet/partition/partition_monitoring.cpp",
     "pqtablet/partition/partition_read.cpp",
+    "pqtablet/partition/partition_reset_offset.cpp",
     "pqtablet/partition/partition_sourcemanager.cpp",
     "pqtablet/partition/partition_write.cpp",
     "pqtablet/partition/sourceid.cpp",
@@ -92,4 +96,6 @@ library("persqueue") {
     "pqtablet/readproxy/readproxy.cpp",
     "pqtablet/transaction.cpp",
   ]
+
+  serialize_enum_headers = [ "pqtablet/partition/deduplication_write_queue.h" ]
 }

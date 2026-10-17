@@ -171,6 +171,10 @@ config("std_string") {
     defines = [ "TSTRING_IS_STD_STRING" ]
 }
 
+config("ydb_embedded_nbs") {
+    defines = [ "YDB_EMBEDDED_NBS_ENABLED" ]
+}
+
 config("no_custom_char_ptr_std_comparator") {
     defines = [ "NO_CUSTOM_CHAR_PTR_STD_COMPARATOR" ]
 }

@@ -121,7 +121,6 @@ template("protobuf_sources") {
 
         args = [ _source_dir ] + outputs + ["--"] + [ "./$_protoc_bin" ] + _proto_paths + _self_proto_paths
         args += [
-            "--fatal_warnings",
             "--cpp_out", _cpp_out,
             "--cpp_styleguide_out", _cpp_out,
             "--plugin=protoc-gen-cpp_styleguide=" + rebase_path(get_label_info(_cpp_styleguide, "root_out_dir") + "/cpp_styleguide"),
@@ -146,14 +145,23 @@ template("protobuf_sources") {
             deps += [ _grpc_cpp ]
         }
 
+        # PROTOC_FATAL_WARNINGS(): as in ya, only where the module asks
+        if (defined(invoker.protoc_fatal_warnings) && invoker.protoc_fatal_warnings) {
+            args += [ "--fatal_warnings" ]
+        }
+
         if (defined(invoker.deps)) {
             deps += invoker.deps
         }
 
         foreach(_plugin, _extra_plugins) {
             _plugin_tool = get_label_info(_plugin.target, "label_no_toolchain") + "($tool_toolchain)"
+
+            # a linked_executable(): its binary is named after its dir and target (//build/gn/link_slots.gni)
+            _plugin_bin = string_replace(rebase_path(get_label_info(_plugin_tool, "dir"), "//"), "/", "-") +
+                          "-" + get_label_info(_plugin_tool, "name")
             args += [
-                "--plugin=protoc-gen-${_plugin.name}=" + rebase_path(get_label_info(_plugin_tool, "root_out_dir") + "/${_plugin.name}"),
+                "--plugin=protoc-gen-${_plugin.name}=" + rebase_path(get_label_info(_plugin_tool, "root_out_dir") + "/${_plugin_bin}"),
                 "--${_plugin.name}_out", _cpp_out,
             ]
             deps += [ _plugin_tool ]
@@ -191,7 +199,8 @@ template("protobuf_library") {
 
     protobuf_sources(_gen_target) {
         forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "proto_public_include_dirs",
-                                          "generated_sources", "proto_transitive_headers", "testonly" ])
+                                          "generated_sources", "proto_transitive_headers", "protoc_fatal_warnings",
+                                          "testonly" ])
         sources = invoker.sources - _cpp_sources
 
         # the imports are the public_deps
@@ -246,7 +255,7 @@ template("protobuf_library") {
     }
 
     library(target_name) {
-        forward_variables_from(invoker, "*", [ "deps", "public_configs", "public_deps", "sources", "extra_plugins", "generate_grpc_services", "proto_public_include_dirs", "serialize_enum_headers", "generated_sources", "proto_transitive_headers" ])
+        forward_variables_from(invoker, "*", [ "deps", "public_configs", "public_deps", "sources", "extra_plugins", "generate_grpc_services", "proto_public_include_dirs", "serialize_enum_headers", "generated_sources", "proto_transitive_headers", "protoc_fatal_warnings" ])
 
         output_dir = "$root_out_dir/" + rebase_path(".", "//") # TODO: doesn't work for some reason
         output_name = _unique_name

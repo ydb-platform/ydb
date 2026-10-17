@@ -1,8 +1,9 @@
 library("config") {
   public_deps = [
-    "//ydb/core/protos",
     # "//ydb/library/accessor",
   ]
+
+  deps = [ "//ydb/core/protos" ]
 
   sources = [ "config.cpp" ]
 }
@@ -10,21 +11,19 @@ library("config") {
 library("request") {
   public_deps = [
     ":config",
-    "//library/cpp/threading/future",
     "//ydb/core/base",
     "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
     # "//ydb/library/accessor",
     # "//ydb/library/aclib",
     "//ydb/library/actors/core",
     # "//ydb/library/conclusion",
-    "//ydb/library/yql/public/ydb_issue",
     "//ydb/public/api/protos",
     # "//yql/essentials/public/issue",
   ]
 
   deps = [
     "//ydb/core/grpc_services",  # peerdir only
-    "//ydb/core/grpc_services/local_rpc",
   ]
 
   sources = [

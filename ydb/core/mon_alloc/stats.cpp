@@ -103,7 +103,7 @@ namespace NKikimr {
             if (name.StartsWith("lf")) {
                 stats = std::make_unique<TLfAllocStats>(std::move(group));
             } else if (name.StartsWith("tc")) {
-                stats = std::move(CreateTcMallocStats(std::move(group)));
+                stats = CreateTcMallocStats(std::move(group));
             }
 
             return stats ? std::move(stats) : std::make_unique<TFakeAllocStats>();
@@ -176,7 +176,7 @@ namespace NKikimr {
             if (name.StartsWith("lf")) {
                 state = std::make_unique<TLfAllocState>();
             } else if (name.StartsWith("tc")) {
-                state = std::move(CreateTcMallocState());
+                state = CreateTcMallocState();
             }
 
             return state ? std::move(state) : std::make_unique<TFakeAllocState>();

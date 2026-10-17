@@ -19,8 +19,9 @@ library("pdisk_io") {
   deps = [
     ":protos",
     "//contrib/libs/libaio",
-    "//contrib/libs/liburing",
+    "//contrib/libs/liburing",  # peerdir only
     # "//library/cpp/containers/stack_vector",
+    # "//ydb/core/util",
     "//ydb/library/actors/core",
   ]
 
@@ -32,13 +33,19 @@ library("pdisk_io") {
     "drivedata.cpp",
     "file_params_linux.cpp",
     "sector_map.cpp",
+    "uring_operation.cpp",
     "uring_router.cpp",
     "wcache.cpp",
   ]
 
-  serialize_enum_headers = [ "aio.h" ]
+  serialize_enum_headers = [
+    "aio.h",
+    "uring_router.h",
+  ]
 }
 
 protobuf_library("protos") {
   sources = [ "protos/sector_map.proto" ]
+
+  protoc_fatal_warnings = true
 }

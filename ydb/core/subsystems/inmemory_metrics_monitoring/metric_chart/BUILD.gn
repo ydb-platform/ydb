@@ -1,0 +1,35 @@
+library("metric_chart") {
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/mon",
+  ]
+
+  sources = [ "resources.cpp" ]
+
+  resources = [
+    {
+      path = "allocation.js"
+      key = "metric-chart/allocation.js"
+    },
+    {
+      path = "chart.js"
+      key = "metric-chart/chart.js"
+    },
+    {
+      path = "chartkit.js"
+      key = "metric-chart/chartkit.js"
+    },
+    {
+      path = "chartkit.css"
+      key = "metric-chart/chartkit.css"
+    },
+    {
+      path = "client.js"
+      key = "metric-chart/client.js"
+    },
+    {
+      path = "chart.css"
+      key = "metric-chart/chart.css"
+    },
+  ]
+}

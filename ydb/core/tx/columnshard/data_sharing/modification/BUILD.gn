@@ -1,8 +1,8 @@
 library("events") {
   public_deps = [
+    # "//ydb/core/tx/columnshard",
     "//ydb/core/tx/columnshard/common",
     "//ydb/core/tx/columnshard/data_sharing/protos",
-    # "//ydb/core/tx/columnshard:ev_ids",
     "//ydb/library/actors/core",
   ]
 

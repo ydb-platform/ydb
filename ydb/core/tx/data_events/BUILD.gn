@@ -12,6 +12,7 @@ library("data_events") {
     "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/scheme_cache",
     "//ydb/library/accessor",
+    # "//ydb/library/aclib",
     "//ydb/library/actors/core",
     "//ydb/library/actors/util",
     "//ydb/library/actors/wilson",
@@ -28,7 +29,8 @@ library("data_events") {
     "//ydb/core/tablet",
     "//ydb/core/tablet_flat",  # peerdir only
     "//ydb/core/tablet_flat/protos",  # peerdir only
-    "//ydb/core/tx/columnshard/splitter:settings",
+    # "//ydb/core/tx/columnshard/flow_control_manager",
+    "//ydb/core/tx/schemeshard/olap/columns",
     "//ydb/core/tx/sharding",
     # "//ydb/public/api/grpc/draft",  # peerdir only
   ]

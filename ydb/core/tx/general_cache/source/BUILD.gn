@@ -1,7 +1,6 @@
 library("source") {
   public_deps = [
     # "//ydb/core/base",
-    # "//ydb/core/tx/general_cache/usage",
     # "//ydb/library/actors/core",
   ]
 

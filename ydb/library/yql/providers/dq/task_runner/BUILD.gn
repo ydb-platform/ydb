@@ -1,5 +1,6 @@
 library("task_runner") {
   public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
     # "//ydb/library/yql/dq/common",
     "//ydb/library/yql/dq/runtime",
     "//ydb/library/yql/providers/dq/api/protos",
@@ -15,8 +16,9 @@ library("task_runner") {
     # "//ydb/library/yql/dq/proto",  # peerdir only
     "//ydb/library/yql/providers/dq/common",
     # "//ydb/library/yql/providers/dq/counters",
+    # "//yql/essentials/minikql/aligned_page_pool",
     # "//yql/essentials/minikql/invoke_builtins",
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/protos",  # peerdir only
     # "//yql/essentials/providers/common/proto",  # peerdir only
     # "//yql/essentials/utils",
@@ -29,6 +31,7 @@ library("task_runner") {
     "file_cache.cpp",
     "tasks_runner_local.cpp",
     "tasks_runner_pipe.cpp",
+    "tasks_runner_pipe_process.cpp",
     "tasks_runner_proxy.cpp",
   ]
 }

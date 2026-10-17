@@ -1,6 +1,8 @@
 library("service") {
   public_deps = [
+    # "//contrib/libs/protobuf",
     # "//library/cpp/json",
+    # "//library/cpp/protobuf/interop",
     # "//ydb/core/base",
     "//ydb/core/change_exchange",
     "//ydb/core/protos",
@@ -10,17 +12,19 @@ library("service") {
     "//ydb/core/tx/replication/common",
     # "//ydb/core/tx/replication/ydb_proxy",
     "//ydb/core/wrappers",
-    "//ydb/library/actors/core",
   ]
 
   deps = [
     # "//ydb/core/fq/libs/row_dispatcher/events",  # peerdir only
     "//ydb/core/fq/libs/row_dispatcher/purecalc_compilation",
     "//ydb/core/io_formats/cell_maker",
+    # "//ydb/core/transfer",
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/replication/ydb_proxy/local_proxy",  # peerdir only
     "//ydb/core/tx/scheme_cache",
     "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/core",
     "//ydb/library/services",
   ]
 

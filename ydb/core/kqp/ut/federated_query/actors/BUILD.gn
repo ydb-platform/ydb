@@ -1,0 +1,32 @@
+unittest_executable("actors") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/checkpointing/events",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/federated_query/actors",
+    "//ydb/core/mind",  # peerdir only
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/pq/proto",
+  ]
+
+  sources = [ "streaming_query_nodes_manager_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/federated_query/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

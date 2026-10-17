@@ -11,7 +11,10 @@ unittest_executable("cost") {
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "kqp_cost_ut.cpp" ]
+  sources = [
+    "kqp_affected_rows_pg_ut.cpp",
+    "kqp_cost_ut.cpp",
+  ]
 
   include_dirs = [
     "//ydb/core/kqp",  # peerdir only
@@ -21,6 +24,7 @@ unittest_executable("cost") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

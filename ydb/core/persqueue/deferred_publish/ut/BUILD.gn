@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/deferred_publish",
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "//ydb/core/persqueue/deferred_publish/destination_blob.cpp",
+    "deferred_publish_destination_blob_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

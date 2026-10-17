@@ -1,0 +1,17 @@
+library("common") {
+  testonly = true
+
+  public_deps = [
+    # "//ydb/core/kqp/ut/common",
+  ]
+
+  deps = [
+    # "//contrib/libs/fmt",  # peerdir only
+    # "//ydb/core/base",
+  ]
+
+  sources = [
+    "kqp_indexes_compact_common.cpp",
+    "kqp_indexes_ttl_ut_common.cpp",
+  ]
+}

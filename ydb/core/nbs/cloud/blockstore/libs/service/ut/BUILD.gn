@@ -3,13 +3,21 @@ unittest_executable("ut") {
     "//library/cpp/monlib/dynamic_counters",
     "//library/cpp/testing/unittest",
     "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
     "//ydb/core/nbs/cloud/blockstore/libs/service",
     "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+    "//ydb/library/actors/wilson",
   ]
 
   sources = [
     "//ydb/core/nbs/cloud/blockstore/libs/service/blocks_info_ut.cpp",
     "//ydb/core/nbs/cloud/blockstore/libs/service/device_handler_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/durable_wrapper_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/storage_gate_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/service/trace_service_gate_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/service" ]

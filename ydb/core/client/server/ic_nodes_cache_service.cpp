@@ -10,7 +10,7 @@ class TIcNodeCacheServiceActor : public TActorBootstrapped<TIcNodeCacheServiceAc
     using TBase = TActorBootstrapped<TIcNodeCacheServiceActor>;
 public:
     TIcNodeCacheServiceActor(TIcNodeCacheServiceActor&&) = default;
-    TIcNodeCacheServiceActor& operator=(TIcNodeCacheServiceActor&&) = default;
+    TIcNodeCacheServiceActor& operator=(TIcNodeCacheServiceActor&&) = delete;
 
     TIcNodeCacheServiceActor(const ::NMonitoring::TDynamicCounterPtr& counters,
                              const TDuration& cacheUpdateInterval)

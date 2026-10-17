@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/dataplane",
+    "//ydb/core/persqueue/ut/common",  # peerdir only
+    "//ydb/core/persqueue/ut/common:pq_ut_common",
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/wilson",
+    "//ydb/public/lib/base",
+  ]
+
+  sources = [
+    "kqp_mock.cpp",
+    "partition_writer_cache_actor_fixture.cpp",
+    "partition_writer_cache_actor_ut.cpp",
+    "pqtablet_mock.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/dataplane/write" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

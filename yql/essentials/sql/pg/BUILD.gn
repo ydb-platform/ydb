@@ -14,12 +14,14 @@ library("pg") {
     "//yql/essentials/ast",
     "//yql/essentials/core/cbo",  # peerdir only
     # "//yql/essentials/core/issue",
+    "//yql/essentials/core/langver",  # peerdir only
     # "//yql/essentials/core/sql_types",
     "//yql/essentials/minikql",
     "//yql/essentials/parser/pg_catalog",
     "//yql/essentials/parser/pg_wrapper",
     "//yql/essentials/parser/pg_wrapper/interface",
     # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/public/issue",
     "//yql/essentials/sql/settings",
     # "//yql/essentials/utils",
     "//yql/essentials/utils/log",

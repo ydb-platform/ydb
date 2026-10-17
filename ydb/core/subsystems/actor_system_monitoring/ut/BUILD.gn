@@ -1,0 +1,14 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/subsystems/actor_system_monitoring",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [ "viewer_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/subsystems/actor_system_monitoring" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

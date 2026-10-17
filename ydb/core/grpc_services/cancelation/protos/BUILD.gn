@@ -2,4 +2,6 @@ protobuf_library("protos") {
   public_deps = [ "//ydb/library/actors/protos" ]
 
   sources = [ "event.proto" ]
+
+  protoc_fatal_warnings = true
 }

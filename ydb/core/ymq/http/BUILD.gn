@@ -3,6 +3,7 @@ library("http") {
     # "//library/cpp/cgiparam",
     # "//library/cpp/http/server",
     "//library/cpp/scheme",
+    # "//ydb/core/http_proxy/sqs_xml",
     "//ydb/core/protos",
     "//ydb/core/ymq/base",
     # "//ydb/library/actors/core",
@@ -10,7 +11,7 @@ library("http") {
   ]
 
   deps = [
-    "//contrib/libs/libxml",
+    "//contrib/libs/libxml",  # peerdir only
     "//library/cpp/http/misc",
     # "//library/cpp/protobuf/json",
     "//library/cpp/string_utils/base64",
@@ -18,14 +19,13 @@ library("http") {
     "//library/cpp/string_utils/url",
     "//ydb/core/ymq/actor",
     # "//ydb/library/http_proxy/error",
+    # "//ydb/library/net",
     "//ydb/library/services",
   ]
 
   sources = [
     "http.cpp",
-    "parser.rl6",
     "types.cpp",
     "xml.cpp",
-    "xml_builder.cpp",
   ]
 }

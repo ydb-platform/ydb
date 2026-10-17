@@ -9,13 +9,13 @@ library("utils") {
     "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/minikql/computation",
     # "//yql/essentials/minikql/invoke_builtins",
+    # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/minikql:terminator",
   ]
 
   deps = [
     # "//library/cpp/dwarf_backtrace",  # peerdir only
     "//library/cpp/dwarf_backtrace/registry",  # peerdir only
-    # "//ydb/core/kqp/runtime",  # peerdir only
     "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
     # "//yql/essentials/public/udf/arrow",
     # "//yql/essentials/public/udf/service/exception_policy",  # link slot

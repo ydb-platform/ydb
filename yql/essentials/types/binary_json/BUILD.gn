@@ -1,9 +1,11 @@
 library("binary_json") {
-  public_deps = [ "//yql/essentials/minikql/dom" ]
+  public_deps = [
+    # "//library/cpp/json/common",
+  ]
 
   deps = [
     "//contrib/libs/simdjson",
-    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/containers/absl",
     "//library/cpp/json",
     "//yql/essentials/utils",
   ]
@@ -15,6 +17,4 @@ library("binary_json") {
   ]
 
   serialize_enum_headers = [ "format.h" ]
-
-  yql_abi_version = "2.27.0"
 }

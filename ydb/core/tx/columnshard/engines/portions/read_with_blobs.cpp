@@ -2,8 +2,10 @@
 #include "read_with_blobs.h"
 #include "write_with_blobs.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 
@@ -12,6 +14,77 @@
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
+
+namespace {
+
+std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(const std::vector<std::shared_ptr<IPortionDataChunk>>& source,
+    const TSimpleColumnInfo& targetColumnFeatures, const TSimpleColumnInfo& sourceColumnFeatures) {
+    const auto& loader = targetColumnFeatures.GetLoader();
+    const auto& serializer = targetColumnFeatures.GetSerializer();
+    const auto& accessorConstructor = targetColumnFeatures.GetDataAccessorConstructor();
+    const ui32 columnId = targetColumnFeatures.GetColumnId();
+    const auto checkNeedActualize = [&]() {
+        if (!serializer.IsEqualTo(sourceColumnFeatures.GetSerializer())) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+                {"event", "actualization"},
+                {"reason", "serializer"},
+                {"from", sourceColumnFeatures.GetSerializer().SerializeToProto().DebugString()},
+                {"to", serializer.SerializeToProto().DebugString()});
+            return true;
+        }
+        if (!loader->IsEqualTo(*sourceColumnFeatures.GetLoader())) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
+                {"event", "actualization"},
+                {"reason", "loader"});
+            return true;
+        }
+        return false;
+    };
+    if (!checkNeedActualize()) {
+        return source;
+    }
+    const bool targetIsDictionary = loader->GetAccessorConstructor()->GetClassName() == NArrow::NAccessor::TGlobalConst::DictionaryAccessorName;
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    for (size_t idx = 0; idx < source.size(); ++idx) {
+        auto s = source[idx];
+        ui32 rawBytes = s->GetRawBytesVerified();
+        std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalData;
+        if (const auto* chunkPrep = dynamic_cast<const NChunks::TChunkPreparation*>(s.get())) {
+            additionalData = chunkPrep->GetRecord().GetMeta().GetAdditionalAccessorData();
+        }
+        const auto loadContext = loader->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
+        if (!accessorConstructor.IsEqualTo(sourceColumnFeatures.GetDataAccessorConstructor())) {
+            auto chunkedArray =
+                sourceColumnFeatures.GetLoader()->ApplyVerified(s->GetData(), s->GetRecordsCountVerified(), std::nullopt, additionalData);
+            auto newArray = accessorConstructor->Construct(chunkedArray, loadContext).DetachResult();
+            rawBytes = newArray->GetRawSizeVerified();
+            auto blobAndMeta = accessorConstructor.SerializeToBlobAndMeta(newArray, loadContext);
+            if (targetIsDictionary) {
+                result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), newArray, TChunkAddress(columnId, idx), targetColumnFeatures, std::move(blobAndMeta.Meta)));
+            } else {
+                result.emplace_back(s->CopyWithAnotherBlob(std::move(blobAndMeta.Blob), rawBytes, blobAndMeta.Meta, targetColumnFeatures));
+            }
+        } else {
+            // Deserialize using the source serializer (blob was written with sourceColumnFeatures.Loader->Serializer),
+            // then re-serialize using the target serializer in `loadContext`.
+            const auto sourceLoadContext =
+                sourceColumnFeatures.GetLoader()->BuildAccessorContext(s->GetRecordsCountVerified(), std::nullopt, additionalData);
+            auto arr = accessorConstructor.DeserializeFromString(s->GetData(), sourceLoadContext).DetachResult();
+            rawBytes = arr->GetRawSizeVerified();
+            auto blobAndMeta = accessorConstructor.SerializeToBlobAndMeta(arr, loadContext);
+            if (targetIsDictionary) {
+                result.emplace_back(std::make_shared<NChunks::TChunkPreparation>(
+                    std::move(blobAndMeta.Blob), arr, TChunkAddress(columnId, idx), targetColumnFeatures, std::move(blobAndMeta.Meta)));
+            } else {
+                result.emplace_back(s->CopyWithAnotherBlob(std::move(blobAndMeta.Blob), rawBytes, blobAndMeta.Meta, targetColumnFeatures));
+            }
+        }
+    }
+    return result;
+}
+
+}   // namespace
 
 void TReadPortionInfoWithBlobs::RestoreChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
     auto address = chunk->GetChunkAddressVerified();
@@ -115,7 +188,8 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
         auto it = columnChunks.find(i);
         std::vector<std::shared_ptr<IPortionDataChunk>> newChunks;
         if (it != columnChunks.end()) {
-            newChunks = to->GetIndexInfo().ActualizeColumnData(it->second, from->GetIndexInfo(), i);
+            newChunks = ActualizeColumnData(
+                it->second, to->GetIndexInfo().GetColumnFeaturesVerified(i), from->GetIndexInfo().GetColumnFeaturesVerified(i));
             AFL_VERIFY(entityChunksNew.emplace(i, std::move(newChunks)).second);
         }
     }

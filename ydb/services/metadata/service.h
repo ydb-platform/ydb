@@ -3,8 +3,8 @@
 #include <ydb/core/base/metadata.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/services/metadata/abstract/common.h>
-
-#include <shared_mutex>
+#include <ydb/services/metadata/abstract/service_operator.h>
+#include <ydb/services/metadata/manager/abstract.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -79,20 +79,6 @@ public:
     {
         Y_ABORT_UNLESS(!!Manager);
     }
-};
-
-class TConfig;
-
-class TServiceOperator {
-private:
-    friend class TService;
-    std::shared_mutex Lock;
-    bool EnabledFlag = false;
-    TString Path = ".metadata";
-    static void Register(const TConfig& config);
-public:
-    static bool IsEnabled();
-    static TString GetPath();
 };
 
 } // namespace NKikimr::NMetadata::NProvider

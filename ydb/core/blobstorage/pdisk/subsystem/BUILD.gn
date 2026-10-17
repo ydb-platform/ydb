@@ -1,0 +1,5 @@
+group("subsystem") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+}

@@ -3,6 +3,7 @@ library("cbo") {
 
   deps = [
     # "//library/cpp/iterator",
+    # "//yql/essentials/utils",
   ]
 
   sources = [

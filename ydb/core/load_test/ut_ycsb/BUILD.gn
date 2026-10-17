@@ -4,7 +4,8 @@ unittest_executable("ut_ycsb") {
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
     "//ydb/core/kqp/ut/common",
-    "//ydb/core/load_test",
+    "//ydb/core/load_test/common",
+    "//ydb/core/load_test/ycsb",
     "//ydb/core/protos/schemeshard",
     "//ydb/core/scheme",
     "//ydb/core/testlib/default",  # peerdir only
@@ -19,12 +20,13 @@ unittest_executable("ut_ycsb") {
 
   sources = [ "//ydb/core/load_test/ut_ycsb.cpp" ]
 
-  include_dirs = [ "//ydb/core/load_test" ]
+  include_dirs = [ "//ydb/core/load_test/ycsb" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

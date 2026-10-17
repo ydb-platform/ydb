@@ -10,7 +10,9 @@ library("grpc_connections") {
     "//ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state",
     "//ydb/public/sdk/cpp/src/client/impl/internal/plain_status",
     "//ydb/public/sdk/cpp/src/client/impl/internal/rpc_request_settings",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime",
     "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/public/sdk/cpp/src/client/types",
     # "//ydb/public/sdk/cpp/src/client/types/credentials",
     "//ydb/public/sdk/cpp/src/client/types/executor",
     "//ydb/public/sdk/cpp/src/library/grpc/client",
@@ -18,6 +20,7 @@ library("grpc_connections") {
   ]
 
   deps = [
+    # "//ydb/public/sdk/cpp/src/client/impl/observability",
     # "//ydb/public/sdk/cpp/src/client/impl/stats",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/types/exceptions",
   ]

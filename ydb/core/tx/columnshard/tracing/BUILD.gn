@@ -1,5 +1,15 @@
 library("tracing") {
-  public_deps = [ "//library/cpp/lwtrace" ]
+  public_deps = [
+    "//library/cpp/lwtrace",
+    "//ydb/core/tx/data_events",
+  ]
 
-  sources = [ "probes.cpp" ]
+  deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [
+    "probes.cpp",
+    "write_orbit.cpp",
+  ]
 }

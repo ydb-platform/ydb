@@ -4,6 +4,7 @@ library("fresh") {
     # "//library/cpp/threading/skip_list",
     # "//ydb/core/base",
     # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/hulldb/base",
     "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     # "//ydb/core/blobstorage/vdisk/hulldb/generic",

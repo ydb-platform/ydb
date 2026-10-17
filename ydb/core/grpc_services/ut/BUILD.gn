@@ -6,8 +6,10 @@ unittest_executable("ut") {
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/client/scheme_cache_lib",  # peerdir only
+    "//ydb/core/formats/arrow",  # peerdir only
     "//ydb/core/grpc_services",
     "//ydb/core/protos",
+    "//ydb/core/scheme",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/public/api/protos",
   ]
@@ -15,6 +17,7 @@ unittest_executable("ut") {
   sources = [
     "//ydb/core/grpc_services/operation_helpers_ut.cpp",
     "//ydb/core/grpc_services/rpc_calls_ut.cpp",
+    "rpc_load_rows_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/grpc_services" ]
@@ -23,6 +26,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

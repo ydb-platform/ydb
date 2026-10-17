@@ -698,7 +698,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     ranges.reserve(request.RangesSize());
 
     for (auto range: request.GetRanges()) {
-        ranges.emplace_back(std::move(TSerializedTableRange(range)));
+        ranges.emplace_back(TSerializedTableRange(range));
     }
 
     auto* tableScan = new TKqpScan(

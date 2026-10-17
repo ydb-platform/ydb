@@ -6,6 +6,7 @@ SRCS(
     counters.cpp
     dlq_helpers.cpp
     events_writer.cpp
+    events_writer_iface.cpp
     helpers.cpp
     probes.cpp
     queue_attributes.cpp

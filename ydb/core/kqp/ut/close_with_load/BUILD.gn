@@ -4,6 +4,7 @@ unittest_executable("close_with_load") {
     "//library/cpp/threading/local_executor",
     "//ydb/core/base",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/buffer",
     "//ydb/core/kqp/common/events",
     "//ydb/core/kqp/common/shutdown",
     "//ydb/core/kqp/counters",
@@ -13,6 +14,7 @@ unittest_executable("close_with_load") {
     "//ydb/core/testlib",
     "//ydb/core/tx/columnshard/hooks/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/data_events",
     "//ydb/core/tx/datashard",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/public/lib/ut_helpers",
@@ -37,6 +39,7 @@ unittest_executable("close_with_load") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

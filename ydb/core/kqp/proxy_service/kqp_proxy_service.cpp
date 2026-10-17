@@ -34,6 +34,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/kqp/script_executions/finalization/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
+#include <ydb/core/kqp/session_actor/kqp_session_actor.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>

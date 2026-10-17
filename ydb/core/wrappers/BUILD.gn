@@ -11,13 +11,17 @@ library("ut_helpers") {
     "//library/cpp/xml/document",
   ]
 
-  sources = [ "ut_helpers/s3_mock.cpp" ]
+  sources = [
+    "ut_helpers/fs_mock.cpp",
+    "ut_helpers/s3_mock.cpp",
+  ]
 }
 
 library("wrappers") {
   public_deps = [
     # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
     "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
+    # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/base",
     "//ydb/core/util",
     "//ydb/core/wrappers/events",

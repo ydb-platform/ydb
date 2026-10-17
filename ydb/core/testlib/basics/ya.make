@@ -30,7 +30,7 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/util
     ydb/library/actors/dnsresolver
-    ydb/library/keys
+    ydb/library/keys  # gn: public dep
     ydb/services/kesus
     ydb/services/persqueue_cluster_discovery
     ydb/services/ydb

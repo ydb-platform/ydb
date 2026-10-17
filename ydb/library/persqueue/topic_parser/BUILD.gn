@@ -8,7 +8,6 @@ library("topic_parser") {
   ]
 
   deps = [
-    # "//ydb/library/yverify_stream",
     # "//ydb/public/api/protos",  # peerdir only
   ]
 

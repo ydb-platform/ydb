@@ -4,13 +4,17 @@ config("ut_private_config") {
 
 unittest_executable("ut") {
   deps = [
+    "//contrib/restricted/abseil-cpp-tstring",
     "//library/cpp/deprecated/atomic",
+    "//library/cpp/string_utils/base64",
     "//library/cpp/testing/unittest",
     "//library/cpp/threading/chunk_queue",
     "//ydb/library/actors/core",
-    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect",  # peerdir only
+    "//ydb/library/actors/interconnect/poller",
+    "//ydb/library/actors/interconnect/rdma",
     "//ydb/library/actors/protos",
-    "//ydb/library/actors/scheduler",
+    "//ydb/library/actors/struct_log",
     "//ydb/library/actors/testlib",
     "//ydb/library/actors/util",
   ]
@@ -22,19 +26,31 @@ unittest_executable("ut") {
     "actor_shared_threads.cpp",
     "actor_ut.cpp",
     "actorsystem_ut.cpp",
+    "allocation_cache_ut.cpp",
     "ask_ut.cpp",
     "benchmark_ut.cpp",
+    "event_flat_ut.cpp",
     "event_pb_payload_ut.cpp",
     "event_pb_ut.cpp",
     "executor_pool_basic_ut.cpp",
     "executor_pool_semaphore_ut.cpp",
     "executor_pools_ut.cpp",
+    "executor_thread_stats_ut.cpp",
+    "inmemory_metrics_ut.cpp",
+    "log_contract_ut.cpp",
+    "log_mon_ut.cpp",
     "log_ut.cpp",
     "mailbox_lockfree_ut.cpp",
+    "metric_system_ut.cpp",
     "mon_ut.cpp",
+    "node_location_ut.cpp",
     "performance_ut.cpp",
     "process_stats_ut.cpp",
     "scheduler_actor_ut.cpp",
+    "scheduler_cookie_ut.cpp",
+    "servicemap_ut.cpp",
+    "struct_log_ut.cpp",
+    "subsystem_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/library/actors/core" ]

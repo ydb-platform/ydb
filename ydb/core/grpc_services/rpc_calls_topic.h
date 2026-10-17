@@ -25,3 +25,15 @@ using TEvPQRemoveReadRuleRequest = TGrpcRequestOperationCall<Ydb::PersQueue::V1:
 using TEvPQReadInfoRequest = TGrpcRequestOperationCall<Ydb::PersQueue::V1::ReadInfoRequest, Ydb::PersQueue::V1::ReadInfoResponse>;
 
 }
+
+namespace NKikimr::NGRpcProxy::V1 {
+
+inline NActors::TActorId GetPQReadServiceActorID() {
+    return NActors::TActorId(0, "PQReadSvc");
+}
+
+inline NActors::TActorId GetPQWriteServiceActorID() {
+    return NActors::TActorId(0, "PQWriteSvc");
+}
+
+}

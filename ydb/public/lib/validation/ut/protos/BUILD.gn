@@ -3,6 +3,8 @@ protobuf_library("protos") {
 
   sources = [ "validation_test.proto" ]
 
+  protoc_fatal_warnings = true
+
   extra_plugins = [
     {
       name = "validation"

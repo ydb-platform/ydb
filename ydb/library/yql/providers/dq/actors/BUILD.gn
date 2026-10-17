@@ -2,17 +2,14 @@ library("actors") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/time_provider",
-    # "//ydb/library/actors/core",
-    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/core",
     "//ydb/library/yql/dq/actors/compute",
-    "//ydb/library/yql/dq/actors/protos",
     # "//ydb/library/yql/dq/common",
     "//ydb/library/yql/dq/proto",
     # "//ydb/library/yql/dq/runtime",
     "//ydb/library/yql/providers/dq/api/protos",
     "//ydb/library/yql/providers/dq/common",
     "//ydb/library/yql/providers/dq/counters",
-    # "//ydb/library/yql/providers/dq/interface",
     # "//ydb/library/yql/providers/dq/task_runner",
     # "//ydb/library/yql/providers/dq/task_runner_actor",
     # "//ydb/library/yql/providers/dq/worker_manager",
@@ -30,39 +27,33 @@ library("actors") {
 
   deps = [
     "//library/cpp/protobuf/util",
-    "//library/cpp/svnversion",
     # "//library/cpp/threading/future",
     # "//library/cpp/yson",
     # "//library/cpp/yson/node",
     # "//ydb/core/fq/libs/checkpointing/events",
-    # "//ydb/library/actors/interconnect/address",
     "//ydb/library/mkql_proto",
     # "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/actors/protos",
     # "//ydb/library/yql/dq/tasks",  # peerdir only
-    "//ydb/library/yql/providers/dq/actors/events",
+    "//ydb/library/yql/providers/dq/actors/events",  # peerdir only
     # "//ydb/library/yql/providers/dq/api/grpc",  # peerdir only
-    # "//ydb/library/yql/providers/dq/config",  # peerdir only
+    # "//ydb/library/yql/providers/dq/interface",
     "//ydb/library/yql/providers/dq/planner",
     "//ydb/library/yql/providers/dq/runtime",
     "//ydb/library/yql/providers/dq/worker_manager/interface",
     "//ydb/library/yql/utils/actor_log",
     # "//ydb/public/lib/yson_value",
     # "//yql/essentials/core/issue",
-    "//yql/essentials/core/issue/protos",
-    # "//yql/essentials/core/services",  # peerdir only
-    "//yql/essentials/core/services/mounts",  # peerdir only
-    # "//yql/essentials/core/user_data",  # peerdir only
+    # "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/providers/common/codec",
     # "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/issue/protos",
     # "//yql/essentials/sql",
     # "//yql/essentials/utils",
-    # "//yql/essentials/utils/backtrace",  # peerdir only
   ]
 
   sources = [
     "compute_actor.cpp",
-    "dummy_lock.cpp",
-    "dynamic_nameserver.cpp",
     "events.cpp",
     "executer_actor.cpp",
     "execution_helpers.cpp",

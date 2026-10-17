@@ -84,7 +84,7 @@ public:
         // If we requested loading blob, but it's not loaded -> wait
         if (!it->second.HasValue()) return false;
 
-        blob = std::move(it->second.ExtractValue());
+        blob = it->second.ExtractValue();
         LoadingBlobs_.erase(it);
         --StoredBlobsCount_;
 

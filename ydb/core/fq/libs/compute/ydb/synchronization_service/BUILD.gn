@@ -28,6 +28,7 @@ library("synchronization_service") {
     "//ydb/public/sdk/cpp/adapters/issue",
     # "//ydb/public/sdk/cpp/src/client/operation",
     # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/scheme",
     # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
   ]
 

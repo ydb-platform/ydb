@@ -4,6 +4,7 @@ unittest_executable("ut") {
     "//ydb/core/base",
     "//ydb/core/cms/console/validators",
     "//ydb/core/protos",
+    "//ydb/library/actors/core",
     "//ydb/library/actors/protos",
   ]
 
@@ -11,6 +12,7 @@ unittest_executable("ut") {
     "//ydb/core/cms/console/validators/registry_ut.cpp",
     "//ydb/core/cms/console/validators/validator_bootstrap_ut.cpp",
     "//ydb/core/cms/console/validators/validator_nameservice_ut.cpp",
+    "validator_composite_conveyor_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/cms/console/validators" ]

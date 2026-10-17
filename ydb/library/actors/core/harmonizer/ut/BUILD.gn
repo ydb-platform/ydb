@@ -4,7 +4,7 @@ unittest_executable("ut") {
     "//ydb/library/actors/core",
     "//ydb/library/actors/helpers",
     "//ydb/library/actors/interconnect",  # peerdir only
-    "//ydb/library/actors/testlib",  # peerdir only
+    "//ydb/library/actors/testlib",
   ]
 
   sources = [

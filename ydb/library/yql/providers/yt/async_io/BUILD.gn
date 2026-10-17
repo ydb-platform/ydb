@@ -1,0 +1,14 @@
+library("async_io") {
+  public_deps = [
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+  ]
+
+  deps = [
+    # "//ydb/library/yql/providers/common/message_stream/async_io",
+    # "//ydb/library/yql/providers/yt/gateway/clients/message_stream",
+    "//ydb/library/yql/providers/yt/proto",
+  ]
+
+  sources = [ "yql_yt_message_stream_source.cpp" ]
+}

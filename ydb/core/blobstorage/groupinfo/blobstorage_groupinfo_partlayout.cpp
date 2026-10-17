@@ -1,6 +1,5 @@
 #include "blobstorage_groupinfo_partlayout.h"
 #include "blobstorage_groupinfo_sets.h"
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 
 #include <bit>
 
@@ -89,21 +88,8 @@ namespace NKikimr {
         }
     }
 
-    ui32 TSubgroupPartLayout::CountEffectiveReplicas(TIngress ingress, TBlobStorageGroupType gtype) {
-        return CreateFromIngress(ingress, gtype).CountEffectiveReplicas(gtype);
-    }
-
-    TSubgroupPartLayout TSubgroupPartLayout::CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype) {
-        TSubgroupPartLayout res;
-        const ui8 subgroupSize = gtype.BlobSubgroupSize();
-        for (ui8 i = 0; i < subgroupSize; ++i) {
-            const NMatrix::TVectorType parts = ingress.KnownParts(gtype, i);
-            for (ui8 j = parts.FirstPosition(); j != parts.GetSize(); j = parts.NextPosition(j)) {
-                res.AddItem(i, j, gtype);
-            }
-        }
-        return res;
-    }
+    // NB: the TIngress-based CountEffectiveReplicas/CreateFromIngress overloads are defined in
+    // ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress_partlayout.cpp -- see the comment there.
 
     TBlobStorageGroupInfo::TSubgroupVDisks TSubgroupPartLayout::GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const {
         const ui32 totalPartCount = top->GType.TotalPartCount();

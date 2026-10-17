@@ -2,14 +2,9 @@ library("account_lockout") {
   sources = [ "account_lockout/account_lockout.cpp" ]
 }
 
-library("cache") {
-  sources = [ "cache/lru.cpp" ]
-}
-
 library("login") {
   public_deps = [
     ":account_lockout",
-    ":cache",
     "//ydb/library/login/hashes_checker",
     "//ydb/library/login/password_checker",
     "//ydb/library/login/protos",

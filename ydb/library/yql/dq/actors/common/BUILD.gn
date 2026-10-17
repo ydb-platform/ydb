@@ -3,6 +3,7 @@ library("common") {
     "//ydb/library/actors/core",
     "//ydb/library/yql/dq/actors/protos",
     "//ydb/library/yql/dq/common",
+    # "//ydb/library/yverify_stream",
   ]
 
   deps = [

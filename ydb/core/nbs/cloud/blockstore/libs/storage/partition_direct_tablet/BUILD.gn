@@ -1,0 +1,69 @@
+library("partition_direct_tablet") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blockstore/core",
+    # "//ydb/core/engine/minikql",
+    # "//ydb/core/mind/bscontroller:group_mapper",
+    # "//ydb/core/nbs/cloud/blockstore/config",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
+    # "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/cgiparam",
+    # "//ydb/core/base",
+    # "//ydb/core/base/services",
+    # "//ydb/core/blobstorage/ddisk",
+    # "//ydb/core/mind/bscontroller",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/bootstrap",
+    # "//ydb/core/nbs/cloud/blockstore/config/protos",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/memory",
+    # "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/nbs_frontend",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat",
+    # "//ydb/core/nbs/cloud/blockstore/libs/vhost",
+    "//ydb/core/nbs/cloud/blockstore/public/api/protos",
+    # "//ydb/core/nbs/cloud/storage/core/libs/actors",
+    # "//ydb/core/node_whiteboard",
+    # "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [
+    "bsc_proxy.cpp",
+    "delete_partition.cpp",
+    "load_actor_adapter.cpp",
+    "part_add_host_to_dbg.cpp",
+    "part_database.cpp",
+    "part_initschema.cpp",
+    "part_loadstate.cpp",
+    "part_monitoring.cpp",
+    "part_persist_host_health.cpp",
+    "part_remove_host_from_dbg.cpp",
+    "part_setvchunktouched.cpp",
+    "part_storepartitionids.cpp",
+    "part_storevolumeconfig.cpp",
+    "part_updatevchunkstate.cpp",
+    "partition_cleanup_actor.cpp",
+    "partition_direct.cpp",
+    "partition_direct_actor.cpp",
+  ]
+}

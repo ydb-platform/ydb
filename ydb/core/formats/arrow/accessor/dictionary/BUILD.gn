@@ -1,0 +1,21 @@
+library("dictionary") {
+  public_deps = [
+    # "//library/cpp/json",
+    "//ydb/core/formats/arrow",
+    # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/validation",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/library/formats/arrow/protos",  # peerdir only
+    # "//ydb/library/formats/arrow/switch",
+  ]
+
+  sources = [
+    "accessor.cpp",
+    "constructor.cpp",
+    "request.cpp",
+  ]
+}

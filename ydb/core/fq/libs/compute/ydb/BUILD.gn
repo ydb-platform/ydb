@@ -31,7 +31,7 @@ library("ydb") {
     "//ydb/core/fq/libs/private_client",
     # "//ydb/core/fq/libs/shared_resources",
     # "//ydb/core/fq/libs/signer",
-    # "//ydb/core/mon",
+    "//ydb/core/mon",
     # "//ydb/library/yql/providers/common/http_gateway",
     # "//ydb/library/yql/providers/dq/actors",
     # "//ydb/library/yql/providers/dq/provider",

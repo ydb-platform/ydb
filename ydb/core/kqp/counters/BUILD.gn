@@ -9,7 +9,7 @@ library("counters") {
     # "//ydb/core/util",
     "//ydb/library/yql/dq/actors/spilling",
     "//ydb/public/api/protos",
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/aligned_page_pool",
   ]
 
   deps = [
@@ -17,8 +17,8 @@ library("counters") {
     "//ydb/core/sys_view/service",
     # "//ydb/library/actors/core",
     "//ydb/library/ydb_issue/proto",
-    "//yql/essentials/core/issue/protos",
     # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [ "kqp_counters.cpp" ]

@@ -6,12 +6,12 @@ IF (SANITIZER_TYPE == "address" AND DEBUGINFO_LINES_ONLY == "yes")
 ENDIF()
 
 SRCS(
-    client_session.cpp
-    data_query.cpp
-    readers.cpp
-    request_migrator.cpp
-    table_client.cpp
-    transaction.cpp
+    client_session.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
+    data_query.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
+    readers.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
+    request_migrator.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
+    table_client.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
+    transaction.cpp  # gn: into ydb/public/sdk/cpp/src/client/table
 )
 
 PEERDIR(

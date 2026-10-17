@@ -6,6 +6,7 @@ unittest_executable("ut") {
   ]
 
   sources = [
+    "//ydb/core/resource_pools/regex_predicate_ut.cpp",
     "//ydb/core/resource_pools/resource_pool_classifier_settings_ut.cpp",
     "//ydb/core/resource_pools/resource_pool_settings_ut.cpp",
   ]

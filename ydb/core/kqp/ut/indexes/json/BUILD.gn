@@ -1,0 +1,40 @@
+unittest_executable("json") {
+  deps = [
+    "//contrib/libs/fmt",  # peerdir only
+    "//ydb/core/cms/console",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/indexes/common",
+    "//ydb/core/kqp/ut/indexes/json/common",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/library/json_index",
+    "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_indexes_json_auto_select_ut.cpp",
+    "kqp_indexes_json_corpus_je_ut.cpp",
+    "kqp_indexes_json_corpus_jejv_ut.cpp",
+    "kqp_indexes_json_corpus_jv_ut.cpp",
+    "kqp_indexes_json_tokens_ut.cpp",
+    "kqp_indexes_json_ut.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,0 +1,17 @@
+library("subsystems") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/actors/util",  # peerdir only
+  ]
+
+  sources = [
+    "cgroup/cgroup_oom.cpp",
+    "cgroup/cgroup_oom_trend.cpp",
+    "cgroup/cgroup_v1.cpp",
+    "cgroup/cgroup_v2.cpp",
+  ]
+}

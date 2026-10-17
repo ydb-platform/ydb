@@ -1,0 +1,14 @@
+library("metrics") {
+  public_deps = [
+    # "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "inmemory_backend.cpp",
+    "line_read.cpp",
+    "line_storage.cpp",
+    "line_types.cpp",
+    "line_write.cpp",
+    "lines/dynamic_group_line.cpp",
+  ]
+}

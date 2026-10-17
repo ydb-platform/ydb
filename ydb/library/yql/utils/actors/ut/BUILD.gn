@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/utils/actors",
+  ]
+
+  sources = [ "//ydb/library/yql/utils/actors/http_sender_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/utils/actors" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

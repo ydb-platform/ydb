@@ -7,6 +7,11 @@ library("test_setup") {
     "//ydb/public/sdk/cpp/tests/integration/topic/utils",
   ]
 
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/library/testlib/common",
+  ]
+
   sources = [ "topic_sdk_test_setup.cpp" ]
 }
 
@@ -26,7 +31,7 @@ library("ut_utils") {
 
   deps = [
     "//library/cpp/streams/bzip2",
-    # "//library/cpp/string_utils/base64",
+    # "//ydb/core/base",  # peerdir only
     # "//ydb/core/cms/console",
     # "//ydb/core/keyvalue",
     # "//ydb/core/persqueue/common",
@@ -35,6 +40,7 @@ library("ut_utils") {
     "//ydb/core/persqueue/ut/common",
     # "//ydb/core/tx/long_tx_service/public",
     # "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    # "//ydb/library/testlib/common",  # peerdir only
     "//ydb/public/api/grpc",
     # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/persqueue_public",  # peerdir only
@@ -42,8 +48,5 @@ library("ut_utils") {
     "//ydb/public/sdk/cpp/tests/integration/topic/utils",  # peerdir only
   ]
 
-  sources = [
-    "event_loop.cpp",
-    "txusage_fixture.cpp",
-  ]
+  sources = [ "txusage_fixture.cpp" ]
 }

@@ -52,6 +52,9 @@ SRCS(
     datashard_active_transaction.cpp
     datashard_change_sending.cpp
     datashard_outreadset.cpp
+    datashard_read_events.cpp  # gn: read_events
+    read_table_add_cell.h
+    read_table_result_set.cpp  # gn: read_events
     datashard_s3_uploads.cpp
     datashard_snapshots.cpp
     truncate_unit.cpp
@@ -415,7 +418,7 @@ JOIN_SRCS(
     build_index/prefix_kmeans.cpp
     probes.cpp
     protect_scheme_echoes_unit.cpp
-    range_ops.cpp
+    range_ops.cpp  # gn: range_ops
     restore_unit.cpp
     rotate_cdc_stream_unit.cpp
 )
@@ -429,6 +432,7 @@ JOIN_SRCS(
     build_index/unique_index.cpp
     upload_stats.cpp
 )
+# gn: range_ops headers range_ops.h
 
 GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
@@ -443,6 +447,9 @@ GENERATE_ENUM_SERIALIZATION(volatile_tx.h)
 RESOURCE(
     ui/index.html datashard/index.html
 )
+
+# gn: read_events headers read_table_add_cell.h
+# gn: read_events peerdir ydb/core/protos
 
 PEERDIR(
     contrib/libs/zstd
@@ -497,6 +504,8 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/io_formats/json
 )
+# gn: peerdir ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:upload_rows
+# gn: peerdir ydb/core/tx/schemeshard:find_subdomain_path_id
 
 IF (OS_WINDOWS)
     CFLAGS(

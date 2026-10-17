@@ -4,6 +4,8 @@ RECURSE_FOR_TESTS(
 
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     audit_denylist.cpp
     audit.cpp

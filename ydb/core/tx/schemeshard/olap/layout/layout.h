@@ -1,10 +1,10 @@
 #pragma once
 #include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/digest/numeric.h>
+#include <util/generic/hash_set.h>
 #include <util/system/types.h>
 
 #include <set>
@@ -63,8 +63,6 @@ public:
     }
 };
 
-class TSchemeShard;
-
 class TColumnTablesLayout {
 private:
     class TPathIdHashCalcer {
@@ -106,8 +104,6 @@ public:
         };
         Groups.erase(std::remove_if(Groups.begin(), Groups.end(), pred), Groups.end());
     }
-
-    static std::vector<ui64> ShardIdxToTabletId(const std::vector<TShardIdx>& shards, const TSchemeShard& ss);
 
     static TColumnTablesLayout BuildTrivial(const std::vector<ui64>& tabletIds);
 };

@@ -6,7 +6,6 @@ library("impl") {
     # "//ydb/core/scheme",
     "//ydb/core/tx/replication/service",
     "//ydb/library/actors/core",
-    "//ydb/library/services",
     # "//ydb/library/yverify_stream",
   ]
 
@@ -14,6 +13,8 @@ library("impl") {
     "//ydb/core/persqueue/events",
     # "//ydb/core/persqueue/writer",
     "//ydb/core/tx/replication/ydb_proxy",
+    # "//ydb/library/aclib",
+    "//ydb/library/services",
   ]
 
   sources = [

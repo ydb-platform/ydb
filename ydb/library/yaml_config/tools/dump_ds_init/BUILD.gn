@@ -1,5 +1,6 @@
 linked_executable("yaml-to-proto-dump-ds-init") {
   deps = [
+    "//ydb/core/protos",
     "//ydb/library/yaml_config",
     "//ydb/library/yaml_config/deprecated",
     "//ydb/library/yaml_config/tools/util",

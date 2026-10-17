@@ -1,6 +1,5 @@
-group("_self") {
+library("_self") {
   public_deps = [
-    # "//ydb/core/base",
     "//ydb/core/blobstorage/vdisk/hulldb/barriers",
     "//ydb/core/blobstorage/vdisk/hulldb/base",
     "//ydb/core/blobstorage/vdisk/hulldb/generic",
@@ -13,6 +12,8 @@ group("_self") {
     # "//ydb/core/blobstorage/vdisk/hulldb/fresh",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
   ]
+
+  sources = [ "//ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h" ]
 }
 
 group("hulldb") {

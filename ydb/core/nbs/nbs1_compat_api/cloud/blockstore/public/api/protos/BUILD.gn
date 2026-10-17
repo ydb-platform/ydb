@@ -1,0 +1,18 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//library/cpp/lwtrace/protos",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos",
+  ]
+
+  sources = [
+    "encryption.proto",
+    "headers.proto",
+    "io.proto",
+    "mount.proto",
+    "ping.proto",
+    "rdma.proto",
+    "volume.proto",
+    "volume_throttling.proto",
+  ]
+}

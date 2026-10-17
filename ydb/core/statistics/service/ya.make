@@ -4,9 +4,10 @@ SRCS(
     http_request.h
     http_request.cpp
     service.h
-    service.cpp   
+    service.cpp  # gn: service_id
     service_impl.cpp 
 )
+# gn: service_id headers service.h
 
 PEERDIR(
     library/cpp/json

@@ -1,0 +1,12 @@
+library("config") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/tx/conveyor_composite/common",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [ "//ydb/library/actors/core" ]
+
+  sources = [ "config.cpp" ]
+}

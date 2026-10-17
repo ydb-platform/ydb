@@ -1,0 +1,3 @@
+library("hyperloglog") {
+  sources = [ "hyperloglog.cpp" ]
+}

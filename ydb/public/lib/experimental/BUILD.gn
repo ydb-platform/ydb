@@ -11,6 +11,7 @@ library("experimental") {
   deps = [
     "//ydb/public/sdk/cpp/src/client/common_client/impl",
     "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers",
     "//ydb/public/sdk/cpp/src/client/proto",
     "//ydb/public/sdk/cpp/src/library/grpc/client",
     # "//yql/essentials/public/issue",

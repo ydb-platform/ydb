@@ -2,17 +2,24 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/protobuf/json",
     "//library/cpp/testing/unittest",
+    "//ydb/core/path_aliasing",
     "//ydb/core/protos",
     "//ydb/library/yaml_config",
     "//ydb/library/yaml_config/public",
+    "//ydb/library/yaml_config/ut/protos",
   ]
 
   sources = [
+    "//ydb/library/yaml_config/config_migration_ut.cpp",
     "//ydb/library/yaml_config/console_dumper_ut.cpp",
     "//ydb/library/yaml_config/incompatibility_rules_ut.cpp",
+    "//ydb/library/yaml_config/path_aliasing_ut.cpp",
+    "//ydb/library/yaml_config/static_group_layout_ut.cpp",
+    "//ydb/library/yaml_config/yaml_config_helpers_ut.cpp",
     "//ydb/library/yaml_config/yaml_config_parser_ut.cpp",
     "//ydb/library/yaml_config/yaml_config_proto2yaml_ut.cpp",
     "//ydb/library/yaml_config/yaml_config_ut.cpp",
+    "//ydb/library/yaml_config/yaml_config_validation_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/library/yaml_config" ]

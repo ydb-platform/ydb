@@ -164,7 +164,7 @@ public:
         AFL_VERIFY(SourceGroupGuard);
         auto result = std::move(SourceGroupGuard);
         SourceGroupGuard = nullptr;
-        return std::move(result);
+        return result;
     }
 
     ui64 GetMemoryGroupId() const {

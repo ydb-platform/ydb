@@ -1,7 +1,8 @@
 library("composite_serial") {
   public_deps = [
     "//ydb/core/formats/arrow",
-    "//ydb/core/formats/arrow/accessor:composite",
+    # "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/composite",
   ]
 
   deps = [

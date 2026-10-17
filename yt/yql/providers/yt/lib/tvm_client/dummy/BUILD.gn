@@ -1,0 +1,12 @@
+library("dummy") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/tvm_client",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",  # peerdir only
+  ]
+
+  sources = [ "dummy_tvm_client.cpp" ]
+}

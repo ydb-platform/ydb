@@ -8,6 +8,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -23,10 +24,6 @@
 #include <type_traits>
 
 namespace NKikimr::NGRpcProxy::V1 {
-
-inline TActorId GetPQReadServiceActorID() {
-    return TActorId(0, "PQReadSvc");
-}
 
 struct TPartitionActorInfo {
     const TActorId Actor;

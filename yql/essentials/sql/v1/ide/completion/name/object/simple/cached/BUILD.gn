@@ -1,0 +1,9 @@
+library("cached") {
+  public_deps = [
+    "//yql/essentials/sql/v1/ide/completion/name/cache",
+    "//yql/essentials/sql/v1/ide/completion/name/object/simple",
+    # "//yql/essentials/utils/meta",
+  ]
+
+  sources = [ "schema.cpp" ]
+}

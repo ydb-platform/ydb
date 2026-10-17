@@ -5,7 +5,6 @@ library("lib") {
     "//ydb/core/blobstorage/vdisk/common",
     # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     "//ydb/library/actors/protos",
-    "//ydb/library/keys",  # peerdir only
   ]
 
   deps = [
@@ -17,9 +16,8 @@ library("lib") {
     # "//ydb/core/base",
     # "//ydb/core/blobstorage",  # peerdir only
     "//ydb/core/blobstorage/backpressure",
-    # "//ydb/core/blobstorage/base",  # peerdir only
+    # "//ydb/core/blobstorage/base",
     # "//ydb/core/blobstorage/crypto",
-    # "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk",
     "//ydb/core/blobstorage/vdisk/huge",
@@ -33,6 +31,7 @@ library("lib") {
     # "//ydb/core/scheme_types",
     # "//ydb/library/actors/core",
     # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     # "//ydb/library/pdisk_io",
   ]
 

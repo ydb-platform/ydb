@@ -50,7 +50,7 @@ NYdb::TTypeParser TArrowCSVTable::ExtractType(const NYdb::TType& type) {
         tp.OpenOptional();
     }
 
-    return std::move(tp);
+    return tp;
 }
 
 arrow::Result<std::shared_ptr<arrow::DataType>> TArrowCSVTable::GetArrowType(const NYdb::TType& type) {

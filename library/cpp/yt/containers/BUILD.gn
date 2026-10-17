@@ -5,4 +5,8 @@ group("containers") {
     # "//library/cpp/yt/misc",
     # "//library/cpp/yt/string",
   ]
+
+  deps = [
+    # "//library/cpp/yt/memory",  # peerdir only
+  ]
 }

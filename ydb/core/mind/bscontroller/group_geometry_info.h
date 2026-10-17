@@ -1,10 +1,14 @@
 #pragma once
 
-#include "defs.h"
-
-#include "impl.h"
-#include "config.h"
 #include "group_mapper.h"
+
+#include <ydb/core/base/blobstorage_grouptype.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
+
+#include <util/generic/hash.h>
+#include <util/stream/str.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NBsController {
 

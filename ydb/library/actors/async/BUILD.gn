@@ -9,6 +9,7 @@ library("async") {
     "continuation.cpp",
     "decorator.cpp",
     "event.cpp",
+    "low_priority.cpp",
     "result.cpp",
     "sleep.cpp",
     "task_group.cpp",

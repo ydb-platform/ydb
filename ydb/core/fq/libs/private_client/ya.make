@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/protos
     ydb/public/sdk/cpp/src/client/table
 )
+# gn: peerdir ydb/core/fq/libs/control_plane_config:service_id ydb/core/fq/libs/control_plane_storage:service_id
 
 YQL_LAST_ABI_VERSION()
 

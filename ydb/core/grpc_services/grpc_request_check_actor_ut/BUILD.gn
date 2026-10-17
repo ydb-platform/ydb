@@ -1,9 +1,11 @@
 unittest_executable("grpc_request_check_actor_ut") {
   deps = [
     "//library/cpp/testing/unittest",
+    "//ydb/core/base",
     "//ydb/core/grpc_services",
     "//ydb/core/grpc_services/base",
     "//ydb/core/grpc_services/counters",
+    "//ydb/core/protos",
     "//ydb/core/scheme",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
@@ -20,6 +22,7 @@ unittest_executable("grpc_request_check_actor_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

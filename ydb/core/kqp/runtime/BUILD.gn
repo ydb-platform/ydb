@@ -1,21 +1,22 @@
 library("runtime") {
   public_deps = [
     "//contrib/libs/apache/arrow",
+    # "//library/cpp/cache",
     # "//library/cpp/containers/stack_vector",
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/time_provider",
     "//ydb/core/base",
     "//ydb/core/engine/minikql",
     # "//ydb/core/formats/arrow",
-    "//ydb/core/kqp/common",
     "//ydb/core/kqp/common/buffer",
     "//ydb/core/kqp/common/result_set_format",
     "//ydb/core/kqp/counters",
     # "//ydb/core/kqp/gateway:interface",
+    "//ydb/core/kqp/rm_service",
+    # "//ydb/core/kqp/runtime/common",
     "//ydb/core/protos",
     # "//ydb/core/resource_pools",
     "//ydb/core/scheme",
-    # "//ydb/core/scheme_types",
     # "//ydb/core/tablet_flat",
     # "//ydb/core/tx/data_events",
     # "//ydb/core/tx/datashard",
@@ -26,57 +27,77 @@ library("runtime") {
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     # "//ydb/library/yql/dq/common",
-    "//ydb/library/yql/dq/comp_nodes",
-    # "//ydb/library/yql/dq/runtime",
     # "//yql/essentials/ast",
-    # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/computation/llvm16",  # link slot
     # "//yql/essentials/parser/pg_wrapper/interface",
     # "//yql/essentials/utils",
   ]
 
   deps = [
-    # "//library/cpp/containers/absl_flat_hash",
-    "//library/cpp/regex/pire",
+    # "//contrib/libs/fmt",  # peerdir only
+    # "//library/cpp/containers/absl",
+    # "//library/cpp/monlib/service/pages",
+    "//library/cpp/regex/pire",  # peerdir only
     "//library/cpp/threading/hot_swap",
     "//ydb/core/actorlib_impl",
     # "//ydb/core/cms/console",
     # "//ydb/core/engine",
     # "//ydb/core/formats",  # peerdir only
-    # "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common",
     # "//ydb/core/kqp/common/simple",
-    "//ydb/core/kqp/topics",  # peerdir only
+    # "//ydb/core/kqp/common:types",
+    "//ydb/core/kqp/runtime/streaming",
+    "//ydb/core/kqp/tracing",
+    # "//ydb/core/mon",
     # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
     "//ydb/core/scheme/protos",
     # "//ydb/core/tx",
     "//ydb/core/tx/datashard:range_ops",
     "//ydb/core/tx/datashard:read_events",  # peerdir only
     # "//ydb/core/tx/locks",
-    # "//ydb/core/tx/schemeshard/olap/schema",
+    # "//ydb/core/tx/scheme_board",
+    "//ydb/core/tx/schemeshard/olap/columns",
     # "//ydb/core/tx/sequenceproxy:public",
     "//ydb/core/tx/sharding",
     # "//ydb/core/ydb_convert",  # peerdir only
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/helpers",  # peerdir only
+    # "//ydb/library/actors/wilson",
+    "//ydb/library/json_index",
+    # "//ydb/library/mkql_proto",  # peerdir only
+    # "//ydb/library/query_actor",  # peerdir only
     # "//ydb/library/wilson_ids",
+    # "//ydb/library/yql/dq/actors",  # peerdir only
     # "//ydb/library/yql/dq/actors/spilling",  # peerdir only
     "//ydb/library/yql/dq/proto",
+    # "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yql/dq/runtime/streaming",
+    # "//ydb/library/yverify_stream",  # peerdir only
     "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    # "//ydb/services/workload_manager",
+    "//ydb/services/workload_manager/service",
+    # "//yql/essentials/minikql",
     "//yql/essentials/minikql/comp_nodes",
-    "//yql/essentials/minikql/computation/llvm16",  # link slot
+    # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     # "//yql/essentials/public/issue",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/arrow",
+    "//yt/yt/core",
+    "//ydb/core/kqp/topics",  # peerdir only
   ]
 
   sources = [
     "kqp_arrow_memory_pool.cpp",
+    "kqp_buffer_lock_actor.cpp",
     "kqp_buffer_lookup_actor.cpp",
     "kqp_compute.cpp",
-    "kqp_effects.cpp",
     "kqp_full_text_source.cpp",
     "kqp_fulltext_analyze.cpp",
-    "kqp_output_stream.cpp",
-    "kqp_program_builder.cpp",
     "kqp_read_actor.cpp",
     "kqp_read_iterator_common.cpp",
     "kqp_read_table.cpp",
@@ -84,19 +105,24 @@ library("runtime") {
     "kqp_scan_data_meta.cpp",
     "kqp_sequencer_actor.cpp",
     "kqp_sequencer_factory.cpp",
+    "kqp_stream_enumerate.cpp",
+    "kqp_stream_lock_worker.cpp",
     "kqp_stream_lookup_actor.cpp",
     "kqp_stream_lookup_factory.cpp",
     "kqp_stream_lookup_join_helpers.cpp",
     "kqp_stream_lookup_worker.cpp",
-    "kqp_tasks_runner.cpp",
     "kqp_transport.cpp",
     "kqp_vector_actor.cpp",
+    "kqp_vector_index_levels_cache.cpp",
+    "kqp_vector_search_actor.cpp",
     "kqp_write_actor.cpp",
     "kqp_write_actor_settings.cpp",
     "kqp_write_table.cpp",
     "scheduler/kqp_compute_scheduler_service.cpp",
-    "scheduler/kqp_schedulable_actor.cpp",
+    "scheduler/kqp_schedulable_base.cpp",
+    "scheduler/kqp_schedulable_read.cpp",
     "scheduler/kqp_schedulable_task.cpp",
+    "scheduler/kqp_schedulable_work_factory.cpp",
     "scheduler/tree/dynamic.cpp",
     "scheduler/tree/snapshot.cpp",
   ]

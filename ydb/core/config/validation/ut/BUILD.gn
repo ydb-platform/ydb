@@ -3,9 +3,14 @@ unittest_executable("ut") {
     "//library/cpp/testing/unittest",
     "//ydb/core/config/validation",
     "//ydb/core/protos",
+    "//ydb/core/tx/conveyor_composite/common/config",
+    "//ydb/library/actors/core",
   ]
 
-  sources = [ "//ydb/core/config/validation/validators_ut.cpp" ]
+  sources = [
+    "//ydb/core/config/validation/validators_ut.cpp",
+    "composite_conveyor_validator_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/config/validation" ]
 

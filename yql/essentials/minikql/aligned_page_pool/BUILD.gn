@@ -1,0 +1,15 @@
+library("aligned_page_pool") {
+  public_deps = [ "//library/cpp/monlib/dynamic_counters" ]
+
+  deps = [
+    "//yql/essentials/public/udf/sanitizer_utils",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "//yql/essentials/minikql/aligned_page_pool.cpp",
+    "//yql/essentials/minikql/fake_mmap.cpp",
+    "//yql/essentials/minikql/system_mmap.cpp",
+    "//yql/essentials/minikql/tracked_mmap.cpp",
+  ]
+}

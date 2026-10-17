@@ -8,8 +8,7 @@ library("health_check") {
   deps = [
     "//library/cpp/digest/old_crc",
     "//library/cpp/protobuf/json",
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
     # "//ydb/core/cms/console",
     # "//ydb/core/mind",
     "//ydb/core/mon",

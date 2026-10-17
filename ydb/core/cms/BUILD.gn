@@ -1,43 +1,43 @@
 library("cms") {
   public_deps = [
+    "//library/cpp/json",
+    "//library/cpp/protobuf/json",
     "//ydb/core/base",
     "//ydb/core/blobstorage/base",
-    # "//ydb/core/blobstorage/events",
     "//ydb/core/cms/console",
     "//ydb/core/engine/minikql",
     "//ydb/core/mind",
+    "//ydb/core/mon",
     "//ydb/core/node_whiteboard",
     "//ydb/core/protos",
     "//ydb/core/scheme",
     "//ydb/core/tablet",
     "//ydb/core/tablet_flat",
+    "//ydb/core/tx/datashard",
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
+    "//yql/essentials/public/issue/protos",
   ]
 
   deps = [
     # "//contrib/libs/protobuf",
-    "//library/cpp/json",
     "//library/cpp/mime/types",
+    # "//library/cpp/monlib/service",
     # "//library/cpp/monlib/service/pages",
-    "//library/cpp/protobuf/json",
     "//library/cpp/resource",
     "//library/cpp/svnversion",
     "//library/cpp/time_provider",
     "//ydb/core/actorlib_impl",
+    # "//ydb/core/base/services",
     # "//ydb/core/blobstorage",  # peerdir only
     # "//ydb/core/blobstorage/crypto",  # peerdir only
     "//ydb/core/blobstorage/nodewarden",
     "//ydb/core/erasure",
     # "//ydb/core/mind/bscontroller",  # peerdir only
-    "//ydb/core/mon",
-    "//ydb/core/tx/datashard",
     # "//ydb/library/aclib",  # peerdir only
-    "//ydb/library/pretty_types_print/protobuf",  # peerdir only
     "//ydb/library/services",
     "//ydb/library/yverify_stream",
     "//ydb/public/api/protos",
-    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [
@@ -50,6 +50,7 @@ library("cms") {
     "cms_tx_load_state.cpp",
     "cms_tx_log_and_send.cpp",
     "cms_tx_log_cleanup.cpp",
+    "cms_tx_persist_ddisk_info.cpp",
     "cms_tx_process_notification.cpp",
     "cms_tx_reject_notification.cpp",
     "cms_tx_remove_expired_notifications.cpp",
@@ -61,9 +62,11 @@ library("cms") {
     "cms_tx_store_walle_task.cpp",
     "cms_tx_update_config.cpp",
     "cms_tx_update_downtimes.cpp",
+    "ddisk_usage.cpp",
     "downtime.cpp",
     "erasure_checkers.cpp",
     "http.cpp",
+    "http_dump.cpp",
     "info_collector.cpp",
     "logger.cpp",
     "node_checkers.cpp",
@@ -101,6 +104,14 @@ library("cms") {
     {
       path = "ui/cms_log.js"
       key = "cms/ui/cms_log.js"
+    },
+    {
+      path = "ui/nbs2_tablets.css"
+      key = "cms/ui/nbs2_tablets.css"
+    },
+    {
+      path = "ui/nbs2_tablets.js"
+      key = "cms/ui/nbs2_tablets.js"
     },
     {
       path = "ui/console_log.js"

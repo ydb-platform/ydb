@@ -1,0 +1,5 @@
+library("sdk_runtime") {
+  public_deps = [ "//ydb/public/sdk/cpp/src/library/grpc/client" ]
+
+  sources = [ "runtime.cpp" ]
+}

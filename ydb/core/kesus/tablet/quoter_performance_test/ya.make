@@ -1,5 +1,7 @@
 PROGRAM()
 
+# gn: move into parent
+
 SRCDIR(ydb/core/kesus/tablet)
 
 PEERDIR(

@@ -5360,6 +5360,17 @@ TShardIdx TSchemeShard::GetShardIdx(TTabletId tabletId) const {
     return *pIdx;
 }
 
+std::vector<ui64> TSchemeShard::ShardIdxToTabletId(const std::vector<TShardIdx>& shards) const {
+    std::vector<ui64> result;
+    result.reserve(shards.size());
+    for (const auto& shardIdx : shards) {
+        auto* shardInfo = ShardInfos.FindPtr(shardIdx);
+        Y_ABORT_UNLESS(shardInfo, "ColumnShard not found");
+        result.emplace_back(shardInfo->TabletID.GetValue());
+    }
+    return result;
+}
+
 TShardIdx TSchemeShard::MustGetShardIdx(TTabletId tabletId) const {
     auto shardIdx = GetShardIdx(tabletId);
     Y_VERIFY_S(shardIdx != InvalidShardIdx, "Cannot find shard idx for tablet " << tabletId);

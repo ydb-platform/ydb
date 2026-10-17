@@ -1,0 +1,30 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/actors",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
+    "//ydb/mvp/core",
+    "//ydb/mvp/meta",
+  ]
+
+  sources = [
+    "//ydb/mvp/meta/support_links/grafana_dashboard_search_source_ut.cpp",
+    "//ydb/mvp/meta/support_links/grafana_dashboard_source_ut.cpp",
+    "//ydb/mvp/meta/support_links/grafana_logging_source_ut.cpp",
+    "//ydb/mvp/meta/support_links/url_source_ut.cpp",
+    "//ydb/mvp/meta/support_links/url_template_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/mvp/meta/support_links" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

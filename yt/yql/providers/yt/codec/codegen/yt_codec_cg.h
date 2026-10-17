@@ -43,6 +43,9 @@ template<bool Flat>
 THolder<IYtCodecCgWriter> MakeYtCodecCgWriter(const std::unique_ptr<NCodegen::ICodegen>& codegen,
     const void* cookie = nullptr);
 
+extern template THolder<IYtCodecCgWriter> MakeYtCodecCgWriter<true>(const std::unique_ptr<NCodegen::ICodegen>& codegen, const void* cookie);
+extern template THolder<IYtCodecCgWriter> MakeYtCodecCgWriter<false>(const std::unique_ptr<NCodegen::ICodegen>& codegen, const void* cookie);
+
 class IYtCodecCgReader {
 public:
     virtual ~IYtCodecCgReader() = default;

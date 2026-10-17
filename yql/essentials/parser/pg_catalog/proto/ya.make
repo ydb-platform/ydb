@@ -1,5 +1,7 @@
 PROTO_LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     pg_catalog.proto
 )

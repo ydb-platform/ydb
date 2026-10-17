@@ -49,6 +49,7 @@ PEERDIR(
     ydb/library/persqueue/counter_time_keeper
     ydb/library/persqueue/topic_parser
 )
+# gn: peerdir ydb/core/persqueue/public:utils
 
 GENERATE_ENUM_SERIALIZATION(deduplication_write_queue.h)
 

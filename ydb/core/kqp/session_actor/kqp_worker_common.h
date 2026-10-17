@@ -1,6 +1,10 @@
 #pragma once
 
-#include "kqp_session_actor.h"
+#include "kqp_worker_settings.h"
+
+#include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
+#include <yql/essentials/core/pg_settings/guc_settings.h>
 
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/docapi/traits.h>
@@ -19,6 +23,8 @@
 #include <util/string/escape.h>
 
 namespace NKikimr::NKqp {
+
+struct TKqpFederatedQuerySetup;
 
 struct TSessionShutdownState {
     TSessionShutdownState(ui32 softTimeout, ui32 hardTimeout)

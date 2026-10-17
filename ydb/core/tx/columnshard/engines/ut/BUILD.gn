@@ -2,24 +2,48 @@ unittest_executable("ut") {
   deps = [
     "//contrib/libs/apache/arrow",
     "//library/cpp/testing/unittest",
-    "//ydb/core/base",  # peerdir only
+    "//ydb/core/base",
     "//ydb/core/formats/arrow",
     "//ydb/core/formats/arrow/program",
+    "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/kqp/ut/common",
     "//ydb/core/protos",
+    "//ydb/core/scheme",
     "//ydb/core/tablet",  # peerdir only
     "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
-    "//ydb/core/tx/columnshard/counters",  # peerdir only
-    "//ydb/core/tx/columnshard/engines",  # peerdir only
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/blobs_reader",
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/counters",
+    "//ydb/core/tx/columnshard/data_locks:manager",
+    "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/predicate",
+    "//ydb/core/tx/columnshard/engines/reader/actor",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor",
     "//ydb/core/tx/columnshard/engines/scheme",
-    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
-    "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/scheme/versions",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/bits_storage",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/bloom",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/max",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
+    "//ydb/core/tx/columnshard/hooks/abstract",
+    "//ydb/core/tx/columnshard/hooks/testing",
+    "//ydb/core/tx/columnshard/splitter",
     "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/program",
     "//ydb/library/formats/arrow",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/core/arrow_kernels/registry",
     "//yql/essentials/core/arrow_kernels/request",
     "//yql/essentials/minikql/comp_nodes",
@@ -29,18 +53,28 @@ unittest_executable("ut") {
 
   sources = [
     "helper.cpp",
+    "ut_actualizer.cpp",
+    "ut_index_blob_size_limit.cpp",
+    "ut_index_info_schema_diff.cpp",
+    "ut_minmax_index.cpp",
+    "ut_portion_blob_validation.cpp",
+    "ut_predicate_ranges_builder.cpp",
     "ut_program.cpp",
+    "ut_scan_actor.cpp",
+    "ut_scan_cursor.cpp",
+    "ut_scan_snapshot_guard.cpp",
     "ut_script.cpp",
+    "ut_snapshot_holders.cpp",
+    "ut_sync_portion_index_reuse.cpp",
   ]
 
-  include_dirs = [
-    "//ydb/core/tx/columnshard/engines",  # peerdir only
-  ]
+  include_dirs = [ "//ydb/core/tx/columnshard/engines" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

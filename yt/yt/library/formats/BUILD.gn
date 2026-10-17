@@ -1,5 +1,6 @@
 library("formats") {
   public_deps = [
+    # "//library/cpp/yt/misc",
     # "//yt/yt/client",
     # "//yt/yt/client/formats",
     # "//yt/yt/core",
@@ -8,13 +9,12 @@ library("formats") {
   deps = [
     # "//contrib/libs/apache/arrow_next",
     # "//contrib/libs/protobuf",
-    # "//contrib/libs/re2",
-    # "//contrib/libs/yaml",
     # "//library/cpp/skiff",
     # "//library/cpp/string_utils/base64",
     # "//library/cpp/yt/coding",
     # "//library/cpp/yt/memory",
-    # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/string",
+    # "//yt/yt/core/yaml",
     # "//yt/yt/library/column_converters",
     # "//yt/yt/library/decimal",
     # "//yt/yt/library/numeric",
@@ -45,9 +45,6 @@ library("formats") {
     "skiff_yson_converter.cpp",
     "unversioned_value_yson_writer.cpp",
     "web_json_writer.cpp",
-    "yaml_helpers.cpp",
-    "yaml_parser.cpp",
-    "yaml_writer.cpp",
     "yamr_parser.cpp",
     "yamr_parser_base.cpp",
     "yamr_writer.cpp",

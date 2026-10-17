@@ -1,0 +1,11 @@
+library("memory") {
+  public_deps = [
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "arena_allocator.cpp",
+    "arena_allocator_index_pool.cpp",
+    "arena_allocator_pool.cpp",
+  ]
+}

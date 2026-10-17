@@ -1,49 +1,34 @@
 library("query_data") {
   public_deps = [
-    # "//contrib/libs/protobuf",
-    # "//library/cpp/containers/absl_flat_hash",
-    # "//library/cpp/random_provider",
-    # "//library/cpp/time_provider",
-    "//ydb/core/kqp/common/result_set_format",
     "//ydb/core/kqp/common/simple",
     "//ydb/core/protos",
     # "//ydb/core/scheme",
     # "//ydb/library/accessor",
-    "//ydb/library/mkql_proto",
-    "//ydb/library/mkql_proto/protos",
     # "//ydb/library/yql/dq/expr_nodes",
     "//ydb/library/yql/dq/proto",
-    "//yql/essentials/core",
-    # "//yql/essentials/minikql",
-    # "//yql/essentials/minikql/computation",
-    # "//yql/essentials/public/udf",
   ]
 
   deps = [
     # "//ydb/core/actorlib_impl",  # peerdir only
     # "//ydb/core/base",
-    # "//ydb/core/formats/arrow",
     "//ydb/core/kqp/common",
+    "//ydb/core/kqp/common/result_set_format",  # peerdir only
     # "//ydb/core/kqp/expr_nodes",
-    # "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/provider",
     "//ydb/core/protos/schemeshard",
     # "//ydb/library/actors/core",
+    "//ydb/library/mkql_proto",
     "//ydb/library/services",
-    # "//ydb/library/yql/dq/runtime",
-    # "//ydb/library/yverify_stream",
     # "//ydb/public/api/grpc/draft",  # peerdir only
-    "//ydb/public/api/protos",
-    # "//ydb/public/sdk/cpp/src/client/params",
-    # "//ydb/public/sdk/cpp/src/client/result",
     # "//ydb/public/sdk/cpp/src/library/operation_id/protos",  # peerdir only
+    "//yql/essentials/core",
     # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/minikql",
     # "//yql/essentials/providers/result/expr_nodes",  # peerdir only
-    # "//yql/essentials/utils",
   ]
 
   sources = [
     "kqp_predictor.cpp",
     "kqp_prepared_query.cpp",
-    "kqp_query_data.cpp",
   ]
 }

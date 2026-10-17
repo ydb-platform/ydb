@@ -5,7 +5,10 @@ library("highlight") {
     "//ydb/public/lib/ydb_cli/commands/interactive/highlight/color",
   ]
 
-  deps = [ "//yql/essentials/sql/v1/highlight" ]
+  deps = [
+    "//ydb/public/lib/ydb_cli/common",
+    "//yql/essentials/sql/v1/highlight",
+  ]
 
   sources = [ "yql_highlighter.cpp" ]
 }

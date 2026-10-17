@@ -1,0 +1,9 @@
+library("interconnect") {
+  deps = [
+    "//ydb/core/load_test/common",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+  ]
+
+  sources = [ "//ydb/core/load_test/interconnect_load.cpp" ]
+}

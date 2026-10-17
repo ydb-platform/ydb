@@ -1,0 +1,28 @@
+library("pqv1") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/schema",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/library/jwt",
+    "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",
+    # "//ydb/services/lib/actors",  # peerdir only
+    # "//ydb/services/persqueue_v1/actors/schema/common",
+  ]
+
+  sources = [
+    "actors.cpp",
+    "add_consumer.cpp",
+    "alter_topic.cpp",
+    "common.cpp",
+    "create_topic.cpp",
+    "drop_topic.cpp",
+    "remove_consumer.cpp",
+  ]
+}

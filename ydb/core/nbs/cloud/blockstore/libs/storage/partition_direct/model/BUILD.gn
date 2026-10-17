@@ -1,0 +1,39 @@
+library("model") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/core/nbs/cloud/blockstore/config",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "count_size.cpp",
+    "ddisk_balance.cpp",
+    "host.cpp",
+    "host_health_policy.cpp",
+    "host_mask.cpp",
+    "host_roles.cpp",
+    "host_stat.cpp",
+    "host_state.cpp",
+    "mon_model.cpp",
+    "oracle.cpp",
+    "oracle_config.cpp",
+    "region_geometry.cpp",
+    "time_predictor.cpp",
+    "vchunk_config.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "ddisk_balance.h",
+    "host.h",
+    "host_roles.h",
+    "host_stat.h",
+    "mon_model.h",
+    "oracle.h",
+    "public.h",
+    "vchunk_config.h",
+  ]
+}

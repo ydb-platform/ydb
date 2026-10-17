@@ -1,0 +1,11 @@
+library("dummy") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/access_provider",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "yt_dummy_access_provider.cpp" ]
+}

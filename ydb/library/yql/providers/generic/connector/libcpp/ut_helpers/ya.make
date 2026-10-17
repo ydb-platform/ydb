@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     connector_client_mock.cpp
     database_resolver_mock.cpp

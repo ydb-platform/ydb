@@ -1,30 +1,30 @@
 LIBRARY()
 
 SRCS(
-    check.cpp
-    clean.cpp
-    common_queries.cpp
-    data_splitter.cpp
-    histogram.cpp
-    init.cpp
-    import.cpp
-    import_tui.cpp
-    log_backend.cpp
-    logs_scroller.cpp
-    path_checker.cpp
-    runner.cpp
-    runner_tui.cpp
-    scroller.cpp
-    task_queue.cpp
-    terminal.cpp
-    transaction_delivery.cpp
-    transaction_neworder.cpp
-    transaction_orderstatus.cpp
-    transaction_payment.cpp
-    transaction_simulation.cpp
-    transaction_stocklevel.cpp
-    tui_base.cpp
-    util.cpp
+    check.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    clean.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    common_queries.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    data_splitter.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    histogram.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    init.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    import.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    import_tui.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    log_backend.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    logs_scroller.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    path_checker.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    runner.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    runner_tui.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    scroller.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    task_queue.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    terminal.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_delivery.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_neworder.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_orderstatus.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_payment.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_simulation.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    transaction_stocklevel.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    tui_base.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    util.cpp  # gn: into ydb/public/lib/ydb_cli/commands
 )
 
 PEERDIR(

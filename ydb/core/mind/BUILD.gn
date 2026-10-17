@@ -3,7 +3,7 @@ library("mind") {
     ":nameserver_table_builder",
     ":tenant_node_enumeration",
     "//ydb/core/base",
-    "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
     "//ydb/core/cms/console",
     # "//ydb/core/engine/minikql",
     "//ydb/core/protos",
@@ -26,13 +26,14 @@ library("mind") {
     # "//ydb/core/blobstorage/groupinfo",  # peerdir only
     # "//ydb/core/blobstorage/incrhuge",  # peerdir only
     # "//ydb/core/blobstorage/pdisk",  # peerdir only
+    # "//ydb/core/control",  # peerdir only
     # "//ydb/core/kesus/tablet",  # peerdir only
     # "//ydb/core/keyvalue",  # peerdir only
     # "//ydb/core/mind/bscontroller",  # peerdir only
     "//ydb/core/mon",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller",  # peerdir only
     # "//ydb/core/node_whiteboard",
     # "//ydb/core/sys_view/processor",  # peerdir only
-    # "//ydb/core/tablet_flat/recovery",  # peerdir only
     # "//ydb/core/test_tablet",  # peerdir only
     # "//ydb/core/tx/replication/controller",  # peerdir only
     "//ydb/core/tx/scheme_board",
@@ -72,12 +73,7 @@ library("mind") {
   ]
 }
 
-library("nameserver_table_builder") {
-  public_deps = [ "//ydb/library/actors/interconnect" ]
-
-  deps = [ "//ydb/core/protos" ]
-
-  sources = [ "nameserver_table_builder.cpp" ]
+group("nameserver_table_builder") {
 }
 
 library("tenant_node_enumeration") {

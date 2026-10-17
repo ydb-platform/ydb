@@ -1,0 +1,11 @@
+config("public_config") {
+    defines = [
+        "OPENTELEMETRY_ABI_VERSION_NO=2",
+        "OPENTELEMETRY_STL_VERSION=2023",
+    ]
+    include_dirs = [ "include" ]
+}
+
+contrib_library("api") {
+    public_configs = [ ":public_config" ]
+}

@@ -1,6 +1,7 @@
 gtest_executable("ut") {
   deps = [
     "//library/cpp/testing/gtest",
+    "//ydb/core/external_sources",
     "//ydb/core/kqp/gateway",
     "//ydb/core/kqp/provider",
     "//ydb/services/kesus",  # peerdir only
@@ -9,6 +10,7 @@ gtest_executable("ut") {
     "//ydb/services/ydb",  # peerdir only
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/providers/common/provider",
     "//yql/essentials/public/udf/service/stub",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
     "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
@@ -21,6 +23,7 @@ gtest_executable("ut") {
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

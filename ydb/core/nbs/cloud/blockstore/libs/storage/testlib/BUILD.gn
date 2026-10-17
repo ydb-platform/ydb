@@ -1,0 +1,8 @@
+library("testlib") {
+  public_deps = [
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tablet_flat/test/libs/table",
+  ]
+
+  sources = [ "test_executor.cpp" ]
+}

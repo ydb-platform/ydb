@@ -22,7 +22,7 @@ namespace NYql {
 void OnPayload(const NYT::TSharedRef& block, size_t i, std::vector<TStreamSchemaInferer>& inferers, std::vector<NYT::TPromise<void>>& promises) {
     NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
     NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
-    auto currentPayload = std::move(NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics));
+    auto currentPayload = NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics);
     if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_FORMAT) {
         return;
     }

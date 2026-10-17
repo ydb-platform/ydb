@@ -1,0 +1,5 @@
+group("abstract") {
+  public_deps = [
+    # "//ydb/library/yql/providers/abstract/message_stream",  # peerdir only
+  ]
+}

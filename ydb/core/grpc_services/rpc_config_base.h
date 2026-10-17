@@ -36,7 +36,7 @@ public:
     TDriveDevice(TString path, NKikimrBlobStorage::EPDiskType type)
         : Path(path), Type(type) {}
 
-    auto operator<=>(const TDriveDevice &) const = default;
+    bool operator==(const TDriveDevice &) const = default;
 
 private:
     TString Path;

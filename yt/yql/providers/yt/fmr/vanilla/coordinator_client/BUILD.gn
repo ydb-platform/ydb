@@ -1,0 +1,16 @@
+library("coordinator_client") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/coordinator/interface",
+    # "//yt/yql/providers/yt/fmr/vanilla/peer_tracker",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/cpp/mapreduce/client",
+    # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/fmr/coordinator/client",
+    # "//yt/yql/providers/yt/fmr/vanilla/common",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_vanilla_coordinator_client.cpp" ]
+}

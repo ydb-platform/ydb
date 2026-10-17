@@ -1,0 +1,3 @@
+library("superlemmer_stub") {
+  sources = [ "superlemmer.cpp" ]
+}

@@ -1,0 +1,24 @@
+unittest_executable("oidc") {
+  public_deps = [
+    "//library/cpp/cgiparam",
+    "//library/cpp/http/misc",
+    "//library/cpp/http/server",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/oidc",
+  ]
+
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+    "//ydb/public/sdk/cpp/tests/unit/client/oidc/helpers",  # peerdir only
+  ]
+
+  sources = [
+    "credentials_ut.cpp",
+    "protocol_ut.cpp",
+    "test_server.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

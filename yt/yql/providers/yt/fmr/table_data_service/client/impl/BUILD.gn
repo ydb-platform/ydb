@@ -2,6 +2,7 @@ library("impl") {
   public_deps = [
     # "//yt/yql/providers/yt/fmr/table_data_service/discovery/interface",
     # "//yt/yql/providers/yt/fmr/table_data_service/interface",
+    # "//yt/yql/providers/yt/fmr/tvm/interface",
   ]
 
   deps = [
@@ -11,6 +12,7 @@ library("impl") {
     # "//library/cpp/yson/node",
     # "//yql/essentials/utils",
     # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/fmr/request_options",
     # "//yt/yql/providers/yt/fmr/table_data_service/client/proto_helpers",
     # "//yt/yql/providers/yt/fmr/table_data_service/discovery/file",
     # "//yt/yql/providers/yt/fmr/utils",

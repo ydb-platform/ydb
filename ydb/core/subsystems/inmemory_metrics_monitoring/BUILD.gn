@@ -1,0 +1,22 @@
+library("inmemory_metrics_monitoring") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/metrics",
+  ]
+
+  deps = [
+    # "//library/cpp/json",
+  ]
+
+  sources = [
+    "subsystem.cpp",
+    "viewer.cpp",
+  ]
+
+  resources = [
+    {
+      path = "overview.js"
+      key = "inmemory-metrics/overview.js"
+    },
+  ]
+}

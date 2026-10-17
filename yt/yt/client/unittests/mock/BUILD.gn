@@ -1,0 +1,11 @@
+library("mock") {
+  public_deps = [
+    # "//library/cpp/testing/gtest_extensions",
+    # "//yt/yt/client",
+  ]
+
+  sources = [
+    "client.cpp",
+    "table_reader.cpp",
+  ]
+}

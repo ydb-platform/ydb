@@ -5,7 +5,7 @@ library("switch") {
     "//ydb/core/scheme_types",
     "//ydb/library/formats/arrow/switch",
     # "//yql/essentials/parser/pg_wrapper",
-    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
   ]
 
   deps = [

@@ -1,0 +1,48 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/regex/pcre",  # peerdir only
+    "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/hook",
+    "//library/cpp/testing/unittest",
+    "//ydb/apps/ydbd:export",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/backup:iscan",
+    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
+    "//ydb/core/tx/columnshard/test_helper",  # peerdir only
+    "//ydb/core/tx/datashard",
+    "//ydb/library/aclib/protos",  # peerdir only
+    "//ydb/library/testlib/backup_test_enums",
+    "//ydb/library/testlib/parquet_helpers",
+    "//ydb/library/testlib/s3_recipe_helper",
+    "//ydb/public/lib/yson_value",  # peerdir only
+    "//ydb/services/metadata",  # peerdir only
+  ]
+
+  sources = [ "ut_iscan.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/columnshard/backup/iscan" ]
+
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

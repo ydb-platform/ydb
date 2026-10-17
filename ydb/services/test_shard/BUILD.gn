@@ -2,13 +2,14 @@ library("test_shard") {
   public_deps = [
     # "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
-    "//ydb/public/api/grpc/draft",
+    "//ydb/public/api/grpc",
   ]
 
   deps = [
     "//ydb/core/grpc_services",
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/jaeger_tracing",
+    # "//ydb/core/test_tablet",  # peerdir only
   ]
 
   sources = [ "grpc_service.cpp" ]

@@ -2,7 +2,6 @@ library("control_plane_config") {
   public_deps = [
     ":service_id",
     # "//library/cpp/monlib/dynamic_counters",
-    "//ydb/core/fq/libs/actors/logging",
     "//ydb/core/fq/libs/config/protos",
     "//ydb/core/fq/libs/shared_resources",
     # "//ydb/library/actors/core",
@@ -20,7 +19,7 @@ library("control_plane_config") {
     "//ydb/core/fq/libs/control_plane_storage:service_id",
     "//ydb/core/fq/libs/control_plane_storage:util",
     # "//ydb/core/fq/libs/db_schema",
-    # "//ydb/core/fq/libs/quota_manager",
+    "//ydb/core/fq/libs/quota_manager",
     # "//ydb/core/fq/libs/quota_manager/events",  # peerdir only
     # "//ydb/core/fq/libs/rate_limiter/events",  # peerdir only
     "//ydb/core/fq/libs/ydb",

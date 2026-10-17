@@ -1,0 +1,25 @@
+unittest_executable("slow") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/services/scheme_secret",
+    "//ydb/services/scheme_secret/ut/common",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "service_ut.cpp" ]
+
+  include_dirs = [ "//ydb/services/scheme_secret" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

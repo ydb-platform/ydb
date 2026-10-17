@@ -7,6 +7,7 @@ library("engine") {
     "//ydb/core/scheme",
     # "//ydb/core/scheme_types",
     "//ydb/core/tablet_flat",
+    # "//ydb/library/aclib",
     "//ydb/library/mkql_proto",
     "//ydb/library/mkql_proto/protos",
     "//ydb/public/api/protos",
@@ -17,11 +18,13 @@ library("engine") {
   deps = [
     # "//library/cpp/containers/stack_vector",  # peerdir only
     # "//ydb/core/base",
+    "//ydb/core/kqp/common:types",
     # "//ydb/core/tablet",
     "//ydb/library/actors/core",
     # "//ydb/public/lib/scheme_types",
     "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     # "//yql/essentials/public/decimal",
   ]
 

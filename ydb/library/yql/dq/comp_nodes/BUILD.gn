@@ -1,10 +1,11 @@
 group("comp_nodes") {
   public_deps = [
     "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
-    # "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yql/dq/comp_nodes/operator_memory_quota",
     # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/udf",
   ]
 
   deps = [

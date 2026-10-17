@@ -1,6 +1,9 @@
 unittest_executable("ut_configs_dispatcher") {
   deps = [
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/monlib/service",
+    "//library/cpp/protobuf/json",
     "//library/cpp/protobuf/util",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
@@ -17,11 +20,14 @@ unittest_executable("ut_configs_dispatcher") {
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/interconnect",
+    "//ydb/library/fyamlcpp",
+    "//ydb/library/yaml_config",
   ]
 
   sources = [
     "//ydb/core/cms/console/configs_cache_ut.cpp",
     "//ydb/core/cms/console/configs_dispatcher_ut.cpp",
+    "ut_private_database_config.proto",
   ]
 
   include_dirs = [ "//ydb/core/cms/console" ]
@@ -30,6 +36,7 @@ unittest_executable("ut_configs_dispatcher") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

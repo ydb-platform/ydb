@@ -1,0 +1,12 @@
+library("executor") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/types/executor",
+  ]
+
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/impl/executor",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/thread_pool",  # peerdir only
+  ]
+
+  sources = [ "executor.cpp" ]
+}

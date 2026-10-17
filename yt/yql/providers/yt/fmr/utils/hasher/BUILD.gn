@@ -1,0 +1,8 @@
+library("hasher") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/utils",
+    # "//yt/yql/providers/yt/fmr/utils/comparator",
+  ]
+
+  sources = [ "yql_yt_binary_yson_hasher.cpp" ]
+}

@@ -1,0 +1,18 @@
+library("helper") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/library/conclusion",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "case_helper.cpp",
+    "index_defaults.cpp",
+    "index_parameters.cpp",
+  ]
+}

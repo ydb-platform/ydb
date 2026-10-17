@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 NO_UTIL()
 NO_COMPILER_WARNINGS()
 

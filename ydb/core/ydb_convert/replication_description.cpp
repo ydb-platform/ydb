@@ -168,8 +168,8 @@ bool CheckConfig(
             return true;
         default:
             error = TStringBuilder() << "wrong config: "
-                << CorrectTargetCase << " expected, "
-                << config.GetTargetCase() << " provided";
+                << static_cast<int>(CorrectTargetCase) << " expected, "
+                << static_cast<int>(config.GetTargetCase()) << " provided";
             break;
     }
 

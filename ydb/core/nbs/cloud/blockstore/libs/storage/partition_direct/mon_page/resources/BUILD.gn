@@ -1,0 +1,16 @@
+library("resources") {
+  resources = [
+    {
+      path = "latency.js"
+      key = "partition_direct/mon_page/latency.js"
+    },
+    {
+      path = "vchunk_counters.js"
+      key = "partition_direct/mon_page/vchunk_counters.js"
+    },
+    {
+      path = "mon_page.css"
+      key = "partition_direct/mon_page/mon_page.css"
+    },
+  ]
+}

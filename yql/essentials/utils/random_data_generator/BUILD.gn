@@ -1,0 +1,5 @@
+group("random_data_generator") {
+  deps = [
+    # "//library/cpp/random_provider",  # peerdir only
+  ]
+}

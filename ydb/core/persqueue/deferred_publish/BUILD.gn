@@ -1,0 +1,37 @@
+library("deferred_publish") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    # "//ydb/library/aclib",
+    # "//ydb/library/persqueue/topic_parser",
+    "//ydb/library/query_actor",
+    # "//ydb/library/services",  # peerdir only
+    "//ydb/library/table_creator",
+    # "//ydb/public/lib/scheme_types",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/proto",
+  ]
+
+  sources = [
+    "delete_publication_query.cpp",
+    "describe_publication_query.cpp",
+    "destination_blob.cpp",
+    "finalize_publication_actor.cpp",
+    "get_destination_blob_query.cpp",
+    "insert_publication_query.cpp",
+    "list_destinations_query.cpp",
+    "list_publications_query.cpp",
+    "query_utils.cpp",
+    "registry_actor.cpp",
+    "tables_creator.cpp",
+    "upsert_destination_query.cpp",
+  ]
+}

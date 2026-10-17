@@ -1,0 +1,22 @@
+library("check") {
+  public_deps = [
+    # "//yql/essentials/ast",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//contrib/libs/antlr4_cpp_runtime",
+    # "//yql/essentials/sql/v1/ide/completion",
+    # "//yql/essentials/sql/v1/ide/completion/analysis/yql",
+    # "//yql/essentials/sql/v1/ide/completion/name/cluster/static",
+    # "//yql/essentials/sql/v1/ide/completion/name/object/simple/static",
+    # "//yql/essentials/sql/v1/ide/completion/name/service/cluster",
+    # "//yql/essentials/sql/v1/ide/completion/name/service/schema",
+    # "//yql/essentials/sql/v1/ide/completion/name/service/static",
+    # "//yql/essentials/sql/v1/ide/completion/name/service/union",
+    # "//yql/essentials/sql/v1/lexer/antlr4_pure",
+    # "//yql/essentials/sql/v1/lexer/antlr4_pure_ansi",
+  ]
+
+  sources = [ "check_complete.cpp" ]
+}

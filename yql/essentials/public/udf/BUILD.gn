@@ -4,7 +4,9 @@ library("udf") {
     # "//library/cpp/deprecated/atomic",
     # "//library/cpp/deprecated/enum_codegen",
     "//yql/essentials/public/decimal",
+    # "//yql/essentials/public/langver",
     "//yql/essentials/public/types",
+    "//yql/essentials/public/udf/abi_version_check",
     # "//yql/essentials/utils",
   ]
 
@@ -26,7 +28,6 @@ library("udf") {
     "udf_validate.cpp",
     "udf_value.cpp",
     "udf_value_builder.cpp",
-    "udf_version.cpp",
   ]
 
   link_slot_interface = "YqlServicePolicy"

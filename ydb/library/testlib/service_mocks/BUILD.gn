@@ -1,4 +1,4 @@
-group("service_mocks") {
+library("service_mocks") {
   public_deps = [
     # "//library/cpp/testing/unittest",
     "//ydb/public/api/client/nc_private/iam/v1",
@@ -6,8 +6,14 @@ group("service_mocks") {
     "//ydb/public/api/client/yc_private/iam",
     "//ydb/public/api/client/yc_private/oauth",
     "//ydb/public/api/client/yc_private/resourcemanager",
-    "//ydb/public/api/client/yc_private/servicecontrol",
   ]
 
-  deps = [ "//ydb/public/api/grpc/draft" ]
+  deps = [
+    # "//contrib/libs/googleapis-common-protos",  # peerdir only
+    # "//contrib/libs/grpc",
+    "//ydb/public/api/client/yc_private/servicecontrol",  # peerdir only
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  sources = [ "common.cpp" ]
 }

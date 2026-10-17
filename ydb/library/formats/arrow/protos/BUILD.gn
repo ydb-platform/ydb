@@ -4,4 +4,6 @@ protobuf_library("protos") {
     "fields.proto",
     "ssa.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

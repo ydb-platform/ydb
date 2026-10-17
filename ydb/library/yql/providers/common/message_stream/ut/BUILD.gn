@@ -1,0 +1,19 @@
+gtest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/library/yql/providers/common/message_stream",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/providers/common/structured_token",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+  ]
+
+  sources = [ "message_stream_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

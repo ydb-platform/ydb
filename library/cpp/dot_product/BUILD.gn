@@ -9,5 +9,6 @@ library("dot_product") {
     "dot_product_avx2.cpp",
     "dot_product_simple.cpp",
     "dot_product_sse.cpp",
+    "dot_product_vnni.cpp",
   ]
 }

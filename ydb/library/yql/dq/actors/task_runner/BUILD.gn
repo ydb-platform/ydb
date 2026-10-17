@@ -1,7 +1,7 @@
 library("task_runner") {
   public_deps = [
     "//ydb/library/actors/core",
-    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/compute",
     # "//ydb/library/yql/dq/common",
     "//ydb/library/yql/dq/proto",
     "//ydb/library/yql/dq/runtime",
@@ -13,9 +13,10 @@ library("task_runner") {
     "//ydb/library/services",
     "//ydb/library/yql/dq/actors",
     "//ydb/library/yql/dq/actors/spilling",
+    # "//ydb/library/yql/dq/comp_nodes/operator_memory_quota",
     # "//ydb/library/yql/utils/actors",  # peerdir only
     "//yql/essentials/core/issue",
-    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [

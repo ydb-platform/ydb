@@ -9,6 +9,8 @@ library("indexes") {
 
   deps = [
     # "//ydb/core/tx/columnshard/blobs_action/common",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc",
+    # "//ydb/core/tx/schemeshard/olap/schema",
   ]
 
   sources = [

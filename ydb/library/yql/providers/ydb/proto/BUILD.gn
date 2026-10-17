@@ -3,4 +3,6 @@ protobuf_library("proto") {
     "range.proto",
     "source.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

@@ -106,6 +106,8 @@ private:
 
     void InitializeFromOrdered(const std::vector<ui64>& orderedIds);
 
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProtoImpl(const NSchemeShard::TOlapColumnsDescription* columns, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
+
 protected:
     std::set<ui64> GetClosedWritingShardIds() const {
         std::set<ui64> result;
@@ -294,6 +296,7 @@ public:
         return BuildFromProto(&schema, shardingInfo);
     }
     static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
+    static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NSchemeShard::TOlapColumnsDescription& columns, const NKikimrSchemeOp::TColumnTableSharding& shardingInfo);
     static TConclusion<std::unique_ptr<IShardingBase>> BuildFromProto(const NKikimrSchemeOp::TColumnTableSharding& shardingInfo) {
         return BuildFromProto(nullptr, shardingInfo);
     }

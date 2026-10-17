@@ -1,0 +1,13 @@
+library("message_stream") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    "//yql/essentials/ast",
+  ]
+
+  deps = [
+    # "//yql/essentials/core",  # peerdir only
+    "//yql/essentials/providers/common/structured_token",
+  ]
+
+  sources = [ "provider.cpp" ]
+}

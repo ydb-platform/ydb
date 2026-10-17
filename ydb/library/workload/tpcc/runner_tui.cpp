@@ -225,15 +225,15 @@ ftxui::Element TRunnerTui::BuildThreadStatsPart() {
 
 Component TRunnerTui::BuildComponent() {
     try {
-        Component resultPreview = Renderer([=] { return BuildPreviewPart(); });
-        Component middleScroller = Scroller(Renderer([=] { return BuildThreadStatsPart(); }), "TPC-C client state");
+        Component resultPreview = Renderer([=, this] { return BuildPreviewPart(); });
+        Component middleScroller = Scroller(Renderer([=, this] { return BuildThreadStatsPart(); }), "TPC-C client state");
         Component logsScroller = LogsScroller(LogBackend);
 
         // for focus/navigation/scrolls
         auto container = Container::Vertical({ resultPreview, middleScroller, logsScroller });
 
         // do all sizing/layout inside the renderer so it adapts to resizes
-        return Renderer(container, [=] {
+        return Renderer(container, [=, this] {
             const int termHeight = ftxui::Terminal::Size().dimy;  // current terminal height
 
             // render preview at natural height

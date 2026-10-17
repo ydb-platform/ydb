@@ -1,0 +1,23 @@
+unittest_executable("ut_storage") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/public/sdk/cpp/src/client/proto",
+    "//ydb/services/udf_store",
+    "//ydb/services/udf_store/metadata_subscription",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "artifact_state_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

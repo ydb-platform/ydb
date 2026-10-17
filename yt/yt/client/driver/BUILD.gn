@@ -4,6 +4,8 @@ library("driver") {
   ]
 
   deps = [
+    # "//library/cpp/yt/logging",
+    # "//library/cpp/yt/string",
     # "//yt/yt/build",
     # "//yt/yt/client",
     # "//yt/yt/client/formats",

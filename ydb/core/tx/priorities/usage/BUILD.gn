@@ -1,12 +1,12 @@
 library("usage") {
   public_deps = [
     "//ydb/core/base",
-    "//ydb/core/protos",
-    # "//ydb/core/tx/priorities/service",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
     # "//ydb/library/conclusion",
   ]
+
+  deps = [ "//ydb/core/protos" ]
 
   sources = [
     "abstract.cpp",

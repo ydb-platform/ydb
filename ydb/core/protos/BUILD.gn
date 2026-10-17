@@ -2,6 +2,7 @@ protobuf_library("protos") {
   public_deps = [
     "//ydb/core/config/protos",
     "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/nbs/cloud/blockstore/config/protos",
     "//ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos",
     "//ydb/core/protos/nbs",
     "//ydb/core/protos/schemeshard",
@@ -24,17 +25,17 @@ protobuf_library("protos") {
   ]
 
   deps = [
-    # "//ydb/core/tx/columnshard/engines/protos",  # peerdir only
-    # "//yql/essentials/core/issue/protos",  # peerdir only
     # "//yql/essentials/public/issue/protos",  # peerdir only
   ]
 
   sources = [
     "alloc.proto",
+    "analyze_operation.proto",
     "auth.proto",
     "backup.proto",
     "base.proto",
     "bind_channel_storage_pool.proto",
+    "blob_checker.proto",
     "blob_depot.proto",
     "blob_depot_config.proto",
     "blobstorage.proto",
@@ -74,6 +75,7 @@ protobuf_library("protos") {
     "counters_columnshard.proto",
     "counters_coordinator.proto",
     "counters_datashard.proto",
+    "counters_detailed_datashard.proto",
     "counters_hive.proto",
     "counters_info.proto",
     "counters_kesus.proto",
@@ -89,7 +91,9 @@ protobuf_library("protos") {
     "counters_testshard.proto",
     "counters_tx_allocator.proto",
     "counters_tx_proxy.proto",
+    "counters_wasm_compile_controller.proto",
     "data_events.proto",
+    "data_format_settings.proto",
     "data_integrity_trails.proto",
     "database_basic_sausage_metainfo.proto",
     "datashard_backup.proto",
@@ -104,6 +108,7 @@ protobuf_library("protos") {
     "flat_scheme_op.proto",
     "flat_tx_scheme.proto",
     "follower_group.proto",
+    "forced_compaction.proto",
     "fs_settings.proto",
     "grpc.proto",
     "grpc_pq_old.proto",
@@ -118,6 +123,7 @@ protobuf_library("protos") {
     "key.proto",
     "kqp.proto",
     "kqp_compile_settings.proto",
+    "kqp_lookup_source.proto",
     "kqp_physical.proto",
     "kqp_stats.proto",
     "kqp_tablemetadata.proto",
@@ -125,10 +131,12 @@ protobuf_library("protos") {
     "load_test.proto",
     "local.proto",
     "long_tx_service.proto",
+    "long_tx_service_config.proto",
     "maintenance.proto",
     "memory_controller_config.proto",
     "memory_stats.proto",
     "metrics.proto",
+    "metrics_config.proto",
     "minikql_engine.proto",
     "mon.proto",
     "msgbus.proto",
@@ -141,11 +149,16 @@ protobuf_library("protos") {
     "node_whiteboard.proto",
     "out/out.cpp",
     "out/out_cms.cpp",
+    "out/out_data_events.cpp",
     "out/out_long_tx_service.cpp",
     "out/out_sequenceshard.cpp",
     "out/out_tablet.cpp",
     "pdiskfit.proto",
     "pqconfig.proto",
+    "pqdata_deferred_publish_destination.proto",
+    "pqdata_mlp.proto",
+    "pqdata_transaction.proto",
+    "pqevents_global.proto",
     "profiler.proto",
     "query_stats.proto",
     "recoveryshard_config.proto",
@@ -159,6 +172,7 @@ protobuf_library("protos") {
     "scheme_type_operation.proto",
     "schemeshard_config.proto",
     "serverless_proxy_config.proto",
+    "set_column_constraint.proto",
     "shared_cache.proto",
     "sqs.proto",
     "statestorage.proto",
@@ -167,6 +181,7 @@ protobuf_library("protos") {
     "subdomains.proto",
     "sys_view.proto",
     "sys_view_types.proto",
+    "table_metrics_settings.proto",
     "table_service_config.proto",
     "table_stats.proto",
     "tablet.proto",
@@ -179,6 +194,7 @@ protobuf_library("protos") {
     "tenant_pool.proto",
     "tenant_slot_broker.proto",
     "test_shard.proto",
+    "test_shard_control.proto",
     "tracing.proto",
     "tx.proto",
     "tx_columnshard.proto",
@@ -204,6 +220,8 @@ protobuf_library("protos") {
   proto_transitive_headers = false
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 
   extra_plugins = [
     {

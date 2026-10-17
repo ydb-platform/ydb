@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: anti-cycle facade
+
 SRCS(
     out.cpp
 )

@@ -1,0 +1,7 @@
+library("http") {
+  deps = [
+    # "//library/cpp/string_utils/url",
+  ]
+
+  sources = [ "rfc7239_forwarded.cpp" ]
+}

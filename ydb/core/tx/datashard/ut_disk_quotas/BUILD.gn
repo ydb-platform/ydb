@@ -3,6 +3,7 @@ unittest_executable("ut_disk_quotas") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/blobstorage/base",
     "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/testlib/actors",
@@ -26,6 +27,7 @@ unittest_executable("ut_disk_quotas") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

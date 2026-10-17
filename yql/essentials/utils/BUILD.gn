@@ -4,6 +4,7 @@ library("utils") {
     "//library/cpp/digest/md5",
     "//library/cpp/threading/future",
     "//library/cpp/time_provider",
+    # "//yql/essentials/utils/meta",
   ]
 
   deps = [
@@ -15,6 +16,7 @@ library("utils") {
     "checkpoint_map.cpp",
     "chunked_buffer.cpp",
     "debug_info.cpp",
+    "exception_utils.cpp",
     "future_action.cpp",
     "hash.cpp",
     "limiting_allocator.cpp",
@@ -27,6 +29,7 @@ library("utils") {
     "rand_guid.cpp",
     "retry.cpp",
     "sort.cpp",
+    "strong_alias.cpp",
     "swap_bytes.cpp",
     "time_provider.cpp",
     "tty.cpp",

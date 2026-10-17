@@ -1,0 +1,28 @@
+library("global") {
+  public_deps = [
+    "//yql/essentials/sql/v1/ide/completion/core",
+    # "//yql/essentials/sql/v1/ide/core",
+    # "//yql/essentials/utils/meta",
+  ]
+
+  deps = [
+    # "//contrib/libs/re2",  # peerdir only
+    # "//library/cpp/iterator",
+    # "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",  # peerdir only
+    "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",  # peerdir only
+    "//yql/essentials/sql/v1/ide/analysis",
+    # "//yql/essentials/sql/v1/ide/completion/syntax",  # peerdir only
+    "//yql/essentials/sql/v1/ide/completion/text",
+    # "//yql/essentials/sql/v1/ide/pure_ast",
+  ]
+
+  sources = [
+    "column.cpp",
+    "function.cpp",
+    "global.cpp",
+    "input.cpp",
+    "named_node_visibility.cpp",
+    "parser.cpp",
+    "use.cpp",
+  ]
+}

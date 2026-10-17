@@ -1,0 +1,3 @@
+library("trace") {
+  sources = [ "trace.cpp" ]
+}

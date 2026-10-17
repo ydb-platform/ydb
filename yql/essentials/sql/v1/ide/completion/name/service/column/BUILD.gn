@@ -1,0 +1,17 @@
+library("column") {
+  public_deps = [
+    "//yql/essentials/sql/v1/ide/completion/analysis/global",
+    "//yql/essentials/sql/v1/ide/completion/name/service",
+    # "//yql/essentials/sql/v1/ide/completion/name/service/ranking",
+  ]
+
+  deps = [
+    "//library/cpp/case_insensitive_string",
+    "//yql/essentials/sql/v1/ide/completion/name/object/simple/static",
+  ]
+
+  sources = [
+    "name_service.cpp",
+    "replicating.cpp",
+  ]
+}

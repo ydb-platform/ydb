@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/metrics",
+  ]
+
+  sources = [
+    "compressed_line_storage_ut.cpp",
+    "dynamic_group_line_ut.cpp",
+    "group_line_frontend_ut.cpp",
+    "inmemory_metrics_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,5 +1,6 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_pdisk_config.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>

@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/utils
 )
+# gn: peerdir contrib/libs/brotli:enc
 
 ADDINCL(
     ydb/library/yql/udfs/common/clickhouse/client/base

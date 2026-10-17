@@ -2,25 +2,40 @@ library("common") {
   public_deps = [
     # "//library/cpp/deprecated/atomic",
     "//library/cpp/json",
-    "//library/cpp/lwtrace",
-    # "//library/cpp/threading/future",
+    "//library/cpp/threading/future",
     "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/util",
+    # "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    "//library/cpp/lwtrace",  # peerdir only
+    "//ydb/library/actors/prof",
   ]
 
   sources = [
     "affinity.cpp",
+    "backoff_delay_provider.cpp",
     "block_buffer.cpp",
     "block_data_ref.cpp",
     "context.cpp",
     "error.cpp",
+    "error_utils.cpp",
+    "format.cpp",
     "guarded_sglist.cpp",
     "helpers.cpp",
     "page_size.cpp",
+    "ring_buffer.cpp",
+    "scheduler.cpp",
+    "scheduler_test.cpp",
     "sglist.cpp",
     "sglist_iter.cpp",
     "sglist_test.cpp",
     "startable.cpp",
     "thread.cpp",
+    "timer.cpp",
+    "timer_test.cpp",
   ]
 
   serialize_enum_headers = [ "error.h" ]

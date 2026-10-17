@@ -12,6 +12,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/resources
     yql/essentials/core/expr_nodes
 )
+# gn: peerdir ydb/core/tx/columnshard/splitter:settings
 
 END()
 

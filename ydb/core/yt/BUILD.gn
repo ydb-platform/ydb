@@ -7,7 +7,7 @@ library("yt") {
     # "//ydb/library/aclib",  # peerdir only
     # "//ydb/library/actors/core",
     "//ydb/library/services",
-    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     # "//yql/essentials/types/binary_json",
     # "//yt/yt/client",
     # "//yt/yt/core",

@@ -1,13 +1,13 @@
 LIBRARY()
 
 SRCS(
-    cleanup_portions.cpp
-    cleanup_tables.cpp
-    compaction.cpp
-    general_compaction.cpp
-    merge_subset.cpp
-    ttl.cpp
-    with_appended.cpp
+    cleanup_portions.cpp  # gn: into ydb/core/tx/columnshard/engines
+    cleanup_tables.cpp  # gn: into ydb/core/tx/columnshard/engines
+    compaction.cpp  # gn: into ydb/core/tx/columnshard/engines
+    general_compaction.cpp  # gn: into ydb/core/tx/columnshard/engines
+    merge_subset.cpp  # gn: into ydb/core/tx/columnshard/engines
+    ttl.cpp  # gn: into ydb/core/tx/columnshard/engines
+    with_appended.cpp  # gn: into ydb/core/tx/columnshard/engines
 )
 
 PEERDIR(

@@ -1,0 +1,20 @@
+library("struct_log") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    # "//library/cpp/logger",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "create_message.cpp",
+    "json_writer.cpp",
+    "key_name.cpp",
+    "log_stack.cpp",
+    "meta_writer.cpp",
+    "native_types_support.cpp",
+    "structured_message.cpp",
+    "text_writer.cpp",
+  ]
+}

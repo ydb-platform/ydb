@@ -3,17 +3,19 @@ YQL_LIBRARY()
 SRCS(
     yql_eval_expr.cpp
     yql_eval_expr.h
-    yql_eval_params.cpp
+    yql_eval_params.cpp  # gn: pipeline
     yql_eval_params.h
-    yql_out_transformers.cpp
+    yql_out_transformers.cpp  # gn: pipeline
     yql_out_transformers.h
-    yql_lineage.cpp
+    yql_lineage.cpp  # gn: pipeline
     yql_lineage.h
     yql_plan.cpp
     yql_plan.h
-    yql_transform_pipeline.cpp
+    yql_transform_pipeline.cpp  # gn: pipeline
     yql_transform_pipeline.h
+    yql_transform_pipeline_eval.cpp
 )
+# gn: pipeline headers yql_eval_params.h yql_lineage.h yql_out_transformers.h yql_transform_pipeline.h
 
 PEERDIR(
     library/cpp/string_utils/base64

@@ -1,0 +1,8 @@
+library("service") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//yql/essentials/sql/v1/ide/completion/core",
+  ]
+
+  sources = [ "name_service.cpp" ]
+}

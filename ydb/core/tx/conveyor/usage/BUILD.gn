@@ -1,8 +1,7 @@
 library("usage") {
   public_deps = [
-    # "//ydb/core/base",
+    "//ydb/core/base",
     "//ydb/core/protos",
-    # "//ydb/core/tx/conveyor/service",
     # "//ydb/library/accessor",
     "//ydb/library/actors/core",
     "//ydb/library/conclusion",

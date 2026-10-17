@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: anti-cycle facade
+
 PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/blobstorage/vdisk/common

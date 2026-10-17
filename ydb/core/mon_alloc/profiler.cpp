@@ -111,11 +111,11 @@ namespace NActors {
 #endif // PROFILE_MEMORY_ALLOCATIONS
 
             if (name.StartsWith("tc")) {
-                profiler = std::move(NKikimr::CreateTcMallocProfiler());
+                profiler = NKikimr::CreateTcMallocProfiler();
             }
 
             if (profiler) {
-                return std::move(profiler);
+                return profiler;
             }
 
 #if defined(EXEC_PROFILER_ENABLED)

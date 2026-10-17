@@ -3,12 +3,14 @@ library("memory") {
     "//library/cpp/yt/assert",
     "//library/cpp/yt/malloc",
     # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/mpl",
     # "//library/cpp/yt/string",
     "//library/cpp/yt/system",
   ]
 
   deps = [
     # "//library/cpp/sanitizer/include",  # peerdir only
+    # "//library/cpp/yt/exception",
   ]
 
   sources = [

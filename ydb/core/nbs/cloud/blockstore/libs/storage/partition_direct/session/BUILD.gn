@@ -1,0 +1,19 @@
+library("session") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//library/cpp/threading/hot_swap",
+    # "//ydb/core/base",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [ "//ydb/core/protos" ]
+
+  sources = [
+    "events.cpp",
+    "partition_session.cpp",
+    "partition_session_control.cpp",
+    "partition_session_state.cpp",
+  ]
+}

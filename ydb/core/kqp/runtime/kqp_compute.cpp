@@ -136,14 +136,14 @@ public:
 
             if (mode == EOutputMode::OnlyLeftRow || mode == EOutputMode::Both) {
                 for (size_t i = 0; i < Self->LeftColumnsIndices.size(); ++i) {
-                    ResultItems[Self->LeftColumnsIndices[i]] = std::move(leftRow.GetElement(i));
+                    ResultItems[Self->LeftColumnsIndices[i]] = leftRow.GetElement(i);
                 }
             }
 
             if (mode == EOutputMode::Both) {
                 if (rightRow.HasValue()) {
                     for (size_t i = 0; i < Self->RightColumnsIndices.size(); ++i) {
-                        ResultItems[Self->RightColumnsIndices[i]] = std::move(rightRow.GetElement(i));
+                        ResultItems[Self->RightColumnsIndices[i]] = rightRow.GetElement(i);
                     }
                 } else {
                     for (size_t i = 0; i < Self->RightColumnsIndices.size(); ++i) {

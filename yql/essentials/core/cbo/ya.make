@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     cbo_optimizer_new.cpp
-    cbo_interesting_orderings.cpp
+    cbo_interesting_orderings.cpp  # gn: into yql/essentials/core
     cbo_hints.cpp
 )
 

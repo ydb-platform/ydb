@@ -1,0 +1,23 @@
+library("observability") {
+  public_deps = [
+    "//library/cpp/logger",
+    "//ydb/public/sdk/cpp/src/client/impl/stats",
+    # "//ydb/public/sdk/cpp/src/client/trace",
+    # "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  deps = [
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/common",
+    "//ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state",
+    "//ydb/public/sdk/cpp/src/client/impl/observability/error_category",
+    # "//ydb/public/sdk/cpp/src/client/metrics",
+  ]
+
+  sources = [
+    "metric_buffer.cpp",
+    "metrics.cpp",
+    "observation.cpp",
+    "span.cpp",
+  ]
+}

@@ -13,6 +13,7 @@ library("cache") {
     # "//library/cpp/monlib/dynamic_counters",
     # "//ydb/core/mon",
     "//ydb/core/protos",
+    # "//ydb/public/api/grpc/draft",  # peerdir only
   ]
 
   sources = [ "pq_l2_cache.cpp" ]

@@ -1,7 +1,13 @@
 library("arrow_kernels") {
-  public_deps = [ "//contrib/libs/apache/arrow" ]
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    # "//library/cpp/testing/unittest",
+  ]
 
-  sources = [ "func_cast.cpp" ]
+  sources = [
+    "func_cast.cpp",
+    "ut_common.cpp",
+  ]
 
   serialize_enum_headers = [ "operations.h" ]
 }

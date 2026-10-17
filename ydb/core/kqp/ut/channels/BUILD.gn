@@ -1,0 +1,38 @@
+unittest_executable("channels") {
+  deps = [
+    "//library/cpp/monlib/service",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",  # peerdir only
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib/actors",
+    "//ydb/library/yql/dq/actors",
+    "//ydb/library/yql/dq/runtime",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "dq_channel_failure_ut.cpp",
+    "dq_channel_finish_ut.cpp",
+    "dq_channel_misc_ut.cpp",
+    "dq_channel_quota_ut.cpp",
+    "dq_channel_service_ut.cpp",
+    "dq_channel_session_ut.cpp",
+    "dq_channel_spilling_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/dq/runtime" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -1,8 +1,9 @@
 library("actors") {
   public_deps = [
+    ":monitoring_settings",
     "//ydb/core/grpc_services",
+    "//ydb/core/persqueue/public/schema",
     "//ydb/core/persqueue/public:utils",
-    "//ydb/core/protos",
     "//ydb/core/protos/schemeshard",
     # "//ydb/library/actors/core",
     "//ydb/library/persqueue/topic_parser",
@@ -11,26 +12,30 @@ library("actors") {
   ]
 
   deps = [
-    "//library/cpp/digest/md5",
-    # "//library/cpp/json",
-    # "//ydb/core/base",
+    # "//library/cpp/json",  # peerdir only
     # "//ydb/core/grpc_services/base",  # peerdir only
-    # "//ydb/core/kafka_proxy",
     # "//ydb/core/metering",  # peerdir only
     # "//ydb/core/mind",  # peerdir only
     "//ydb/core/persqueue/public",
-    # "//ydb/core/util",
-    # "//ydb/core/ydb_convert",
+    "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/util",  # peerdir only
     # "//ydb/library/grpc/server",  # peerdir only
     # "//ydb/public/api/grpc",  # peerdir only
-    "//ydb/public/sdk/cpp/src/library/jwt",
     # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
-    "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",
-    # "//yql/essentials/public/decimal",
   ]
 
-  sources = [
-    "consumers_advanced_monitoring_settings.cpp",
-    "pq_schema_actor.cpp",
+  sources = [ "pq_schema_actor.cpp" ]
+}
+
+library("monitoring_settings") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
   ]
+
+  deps = [
+    "//library/cpp/json",
+  ]
+
+  sources = [ "consumers_advanced_monitoring_settings.cpp" ]
 }

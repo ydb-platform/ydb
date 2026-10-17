@@ -2,20 +2,23 @@ unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
     "//library/cpp/malloc/api",
+    "//library/cpp/monlib/service",
     "//library/cpp/svnversion",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
+    "//ydb/core/base/services",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/crypto",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/cms",
     "//ydb/core/cms/console",
-    "//ydb/core/config/init",
     "//ydb/core/mind",
     "//ydb/core/mind/bscontroller",
     "//ydb/core/node_whiteboard",
     "//ydb/core/protos",
     "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/aclib",
@@ -31,14 +34,20 @@ unittest_executable("ut") {
     "//ydb/core/cms/cms_ut_common.cpp",
     "//ydb/core/cms/downtime_ut.cpp",
     "//ydb/core/cms/ut_helpers.cpp",
+    "ddisk_usage_ut.cpp",
+    "http_dump_ut.cpp",
+    "json_proxy_toggle_config_validator_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/cms" ]
+
+  serialize_enum_headers = [ "//ydb/core/cms/cms_maintenance_api_ut_enums.h" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

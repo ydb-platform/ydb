@@ -1,0 +1,7 @@
+protobuf_library("identity") {
+  public_deps = [ "//ydb/public/api/protos/annotations" ]
+
+  sources = [ "user_token.proto" ]
+
+  protoc_fatal_warnings = true
+}

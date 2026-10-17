@@ -1,0 +1,30 @@
+gtest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/library/yql/providers/dq/expr_nodes",
+    # "//ydb/library/yql/providers/yt/expr_nodes",  # no target
+    "//ydb/library/yql/providers/yt/provider",
+    "//yql/essentials/core",
+    "//yql/essentials/minikql/computation/llvm16",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/providers/common/structured_token",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yt/yql/providers/yt/codec/codegen/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/expr_nodes",
+    "//yt/yql/providers/yt/gateway/lib",  # peerdir only
+    "//yt/yql/providers/yt/provider",
+  ]
+
+  sources = [ "provider_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

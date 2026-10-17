@@ -53,7 +53,7 @@ declare_args() {
   #     of pch_targets their own on top of it (chained); the build tools have
   #     none, see tool_toolchain;
   #   "none"
-  pch_mode = "per_target"
+  pch_mode = "none"
 
   # write "$" for the shell as "\$\$"
   cc_wrapper = ""
@@ -86,6 +86,7 @@ _default_configs = [
   "//build/gn/config:${library_type}",
   "//build/gn/config/${host_os}:base",
   "//build/gn/config:std_string",
+  "//build/gn/config:ydb_embedded_nbs",
   "//build/gn/config:no_undefined",
   "//build/gn/config:yql_abi_current",
   "//build/gn/config:macro_prefix_map",

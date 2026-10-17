@@ -10,6 +10,7 @@ config("private_config") {
     ]
     defines = [
         "_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER",
+        "_LIBUNWIND_HAVE_GETAUXVAL",
         "_LIBUNWIND_IS_NATIVE_ONLY",
     ]
     include_dirs = [ "include" ]

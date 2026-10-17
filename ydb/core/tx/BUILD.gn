@@ -4,7 +4,6 @@ library("tx") {
     "//ydb/core/protos",
     "//ydb/library/actors/core",
     "//ydb/library/conclusion",
-    "//ydb/library/services",
   ]
 
   deps = [

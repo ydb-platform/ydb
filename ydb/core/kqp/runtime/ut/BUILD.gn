@@ -1,19 +1,34 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
-    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/common",
     "//ydb/core/kqp/compute_actor",
+    "//ydb/core/kqp/node_service",
     "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",  # peerdir only
-    "//ydb/core/kqp/workload_service/ut/common",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
     "//ydb/core/testlib/actors",
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/basics:pg",  # peerdir only
+    "//ydb/core/tx/data_events",
+    "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_cache",
     "//ydb/library/accessor",
+    "//ydb/library/actors/interconnect",
+    "//ydb/public/lib/scheme_types",
+    "//ydb/services/workload_manager/ut/common",
+    "//yql/essentials/ast",  # peerdir only
+    "//yql/essentials/minikql",
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
     "//yql/essentials/minikql:alloc",
     "//yql/essentials/public/udf",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/v1/lexer/antlr4",  # peerdir only
+    "//yql/essentials/sql/v1/lexer/antlr4_ansi",  # peerdir only
     "//yt/yql/providers/yt/codec/codegen",  # peerdir only
     "//yt/yql/providers/yt/comp_nodes/dq/llvm16",  # peerdir only
     "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
@@ -24,6 +39,8 @@ unittest_executable("ut") {
     "//ydb/core/kqp/runtime/kqp_scan_fetcher_ut.cpp",
     "//ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service_ut.cpp",
     "//ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_ut.cpp",
+    "kqp_write_actor_ut.cpp",
+    "kqp_write_table_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/kqp/runtime" ]
@@ -32,6 +49,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

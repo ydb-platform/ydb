@@ -251,7 +251,7 @@ namespace NYql::NConnector {
                 auto status = NYdbGrpc::TGrpcStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,msg));
 
                 YQL_CLOG(WARN, ProviderGeneric) << msg;
-                promise.SetValue({std::move(status), std::move(NApi::TDescribeTableResponse())});
+                promise.SetValue({std::move(status), NApi::TDescribeTableResponse()});
                 return promise.GetFuture();
             }
 

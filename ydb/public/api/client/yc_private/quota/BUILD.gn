@@ -7,4 +7,6 @@ protobuf_library("quota") {
   ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

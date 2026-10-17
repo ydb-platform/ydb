@@ -11,16 +11,4 @@ void TServiceOperator::Register(const TConfig& config) {
     service->Path = config.GetPath();
 }
 
-bool TServiceOperator::IsEnabled() {
-    auto* service = Singleton<TServiceOperator>();
-    std::shared_lock<std::shared_mutex> lock(service->Lock);
-    return service->EnabledFlag;
-}
-
-TString TServiceOperator::GetPath() {
-    auto* service = Singleton<TServiceOperator>();
-    std::shared_lock<std::shared_mutex> lock(service->Lock);
-    return service->Path;
-}
-
 } // namespace NKikimr::NMetadata::NProvider

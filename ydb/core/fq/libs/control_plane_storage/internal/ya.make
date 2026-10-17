@@ -1,13 +1,13 @@
 LIBRARY()
 
 SRCS(
-    nodes_health_check.cpp
-    rate_limiter_resources.cpp
-    response_tasks.cpp
-    task_get.cpp
-    task_ping.cpp
-    task_result_write.cpp
-    utils.cpp
+    nodes_health_check.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    rate_limiter_resources.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    response_tasks.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    task_get.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    task_ping.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    task_result_write.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
+    utils.cpp  # gn: into ydb/core/fq/libs/control_plane_storage
 )
 
 PEERDIR(

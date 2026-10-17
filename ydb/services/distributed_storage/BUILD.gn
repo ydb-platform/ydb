@@ -1,0 +1,15 @@
+library("distributed_storage") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/grpc/server",
+    "//ydb/public/api/grpc/draft",
+  ]
+
+  deps = [
+    # "//ydb/core/grpc_services",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/jaeger_tracing",
+  ]
+
+  sources = [ "grpc_service.cpp" ]
+}

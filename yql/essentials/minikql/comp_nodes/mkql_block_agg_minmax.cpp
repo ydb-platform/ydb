@@ -642,13 +642,13 @@ public:
     void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
         auto typedState = static_cast<TGenericState*>(state);
 
-        *typedState = std::move(MakeString(buffer.PopString()));
+        *typedState = MakeString(buffer.PopString());
     }
 
     void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
         auto typedState = static_cast<TGenericState*>(state);
         TMaybe<NUdf::TStringRef> currentState = typedState->AsStringRef();
-        TGenericState deserializedState = std::move(MakeString(buffer.PopString()));
+        TGenericState deserializedState = MakeString(buffer.PopString());
         NUdf::TStringRef deserializedStateRef = deserializedState.AsStringRef();
 
         bool stateChanged = false;

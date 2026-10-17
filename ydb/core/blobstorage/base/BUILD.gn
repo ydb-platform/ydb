@@ -4,9 +4,10 @@ library("base") {
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/monlib/metrics",
     "//ydb/core/base",
+    # "//ydb/core/blobstorage/groupinfo",
+    # "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/common:guids",
-    # "//ydb/core/debug",
     "//ydb/core/protos",
     # "//ydb/core/util",
     # "//ydb/library/actors/core",
@@ -15,6 +16,7 @@ library("base") {
   ]
 
   deps = [
+    # "//contrib/libs/xxhash",
     # "//library/cpp/deprecated/atomic",  # peerdir only
     # "//library/cpp/lwtrace",  # peerdir only
     # "//library/cpp/monlib/service/pages",
@@ -22,6 +24,8 @@ library("base") {
   ]
 
   sources = [
+    "blobstorage_checksum.cpp",
+    "blobstorage_events.cpp",
     "blobstorage_syncstate.cpp",
     "blobstorage_vdiskid.cpp",
     "html.cpp",

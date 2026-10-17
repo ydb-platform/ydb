@@ -1,0 +1,16 @@
+library("ddisk") {
+  deps = [
+    # "//library/cpp/containers/absl",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/time_provider",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/ddisk",
+    # "//ydb/core/control/lib",
+    "//ydb/core/load_test/common",
+  ]
+
+  sources = [
+    "//ydb/core/load_test/ddisk_load.cpp",
+    "//ydb/core/load_test/persistent_buffer_write.cpp",
+  ]
+}

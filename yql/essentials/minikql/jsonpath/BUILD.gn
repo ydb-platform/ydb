@@ -4,18 +4,19 @@ library("jsonpath") {
     "//library/cpp/json",
     "//yql/essentials/minikql/jsonpath/parser",
     "//yql/essentials/public/issue",
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf",
     "//yql/essentials/types/binary_json",
     "//yql/essentials/utils",
   ]
 
   deps = [
     # "//yql/essentials/ast",  # peerdir only
-    "//yql/essentials/core/issue/protos",
-    # "//yql/essentials/minikql/dom",
+    "//yql/essentials/minikql/dom",
     # "//yql/essentials/minikql/jsonpath/rewrapper",  # peerdir only
     "//yql/essentials/minikql/jsonpath/rewrapper/hyperscan",  # peerdir only
     "//yql/essentials/minikql/jsonpath/rewrapper/re2",  # peerdir only
+    "//yql/essentials/public/issue/protos",
+    "//yql/essentials/types/binary_json/dom",  # peerdir only
   ]
 
   sources = [
@@ -23,6 +24,4 @@ library("jsonpath") {
     "jsonpath.cpp",
     "value.cpp",
   ]
-
-  yql_abi_version = "2.27.0"
 }

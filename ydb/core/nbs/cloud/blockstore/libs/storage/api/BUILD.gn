@@ -3,8 +3,12 @@ library("api") {
     "//ydb/core/base",
     "//ydb/core/nbs/cloud/blockstore/libs/kikimr",
     "//ydb/core/nbs/cloud/blockstore/public/api/protos",
+    "//ydb/core/protos",
     # "//ydb/library/actors/core",
   ]
 
-  sources = [ "service.cpp" ]
+  sources = [
+    "service.cpp",
+    "ss_proxy.cpp",
+  ]
 }

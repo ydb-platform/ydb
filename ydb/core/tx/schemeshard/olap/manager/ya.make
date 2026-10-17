@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    manager.cpp
+    manager.cpp  # gn: into ydb/core/tx/schemeshard
 )
 
 PEERDIR(

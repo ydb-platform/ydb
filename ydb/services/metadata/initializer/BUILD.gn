@@ -5,7 +5,6 @@ library("initializer") {
     "//ydb/core/base",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
-    "//ydb/public/api/protos",
     "//ydb/services/metadata/abstract",
     # "//ydb/services/metadata/ds_table",
     "//ydb/services/metadata/manager",

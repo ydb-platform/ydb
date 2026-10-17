@@ -23,4 +23,6 @@ protobuf_library("v1") {
   ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

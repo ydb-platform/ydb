@@ -3,10 +3,14 @@ library("common") {
 
   public_deps = [
     # "//library/cpp/testing/unittest",
+    # "//library/cpp/threading/future",
+    # "//ydb/core/base",
     # "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/public/describer",
     "//ydb/core/persqueue/public/mlp",
     # "//ydb/core/testlib",
+    # "//ydb/core/testlib/actors",
+    # "//ydb/library/aclib",
     # "//ydb/public/sdk/cpp/src/client/query",
     "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
   ]

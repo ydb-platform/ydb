@@ -1,0 +1,25 @@
+library("partitioner") {
+  public_deps = [
+    # "//yql/essentials/utils/log",
+    # "//yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface",
+    # "//yt/yql/providers/yt/fmr/job/impl",
+    # "//yt/yql/providers/yt/fmr/request_options",
+    # "//yt/yql/providers/yt/fmr/utils/comparator",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",
+    # "//library/cpp/yson/node",
+    # "//yql/essentials/utils",
+    # "//yt/cpp/mapreduce/common",
+    # "//yt/yql/providers/yt/fmr/utils",  # peerdir only
+  ]
+
+  sources = [
+    "yql_yt_fmr_partitioner.cpp",
+    "yql_yt_ordered_partitioner.cpp",
+    "yql_yt_reduce_partitioner.cpp",
+    "yql_yt_sorted_partitioner.cpp",
+    "yql_yt_sorted_partitioner_base.cpp",
+  ]
+}

@@ -2,7 +2,7 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
+#include <ydb/core/client/minikql_compile/db_key_resolver.h>
 
 #include <ydb/library/actors/core/actorsystem.h>
 

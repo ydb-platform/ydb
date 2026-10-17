@@ -1,4 +1,4 @@
-group("base") {
+library("base") {
   public_deps = [
     # "//contrib/libs/grpc",
     # "//library/cpp/containers/stack_vector",
@@ -18,4 +18,13 @@ group("base") {
     "//ydb/public/sdk/cpp/src/client/resources",
     "//yql/essentials/public/issue",
   ]
+
+  deps = [ "//ydb/core/path_aliasing" ]
+
+  sources = [
+    "base.cpp",
+    "path_aliasing.cpp",
+  ]
+
+  serialize_enum_headers = [ "http_database_access_verdict.h" ]
 }

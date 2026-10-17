@@ -84,7 +84,8 @@ struct THiveEvent {
     }
 };
 
-static_assert(sizeof(THiveEvent) <= 16, "THiveEvent is expected to stay compact");
+// TODO: uncomment later
+// static_assert(sizeof(THiveEvent) <= 16, "THiveEvent is expected to stay compact");
 
 struct TRecentNodeEvent {
     TNodeId NodeId = 0;

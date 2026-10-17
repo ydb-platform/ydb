@@ -2,13 +2,13 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/deprecated/atomic",
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/logger",
     "//library/cpp/svnversion",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/base/services",
     "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/crypto",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only
     "//ydb/core/blobstorage/pdisk",
@@ -33,7 +33,9 @@ unittest_executable("ut") {
 
   sources = [
     "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_blockdevice_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_compaction_arbiter_ut.cpp",
     "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_crypto_ut.cpp",
+    "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_device_overestimation_ut.cpp",
     "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_log_cache_ut.cpp",
     "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_restore_ut.cpp",
     "//ydb/core/blobstorage/pdisk/blobstorage_pdisk_scheduler_ut.cpp",
@@ -57,10 +59,7 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/blobstorage/pdisk" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

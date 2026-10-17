@@ -5,16 +5,22 @@ library("common") {
     ":pq_ut_common",
     # "//library/cpp/testing/unittest",
     "//ydb/core/persqueue/public/describer",
+    # "//ydb/core/testlib",
     "//ydb/core/tx/schemeshard/ut_helpers",
+    # "//ydb/public/sdk/cpp/src/client/topic",
     "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
   ]
 
   deps = [
     "//ydb/core/persqueue",  # peerdir only
-    # "//ydb/core/testlib",  # peerdir only
+    # "//ydb/core/persqueue/public/schema",
+    "//ydb/core/protos",
   ]
 
-  sources = [ "autoscaling_ut_common.cpp" ]
+  sources = [
+    "autoscaling_ut_common.cpp",
+    "sdk_ut_common.cpp",
+  ]
 }
 
 library("pq_ut_common") {
@@ -38,7 +44,9 @@ library("pq_ut_common") {
     # "//ydb/core/security",
     # "//ydb/core/tablet",
     # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx",
     # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/core",
     # "//ydb/public/lib/base",
   ]
 

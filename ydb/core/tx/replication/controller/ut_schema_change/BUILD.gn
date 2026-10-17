@@ -1,0 +1,30 @@
+unittest_executable("ut_schema_change") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
+    "//ydb/core/tx/replication/controller",
+    "//ydb/core/tx/replication/service",
+    "//ydb/core/tx/replication/ut_helpers",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/actors/core",
+    "//ydb/library/mkql_proto/protos",
+  ]
+
+  sources = [ "//ydb/core/tx/replication/controller/schema_change_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/replication/controller" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

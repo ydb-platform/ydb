@@ -31,6 +31,7 @@ library("mon") {
     # "//library/cpp/monlib/service/pages/resources",
     # "//library/cpp/monlib/service/pages/tablesorter",
     "//ydb/core/base",
+    "//ydb/core/grpc_services/counters",
     # "//ydb/library/actors/core",
     "//ydb/library/actors/http",
     "//ydb/public/sdk/cpp/src/client/types/status",
@@ -63,6 +64,8 @@ library("mon") {
 }
 
 library("ut_utils") {
+  testonly = true
+
   public_deps = [
     "//ydb/core/base",
     "//ydb/core/security",
@@ -73,7 +76,11 @@ library("ut_utils") {
 
   deps = [
     # "//library/cpp/http/misc",
+    # "//library/cpp/testing/unittest",
     # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/testlib",
+    # "//ydb/core/testlib/default",  # peerdir only
+    # "//ydb/library/security",
   ]
 
   sources = [ "ut_utils/ut_utils.cpp" ]

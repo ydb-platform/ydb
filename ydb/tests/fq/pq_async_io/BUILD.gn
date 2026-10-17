@@ -15,6 +15,7 @@ library("pq_async_io") {
 
   deps = [
     # "//ydb/core/base",
+    # "//ydb/library/testlib/common",
     # "//ydb/library/yql/providers/pq/gateway/dummy",  # peerdir only
     "//ydb/library/yql/providers/pq/gateway/native",
     "//ydb/public/sdk/cpp/src/client/datastreams",

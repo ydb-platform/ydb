@@ -1,0 +1,36 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/composite",
+    "//ydb/core/formats/arrow/accessor/dictionary",
+    "//ydb/core/formats/arrow/accessor/sub_columns",
+    "//ydb/core/formats/arrow/accessor/sub_columns/ut_common",
+    "//ydb/library/arrow_kernels",
+    "//ydb/services/metadata/abstract:request_features",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [
+    "ut_dictionary.cpp",
+    "ut_key_ownership.cpp",
+    "ut_native_scalars.cpp",
+    "ut_sparsed.cpp",
+    "ut_sub_column_name.cpp",
+    "ut_sub_columns.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/formats/arrow/accessor/sub_columns" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

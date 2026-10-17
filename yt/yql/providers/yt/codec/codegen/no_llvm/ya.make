@@ -16,6 +16,7 @@ PEERDIR(
 )
 
 PROVIDES(YT_CODEC_CODEGEN)
+# gn: default provider
 
 YQL_LAST_ABI_VERSION()
 

@@ -21,6 +21,7 @@ library("ast") {
     # "//yql/essentials/core/issue",
     "//yql/essentials/parser/pg_catalog",
     # "//yql/essentials/utils/fetch",
+    "//yql/essentials/utils/log",
   ]
 
   sources = [

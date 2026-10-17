@@ -140,8 +140,8 @@ TRevision TAutomatonVersion::GetLogicalRevision() const
 TAutomatonVersion TAutomatonVersion::Advance() const
 {
     return TAutomatonVersion(
-        std::move(GetPhysicalVersion().Advance()),
-        std::move(GetLogicalVersion().Advance()));
+        GetPhysicalVersion().Advance(),
+        GetLogicalVersion().Advance());
 }
 
 void FormatValue(TStringBuilderBase* builder, TAutomatonVersion version, TStringBuf /*spec*/)

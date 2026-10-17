@@ -5,6 +5,7 @@ unittest_executable("ut") {
     "//ydb/core/io_formats/arrow/scheme",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/types/uuid",
   ]
 
   sources = [ "//ydb/core/io_formats/arrow/scheme/csv_arrow_ut.cpp" ]

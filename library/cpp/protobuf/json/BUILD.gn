@@ -2,12 +2,12 @@ library("json") {
   public_deps = [
     # "//contrib/libs/protobuf",
     "//library/cpp/json",
+    "//library/cpp/protobuf/runtime",
     # "//library/cpp/string_utils/relaxed_escaper",
   ]
 
   deps = [
     ":proto",
-    # "//library/cpp/protobuf/runtime",  # peerdir only
     # "//library/cpp/protobuf/util",  # peerdir only
     "//library/cpp/string_utils/base64",
   ]

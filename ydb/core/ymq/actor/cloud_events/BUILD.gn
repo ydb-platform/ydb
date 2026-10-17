@@ -29,4 +29,6 @@ protobuf_library("proto") {
   sources = [ "proto/ymq.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

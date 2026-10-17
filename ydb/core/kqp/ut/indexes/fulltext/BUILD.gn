@@ -3,16 +3,26 @@ unittest_executable("fulltext") {
     "//library/cpp/json",
     "//library/cpp/threading/local_executor",  # peerdir only
     "//ydb/core/base",
+    "//ydb/core/cms/console",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/indexes/common",
     "//ydb/core/tx/datashard",
+    "//ydb/core/tx/schemeshard/index",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/proto",
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "kqp_indexes_fulltext_ut.cpp" ]
+  sources = [
+    "kqp_fulltext_build_ut.cpp",
+    "kqp_fulltext_search_ut.cpp",
+    "kqp_fulltext_ut_common.cpp",
+  ]
 
   include_dirs = [
     "//ydb/core/kqp",  # peerdir only
@@ -22,6 +32,7 @@ unittest_executable("fulltext") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

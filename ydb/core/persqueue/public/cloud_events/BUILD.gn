@@ -1,0 +1,27 @@
+library("cloud_events") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/unified_agent_client",
+    # "//ydb/core/base",
+    # "//ydb/core/persqueue/events",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/json",
+    # "//library/cpp/logger/global",
+    # "//library/cpp/yt/coding",
+    # "//ydb/core/audit",
+    "//ydb/core/persqueue/public/cloud_events/proto",
+    "//ydb/core/protos/schemeshard",
+    # "//ydb/core/security/util",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "actor.cpp",
+    "events_writer.cpp",
+  ]
+}

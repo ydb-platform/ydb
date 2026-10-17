@@ -3,18 +3,20 @@ library("codec") {
     # "//library/cpp/yson",
     # "//library/cpp/yson/node",
     # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/aligned_page_pool",
     # "//yql/essentials/minikql/computation",
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/providers/common/codec",
     # "//yql/essentials/public/udf",
     "//yt/cpp/mapreduce/interface",
-    # "//yt/cpp/mapreduce/io",
+    "//yt/cpp/mapreduce/io",
   ]
 
   deps = [
     # "//contrib/libs/apache/arrow",
     "//library/cpp/streams/brotli",
     "//yql/essentials/core",
+    # "//yql/essentials/minikql:alloc",
     # "//yql/essentials/parser/pg_wrapper/interface",
     "//yql/essentials/providers/common/codec/arrow",
     # "//yql/essentials/providers/common/codec/yt_arrow_converter_interface",

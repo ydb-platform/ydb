@@ -1,0 +1,17 @@
+library("coroutine") {
+  public_deps = [
+    "//library/cpp/coroutine/engine",
+    # "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  deps = [
+    # "//library/cpp/deprecated/atomic",
+  ]
+
+  sources = [
+    "executor.cpp",
+    "executor_pool.cpp",
+    "queue.cpp",
+  ]
+}

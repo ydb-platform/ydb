@@ -2,7 +2,6 @@ library("actors") {
   public_deps = [
     "//ydb/library/actors/core",
     "//ydb/library/yql/dq/actors/compute",
-    # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/computation",
     # "//yql/essentials/minikql:alloc",
     "//yt/yql/providers/yt/gateway/file",
@@ -14,6 +13,7 @@ library("actors") {
     # "//ydb/library/mkql_proto",
     # "//ydb/library/yql/dq/runtime",
     # "//yql/essentials/core",
+    # "//yql/essentials/minikql",
     # "//yql/essentials/providers/common/provider",
     # "//yql/essentials/providers/common/schema/parser",
     # "//yql/essentials/public/types",  # peerdir only

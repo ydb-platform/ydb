@@ -72,37 +72,85 @@ template("expand_template") {
 # Out<>, FromStringImpl<>... the PCH has instantiated already.
 template("serialize_enums") {
     _enum = "${target_name}_enum"
+    _enum_include = "${target_name}_enum_include"
     _owner = get_label_info(":$target_name", "label_no_toolchain")
     not_needed([ "_owner" ])
-    _output = "{{source_gen_dir}}/{{source_file_part}}_serialized.cpp"
-    _header = "{{source_gen_dir}}/{{source_file_part}}_serialized.h"
 
-    action_foreach(_enum) {
-        forward_variables_from(invoker, [ "testonly" ])
-        script = "//build/gn/scripts/run.py"
-        sources = invoker.headers
-        outputs = [ "$_output", "$_header" ]
+    # The headers of the target's own dir: generated next to them, at their
+    # gen dir. A header of another dir (a variant module serializing the
+    # headers of the module it copies, e.g. ydb/.../purecalc_no_pg_wrapper):
+    # in the target's gen dir, or two targets would write the same file.
+    # (get_path_info(".", "abspath") already ends with a slash)
+    _here = get_path_info(get_path_info("_", "abspath"), "dir") + "/"
+    _own = []
+    _foreign = []
+    foreach(_h, invoker.headers) {
+        _abs = get_path_info(_h, "abspath")
+        if (string_replace(_abs, _here, "") != _abs) {
+            _own += [ _h ]
+        } else {
+            _foreign += [ _h ]
+        }
+    }
+    _actions = []
+    if (_own != []) {
+        _actions += [ {
+            name = _enum
+            sources = _own
+            dir = "{{source_gen_dir}}"
+        } ]
+    }
+    if (_foreign != []) {
+        _actions += [ {
+            name = "${_enum}_foreign"
+            sources = _foreign
+            dir = "$target_gen_dir/{{source_root_relative_dir}}"
+        } ]
+    }
 
-        _enum_parser = "//tools/enum_parser:enum_parser($tool_toolchain)"
-        _enum_parser_bin = rebase_path(get_label_info(_enum_parser, "root_out_dir") + "/enum_parser", root_build_dir)
+    # ..._serialized.h of a header of another dir: found by its usual path
+    # (<header dir>/<header>_serialized.h) under $target_gen_dir; the target
+    # takes it to `public_configs`
+    config(_enum_include) {
+        if (_foreign != []) {
+            include_dirs = [ target_gen_dir ]
+        }
+    }
 
-        args = [
-            "./$_enum_parser_bin",
-            "{{source}}",
-            "--include-path", "{{source_root_relative_dir}}/{{source_file_part}}",
-            "--output", "$_output",
-            "--header", "$_header",
-        ]
+    _enum_parser = "//tools/enum_parser:enum_parser($tool_toolchain)"
+    _enum_parser_bin = rebase_path(get_label_info(_enum_parser, "root_out_dir") + "/enum_parser", root_build_dir)
+    _enum_sources = []
+    _enum_deps = []
+    foreach(_a, _actions) {
+        _output = "${_a.dir}/{{source_file_part}}_serialized.cpp"
+        _header = "${_a.dir}/{{source_file_part}}_serialized.h"
 
-        deps = [ _enum_parser ]
+        action_foreach(_a.name) {
+            forward_variables_from(invoker, [ "testonly" ])
+            script = "//build/gn/scripts/run.py"
+            sources = _a.sources
+            outputs = [ "$_output", "$_header" ]
+
+            args = [
+                "./$_enum_parser_bin",
+                "{{source}}",
+                "--include-path", "{{source_root_relative_dir}}/{{source_file_part}}",
+                "--output", "$_output",
+                "--header", "$_header",
+            ]
+
+            deps = [ _enum_parser ]
+        }
+
+        _enum_sources += filter_include(get_target_outputs(":${_a.name}"), [ "*.cpp" ])
+        _enum_deps += [ ":${_a.name}" ]
     }
 
     source_set("${target_name}_enum_objs") {
         forward_variables_from(invoker, [ "testonly", "defines", "include_dirs", "cflags", "cflags_c", "cflags_cc" ])
         visibility = [ ":*" ]
-        sources = filter_include(get_target_outputs(":$_enum"), [ "*.cpp" ])
-        deps += [
-            ":$_enum",
+        sources = _enum_sources
+        deps += _enum_deps + [
             "//tools/enum_parser:runtime",
         ]
         if (defined(invoker.deps)) {
@@ -117,6 +165,7 @@ template("serialize_enums") {
         if (defined(invoker.public_configs)) {
             configs += invoker.public_configs
         }
+        configs += [ ":$_enum_include" ]
         if (defined(invoker.yql_abi_version)) {
             _abi = string_split(invoker.yql_abi_version, ".")
             configs -= [ "//build/gn/config:yql_abi_current" ]
@@ -181,11 +230,11 @@ template("library") {
     if (defined(invoker.sources)) {
         _proto = filter_include(invoker.sources, [ "*.proto" ])
     }
-    not_needed(invoker, [ "generate_grpc_services", "proto_imports" ])
+    not_needed(invoker, [ "generate_grpc_services", "proto_imports", "protoc_fatal_warnings" ])
     if (_proto != []) {
         _codegen_target = "${target_name}_codegen"
         protobuf_sources("${target_name}_proto") {
-            forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "testonly" ])
+            forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "protoc_fatal_warnings", "testonly" ])
             sources = _proto
             if (defined(invoker.proto_imports)) {
                 imports = invoker.proto_imports
@@ -228,6 +277,11 @@ template("library") {
             if (defined(invoker.link_slot_codegen)) {
                 codegen = invoker.link_slot_codegen
             }
+            # the library calls the slot's functions itself: what its own
+            # sources define is left out of the list, the rest is weak here too
+            if (defined(invoker.link_slot_self) && invoker.link_slot_self) {
+                sources = invoker.sources
+            }
         }
     }
 
@@ -236,7 +290,7 @@ template("library") {
     not_needed(invoker, [ "plugins" ])
 
     target(library_type, target_name) {
-        forward_variables_from(invoker, "*", [ "configs", "deps", "extra_plugins", "generate_grpc_services", "resources", "resource_files", "resource_deps", "link_slot_provides", "link_slot_interface", "link_slot_headers", "link_slot_flags_from", "link_slot_codegen", "link_slot_module_interfaces", "plugins", "proto_imports", "yql_abi_version" ])
+        forward_variables_from(invoker, "*", [ "configs", "deps", "extra_plugins", "generate_grpc_services", "resources", "resource_files", "resource_deps", "link_slot_provides", "link_slot_interface", "link_slot_headers", "link_slot_flags_from", "link_slot_codegen", "link_slot_self", "link_slot_module_interfaces", "plugins", "proto_imports", "protoc_fatal_warnings", "yql_abi_version" ])
 
         output_dir = "$root_out_dir/" + rebase_path(".", "//") # TODO: doesn't work for some reason
         output_name = "${_unique_name}_${target_name}"
@@ -282,6 +336,10 @@ template("library") {
                 ":${target_name}_enum_objs",
                 "//tools/enum_parser:runtime",
             ]
+            if (!defined(public_configs)) {
+                public_configs = []
+            }
+            public_configs += [ ":${target_name}_enum_include" ]
         }
 
         if (_has_resources) {
@@ -299,15 +357,18 @@ template("library") {
         # dependents get weak references, the library itself does not (it
         # defines some of the listed functions): the list is a public config,
         # which gn applies to the target too, GN_SLOT_INTERFACE_<slot> turns
-        # it off here
+        # it off here -- unless link_slot_self: the library calls the
+        # functions itself, and its own definitions are off the list
         if (_slot_provider) {
             configs += [ ":${target_name}_slot_provider_config" ]
         }
         if (_slot_weak) {
-            if (!defined(defines)) {
-                defines = []
+            if (!defined(invoker.link_slot_self) || !invoker.link_slot_self) {
+                if (!defined(defines)) {
+                    defines = []
+                }
+                defines += [ "GN_SLOT_INTERFACE_" + invoker.link_slot_interface ]
             }
-            defines += [ "GN_SLOT_INTERFACE_" + invoker.link_slot_interface ]
             if (!defined(public_deps)) {
                 public_deps = []
             }

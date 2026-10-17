@@ -1,0 +1,21 @@
+linked_executable("hash_test") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/comp_nodes",
+    "//ydb/library/yql/dq/comp_nodes/ut/utils",  # peerdir only
+    "//yql/essentials/minikql",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

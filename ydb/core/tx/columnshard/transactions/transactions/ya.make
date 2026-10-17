@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    tx_add_sharding_info.cpp
-    tx_finish_async.cpp
+    tx_add_sharding_info.cpp  # gn: into ydb/core/tx/columnshard
+    tx_finish_async.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

@@ -1,0 +1,15 @@
+library("message_stream") {
+  public_deps = [
+    # "//ydb/library/yql/providers/abstract/message_stream",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  deps = [
+    # "//ydb/library/yql/providers/abstract",  # peerdir only
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/sdk/cpp/adapters/issue",
+  ]
+
+  sources = [ "yql_pq_message_stream_client.cpp" ]
+}

@@ -2,7 +2,6 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
-    "//ydb/core/testlib",  # peerdir only
     "//ydb/core/testlib/actors",
     "//ydb/library/actors/core",
     "//ydb/library/grpc/server",
@@ -16,12 +15,10 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/library/ncloud/impl" ]
 
   link_select = [
-    "YqlServicePolicy=exception_policy",
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=llvm16",
-    "topic_rpc=persqueue_v1",
+    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
-    "yt_codegen=llvm16",
   ]
 }

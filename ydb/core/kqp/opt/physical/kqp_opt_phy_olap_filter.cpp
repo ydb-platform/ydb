@@ -196,7 +196,7 @@ std::vector<std::pair<TExprBase, TExprBase>> ExtractComparisonParameters(const T
     }
 
     for (ui32 i = 0; i < left.size(); ++i) {
-        out.emplace_back(std::move(std::make_pair(left[i], right[i])));
+        out.emplace_back(std::make_pair(left[i], right[i]));
     }
 
     return out;
@@ -300,7 +300,7 @@ TMaybeNode<TExprBase> SafeCastPredicatePushdown(const TCoFlatMap& inputFlatmap, 
     }
 
     for (ui32 i = 0; i < left.size(); ++i) {
-        parameters.emplace_back(std::move(std::make_pair(left[i], right[i])));
+        parameters.emplace_back(std::make_pair(left[i], right[i]));
     }
 
     return ComparisonPushdown(parameters, predicate, ctx, pos, pushdownOptions);

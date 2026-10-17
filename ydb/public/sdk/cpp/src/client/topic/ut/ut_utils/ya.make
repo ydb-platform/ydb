@@ -1,11 +1,12 @@
 LIBRARY()
 
 SRCS(
-    topic_sdk_test_setup.cpp
+    topic_sdk_test_setup.cpp  # gn: test_setup
     topic_sdk_test_setup.h
     txusage_fixture.cpp
     txusage_fixture.h
 )
+# gn: test_setup headers topic_sdk_test_setup.h
 
 PEERDIR(
     ydb/library/testlib/common

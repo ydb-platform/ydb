@@ -1,7 +1,8 @@
 library("tablet_flat") {
   public_deps = [
+    # "//contrib/libs/openssl",
     "//library/cpp/blockcodecs",
-    "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/containers/absl",
     # "//library/cpp/containers/stack_vector",
     # "//library/cpp/lwtrace",
     "//library/cpp/monlib/dynamic_counters",
@@ -34,17 +35,23 @@ library("tablet_flat") {
     "//library/cpp/json",
     "//library/cpp/lwtrace/mon",
     # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/openssl/crypto",  # peerdir only
     "//library/cpp/protobuf/json",
     "//library/cpp/string_utils/base64",
     # "//ydb/core/cms/console",
+    "//ydb/core/io_formats/json",
     "//ydb/core/scheme/protos",
     # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/prof",
     # "//ydb/library/mkql_proto/protos",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     "//yql/essentials/types/binary_json",
     "//yql/essentials/types/dynumber",
   ]
 
   sources = [
+    "//ydb/core/tablet/simple_tablet.cpp",
+    "//ydb/core/tablet/simple_tablet.h",
     "defs.cpp",
     "flat_backup.cpp",
     "flat_bio_actor.cpp",
@@ -63,6 +70,7 @@ library("tablet_flat") {
     "flat_executor.cpp",
     "flat_executor.proto",
     "flat_executor_backup.cpp",
+    "flat_executor_backup_common.cpp",
     "flat_executor_bootlogic.cpp",
     "flat_executor_borrowlogic.cpp",
     "flat_executor_compaction_logic.cpp",
@@ -96,14 +104,15 @@ library("tablet_flat") {
     "flat_store_hotdog.cpp",
     "flat_table.cpp",
     "flat_table_committed.cpp",
+    "flat_table_key_blocks.cpp",
     "flat_table_misc.cpp",
     "flat_table_observer.cpp",
     "flat_table_part.cpp",
     "probes.cpp",
+    "shared_cache_btree_walk.cpp",
     "shared_cache_counters.cpp",
     "shared_handle.cpp",
     "shared_sausagecache.cpp",
-    "simple_tablet.cpp",
     "tablet_flat_executed.cpp",
     "tablet_flat_executor.cpp",
   ]
@@ -111,6 +120,7 @@ library("tablet_flat") {
   serialize_enum_headers = [
     "flat_comp_gen.h",
     "flat_executor_compaction_logic.h",
+    "flat_executor_recovery.h",
     "flat_executor_vacuum_logic.h",
     "flat_page_iface.h",
     "flat_part_loader.h",

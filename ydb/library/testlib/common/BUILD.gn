@@ -1,7 +1,22 @@
 library("common") {
   testonly = true
 
-  deps = [ "//library/cpp/testing/unittest" ]
+  public_deps = [
+    "//library/cpp/testing/unittest",
+    # "//ydb/core/testlib/actors",
+    # "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
 
-  sources = [ "test_utils.cpp" ]
+  deps = [
+    # "//library/cpp/testing/common",
+    # "//ydb/core/base",
+    # "//ydb/core/testlib/basics",
+    # "//ydb/library/actors/testlib",
+  ]
+
+  sources = [
+    "test_utils.cpp",
+    "test_with_actor_system.cpp",
+  ]
 }

@@ -1,23 +1,23 @@
 LIBRARY(topic_workload)
 
 SRCS(
-    topic_workload_clean.cpp
-    topic_workload_configurator.cpp
-    topic_workload_describe.cpp
-    topic_workload_init.cpp
-    topic_workload_params.cpp
-    topic_workload_run_read.cpp
-    topic_workload_run_write.cpp
-    topic_workload_run_full.cpp
-    topic_workload_stats.cpp
-    topic_workload_stats_collector.cpp
-    topic_workload_writer.cpp
-    topic_workload_writer_producer.cpp
-    topic_workload_keyed_writer.cpp
-    topic_workload_keyed_writer_producer.cpp
-    topic_workload_reader.cpp
-    topic_workload_reader_transaction_support.cpp
-    topic_workload.cpp
+    topic_workload_clean.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_configurator.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_describe.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_init.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_params.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_run_read.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_run_write.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_run_full.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_stats.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_stats_collector.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_writer.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_writer_producer.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_keyed_writer.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_keyed_writer_producer.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_reader.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload_reader_transaction_support.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    topic_workload.cpp  # gn: into ydb/public/lib/ydb_cli/commands
 )
 
 PEERDIR(

@@ -38,6 +38,19 @@ namespace NKikimr::NTesting {
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // GetBlock
+
+    template<>
+    void TGroupState::ExamineQueryEvent(const TQueryId& queryId, const TEvBlobStorage::TEvGetBlock& msg) {
+        (void)queryId, (void)msg;
+    }
+
+    template<>
+    void TGroupState::ExamineResultEvent(const TQueryId& queryId, const TEvBlobStorage::TEvGetBlockResult& msg) {
+        (void)queryId, (void)msg;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Put
 
     template<>

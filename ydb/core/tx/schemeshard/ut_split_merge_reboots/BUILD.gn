@@ -3,6 +3,7 @@ unittest_executable("ut_split_merge_reboots") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/schemeshard",  # peerdir only
@@ -21,6 +22,7 @@ unittest_executable("ut_split_merge_reboots") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

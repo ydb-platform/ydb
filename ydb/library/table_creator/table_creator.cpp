@@ -4,7 +4,6 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>

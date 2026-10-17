@@ -10,11 +10,14 @@ library("common") {
     "//contrib/libs/openssl",
     "//library/cpp/json",
     "//ydb/core/util",
+    "//ydb/public/api/protos",
   ]
 
   sources = [
     "checksum.cpp",
     "encryption.cpp",
+    "feature_flags.cpp",
+    "fields_wrappers.cpp",
     "metadata.cpp",
   ]
 
@@ -25,4 +28,6 @@ protobuf_library("proto") {
   public_deps = [ "//ydb/public/api/protos/annotations" ]
 
   sources = [ "proto/encrypted_file.proto" ]
+
+  protoc_fatal_warnings = true
 }

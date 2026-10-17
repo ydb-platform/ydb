@@ -11,7 +11,7 @@ library("public") {
     "//ydb/library/ydb_issue",
     "//ydb/public/api/protos",
     # "//ydb/public/lib/base",
-    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/minikql/aligned_page_pool",
   ]
 
   deps = [ "//ydb/core/base" ]
@@ -36,8 +36,8 @@ library("read_table") {
     "//ydb/core/ydb_convert",
     # "//ydb/library/actors/core",
     "//yql/essentials/core/issue",
-    "//yql/essentials/core/issue/protos",
     "//yql/essentials/public/issue",
+    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [ "read_table_impl.cpp" ]
@@ -74,6 +74,8 @@ library("tx_proxy") {
     # "//ydb/core/tablet_flat",
     "//ydb/core/tx",
     "//ydb/core/tx/balance_coverage",
+    # "//ydb/core/tx/columnshard/flow_control_manager",  # peerdir only
+    # "//ydb/core/tx/data_events",  # peerdir only
     # "//ydb/core/tx/datashard",
     # "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/scheme_board",
@@ -102,7 +104,6 @@ library("tx_proxy") {
     "commitreq.cpp",
     "datareq.cpp",
     "describe.cpp",
-    "global.cpp",
     "proxy_impl.cpp",
     "resolvereq.cpp",
     "schemereq.cpp",
@@ -119,34 +120,36 @@ library("upload_rows") {
     "//ydb/core/actorlib_impl",
     "//ydb/core/base",
     "//ydb/core/formats/arrow",
-    # "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/io_formats/arrow/scheme",
     "//ydb/core/protos",
     "//ydb/core/scheme",
+    "//ydb/core/tx/columnshard/flow_control_manager",
     # "//ydb/core/tx/datashard",
     "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/scheme_cache",
     "//ydb/core/util",
+    # "//ydb/library/aclib",
     # "//ydb/library/actors/core",
     "//ydb/library/signals",
     # "//ydb/library/wilson_ids",
     "//ydb/library/ydb_issue",
     "//ydb/public/api/protos",
-    # "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
   ]
 
   deps = [
     ":public",
     "//contrib/libs/apache/arrow",
     "//ydb/core/kqp/query_data",
+    # "//ydb/core/tx/columnshard",
     "//ydb/core/tx/data_events",
+    # "//ydb/core/tx/schemeshard",
     "//ydb/library/actors/prof",
     "//ydb/library/actors/wilson",
-    "//ydb/library/ydb_issue/proto",
-    "//ydb/services/ext_index/common",
+    "//ydb/library/services",
   ]
 
   sources = [
+    "long_tx_write_flow_control.cpp",
     "rpc_long_tx.cpp",
     "upload_rows.cpp",
     "upload_rows_common_impl.cpp",

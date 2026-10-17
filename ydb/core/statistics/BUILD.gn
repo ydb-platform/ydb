@@ -10,6 +10,7 @@ group("statistics") {
 
   deps = [
     # "//ydb/library/query_actor",  # peerdir only
+    # "//yql/essentials/core/histogram",  # peerdir only
     # "//yql/essentials/core/minsketch",  # peerdir only
   ]
 }
@@ -21,20 +22,25 @@ library("ut_common") {
     ":statistics",
     # "//library/cpp/testing/unittest",
     # "//library/cpp/threading/future",
+    "//ydb/core/protos",
+    # "//ydb/core/statistics/common",
     "//ydb/core/testlib",
     "//ydb/core/tx/columnshard/hooks/testing",
+    # "//ydb/library/actors/testlib",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/udf",
   ]
 
   deps = [
-    "//ydb/core/grpc_services",  # peerdir only
+    # "//ydb/core/base",
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/statistics/service:service_id",
-    # "//ydb/core/testlib/actors",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
     # "//ydb/core/tx/tx_proxy:public",
     "//ydb/public/api/grpc",
+    # "//yql/essentials/core/histogram",
   ]
 
   sources = [ "ut_common/ut_common.cpp" ]

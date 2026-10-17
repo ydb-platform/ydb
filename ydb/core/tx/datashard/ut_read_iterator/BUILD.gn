@@ -3,8 +3,11 @@ unittest_executable("ut_read_iterator") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
     "//ydb/core/formats/arrow",
     "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/protos",
     "//ydb/core/tablet_flat",
@@ -27,6 +30,8 @@ unittest_executable("ut_read_iterator") {
   sources = [
     "//ydb/core/tx/datashard/datashard_ut_read_iterator.cpp",
     "//ydb/core/tx/datashard/datashard_ut_read_iterator_ext_blobs.cpp",
+    "//ydb/core/tx/datashard/datashard_ut_read_iterator_sampling.cpp",
+    "datashard_ut_read_iterator_scheduler.cpp",
   ]
 
   include_dirs = [ "//ydb/core/tx/datashard" ]
@@ -35,6 +40,7 @@ unittest_executable("ut_read_iterator") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

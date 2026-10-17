@@ -2,6 +2,7 @@ library("json") {
   public_deps = [ "//library/cpp/monlib/encode" ]
 
   deps = [
+    # "//contrib/libs/rapidjson",
     "//library/cpp/json",
     "//library/cpp/monlib/encode/buffered",
     "//library/cpp/monlib/exception",

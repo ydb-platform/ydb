@@ -4,7 +4,7 @@ SRCS(
     kqp_compute_actor_factory.cpp
     kqp_compute_actor.cpp
     kqp_compute_actor_helpers.cpp
-    kqp_compute_events.cpp
+    kqp_compute_events.cpp  # gn: events
     kqp_compute_state.cpp
     kqp_pure_compute_actor.cpp
     kqp_scan_compute_stat.cpp
@@ -13,8 +13,10 @@ SRCS(
     kqp_scan_fetcher_actor.cpp
     kqp_scan_common.cpp
     kqp_scan_events.cpp
-    kqp_compute_events_stats.cpp
+    kqp_compute_events_stats.cpp  # gn: events_stats
 )
+# gn: events_stats headers kqp_compute_events_stats.h
+# gn: events headers kqp_compute_events.h
 
 PEERDIR(
     ydb/core/kqp/tracing

@@ -1,0 +1,12 @@
+library("vector_distance") {
+  deps = [
+    # "//library/cpp/dot_product",
+    # "//library/cpp/sse",
+  ]
+
+  sources = [
+    "half_distance.cpp",
+    "half_distance_avx2.cpp",
+    "half_distance_sse.cpp",
+  ]
+}

@@ -1,9 +1,14 @@
 library("aclib") {
-  public_deps = [ "//ydb/library/aclib/protos" ]
+  public_deps = [
+    "//ydb/library/aclib/protos/acl",
+    "//ydb/library/aclib/protos/identity",
+    # "//ydb/library/actors/wilson",
+  ]
 
   deps = [
     # "//contrib/libs/protobuf",  # peerdir only
     "//library/cpp/protobuf/util",
+    "//ydb/library/aclib/protos",  # peerdir only
   ]
 
   sources = [ "aclib.cpp" ]

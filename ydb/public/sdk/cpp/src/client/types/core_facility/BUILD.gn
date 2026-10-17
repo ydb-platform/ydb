@@ -1,7 +1,9 @@
-group("core_facility") {
+library("core_facility") {
   public_deps = [
     # "//ydb/public/sdk/cpp/src/client/types",
     "//ydb/public/sdk/cpp/src/client/types/status",
     # "//ydb/public/sdk/cpp/src/library/time",
   ]
+
+  sources = [ "simple_core_facility.cpp" ]
 }

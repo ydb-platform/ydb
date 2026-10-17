@@ -606,7 +606,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             request->ResultSet.emplace_back(entry);
         }
 
-        return std::move(request);
+        return request;
     }
 
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,

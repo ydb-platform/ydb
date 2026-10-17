@@ -1,0 +1,5 @@
+protobuf_library("proto") {
+  public_deps = [ "//yql/essentials/providers/common/proto/activation" ]
+
+  sources = [ "runtime_settings.proto" ]
+}

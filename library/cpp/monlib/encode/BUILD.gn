@@ -1,5 +1,8 @@
 library("encode") {
-  public_deps = [ "//library/cpp/monlib/metrics" ]
+  public_deps = [
+    # "//library/cpp/http/io",
+    "//library/cpp/monlib/metrics",
+  ]
 
   sources = [
     "encoder.cpp",

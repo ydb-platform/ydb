@@ -1,17 +1,23 @@
 library("common") {
   public_deps = [
     "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
     "//ydb/library/accessor",
+    "//ydb/library/formats/arrow/protos",
+    "//yql/essentials/types/binary_json",
   ]
 
   deps = [
     "//ydb/library/actors/core",
-    "//yql/essentials/types/binary_json",
+    "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/switch",
   ]
 
   sources = [
-    "binary_json_value_view.cpp",
+    "additional_data.cpp",
     "chunk_data.cpp",
     "const.cpp",
+    "json_value_view.cpp",
+    "types.cpp",
   ]
 }

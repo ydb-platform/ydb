@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/src/client/persqueue_public/include/control_plane.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/src/client/persqueue_public/include/read_events.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/src/client/persqueue_public/include/write_events.h)

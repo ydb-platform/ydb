@@ -3,13 +3,13 @@ library("bits_storage") {
 
   deps = [
     "//ydb/core/protos",
-    # "//ydb/library/accessor",
     "//ydb/library/actors/core",
   ]
 
   sources = [
     "abstract.cpp",
+    "array_power2.cpp",
     "bitset.cpp",
-    "string.cpp",
+    "fix_string.cpp",
   ]
 }

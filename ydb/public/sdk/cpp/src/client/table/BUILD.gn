@@ -21,13 +21,16 @@ library("table") {
     "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
     "//ydb/public/sdk/cpp/src/client/impl/internal/retry",
     # "//ydb/public/sdk/cpp/src/client/impl/internal/rpc_request_settings",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",
     "//ydb/public/sdk/cpp/src/client/impl/session",
     # "//ydb/public/sdk/cpp/src/client/impl/stats",
+    # "//ydb/public/sdk/cpp/src/client/metrics",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/proto",
     # "//ydb/public/sdk/cpp/src/client/resources",
     "//ydb/public/sdk/cpp/src/client/value",
     # "//ydb/public/sdk/cpp/src/library/operation_id",
-    "//ydb/public/sdk/cpp/src/library/string_utils/helpers",
+    "//ydb/public/sdk/cpp/src/library/string_utils/helpers",  # peerdir only
   ]
 
   sources = [

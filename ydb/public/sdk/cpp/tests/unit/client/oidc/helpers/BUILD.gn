@@ -1,0 +1,18 @@
+library("helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/cgiparam",
+    # "//library/cpp/http/misc",
+    # "//library/cpp/http/server",
+    # "//library/cpp/testing/unittest",
+    # "//ydb/public/sdk/cpp/src/client/types/credentials/oidc",
+  ]
+
+  deps = [
+    # "//contrib/libs/openssl",
+    # "//library/cpp/json",
+  ]
+
+  sources = [ "test_server.cpp" ]
+}

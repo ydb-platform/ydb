@@ -15,6 +15,7 @@ SRCS(
     block_item_comparator.cpp
     block_type_helper.cpp
     memory_pool.cpp
+    ../udf_value_utils.h
 )
 
 PEERDIR(

@@ -33,7 +33,7 @@ public:
     { }
 
     void Pass(const IFacilityProvider& facility) override {
-        PassMethod(std::move(std::unique_ptr<IRequestOpCtx>(this)), facility);
+        PassMethod(std::unique_ptr<IRequestOpCtx>(this), facility);
     }
 
     TRateLimiterMode GetRlMode() const override {

@@ -1197,7 +1197,7 @@ private:
         TSynchronousIOGuard(TSynchronousIOGuard&&) = default;
 
         TSynchronousIOGuard& operator=(const TSynchronousIOGuard&) = delete;
-        TSynchronousIOGuard& operator=(TSynchronousIOGuard&&) = default;
+        TSynchronousIOGuard& operator=(TSynchronousIOGuard&&) = delete;
 
     private:
         const TFDConnectionImplPtr Owner_;

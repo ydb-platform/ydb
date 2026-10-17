@@ -196,7 +196,7 @@ public:
                 MaskForCookieBruteForcing, std::move(Diffs), DiffCount, Deadline));
         patch->RestartCounter = counter;
         patch->Orbit = std::move(Orbit);
-        return std::move(ev);
+        return ev;
     }
 
     void ApplyDiffs() {

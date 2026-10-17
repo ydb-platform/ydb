@@ -1,13 +1,13 @@
 LIBRARY()
 
 SRCS(
-    fulltext.cpp
-    fulltext_data_generator.cpp
-    fulltext_quality_evaluator.cpp
-    fulltext_workload_generator.cpp
-    fulltext_workload_params.cpp
-    markov_model_builder.cpp
-    markov_model_evaluator.cpp
+    fulltext.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    fulltext_data_generator.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    fulltext_quality_evaluator.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    fulltext_workload_generator.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    fulltext_workload_params.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    markov_model_builder.cpp  # gn: into ydb/public/lib/ydb_cli/commands
+    markov_model_evaluator.cpp  # gn: into ydb/public/lib/ydb_cli/commands
 )
 
 PEERDIR(

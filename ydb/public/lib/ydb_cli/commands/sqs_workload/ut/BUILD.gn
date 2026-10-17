@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/commands",
+  ]
+
+  sources = [ "sqs_workload_scenario_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/commands/sqs_workload" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

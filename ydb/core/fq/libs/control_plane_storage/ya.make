@@ -2,11 +2,12 @@ LIBRARY()
 
 SRCS(
     config.cpp
+    control_plane_storage.cpp  # gn: service_id
     control_plane_storage_counters.cpp
     in_memory_control_plane_storage.cpp
     probes.cpp
     request_validators.cpp
-    util.cpp
+    util.cpp  # gn: util
     validators.cpp
     ydb_control_plane_storage.cpp
     ydb_control_plane_storage_bindings.cpp
@@ -16,6 +17,8 @@ SRCS(
     ydb_control_plane_storage_queries.cpp
     ydb_control_plane_storage_quotas.cpp
 )
+# gn: service_id headers control_plane_storage.h
+# gn: util headers util.h
 
 PEERDIR(
     library/cpp/lwtrace

@@ -4,21 +4,25 @@ library("http") {
     # "//library/cpp/dns",
     "//library/cpp/monlib/metrics",
     "//ydb/library/actors/core",
-    "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
   ]
 
   deps = [
     "//contrib/libs/zlib",
     "//library/cpp/digest/md5",
+    # "//library/cpp/json",
     "//library/cpp/resource",
     "//library/cpp/string_utils/quote",
+    "//ydb/library/actors/interconnect",  # peerdir only
     "//ydb/library/actors/wilson",
     # "//ydb/library/wilson_ids",
   ]
 
   sources = [
     "http.cpp",
+    "http2.cpp",
+    "http2_hpack.cpp",
     "http_cache.cpp",
     "http_compress.cpp",
     "http_proxy.cpp",

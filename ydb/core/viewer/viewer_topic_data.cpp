@@ -179,7 +179,7 @@ void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
             data.resize(MaxSingleMessageSize);
         }
         totalSize += data.size();
-        protoMessage.SetMessage(std::move(Base64Encode(data)));
+        protoMessage.SetMessage(Base64Encode(data));
     };
     auto fillViewerMessageFields = [](NKikimrViewer::TTopicDataResponse::TMessage* proto,
                                             const auto& r,

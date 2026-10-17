@@ -1,0 +1,7 @@
+linked_executable("tune_vptree") {
+  deps = [ "//ydb/library/nmslib" ]
+
+  sources = [ "tune_vptree.cc" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

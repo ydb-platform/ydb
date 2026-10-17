@@ -1,6 +1,4 @@
 library("rows") {
-  testonly = true
-
   public_deps = [
     # "//library/cpp/containers/stack_vector",
     # "//ydb/core/scheme",

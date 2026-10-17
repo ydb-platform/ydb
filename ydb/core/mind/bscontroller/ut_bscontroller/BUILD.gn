@@ -4,9 +4,8 @@ unittest_executable("ut_bscontroller") {
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/blobstorage",  # peerdir only
-    "//ydb/core/blobstorage/base",  # peerdir only
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/dsproxy/mock",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/mind/bscontroller",
     "//ydb/core/mind/bscontroller:group_mapper",
     "//ydb/core/protos",
@@ -23,6 +22,7 @@ unittest_executable("ut_bscontroller") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

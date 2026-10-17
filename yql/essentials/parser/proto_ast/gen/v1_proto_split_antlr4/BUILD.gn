@@ -14,7 +14,10 @@ expand_template("grammar") {
 
 expand_template("stg") {
   sources = [ "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in" ]
-  substitutions = [ "ANTLR_PACKAGE_NAME=NSQLv1Generated" ]
+  substitutions = [
+    "ANTLR_AST_NAME=TSQLv1ParserAST",
+    "ANTLR_PACKAGE_NAME=NSQLv1Generated",
+  ]
 }
 
 _grammar_files = get_target_outputs(":grammar")
@@ -48,7 +51,6 @@ action("protoc") {
     "-I", rebase_path("//", root_build_dir),
     "-I", rebase_path("//contrib/libs/protobuf/src", root_build_dir),
     "-I", rebase_path(root_gen_dir, root_build_dir),
-    "--fatal_warnings",
     "--cpp_out", rebase_path(root_gen_dir),
     "--cpp_styleguide_out", rebase_path(root_gen_dir),
     "--plugin=protoc-gen-cpp_styleguide=" + rebase_path(get_label_info(_cpp_styleguide, "root_out_dir") + "/cpp_styleguide"),

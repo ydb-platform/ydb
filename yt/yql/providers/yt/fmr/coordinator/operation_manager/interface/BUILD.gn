@@ -1,0 +1,13 @@
+library("interface") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/coordinator/impl",
+    # "//yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface",
+    # "//yt/yql/providers/yt/fmr/request_options",
+  ]
+
+  deps = [
+    # "//yql/essentials/utils",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_stage_operation_manager.cpp" ]
+}

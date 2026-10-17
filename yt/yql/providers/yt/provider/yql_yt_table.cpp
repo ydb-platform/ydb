@@ -7,7 +7,7 @@
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
-#include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
+#include <yt/yql/providers/yt/common/yql_yt_ypath_attrs.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/decimal/yql_decimal_serialize.h>

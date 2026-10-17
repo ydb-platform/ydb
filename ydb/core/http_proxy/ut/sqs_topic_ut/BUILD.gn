@@ -7,6 +7,10 @@ unittest_executable("sqs_topic_ut") {
     "//ydb/core/base",  # peerdir only
     "//ydb/core/http_proxy",
     "//ydb/core/http_proxy/ut/datastreams_fixture",
+    "//ydb/core/metering",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/ut/common",
+    "//ydb/core/quoter/public",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/ymq/actor",
@@ -18,12 +22,18 @@ unittest_executable("sqs_topic_ut") {
     "//ydb/library/persqueue/tests",  # peerdir only
     "//ydb/library/testlib/service_mocks",
     "//ydb/public/sdk/cpp/src/client/discovery",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
     "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/kafka",
+    "//ydb/services/sqs_topic",
     "//ydb/services/ydb",  # peerdir only
   ]
 
   sources = [
+    "//ydb/core/http_proxy/ut/sqs_topic_cdc_ut.cpp",
     "//ydb/core/http_proxy/ut/sqs_topic_ut.cpp",
+    "//ydb/core/http_proxy/ut/sqs_topic_xml_ut.cpp",
     "inside_ydb_ut.cpp",
   ]
 
@@ -31,6 +41,7 @@ unittest_executable("sqs_topic_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

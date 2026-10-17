@@ -16,20 +16,25 @@ library("base") {
     # "//ydb/core/base/services",
     # "//ydb/core/blobstorage",
     "//ydb/core/control/lib",
+    # "//ydb/core/debug",
     "//ydb/core/erasure",
+    # "//ydb/core/fq/libs/events",
     "//ydb/core/jaeger_tracing",
     "//ydb/core/protos",
     "//ydb/core/scheme",
     # "//ydb/core/tablet",
     # "//ydb/core/tx",
     # "//ydb/core/util",
+    # "//ydb/library/accessor",
     "//ydb/library/aclib",
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     # "//ydb/library/actors/util",
     "//ydb/library/actors/wilson",
     # "//ydb/library/grpc/server",
     "//ydb/library/login",
+    # "//ydb/library/pdisk_io",
     "//ydb/library/pdisk_io:device_type",
     # "//ydb/library/yql/dq/actors",
     # "//ydb/library/yverify_stream",
@@ -38,32 +43,38 @@ library("base") {
   ]
 
   deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
     "//contrib/libs/snowball",
+    # "//library/cpp/cgiparam",
     # "//library/cpp/deprecated/atomic",  # peerdir only
+    # "//library/cpp/digest/old_crc",
     "//library/cpp/dot_product",
     "//library/cpp/dwarf_backtrace",
+    # "//library/cpp/json",
     # "//library/cpp/l1_distance",
     "//library/cpp/l2_distance",
     "//library/cpp/logger",  # peerdir only
     "//library/cpp/lwtrace/mon",  # peerdir only
     # "//library/cpp/monlib/service/pages",
+    "//library/cpp/svnversion",
     "//ydb/core/audit/audit_config",
     # "//ydb/core/blobstorage/base",
     # "//ydb/core/blobstorage/nodewarden",
-    # "//ydb/core/debug",  # peerdir only
     # "//ydb/core/graph/api",
     # "//ydb/core/grpc_services",
     # "//ydb/core/node_whiteboard",
     # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/long_tx_service/public",
     "//ydb/library/actors/helpers",
     "//ydb/library/actors/protos",
     "//ydb/library/login/protos",
     "//ydb/library/pretty_types_print/protobuf",  # peerdir only
     "//ydb/library/services",
+    "//ydb/library/superlemmer_stub",  # peerdir only
+    "//ydb/library/vector_distance",  # peerdir only
     # "//ydb/library/wilson_ids",
     "//ydb/library/ydb_issue",  # peerdir only
-    # "//yql/essentials/minikql",  # peerdir only
-    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/minikql/aligned_page_pool",
   ]
 
   sources = [
@@ -80,15 +91,18 @@ library("base") {
     "boot_type.cpp",
     "bridge.cpp",
     "counters.cpp",
+    "database_kind.cpp",
     "domain.cpp",
     "event_filter.cpp",
     "feature_flags_service.cpp",
     "fulltext.cpp",
     "group_stat.cpp",
+    "http_database_param.cpp",
     "kmeans_clusters.cpp",
     "local_user_token.cpp",
     "localdb.cpp",
     "logoblob.cpp",
+    "mon_auth.cpp",
     "path.cpp",
     "pool_stats_collector.cpp",
     "row_version.cpp",
@@ -112,7 +126,9 @@ library("base") {
   ]
 
   serialize_enum_headers = [
+    "auth.h",
     "boot_type.h",
+    "database_kind.h",
     "memory_controller_iface.h",
   ]
 

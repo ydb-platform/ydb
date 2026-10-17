@@ -1,0 +1,8 @@
+library("test_utils") {
+  deps = [
+    # "//contrib/libs/openssl",
+    # "//library/cpp/string_utils/base64",
+  ]
+
+  sources = [ "rsa_key_pair.cpp" ]
+}

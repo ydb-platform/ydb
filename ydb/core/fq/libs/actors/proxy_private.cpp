@@ -192,11 +192,6 @@ private:
     ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
-TActorId MakeYqPrivateProxyId() {
-    constexpr TStringBuf name = "YQPRIVPROXY";
-    return NActors::TActorId(0, name);
-}
-
 IActor* CreateYqlAnalyticsPrivateProxy(
     const NConfig::TPrivateProxyConfig& privateProxyConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,

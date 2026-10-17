@@ -2,20 +2,29 @@ library("query") {
   public_deps = [
     "//library/cpp/streams/bzip2",
     "//ydb/core/base",
-    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/groupinfo",
     # "//ydb/core/blobstorage/vdisk/common",
     # "//ydb/core/blobstorage/vdisk/hulldb",
+    "//ydb/core/blobstorage/vdisk/hulldb/barriers",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
+    "//ydb/core/blobstorage/vdisk/protos",
     # "//ydb/core/blobstorage/vdisk:defs",
+    # "//ydb/core/util",
   ]
 
   deps = [
-    # "//ydb/core/blobstorage/base",
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/monlib/dynamic_counters",
     # "//ydb/core/blobstorage/pdisk",
-    "//ydb/core/blobstorage/vdisk/hulldb/barriers",  # peerdir only
-    # "//ydb/core/blobstorage/vdisk/hulldb/base",  # peerdir only
-    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/blobstorage/vdisk/chunk_keeper",
+    # "//ydb/core/blobstorage/vdisk/huge",
     # "//ydb/core/blobstorage/vdisk/scrub",
-    # "//ydb/core/util",
+    # "//ydb/core/blobstorage/vdisk/synclog",
+    # "//ydb/core/control/lib",
+    "//ydb/core/retro_tracing_impl/spans",
     "//ydb/library/actors/wilson",
     # "//ydb/library/wilson_ids",
   ]
@@ -28,7 +37,10 @@ library("query") {
     "query_range.cpp",
     "query_readactor.cpp",
     "query_readbatch.cpp",
+    "query_spacereport.cpp",
+    "query_spacereport_scan.cpp",
     "query_statdb.cpp",
+    "query_statdb_stream.cpp",
     "query_stathuge.cpp",
     "query_stattablet.cpp",
   ]

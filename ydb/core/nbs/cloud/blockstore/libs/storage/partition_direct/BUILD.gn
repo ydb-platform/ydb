@@ -1,41 +1,63 @@
-library("load_actor_adapter") {
-  public_deps = [
-    "//ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
-    "//ydb/library/actors/core",
-  ]
-
-  deps = [
-    # "//ydb/core/nbs/cloud/blockstore/libs/service",
-    "//ydb/core/nbs/cloud/blockstore/public/api/protos",
-    # "//ydb/core/nbs/cloud/storage/core/libs/common",
-  ]
-
-  sources = [ "load_actor_adapter/load_actor_adapter.cpp" ]
-}
-
 library("partition_direct") {
   public_deps = [
-    # "//ydb/core/blobstorage/events",
+    # "//library/cpp/threading/future",
+    # "//ydb/core/base",
+    # "//ydb/core/mind/bscontroller:group_mapper",
     "//ydb/core/nbs/cloud/blockstore/config",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    "//ydb/core/nbs/cloud/blockstore/config/protos",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/memory",
+    # "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport",
+    # "//ydb/core/nbs/cloud/blockstore/libs/throttling",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
+    "//ydb/core/nbs/cloud/storage/core/protos",
     "//ydb/core/protos",
     "//ydb/library/actors/core",
+    # "//ydb/library/actors/wilson",
+    # "//ydb/library/wilson_ids",
   ]
 
   deps = [
-    ":load_actor_adapter",
-    # "//ydb/core/base",
-    # "//ydb/core/mind/bscontroller:group_mapper",
-    "//ydb/core/nbs/cloud/blockstore/bootstrap",
-    "//ydb/core/nbs/cloud/blockstore/libs/service/fast_path_service",
-    # "//ydb/core/nbs/cloud/blockstore/libs/vhost",
-    "//ydb/core/tablet",
-    # "//ydb/library/services",  # peerdir only
+    # "//contrib/proto/opentelemetry",  # peerdir only
+    # "//library/cpp/cgiparam",  # peerdir only
+    # "//ydb/core/mind/bscontroller",  # peerdir only
+    "//ydb/core/nbs/cloud/blockstore/bootstrap",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",  # peerdir only
+    # "//ydb/library/aclib",  # peerdir only
+    "//ydb/library/services",
   ]
 
   sources = [
-    "partition_direct.cpp",
-    "partition_direct_actor.cpp",
+    "dbg_connections.cpp",
+    "ddisk_data_copier.cpp",
+    "direct_block_group.cpp",
+    "direct_block_group_impl.cpp",
+    "erase_request.cpp",
+    "fast_path_service.cpp",
+    "flush_request.cpp",
+    "read_request_executor.cpp",
+    "read_request_multiple_location.cpp",
+    "read_request_single_location.cpp",
+    "region.cpp",
+    "restore_request.cpp",
+    "vchunk.cpp",
+    "write_request.cpp",
+    "write_request_bundle.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "dbg_connections.h",
+    "ddisk_data_copier.h",
+    "partition_direct_service.h",
   ]
 }

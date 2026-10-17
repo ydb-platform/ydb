@@ -1,0 +1,26 @@
+library("blobstorage") {
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/time_provider",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/backpressure",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/control/lib",
+    # "//ydb/core/jaeger_tracing",
+    "//ydb/core/load_test/common",
+    # "//ydb/core/util",
+    # "//ydb/library/actors/util",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "//ydb/core/load_test/group_write.cpp",
+    "//ydb/core/load_test/pdisk_log.cpp",
+    "//ydb/core/load_test/pdisk_read.cpp",
+    "//ydb/core/load_test/pdisk_write.cpp",
+    "//ydb/core/load_test/vdisk_write.cpp",
+  ]
+}

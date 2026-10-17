@@ -758,7 +758,10 @@ namespace NPlugins {
                 printer.Print("// Yandex JSON extension\n");
                 TVariables vars;
                 vars["class"] = ClassName(Descriptor_, true);
-                printer.Print(vars, "inline void $class$::PrintJSON(IOutputStream& out) const {\n");
+                // Not `inline`: this definition lives in the .pb.cc only. Being inline it is
+                // hidden by -fvisibility-inlines-hidden and not exported from the shared
+                // proto library, so vtables of subclasses elsewhere cannot resolve it.
+                printer.Print(vars, "void $class$::PrintJSON(IOutputStream& out) const {\n");
 
                 printer.Indent();
                 printer.Print("out << '{';\n");

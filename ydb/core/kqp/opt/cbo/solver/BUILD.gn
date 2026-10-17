@@ -1,0 +1,33 @@
+library("solver") {
+  public_deps = [
+    # "//library/cpp/disjoint_sets",
+    # "//library/cpp/iterator",
+    "//ydb/core/kqp/opt/cbo",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/dq/opt",
+    "//yql/essentials/core",
+    "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/core/expr_nodes_gen",
+    "//yql/essentials/utils/log",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/expr_nodes",  # peerdir only
+    # "//ydb/library/yql/dq/expr_nodes",  # peerdir only
+    # "//ydb/library/yql/dq/proto",  # peerdir only
+    # "//ydb/library/yql/dq/type_ann",  # peerdir only
+    # "//yql/essentials/ast",  # peerdir only
+    # "//yql/essentials/core/dq_integration",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_opt_cbo_latency_predictor.cpp",
+    "kqp_opt_conflict_rules_collector.cpp",
+    "kqp_opt_join.cpp",
+    "kqp_opt_join_cbo_factory.cpp",
+    "kqp_opt_join_cost_based.cpp",
+    "kqp_opt_join_tree_node.cpp",
+    "kqp_opt_predicate_selectivity.cpp",
+    "kqp_opt_stat.cpp",
+  ]
+}

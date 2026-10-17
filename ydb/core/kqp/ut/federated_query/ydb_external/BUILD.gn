@@ -1,0 +1,38 @@
+unittest_executable("ydb_external") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services/local_rpc",  # peerdir only
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/gateway",
+    "//ydb/core/kqp/host",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/federated_query/common",
+    "//ydb/core/security/certificate_check/test_utils",
+    "//ydb/core/testlib",
+    "//ydb/library/yql/providers/s3/actors",
+    "//ydb/public/api/grpc",  # peerdir only
+    "//yql/essentials/core/services/mounts",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "kqp_ydb_external_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

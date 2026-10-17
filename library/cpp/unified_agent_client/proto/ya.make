@@ -1,5 +1,7 @@
 PROTO_LIBRARY()
 
+# gn: move into parent
+
 INCLUDE_TAGS(GO_PROTO)
 
 GRPC()

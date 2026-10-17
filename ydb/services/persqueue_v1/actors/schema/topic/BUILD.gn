@@ -1,0 +1,25 @@
+library("topic") {
+  public_deps = [
+    "//ydb/core/grpc_services/base",
+  ]
+
+  deps = [
+    # "//contrib/restricted/abseil-cpp",
+    "//ydb/core/grpc_services",
+    "//ydb/core/persqueue/public/schema",
+    # "//ydb/core/ydb_convert",
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/api/protos",
+    "//ydb/services/persqueue_v1/actors/schema/common",
+  ]
+
+  sources = [
+    "actors.cpp",
+    "alter_topic.cpp",
+    "create_topic.cpp",
+    "describe_consumer.cpp",
+    "describe_partition.cpp",
+    "describe_topic.cpp",
+    "drop_topic.cpp",
+  ]
+}

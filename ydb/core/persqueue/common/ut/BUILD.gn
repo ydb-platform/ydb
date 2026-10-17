@@ -1,18 +1,40 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
+    "//ydb/core/base",
     "//ydb/core/persqueue/common",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/struct_log",
   ]
 
-  sources = [ "//ydb/core/persqueue/common/microseconds_sliding_window_ut.cpp" ]
+  sources = [
+    "//ydb/core/persqueue/common/microseconds_sliding_window_ut.cpp",
+    "actor_ut.cpp",
+    "common_app_ut.cpp",
+    "heartbeat_ut.cpp",
+    "key_ut.cpp",
+    "last_counter_ut.cpp",
+    "misc_ut.cpp",
+    "partition_id_ut.cpp",
+    "partitioning_keys_manager_ut.cpp",
+    "percentiles_ut.cpp",
+    "schema_change_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/persqueue/common" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
+    "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
   ]
 }

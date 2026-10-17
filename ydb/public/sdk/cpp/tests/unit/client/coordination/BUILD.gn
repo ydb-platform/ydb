@@ -6,7 +6,10 @@ unittest_executable("coordination") {
     "//ydb/public/sdk/cpp/src/client/coordination",
   ]
 
-  sources = [ "coordination_ut.cpp" ]
+  sources = [
+    "coordination_ut.cpp",
+    "distributed_lock_ut.cpp",
+  ]
 
   link_select = [ "allocator=tcmalloc" ]
 }

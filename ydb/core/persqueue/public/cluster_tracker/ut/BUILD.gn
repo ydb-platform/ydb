@@ -1,0 +1,20 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/public/cluster_tracker",
+  ]
+
+  sources = [ "cluster_select_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/cluster_tracker" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

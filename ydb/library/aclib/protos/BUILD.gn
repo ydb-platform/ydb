@@ -1,3 +1,6 @@
-protobuf_library("protos") {
-  sources = [ "aclib.proto" ]
+group("protos") {
+  public_deps = [
+    # "//ydb/library/aclib/protos/acl",  # peerdir only
+    # "//ydb/library/aclib/protos/identity",  # peerdir only
+  ]
 }

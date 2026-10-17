@@ -95,7 +95,7 @@ void ThrowError(const std::string& formula, int position, const std::string& mes
         formula);
     builder.AppendChar(' ', position);
     builder.AppendFormat("^\n%v", message);
-    THROW_ERROR_EXCEPTION(std::move(builder.Flush()), NYT::TError::DisableFormat)
+    THROW_ERROR_EXCEPTION(builder.Flush(), NYT::TError::DisableFormat)
         .With("context", context)
         .With("context_pos", contextPosition);
 }

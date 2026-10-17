@@ -1,0 +1,3 @@
+library("metrics") {
+  sources = [ "metrics.cpp" ]
+}

@@ -1,0 +1,26 @@
+library("sync_points") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//ydb/core/tx/columnshard/engines/reader/common",
+    # "//ydb/core/tx/columnshard/engines/reader/tracing",
+    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator",
+    # "//ydb/library/accessor",
+  ]
+
+  deps = [
+    # "//library/cpp/lwtrace",
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections",
+    # "//ydb/library/actors/struct_log",
+  ]
+
+  sources = [
+    "abstract.cpp",
+    "aggr.cpp",
+    "distinct_limit.cpp",
+    "limit.cpp",
+    "result.cpp",
+  ]
+}

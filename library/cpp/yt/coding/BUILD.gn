@@ -1,5 +1,11 @@
 group("coding") {
   public_deps = [
-    # "//library/cpp/yt/exception",
+    "//library/cpp/yt/exception",
+    # "//library/cpp/yt/mpl",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/assert",  # peerdir only
+    # "//library/cpp/yt/memory",  # peerdir only
   ]
 }

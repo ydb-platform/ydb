@@ -6,7 +6,7 @@ library("testlib") {
     # "//library/cpp/time_provider",
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
-    "//ydb/library/actors/interconnect/mock",
+    # "//ydb/library/actors/interconnect/poller",
     # "//ydb/library/actors/util",
   ]
 

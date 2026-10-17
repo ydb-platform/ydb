@@ -1,6 +1,6 @@
 library("events") {
   public_deps = [
-    # "//contrib/libs/apache/arrow",
+    "//contrib/libs/apache/arrow",
     "//ydb/core/base",
     # "//ydb/library/actors/core",
     "//ydb/library/yql/dq/actors/protos",

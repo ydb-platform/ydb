@@ -5,7 +5,6 @@ unittest_executable("control_plane_storage") {
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/external_sources",  # peerdir only
-    "//ydb/core/fq/libs/actors/logging",
     "//ydb/core/fq/libs/config",
     "//ydb/core/fq/libs/config/protos",
     "//ydb/core/fq/libs/control_plane_storage",
@@ -23,6 +22,7 @@ unittest_executable("control_plane_storage") {
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/core",
     "//ydb/library/security",
+    "//ydb/library/testlib/common",
     "//ydb/library/yql/dq/actors/protos",
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/result",
@@ -56,6 +56,7 @@ unittest_executable("control_plane_storage") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

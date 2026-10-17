@@ -2,14 +2,18 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common",  # peerdir only
+    "//ydb/core/kqp/common/compilation",
+    "//ydb/core/kqp/common/simple",
     "//ydb/core/kqp/compile_service",  # peerdir only
     "//ydb/core/kqp/counters",
     "//ydb/core/kqp/ut/common",
+    "//ydb/library/aclib",
     "//ydb/public/sdk/cpp/src/client/proto",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "kqp_compile_fallback_ut.cpp" ]
+  sources = [ "kqp_replay_log_ut.cpp" ]
 
   include_dirs = [
     "//ydb/core/kqp/compile_service",  # peerdir only
@@ -19,6 +23,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -8,14 +8,15 @@ library("libcpp") {
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/library/grpc/client",
     "//yql/essentials/providers/common/proto",
-    # "//yql/essentials/public/issue",
+    "//yql/essentials/public/issue",
     "//yql/essentials/utils",
   ]
 
   deps = [
     "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/library/yql/dq/actors",
     "//ydb/library/yql/providers/generic/connector/api/service",
-    "//ydb/library/yql/public/ydb_issue",  # peerdir only
     "//yql/essentials/utils/log",
   ]
 

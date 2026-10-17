@@ -1,0 +1,22 @@
+unittest_executable("pipe") {
+  deps = [
+    "//ydb/core/persqueue/pqtablet/partition/mlp",
+    "//ydb/core/persqueue/public/mlp/ut/common",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "mlp_simthreads_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/pqtablet/partition/mlp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

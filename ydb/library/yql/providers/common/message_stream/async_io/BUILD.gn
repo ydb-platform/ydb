@@ -1,0 +1,24 @@
+library("async_io") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/util",
+    "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/dq/runtime/streaming",
+    # "//ydb/library/yql/providers/abstract/message_stream",
+    # "//ydb/library/yql/providers/common/message_stream",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/disjoint_interval_tree",
+    "//ydb/library/services",
+    "//ydb/library/yql/dq/actors/protos",
+    # "//ydb/library/yql/providers/abstract",  # peerdir only
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/utils",
+    # "//yql/essentials/utils/log",
+  ]
+
+  sources = [ "read_actor.cpp" ]
+}

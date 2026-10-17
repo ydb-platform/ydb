@@ -1,6 +1,7 @@
 library("service") {
   public_deps = [
     "//library/cpp/cgiparam",
+    "//library/cpp/coroutine/engine",
     "//library/cpp/coroutine/listener",
     "//library/cpp/http/fetch",
     "//library/cpp/http/server",
@@ -11,7 +12,6 @@ library("service") {
 
   deps = [
     "//contrib/libs/protobuf",
-    "//library/cpp/coroutine/engine",
     # "//library/cpp/http/io",
     "//library/cpp/malloc/api",
     # "//library/cpp/protobuf/runtime",  # peerdir only

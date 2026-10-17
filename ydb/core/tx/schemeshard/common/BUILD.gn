@@ -5,8 +5,8 @@ library("common") {
   ]
 
   deps = [
-    # "//yql/essentials/parser/pg_wrapper",
-    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/parser/pg_wrapper",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
   ]
 
   sources = [ "validation.cpp" ]

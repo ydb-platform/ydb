@@ -18,11 +18,6 @@ library("common") {
     # "//yql/essentials/public/issue",
   ]
 
-  deps = [
-    "//yql/essentials/parser/pg_catalog",
-    "//yql/essentials/parser/pg_wrapper/interface",
-  ]
-
   sources = [
     "registry.cpp",
     "resolver.cpp",

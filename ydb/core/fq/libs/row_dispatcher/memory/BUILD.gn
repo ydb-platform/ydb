@@ -1,0 +1,13 @@
+library("memory") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/yql/dq/actors/compute",
+    # "//yql/essentials/minikql:alloc",
+  ]
+
+  deps = [
+    # "//yql/essentials/minikql",  # peerdir only
+  ]
+
+  sources = [ "memory_quota.cpp" ]
+}

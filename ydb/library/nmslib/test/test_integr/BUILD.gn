@@ -1,0 +1,10 @@
+linked_executable("test_integr") {
+  deps = [
+    "//library/cpp/testing/common",  # peerdir only
+    "//ydb/library/nmslib",
+  ]
+
+  sources = [ "test_integr.cc" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

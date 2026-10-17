@@ -1,5 +1,8 @@
 library("dom") {
-  public_deps = [ "//yql/essentials/public/udf" ]
+  public_deps = [
+    # "//library/cpp/deprecated/enum_codegen",
+    "//yql/essentials/public/udf",
+  ]
 
   deps = [
     "//library/cpp/containers/stack_vector",
@@ -16,6 +19,4 @@ library("dom") {
     "peel.cpp",
     "yson.cpp",
   ]
-
-  yql_abi_version = "2.44.0"
 }

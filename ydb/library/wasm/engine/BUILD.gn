@@ -1,0 +1,24 @@
+library("engine") {
+  deps = [
+    "//contrib/restricted/wavm_llvm16/Lib",
+    "//library/cpp/resource",
+    "//library/cpp/yt/assert",
+    "//library/cpp/yt/compact_containers",
+    "//library/cpp/yt/error",
+    "//library/cpp/yt/memory",
+    "//library/cpp/yt/misc",
+    "//library/cpp/yt/string",
+    "//ydb/library/wasm/api",
+  ]
+
+  sources = [
+    "builtins.cpp",
+    "compartment.cpp",
+    "data_transfer.cpp",
+    "function.cpp",
+    "intrinsics.cpp",
+    "memory_pool.cpp",
+    "system_libraries.cpp",
+    "type_builder.cpp",
+  ]
+}

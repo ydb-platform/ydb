@@ -1,0 +1,63 @@
+unittest_executable("protocol") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/protobuf",
+    "//library/cpp/digest/md5",
+    "//library/cpp/json",
+    "//library/cpp/retry",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/kafka_proxy",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/schema",  # peerdir only
+    "//ydb/core/persqueue/ut/common",  # peerdir only
+    "//ydb/core/protos/schemeshard",
+    "//ydb/core/security/certificate_check/test_utils",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",  # peerdir only
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/formats/arrow/switch",
+    "//ydb/library/login/sasl",
+    "//ydb/library/testlib/service_mocks",
+    "//ydb/public/api/grpc/draft",
+    "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/datastreams",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/query",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+    "//ydb/services/ydb",
+  ]
+
+  sources = [
+    "//ydb/core/kafka_proxy/ut/kafka_test_client.cpp",
+    "//ydb/core/kafka_proxy/ut/test_server.cpp",
+    "//ydb/core/kafka_proxy/ut/ut_auth.cpp",
+    "//ydb/core/kafka_proxy/ut/ut_authz.cpp",
+    "//ydb/core/kafka_proxy/ut/ut_protocol.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/kafka_proxy" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -7,12 +7,12 @@ library("scheme") {
     "//ydb/library/actors/core",
     "//ydb/public/api/protos",
     # "//ydb/public/lib/scheme_types",
-    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/parser/pg_wrapper/interface/type_desc",
   ]
 
   deps = [
     # "//library/cpp/charset/lite",  # peerdir only
-    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/containers/absl",
     # "//library/cpp/containers/bitseq",  # peerdir only
     "//library/cpp/lwtrace/mon",  # peerdir only
     # "//library/cpp/yson",  # peerdir only

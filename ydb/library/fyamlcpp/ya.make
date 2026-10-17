@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/libfyaml
+    contrib/libs/libfyaml  # gn: public dep
 )
 
 END()

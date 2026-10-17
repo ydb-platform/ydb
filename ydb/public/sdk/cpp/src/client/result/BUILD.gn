@@ -1,5 +1,9 @@
 library("result") {
-  public_deps = [ "//ydb/public/sdk/cpp/src/client/value" ]
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
 
   deps = [
     # "//contrib/libs/protobuf",

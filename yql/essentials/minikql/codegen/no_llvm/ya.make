@@ -13,5 +13,6 @@ SRCS(
 )
 
 PROVIDES(MINIKQL_CODEGEN)
+# gn: default provider
 
 END()

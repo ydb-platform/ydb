@@ -4,4 +4,6 @@ protobuf_library("protos") {
   sources = [ "persqueue.proto" ]
 
   serialize_enum_headers = [ "persqueue.pb.h" ]
+
+  protoc_fatal_warnings = true
 }

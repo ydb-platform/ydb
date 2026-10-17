@@ -36,7 +36,7 @@ struct TReceiveAttemptPartitionKey {
     TString Consumer;
     TString ReceiveAttemptId;
 
-    auto operator<=>(const TReceiveAttemptPartitionKey&) const = default;
+    bool operator==(const TReceiveAttemptPartitionKey&) const = default;
 };
 
 struct TReceiveAttemptPartitionUpsert {

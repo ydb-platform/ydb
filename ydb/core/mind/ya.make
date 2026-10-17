@@ -1,8 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
-    configured_tablet_bootstrapper.cpp
-    configured_tablet_bootstrapper.h
+    configured_tablet_bootstrapper.cpp  # gn: into ydb/core/driver_lib/run
+    configured_tablet_bootstrapper.h  # gn: into ydb/core/driver_lib/run
     defs.h
     dynamic_nameserver.cpp
     dynamic_nameserver.h
@@ -30,7 +30,7 @@ SRCS(
     slot_indexes_pool.cpp
     slot_indexes_pool.h
     table_adapter.h
-    tenant_node_enumeration.cpp
+    tenant_node_enumeration.cpp  # gn: tenant_node_enumeration
     tenant_node_enumeration.h
     tenant_pool.h
     tenant_pool.cpp
@@ -48,6 +48,8 @@ SRCS(
     tenant_slot_broker__update_node_location.cpp
     tenant_slot_broker__update_slot_status.cpp
 )
+# gn: tenant_node_enumeration headers tenant_node_enumeration.h
+# gn: nameserver_table_builder headers nameserver_table_builder.h
 
 PEERDIR(
     ydb/library/actors/core

@@ -10,8 +10,8 @@ ADDINCL(
 )
 
 SRCS(
-    Allocator.cpp
-    PODArray.cpp
+    Allocator.cpp  # gn: into ydb/library/arrow_clickhouse
+    PODArray.cpp  # gn: into ydb/library/arrow_clickhouse
 )
 
 END()

@@ -1,8 +1,11 @@
 library("cm_client") {
   public_deps = [
     # "//library/cpp/threading/future",
+    # "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/public/sdk/cpp/src/client/types",
     # "//ydb/public/sdk/cpp/src/client/types/credentials",
     "//yql/essentials/public/issue",
+    # "//yql/essentials/utils",
   ]
 
   sources = [ "client.cpp" ]

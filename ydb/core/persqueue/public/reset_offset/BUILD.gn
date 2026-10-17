@@ -1,0 +1,22 @@
+library("reset_offset") {
+  public_deps = [
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/events/internal/protos",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/absl",
+    # "//ydb/core/base",
+    # "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/public",  # peerdir only
+    "//ydb/core/persqueue/public/describer",
+    # "//ydb/core/persqueue/public:utils",
+    # "//ydb/core/util",
+    "//ydb/library/persqueue/topic_parser",
+  ]
+
+  sources = [ "reset_offset.cpp" ]
+}

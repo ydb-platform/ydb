@@ -1,0 +1,20 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/security/util",
+  ]
+
+  sources = [
+    "//ydb/core/security/util/counters_ut.cpp",
+    "//ydb/core/security/util/jwk_ut.cpp",
+    "//ydb/core/security/util/net_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/security/util" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

@@ -12,13 +12,11 @@ library("db_driver_state") {
   deps = [
     "//library/cpp/string_utils/quote",
     "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
-    "//ydb/public/sdk/cpp/src/client/resources",
     "//ydb/public/sdk/cpp/src/client/types/credentials",
     "//ydb/public/sdk/cpp/src/library/grpc/client",
   ]
 
   sources = [
-    "authenticator.cpp",
     "endpoint_pool.cpp",
     "state.cpp",
   ]

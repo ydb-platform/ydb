@@ -16,7 +16,8 @@ library("ytprof") {
     # "//library/cpp/yt/backtrace/cursors/libunwind",  # peerdir only
     # "//library/cpp/yt/cpu_clock",
     # "//library/cpp/yt/misc",
-    # "//library/cpp/yt/threading",
+    # "//library/cpp/yt/system",
+    # "//library/cpp/yt/threading",  # peerdir only
     # "//yt/yt/core",
     # "//yt/yt/library/ytprof/api",
     "//yt/yt/library/ytprof/proto",

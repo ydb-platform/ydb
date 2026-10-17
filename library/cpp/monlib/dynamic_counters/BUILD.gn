@@ -8,6 +8,7 @@ library("dynamic_counters") {
   ]
 
   deps = [
+    "//library/cpp/html/escape",
     "//library/cpp/monlib/encode/json",
     "//library/cpp/monlib/encode/prometheus",
     "//library/cpp/monlib/encode/spack",

@@ -1,0 +1,8 @@
+library("udf_meta") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//yql/essentials/public/langver",
+  ]
+
+  sources = [ "udf_meta.cpp" ]
+}

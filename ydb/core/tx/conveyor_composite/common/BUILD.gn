@@ -1,0 +1,3 @@
+library("common") {
+  serialize_enum_headers = [ "category.h" ]
+}

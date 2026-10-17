@@ -1,0 +1,36 @@
+library("state") {
+  public_deps = [
+    # "//ydb/core/fq/libs/checkpointing",
+    "//ydb/core/fq/libs/graph_params/proto",
+    # "//ydb/library/accessor",
+    "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/dq/proto",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",
+    "//ydb/core/base",
+    # "//ydb/core/fq/libs/checkpointing/events",
+    "//ydb/library/actors/async",
+    # "//ydb/library/yql/dq/runtime",
+    # "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/library/yql/providers/pq/task_meta",
+    # "//ydb/library/yverify_stream",
+    # "//yql/essentials/core/sql_types",
+    # "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/public/issue/protos",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "dq_stage_state_recovery_info.cpp",
+    "dq_state_load_plan.cpp",
+    "dq_state_load_plan_resolver.cpp",
+  ]
+}

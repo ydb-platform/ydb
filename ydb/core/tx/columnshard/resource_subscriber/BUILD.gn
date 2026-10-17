@@ -5,12 +5,14 @@ library("resource_subscriber") {
     # "//ydb/core/tablet",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
     "//ydb/library/signals",
   ]
 
   deps = [
     # "//ydb/core/protos",  # peerdir only
-    # "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/tablet_flat",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/protos",  # peerdir only
   ]
 
   sources = [

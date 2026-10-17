@@ -10,6 +10,8 @@ library("kesus") {
   deps = [
     "//ydb/core/base",
     # "//ydb/core/grpc_streaming",
+    # "//ydb/core/kesus/proxy",  # peerdir only
+    # "//ydb/core/kesus/tablet",  # peerdir only
     # "//ydb/public/api/grpc/draft",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/resources",
     # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only

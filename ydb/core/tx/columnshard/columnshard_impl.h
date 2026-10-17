@@ -8,6 +8,7 @@
 #include "defs.h"
 #include "inflight_request_tracker.h"
 #include "tables_manager.h"
+#include "write_actor.h"
 
 #include "bg_tasks/events/local.h"
 #include "blobs_action/events/delete_blobs.h"
@@ -158,7 +159,6 @@ class TTiersManagerInitializer;
 
 extern bool gAllowLogBatchingDefaultValue;
 
-IActor* CreateWriteActor(ui64 tabletId, IWriteController::TPtr writeController, const TInstant deadline);
 IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
 
 struct TSettings {

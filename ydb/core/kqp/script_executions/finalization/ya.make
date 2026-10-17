@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/script_executions/common
     ydb/core/kqp/script_executions/table_queries
-    ydb/core/mind
+    ydb/core/mind  # gn: :tenant_node_enumeration
     ydb/core/tx/scheme_cache
     ydb/library/table_creator
     ydb/library/yql/providers/s3/actors_factory

@@ -10,7 +10,9 @@ library("interface") {
     "//yql/essentials/utils/log",
   ]
 
-  deps = [ "//ydb/library/yql/providers/dq/common:attrs" ]
+  deps = [
+    "//ydb/library/yql/providers/dq/common:attrs",  # peerdir only
+  ]
 
   sources = [
     "counters.cpp",

@@ -1,5 +1,6 @@
 library("cluster_tracker") {
   public_deps = [
+    # "//library/cpp/containers/absl",
     # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/base",
     # "//ydb/library/actors/core",
@@ -10,9 +11,12 @@ library("cluster_tracker") {
     # "//ydb/core/kqp/common",
     # "//ydb/core/persqueue/events",  # peerdir only
     "//ydb/core/persqueue/public",
-    "//ydb/library/mkql_proto/protos",
     "//ydb/public/sdk/cpp/src/client/result",
   ]
 
-  sources = [ "cluster_tracker.cpp" ]
+  sources = [
+    "cluster_list.cpp",
+    "cluster_select.cpp",
+    "cluster_tracker.cpp",
+  ]
 }

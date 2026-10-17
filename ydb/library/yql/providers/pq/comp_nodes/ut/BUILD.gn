@@ -1,0 +1,25 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/dwarf_backtrace",  # peerdir only
+    "//library/cpp/dwarf_backtrace/registry",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/comp_nodes",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes/ut/utils",
+    "//ydb/library/yql/providers/pq/comp_nodes",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "dq_pq_parsing_wrapper_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/pq/comp_nodes" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

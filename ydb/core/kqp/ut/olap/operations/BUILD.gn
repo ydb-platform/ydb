@@ -2,10 +2,14 @@ unittest_executable("operations") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
+    "//ydb/core/cms/console",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/kqp/ut/olap/combinatory",
     "//ydb/core/kqp/ut/olap/helpers",
+    "//ydb/core/protos",
     "//ydb/core/testlib",  # peerdir only
     "//ydb/core/tx/columnshard",  # peerdir only
     "//ydb/core/tx/columnshard/hooks/testing",
@@ -15,6 +19,7 @@ unittest_executable("operations") {
   ]
 
   sources = [
+    "cache_blobs_after_write_ut.cpp",
     "delete_ut.cpp",
     "write_ut.cpp",
   ]
@@ -27,6 +32,7 @@ unittest_executable("operations") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

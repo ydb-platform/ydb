@@ -8,6 +8,7 @@ config("private_config") {
     ]
     defines = [
         "ARROW_EXPORTING",
+        "ARROW_WITH_BACKTRACE",
         "ARROW_WITH_BROTLI",
         "ARROW_WITH_LZ4",
         "ARROW_WITH_RE2",
@@ -24,7 +25,10 @@ config("private_config") {
 }
 
 contrib_library("arrow") {
-    public_deps = [ "cpp/src:generated" ]
+    public_deps = [
+        "cpp/src:generated",
+        "//contrib/restricted/thrift",  # cpp/src/generated/parquet_types.h
+    ]
 
     deps = [
         "//contrib/libs/apache/orc",
@@ -38,7 +42,6 @@ contrib_library("arrow") {
         "//contrib/libs/utf8proc",
         "//contrib/libs/zlib",
         "//contrib/libs/zstd",
-        "//contrib/restricted/thrift",
         "//contrib/restricted/uriparser",
     ]
 

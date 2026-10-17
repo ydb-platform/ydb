@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 PEERDIR(
     ydb/core/testlib/basics
     yql/essentials/sql/pg

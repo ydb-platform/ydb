@@ -25,6 +25,7 @@ PEERDIR(
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/types/status
 )
+# gn: peerdir ydb/library/yql/public/ydb_issue
 
 END()
 

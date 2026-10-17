@@ -7,12 +7,13 @@ library("cli_utils") {
     # "//library/cpp/svnversion",
     "//ydb/core/driver_lib/cli_base",
     "//ydb/core/driver_lib/run:_self",
-    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     # "//ydb/public/lib/deprecated/client",
     "//ydb/public/lib/deprecated/kicli",
   ]
 
   deps = [
+    # "//library/cpp/malloc/api",
     # "//library/cpp/protobuf/json",
     # "//library/cpp/yson",  # peerdir only
     # "//ydb/core/actorlib_impl",  # peerdir only
@@ -25,6 +26,8 @@ library("cli_utils") {
     # "//ydb/core/config/init",
     "//ydb/core/config/validation",
     # "//ydb/core/driver_lib/cli_config_base",
+    # "//ydb/core/driver_lib/run:config",
+    # "//ydb/core/driver_lib/version",
     # "//ydb/core/engine",  # peerdir only
     # "//ydb/core/erasure",  # peerdir only
     "//ydb/core/mind/bscontroller",  # peerdir only
@@ -37,13 +40,13 @@ library("cli_utils") {
     "//ydb/library/actors/core",
     "//ydb/library/actors/protos",
     # "//ydb/library/folder_service/proto",  # peerdir only
-    "//ydb/library/keys",  # peerdir only
     "//ydb/library/yaml_config",
     "//ydb/public/api/grpc",
     "//ydb/public/api/grpc/draft",
     "//ydb/public/api/protos",
     "//ydb/public/lib/ydb_cli/commands",
     "//ydb/public/lib/ydb_cli/commands/ydb_discovery",  # peerdir only
+    # "//ydb/public/lib/ydb_cli/common",
     # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/resources",
     # "//ydb/public/sdk/cpp/src/library/grpc/client",
@@ -53,6 +56,7 @@ library("cli_utils") {
     "cli.cpp",
     "cli_actorsystem_perftest.cpp",
     "cli_cmd_config.cpp",
+    "cli_cmds_actorsys_perftest.cpp",
     "cli_cmds_admin.cpp",
     "cli_cmds_bs.cpp",
     "cli_cmds_cms.cpp",
@@ -60,9 +64,15 @@ library("cli_utils") {
     "cli_cmds_console.cpp",
     "cli_cmds_debug.cpp",
     "cli_cmds_disk.cpp",
+    "cli_cmds_format_info.cpp",
+    "cli_cmds_format_util.cpp",
     "cli_cmds_genconfig.cpp",
     "cli_cmds_node.cpp",
+    "cli_cmds_node_by_host.cpp",
+    "cli_cmds_pq_cmds.cpp",
     "cli_cmds_root.cpp",
+    "cli_cmds_run.cpp",
+    "cli_cmds_scheme_initroot_cmd.cpp",
     "cli_cmds_server.cpp",
     "cli_cmds_tablet.cpp",
     "cli_cmds_tenant.cpp",

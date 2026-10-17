@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/minikql/invoke_builtins/llvm16
 
 )
+# gn: peerdir ydb/library/formats/arrow/modifier
 
 IF (OS_WINDOWS)
     ADDINCL(

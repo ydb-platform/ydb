@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    index.cpp
+    index.cpp  # gn: into ydb/core/tx/columnshard/engines
 )
 
 PEERDIR(

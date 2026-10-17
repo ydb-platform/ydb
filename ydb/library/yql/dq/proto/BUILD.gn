@@ -1,9 +1,14 @@
 protobuf_library("proto") {
-  public_deps = [ "//ydb/library/actors/protos" ]
+  public_deps = [
+    "//ydb/library/actors/protos",
+    "//yql/essentials/minikql/runtime_settings/proto",
+  ]
 
   sources = [
     "dq_state_load_plan.proto",
     "dq_tasks.proto",
     "dq_transport.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

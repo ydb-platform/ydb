@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "presort_key_agreement_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

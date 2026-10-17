@@ -1,12 +1,14 @@
 library("blob_depot") {
   public_deps = [
+    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3",
     # "//library/cpp/json",
     # "//library/cpp/monlib/service/pages",
     "//ydb/core/base",
-    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
     # "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/testing/group_overseer",
     # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/control/lib",
     "//ydb/core/engine/minikql",
     # "//ydb/core/mind",
     # "//ydb/core/node_whiteboard",
@@ -18,7 +20,11 @@ library("blob_depot") {
   ]
 
   deps = [
+    # "//library/cpp/random_provider",
+    # "//ydb/core/base/services",
     "//ydb/core/wrappers",
+    # "//ydb/core/wrappers/events",
+    # "//ydb/library/actors/http",
     "//ydb/public/api/protos",
   ]
 
@@ -40,12 +46,14 @@ library("blob_depot") {
     "given_id_range.cpp",
     "group_metrics_exchange.cpp",
     "mon_main.cpp",
+    "move_data.cpp",
     "op_apply_config.cpp",
     "op_commit_blob_seq.cpp",
     "op_init_schema.cpp",
     "op_load.cpp",
     "s3.cpp",
     "s3_delete.cpp",
+    "s3_router.cpp",
     "s3_scan.cpp",
     "s3_upload.cpp",
     "s3_write.cpp",

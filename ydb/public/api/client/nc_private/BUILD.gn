@@ -4,4 +4,6 @@ protobuf_library("nc_private") {
   sources = [ "annotations.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

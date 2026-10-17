@@ -1,6 +1,7 @@
 unittest_executable("opt") {
   deps = [
     "//library/cpp/json",
+    "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/provider",
@@ -9,9 +10,11 @@ unittest_executable("opt") {
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_proxy:public",
+    "//ydb/public/lib/yson_value",
     "//ydb/public/sdk/cpp/src/client/proto",
     "//yql/essentials/ast",
     "//yql/essentials/core",
+    "//yql/essentials/core/expr_nodes_gen",
     "//yql/essentials/parser/pg_catalog",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/parser/pg_wrapper/interface",
@@ -21,6 +24,8 @@ unittest_executable("opt") {
 
   sources = [
     "kqp_agg_ut.cpp",
+    "kqp_concurrent_results_ut.cpp",
+    "kqp_constant_folding_ut.cpp",
     "kqp_extract_predicate_unpack_ut.cpp",
     "kqp_hash_combine_ut.cpp",
     "kqp_kv_ut.cpp",
@@ -28,6 +33,8 @@ unittest_executable("opt") {
     "kqp_named_expressions_ut.cpp",
     "kqp_ne_ut.cpp",
     "kqp_not_null_ut.cpp",
+    "kqp_partitions_by_keys_sort_ut.cpp",
+    "kqp_peephole_ut.cpp",
     "kqp_ranges_ut.cpp",
     "kqp_returning_ut.cpp",
     "kqp_sort_ut.cpp",
@@ -43,6 +50,7 @@ unittest_executable("opt") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

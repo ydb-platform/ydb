@@ -4,6 +4,8 @@ linked_executable("basic_example") {
     "//ydb/public/sdk/cpp/src/client/driver",
     "//ydb/public/sdk/cpp/src/client/params",
     "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/row_ranges",  # peerdir only
   ]
 
   sources = [

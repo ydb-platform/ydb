@@ -5,6 +5,7 @@ config("public_config") {
 config("private_config") {
     cflags = [
         "-Wno-deprecated-declarations",
+        "-Wno-implicit-function-declaration",
         "-Wno-incompatible-pointer-types",
         "-Wno-unused-but-set-variable",
     ]
@@ -36,13 +37,14 @@ contrib_library("libssh2") {
     ]
 
     sources = [
-        "src/agent_win.c",
         "src/agent.c",
         "src/bcrypt_pbkdf.c",
-        "src/blowfish.c",
+        "src/chacha.c",
         "src/channel.c",
+        "src/cipher-chachapoly.c",
         "src/comp.c",
         "src/crypt.c",
+        "src/crypto.c",
         "src/global.c",
         "src/hostkey.c",
         "src/keepalive.c",
@@ -50,15 +52,16 @@ contrib_library("libssh2") {
         "src/knownhost.c",
         "src/mac.c",
         "src/misc.c",
-        "src/openssl.c",
         "src/packet.c",
         "src/pem.c",
+        "src/poly1305.c",
         "src/publickey.c",
         "src/scp.c",
         "src/session.c",
         "src/sftp.c",
         "src/transport.c",
         "src/userauth.c",
+        "src/userauth_kbd_packet.c",
         "src/version.c",
     ]
 

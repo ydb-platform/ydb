@@ -1,5 +1,6 @@
 library("pushdown") {
   public_deps = [
+    # "//library/cpp/containers/disjoint_interval_tree",
     "//yql/essentials/ast",
     "//yql/essentials/core",
     # "//yql/essentials/core/expr_nodes",
@@ -11,6 +12,7 @@ library("pushdown") {
 
   sources = [
     "collection.cpp",
+    "intervals_converter.cpp",
     "physical_opt.cpp",
     "predicate_node.cpp",
     "settings.cpp",

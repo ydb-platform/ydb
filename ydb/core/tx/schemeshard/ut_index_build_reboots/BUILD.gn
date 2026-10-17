@@ -3,9 +3,14 @@ unittest_executable("ut_index_build_reboots") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
     "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx/datashard",
     "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/schemeshard",  # peerdir only
     "//ydb/core/tx/schemeshard/ut_helpers",
@@ -14,8 +19,10 @@ unittest_executable("ut_index_build_reboots") {
   ]
 
   sources = [
+    "ut_fulltext_index_build_last_key_ack.cpp",
     "ut_fulltext_index_build_reboots.cpp",
     "ut_index_build_reboots.cpp",
+    "ut_json_index_build_reboots.cpp",
   ]
 
   include_dirs = [
@@ -26,6 +33,7 @@ unittest_executable("ut_index_build_reboots") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

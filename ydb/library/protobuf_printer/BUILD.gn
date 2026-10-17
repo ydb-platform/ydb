@@ -1,6 +1,7 @@
 library("protobuf_printer") {
   public_deps = [
     "//contrib/libs/protobuf",
+    "//library/cpp/protobuf/json",
     "//ydb/public/api/protos/annotations",
   ]
 
@@ -8,6 +9,8 @@ library("protobuf_printer") {
 
   sources = [
     "hide_field_printer.cpp",
+    "security_json_printer.cpp",
+    "security_printer.cpp",
     "size_printer.cpp",
     "stream_helper.cpp",
     "token_field_printer.cpp",

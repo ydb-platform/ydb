@@ -1,5 +1,5 @@
 group("operation_id") {
-  deps = [
+  public_deps = [
     # "//ydb/public/sdk/cpp/src/library/operation_id",
   ]
 }

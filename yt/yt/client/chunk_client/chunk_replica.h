@@ -191,8 +191,6 @@ struct TChunkIdWithIndexAndState
 
     bool operator==(const TChunkIdWithIndexAndState& other) const = default;
 
-    auto operator<=>(const TChunkIdWithIndexAndState& other) const = default;
-
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
 };

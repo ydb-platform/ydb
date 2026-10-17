@@ -1,0 +1,10 @@
+group("udf_value_test_support") {
+  testonly = true
+
+  deps = [
+    # "//yql/essentials/public/decimal",  # peerdir only
+    # "//yql/essentials/public/udf",  # peerdir only
+    # "//yql/essentials/public/udf/arrow",  # peerdir only
+    # "//yql/essentials/utils/random_data_generator",  # peerdir only
+  ]
+}

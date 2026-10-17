@@ -9,6 +9,7 @@ library("client") {
 
   deps = [
     # "//contrib/libs/grpc",
+    "//ydb/public/sdk/cpp/src/client/resources",
   ]
 
   sources = [

@@ -1816,10 +1816,10 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
         auto alternative = variantType->GetAlternativeType(index);
         if (value.value_case() == Ydb::Value::kNestedValue) {
             auto unboxedValue = ImportValueFromProto(alternative, value.nested_value(), factory);
-            return factory.CreateVariantHolder(std::move(unboxedValue.Release()), index);
+            return factory.CreateVariantHolder(unboxedValue.Release(), index);
         }
         auto unboxedValue = ImportValueFromProto(alternative, value, factory);
-        return factory.CreateVariantHolder(std::move(unboxedValue.Release()), index);
+        return factory.CreateVariantHolder(unboxedValue.Release(), index);
     }
 
     case TType::EKind::Tagged: {

@@ -1,4 +1,4 @@
-library("draft") {
+contrib_library("draft") {
   sources = [
     "date.cpp",
     "datetime.cpp",

@@ -1,0 +1,13 @@
+gtest_executable("otel") {
+  deps = [
+    "//contrib/libs/opentelemetry-cpp",
+    "//contrib/libs/opentelemetry-cpp/api",  # peerdir only
+    "//library/cpp/testing/gtest",
+    "//ydb/public/sdk/cpp/plugins/metrics/otel",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/metrics",
+  ]
+
+  sources = [ "otel_registry_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

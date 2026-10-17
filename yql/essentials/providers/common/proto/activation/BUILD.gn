@@ -1,0 +1,3 @@
+protobuf_library("activation") {
+  sources = [ "activation.proto" ]
+}

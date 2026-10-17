@@ -1,0 +1,27 @@
+linked_executable("bunit") {
+  deps = [
+    "//library/cpp/testing/common",  # peerdir only
+    "//ydb/library/nmslib",  # peerdir only
+  ]
+
+  sources = [
+    "bunit.cc",
+    "test_distfunc.cc",
+    "test_editdist.cc",
+    "test_eval.cc",
+    "test_falconn_heap.cc",
+    "test_fp.cc",
+    "test_lpnorm.cc",
+    "test_object.cc",
+    "test_overlap.cc",
+    "test_pow.cc",
+    "test_some_stat.cc",
+    "test_space_scalar.cc",
+    "test_space_serial.cc",
+    "test_sqfd.cc",
+    "test_thread_pool.cc",
+    "test_timer.cc",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

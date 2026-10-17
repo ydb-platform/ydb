@@ -1,12 +1,24 @@
 library("diagnostics") {
   public_deps = [
     "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/threading/future",
     "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
     # "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/metrics",
   ]
 
   sources = [
+    "dbg_counters.cpp",
     "public.cpp",
+    "trace_helpers.cpp",
+    "vchunk_counters.cpp",
+    "vchunk_stats.cpp",
     "vhost_stats.cpp",
     "vhost_stats_simple.cpp",
     "vhost_stats_test.cpp",

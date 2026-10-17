@@ -3,9 +3,10 @@ YQL_LIBRARY()
 SRCS(
     request_actor.cpp
     request_actor_cb.cpp
-    config.cpp
+    config.cpp  # gn: config
     common.cpp
 )
+# gn: config headers config.h
 
 PEERDIR(
     ydb/library/actors/core

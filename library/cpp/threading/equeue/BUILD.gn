@@ -1,5 +1,3 @@
 library("equeue") {
-  public_deps = [ "//library/cpp/deprecated/atomic" ]
-
   sources = [ "equeue.cpp" ]
 }

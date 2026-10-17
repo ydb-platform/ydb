@@ -1,5 +1,6 @@
 library("grpc_services") {
   public_deps = [
+    # "//contrib/libs/apache/arrow",
     "//library/cpp/monlib/service/pages",
     "//ydb/core/actorlib_impl",
     "//ydb/core/audit/audit_config",
@@ -47,16 +48,13 @@ library("grpc_services") {
     # "//library/cpp/digest/old_crc",
     # "//library/cpp/json",
     "//library/cpp/regex/pcre",
-    # "//library/cpp/retry",
     # "//library/cpp/streams/zstd",
     # "//library/cpp/yson",
     "//ydb/core/audit",
     "//ydb/core/backup/common",
     "//ydb/core/backup/regexp",
     # "//ydb/core/blobstorage/base",
-    "//ydb/core/blobstorage/events",
     # "//ydb/core/blobstorage/nodewarden",
-    # "//ydb/core/client/minikql_compile",
     # "//ydb/core/cms",
     # "//ydb/core/counters_info",
     "//ydb/core/discovery",
@@ -66,7 +64,7 @@ library("grpc_services") {
     "//ydb/core/fq/libs/audit",
     "//ydb/core/fq/libs/audit/events",
     "//ydb/core/fq/libs/control_plane_proxy/events",
-    "//ydb/core/fq/libs/control_plane_storage:util",
+    "//ydb/core/fq/libs/control_plane_storage:util",  # peerdir only
     "//ydb/core/fq/libs/events",
     "//ydb/core/fq/libs/protos",
     "//ydb/core/grpc_services/local_rpc",
@@ -77,59 +75,65 @@ library("grpc_services") {
     "//ydb/core/keyvalue",
     # "//ydb/core/kqp/common/events",
     # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/common:types",
     # "//ydb/core/kqp/compute_actor:events",
     # "//ydb/core/kqp/executer_actor",
     "//ydb/core/kqp/executer_actor:shards_resolver",
     "//ydb/core/kqp/opt",
+    # "//ydb/core/local_indexes/bloom",
     # "//ydb/core/mind",
     # "//ydb/core/mind/bscontroller",
     # "//ydb/core/mind/hive",
     # "//ydb/core/mon",
-    "//ydb/core/nbs/cloud/blockstore/config",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
     # "//ydb/core/nbs/cloud/blockstore/libs/service",  # peerdir only
     "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
-    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy",  # peerdir only
     # "//ydb/core/nbs/cloud/blockstore/public/api/protos",  # peerdir only
-    # "//ydb/core/nbs/cloud/storage/core/libs/common",  # peerdir only
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
     "//ydb/core/nbs/cloud/storage/core/protos",
     # "//ydb/core/node_whiteboard",
+    # "//ydb/core/persqueue/deferred_publish",  # peerdir only
     "//ydb/core/protos/schemeshard",
     "//ydb/core/quoter/public",
     # "//ydb/core/security/ldap_auth_provider",
     "//ydb/core/security/sasl",
+    # "//ydb/core/statistics",
     # "//ydb/core/sys_view",  # peerdir only
-    # "//ydb/core/test_tablet",
     # "//ydb/core/tx",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc",
     # "//ydb/core/tx/data_events",  # peerdir only
     # "//ydb/core/tx/datashard",
     "//ydb/core/tx/datashard:read_events",  # peerdir only
     # "//ydb/core/tx/replication/controller",
+    # "//ydb/core/tx/schemeshard/index",
     "//ydb/core/tx/schemeshard/olap/bg_tasks/events",
     "//ydb/core/tx/sharding",  # peerdir only
     # "//ydb/core/tx/tx_proxy",
     "//ydb/core/tx/tx_proxy:read_table",  # peerdir only
     "//ydb/core/tx/tx_proxy:upload_rows",
-    "//ydb/library/actors/http",
+    # "//ydb/library/actors/http",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/fyamlcpp",
     "//ydb/library/login",
     "//ydb/library/login/sasl",
     # "//ydb/library/mkql_proto",
     # "//ydb/library/protobuf_printer",  # peerdir only
-    "//ydb/library/security",
+    # "//ydb/library/security",
     "//ydb/library/yaml_config",
     # "//ydb/library/yaml_config/public",
     # "//ydb/library/yaml_config/tools/util",
     "//ydb/public/api/grpc",
     "//ydb/public/lib/fq",
     "//ydb/public/sdk/cpp/src/client/proto",
-    # "//ydb/services/ext_index/common",  # peerdir only
     # "//yql/essentials/core/issue",
-    "//yql/essentials/core/issue/protos",
     # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/dom",
-    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/parser/pg_wrapper/interface",  # peerdir only
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     # "//yql/essentials/public/decimal",
+    "//yql/essentials/public/issue/protos",
     # "//yql/essentials/public/types",  # peerdir only
     # "//yql/essentials/public/udf",
     # "//yql/essentials/types/binary_json",
@@ -138,6 +142,8 @@ library("grpc_services") {
   ]
 
   sources = [
+    "//ydb/core/security/login_page.cpp",
+    "//ydb/core/security/login_page.h",
     "audit_dml_operations.cpp",
     "audit_log.cpp",
     "audit_logins.cpp",
@@ -150,7 +156,6 @@ library("grpc_services") {
     "grpc_request_proxy_handle_methods.cpp",
     "grpc_request_proxy_simple.cpp",
     "local_rate_limiter.cpp",
-    "login_page.cpp",
     "operation_helpers.cpp",
     "query/rpc_attach_session.cpp",
     "query/rpc_execute_query.cpp",
@@ -179,10 +184,12 @@ library("grpc_services") {
     "rpc_describe_external_data_source.cpp",
     "rpc_describe_external_table.cpp",
     "rpc_describe_path.cpp",
+    "rpc_describe_secret.cpp",
     "rpc_describe_system_view.cpp",
     "rpc_describe_table.cpp",
     "rpc_describe_table_options.cpp",
     "rpc_discovery.cpp",
+    "rpc_distributed_storage.cpp",
     "rpc_drop_coordination_node.cpp",
     "rpc_drop_table.cpp",
     "rpc_dynamic_config.cpp",
@@ -234,12 +241,6 @@ library("grpc_services") {
     "rpc_view.cpp",
     "rpc_whoami.cpp",
     "table_settings.cpp",
-    "ydb_over_fq/create_session.cpp",
-    "ydb_over_fq/describe_table.cpp",
-    "ydb_over_fq/execute_data_query.cpp",
-    "ydb_over_fq/explain_data_query.cpp",
-    "ydb_over_fq/keep_alive.cpp",
-    "ydb_over_fq/list_directory.cpp",
   ]
 
   link_slot_module_interfaces = [ "topic_rpc" ]

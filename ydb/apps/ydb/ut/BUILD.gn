@@ -7,7 +7,8 @@ unittest_executable("ut") {
     "//library/cpp/json",
     "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
+    "//ydb/core/wrappers:ut_helpers",
     "//ydb/public/api/client/yc_public/iam",
     "//ydb/public/api/grpc",
     "//ydb/public/api/protos",
@@ -23,8 +24,11 @@ unittest_executable("ut") {
   ]
 
   sources = [
-    "parse_command_line.cpp",
+    "export.cpp",
+    "import.cpp",
+    "mock_env.cpp",
     "run_ydb.cpp",
+    "sql_resource_pool.cpp",
     "supported_codecs.cpp",
     "supported_codecs_fixture.cpp",
     "workload-topic.cpp",
@@ -35,10 +39,7 @@ unittest_executable("ut") {
   test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

@@ -1,0 +1,11 @@
+library("otel") {
+  deps = [
+    # "//contrib/libs/opentelemetry-cpp",
+    # "//contrib/libs/opentelemetry-cpp/api",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/impl/observability",
+    # "//ydb/public/sdk/cpp/src/client/metrics",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/resources",
+  ]
+
+  sources = [ "metrics.cpp" ]
+}

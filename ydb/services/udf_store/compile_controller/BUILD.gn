@@ -1,0 +1,48 @@
+library("compile_controller") {
+  public_deps = [
+    ":events",
+    # "//ydb/core/base",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    ":protos",  # peerdir only
+    # "//ydb/core/cms/console",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/protos",
+    # "//ydb/core/scheme",
+    "//ydb/core/tablet",
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tx",
+    # "//ydb/library/aclib",
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/request",
+    "//ydb/services/udf_store",
+    "//ydb/services/udf_store/metadata_subscription",
+    "//ydb/services/udf_store/wasm",
+  ]
+
+  sources = [
+    "controller_impl.cpp",
+    "reconcile_actor.cpp",
+    "tx_assign.cpp",
+    "tx_finish.cpp",
+    "tx_init.cpp",
+    "tx_init_schema.cpp",
+    "tx_register_worker.cpp",
+  ]
+}
+
+group("events") {
+  public_deps = [
+    ":protos",
+    # "//ydb/core/base",
+    "//ydb/library/actors/core",
+  ]
+}
+
+protobuf_library("protos") {
+  sources = [ "protos/compile_controller.proto" ]
+
+  protoc_fatal_warnings = true
+}

@@ -11,6 +11,7 @@ library("topics") {
 
   deps = [
     # "//ydb/core/base",
+    # "//ydb/core/persqueue/public",  # peerdir only
     "//ydb/core/persqueue/public:utils",
   ]
 

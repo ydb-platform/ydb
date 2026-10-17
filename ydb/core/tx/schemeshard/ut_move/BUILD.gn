@@ -5,6 +5,7 @@ unittest_executable("ut_move") {
     "//library/cpp/svnversion",  # peerdir only
     "//ydb/core/base",
     "//ydb/core/kqp/ut/common",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/datashard",
@@ -19,10 +20,13 @@ unittest_executable("ut_move") {
     "//ydb/core/tx/schemeshard",  # peerdir only
   ]
 
+  serialize_enum_headers = [ "move_replace_path_types.h" ]
+
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

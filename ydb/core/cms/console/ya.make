@@ -110,6 +110,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/library/operation_id/protos
 )
+# gn: peerdir ydb/core/tx/tx_proxy:public
 
 YQL_LAST_ABI_VERSION()
 

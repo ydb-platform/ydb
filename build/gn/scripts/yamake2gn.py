@@ -36,10 +36,12 @@ needs a fix.
 """
 
 import argparse
+import functools
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 
 # --- ya.make macro vocabulary ---------------------------------------------
@@ -71,10 +73,11 @@ TRIVIAL_MACROS = MODULE_MACROS | {
     "ALLOCATOR",  # of a program or a test: its link_select, see link_selects
     "NO_UTIL",   # LIBRARY -> contrib_library (no default //util dep)
     "GN_DIRECTIVES",   # carrier of standalone `# gn:` lines, see GN_DIRECTIVES
+    "DEFAULT",   # TODO: temporary ignore (its variable stays unset in IF conditions)
 }
-# PROTO_LIBRARY macros that are pure noise in GN (template always does
-# --fatal_warnings, python/metadata/tags are irrelevant) -> drop, do not block;
-# but GRPC() -> generate_grpc_services (Module.grpc).
+# PROTO_LIBRARY macros that are pure noise in GN (python/metadata/tags are
+# irrelevant) -> drop, do not block; but GRPC() -> generate_grpc_services
+# (Module.grpc), PROTOC_FATAL_WARNINGS() -> protoc_fatal_warnings.
 PROTO_IGNORE_MACROS = {
     "PROTOC_FATAL_WARNINGS", "GRPC", "EXCLUDE_TAGS", "INCLUDE_TAGS", "ONLY_TAGS",
     "PY_NAMESPACE", "NO_OPTIMIZE_PY_PROTOS", "NO_MYPY", "LICENSE", "LICENSE_TEXTS",
@@ -359,6 +362,7 @@ class Module:
         self.macros = []
         self.transitive_headers_no = False
         self.grpc = False            # GRPC(): the services of the .proto, by the grpc_cpp plugin
+        self.protoc_fatal_warnings = False  # PROTOC_FATAL_WARNINGS(): protoc --fatal_warnings
         self.no_util = False
         self.use_common_google_apis = False
         self.resource_macros = []    # (macro, raw args) of RESOURCE* in file order
@@ -371,6 +375,7 @@ class Module:
         self.gn_peerdirs = []        # (own part or None, dir, its part or None), `# gn: [<part>] peerdir ...`
         self.provides = []           # PROVIDES() names
         self.slot_headers = defaultdict(list)  # slot -> its interface headers (as written), `# gn: slot ...`
+        self.slot_self = set()       # slots the module calls the functions of itself, `# gn: slot <slot> self`
         self.anti_cycle_facade = False  # `# gn: anti-cycle facade`, see ANTI_CYCLE_FACADE
         self.move_into_parent = False   # `# gn: move into parent`, see MOVE_INTO_PARENT
         self.default_provider = False   # `# gn: default provider`, see DEFAULT_PROVIDER
@@ -446,6 +451,7 @@ CONDITION_VARS = {
     "OPENSOURCE": True,
     "OS_LINUX": True,
     "YQL_DISABLE_YT": True,
+    "YDB_EMBEDDED_NBS_ENABLED": True,   # DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes) in ya.make
 }
 
 
@@ -463,6 +469,7 @@ def _cond_as_bool(value):
 # the single knob; the map only bridges the (possibly different) names.
 YA_VAR_TO_CPP_DEFINE = {
     "YQL_DISABLE_YT": "YQL_DISABLE_YT",
+    "YDB_EMBEDDED_NBS_ENABLED": "YDB_EMBEDDED_NBS_ENABLED",
 }
 
 # Preprocessor macros considered "defined" while scanning #include lines.
@@ -647,6 +654,16 @@ def strip_yamake_comments(text):
 #     //build/gn/link_slots.gni. Like PROVIDES, a module is the interface of one
 #     slot at most.
 #
+#   SRCS(
+#       retro_span_deserialization.cpp
+#       retro_span_deserialization.h  # gn: slot retro_spans self
+#   )
+#
+#     The same, for a module that calls the functions its providers implement
+#     itself (an interface's own code otherwise refers to them strongly: it
+#     gets no weak references, see link_slot_self in //build/gn/base.gni). Its
+#     own sources are parsed too, so what they define stays strong.
+#
 #   PEERDIR(
 #       ydb/core/tx/columnshard/normalizer  # gn: plugin
 #   )
@@ -707,10 +724,10 @@ def _gn_directive_tokens(code, comment):
         if not code.strip():
             return ""   # a trailing directive needs an entry on its line
         return " @gn-public-dep"
-    if len(words) == 2 and words[0] == "slot":
+    if words[0] == "slot" and (len(words) == 2 or (len(words) == 3 and words[2] == SLOT_SELF)):
         if not code.strip():
             return ""   # a trailing directive needs an entry on its line
-        return " @gn-slot:" + words[1]
+        return " @gn-slot:" + ":".join(words[1:])
     if len(words) >= 2 and words[1] == "headers":
         token = "@gn-headers:%s:%s" % (words[0], ",".join(words[2:]))
     elif words[0] == "peerdir":
@@ -835,6 +852,15 @@ def parse_yamake(path, directory, root):
     mod = Module(directory)
     mod.root = root
     for name, args, raw in scan_macros(text):
+        if name == "JOIN_SRCS":
+            # JOIN_SRCS(<joined>.cpp src...): ya compiles the sources as one TU,
+            # GN as plain SRCS (no join)
+            name, args = "SRCS", args[1:]
+        elif name == "YQL_LIBRARY":
+            # multimodule: a LIBRARY at the stable and at the current UDF ABI;
+            # GN builds the current one (as LIBRARY + YQL_LAST_ABI_VERSION)
+            name = "LIBRARY"
+            mod.yql_abi = mod.yql_abi or "current"
         args = _take_gn_directives(mod, name, args)
         if name == "SET" and args and args[0] in _IGNORED_SET_VARS:
             if (args[0] == "PROTOC_TRANSITIVE_HEADERS"
@@ -846,6 +872,8 @@ def parse_yamake(path, directory, root):
             mod.set_vars[args[0]] = " ".join(args[1:]) or "yes"
         if name == "GRPC":
             mod.grpc = True
+        if name == "PROTOC_FATAL_WARNINGS":
+            mod.protoc_fatal_warnings = True
         if name in KIND_MACROS:
             mod.kind = name
             mod.name = args[0] if args else os.path.basename(directory)
@@ -893,7 +921,7 @@ def parse_yamake(path, directory, root):
         elif name == "ALLOCATOR" and args:
             mod.allocator = args[0]
         elif name in GENERATOR_MACROS:
-            mod.generated.extend(_generated_outputs(name, args, directory))
+            mod.generated.extend(_generated_outputs(name, args, directory, mod.set_vars))
         elif name == "YQL_LAST_ABI_VERSION":
             mod.yql_abi = "current"
         elif name == "YQL_ABI_VERSION":
@@ -932,12 +960,30 @@ _GENERATOR_OUT_KEYWORDS = {"OUT", "OUT_NOAUTO", "STDOUT", "STDOUT_NOAUTO"}
 _GENERATOR_KEYWORD_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
-def _generated_outputs(name, args, directory):
+def _generated_outputs(name, args, directory, set_vars=None):
     """Repo-relative paths of the files a generator macro writes: the OUT /
     STDOUT arguments of RUN_* (up to the next keyword), the second argument of
-    CONFIGURE_FILE. Relative to the module's build dir, i.e. to its dir."""
+    CONFIGURE_FILE, the headers RUN_ANTLR4_CPP names after its grammar.
+    Relative to the module's build dir, i.e. to its dir."""
     if name == "CONFIGURE_FILE":
         outs = args[1:2]
+    elif name == "RUN_ANTLR4_CPP":
+        # RUN_ANTLR4_CPP(<grammar> [VISITOR] [LISTENER] ...): no OUT, the
+        # headers are named after the grammar -- <G>Lexer.h, <G>Parser.h, and
+        # <G>Visitor.h, <G>BaseVisitor.h with VISITOR, <G>Listener.h,
+        # <G>BaseListener.h with LISTENER
+        grammar = re.sub(r"\$\{(\w+)\}", lambda m: (set_vars or {}).get(m.group(1), m.group(0)),
+                         args[0]) if args else ""
+        # next to the grammar, as ya's ${suf=Parser.h;noext:GRAMMAR}
+        base = os.path.splitext(grammar)[0]
+        if not base.startswith("${BINDIR}/"):
+            base = "${BINDIR}/" + os.path.basename(base)
+        kinds = ["Lexer", "Parser"]
+        if "VISITOR" in args:
+            kinds += ["Visitor", "BaseVisitor"]
+        if "LISTENER" in args:
+            kinds += ["Listener", "BaseListener"]
+        outs = [base + k + ".h" for k in kinds] if grammar else []
     else:
         outs, taking = [], False
         for a in args:
@@ -972,11 +1018,13 @@ def _take_gn_directives(mod, macro, args):
                 d, _, sub = t.partition(":")
                 mod.gn_peerdirs.append((part or None, _norm_dir(d), sub or None))
         elif a.startswith("@gn-slot:"):
-            slot = a[len("@gn-slot:"):]
+            slot, _, flag = a[len("@gn-slot:"):].partition(":")
             if last is None or macro not in ("SRCS", "SRC") or not last.endswith(HEADER_EXTS):
                 mod.macros.append("GN<slot %r not on a header in SRCS>" % slot)
             else:
                 mod.slot_headers[slot].append(last)
+                if flag == SLOT_SELF:
+                    mod.slot_self.add(slot)
         elif a == "@gn-plugin":
             if last is None or macro != "PEERDIR":
                 mod.macros.append("GN<plugin not on a PEERDIR entry>")
@@ -1276,6 +1324,7 @@ def src_path(mod, src):
     return module_path(mod, mod.root, src)
 
 
+@functools.lru_cache(maxsize=None)
 def _norm_dir(p):
     """A dir as ya.make writes it (a PEERDIR, a DEPENDS ...), normalized."""
     return os.path.normpath(p.rstrip("/"))
@@ -1365,6 +1414,9 @@ class Resolver:
         # a file some module generates -> that module (see GENERATOR_MACROS)
         self.generated = {g: d for d, m in mods.items() for g in m.generated}
         self._cache = {}
+        self._resolved = {}   # resolve(): its key -> its answer (the tree does not change in a run)
+        self._modules = {}    # is_module(): dir -> its answer (nor do the modules' kinds)
+        self._walked = {}     # _walk_up(): dir -> its answer
         # include-side module dir -> the module it is folded into (INCLUDE_ROOT_REMAP)
         self.aliases = {}
         self.alias_parts = {}   # include-side module dir -> part of its alias target
@@ -1422,13 +1474,16 @@ class Resolver:
         """True if d's ya.make module has a GN target: a buildable kind
         (LIBRARY/PROGRAM/PROTO_LIBRARY), or any kind (YQL_UDF_YDB, ...) whose
         hand-written keep-marked BUILD.gn declares the target."""
-        mod = self.mods.get(d)
-        if mod is None:
-            return False
-        if mod.kind in KIND_MACROS:
-            return not is_test(mod)
-        return (self.external is not None and not is_test(mod)
-                and self.external.declares(d, os.path.basename(d)))
+        if d not in self._modules:
+            mod = self.mods.get(d)
+            if mod is None:
+                self._modules[d] = False
+            elif mod.kind in KIND_MACROS:
+                self._modules[d] = not is_test(mod)
+            else:
+                self._modules[d] = (self.external is not None and not is_test(mod)
+                                    and self.external.declares(d, os.path.basename(d)))
+        return self._modules[d]
 
     def _has_yamake(self, d):
         if d not in self._cache:
@@ -1442,13 +1497,19 @@ class Resolver:
         # target, so it cannot own anyone's #include -- skip past it.
         # contrib/ dirs are not in `mods` (unparsed); any ya.make there is
         # treated as an owner, as before.
+        if d not in self._walked:
+            self._walked[d] = self._walk_up_uncached(d)
+        return self._walked[d]
+
+    def _walk_up_uncached(self, d):
         while True:
+            # the root ya.make (RECURSE only) owns nothing
+            if not d or d == ".":
+                return None
             if self._has_yamake(d):
                 mod = self.mods.get(d)
                 if mod is None or mod.kind in KIND_MACROS or self.is_module(d):
                     return d
-            if not d or d == ".":
-                return None
             d = os.path.dirname(d)
 
     def owner(self, d):
@@ -1471,6 +1532,13 @@ class Resolver:
         return None
 
     def resolve(self, inc, is_quote, file_dir, include_dirs=()):
+        # of an <include> the dir of the includer does not matter
+        key = (inc, file_dir if is_quote else None, tuple(include_dirs))
+        if key not in self._resolved:
+            self._resolved[key] = self._resolve(inc, is_quote, file_dir, include_dirs)
+        return self._resolved[key]
+
+    def _resolve(self, inc, is_quote, file_dir, include_dirs):
         cands = []
         if is_quote:
             cands.append(os.path.normpath(os.path.join(file_dir, inc)))
@@ -1655,7 +1723,8 @@ class IncludeGraph:
         except OSError:
             lines = []
         fdir = os.path.dirname(f)
-        for line in active_lines(lines):
+        # a line with no "#" is neither a directive of the preprocessor nor an #include
+        for line in active_lines([l for l in lines if "#" in l]):
             m = INCLUDE_RE.match(line)
             if not m:
                 continue
@@ -1790,6 +1859,7 @@ class TargetSpec:
         self.proto_public = set()               # proto imports (always public)
         self.proto_transitive_headers = True    # SET(PROTOC_TRANSITIVE_HEADERS "no"): False
         self.grpc = mod.grpc                    # GRPC()
+        self.protoc_fatal_warnings = mod.protoc_fatal_warnings  # PROTOC_FATAL_WARNINGS()
         self.sources = []                       # repo-relative, non-proto
         self.proto_sources = []                 # repo-relative .proto sources
         self.enum_headers = []                  # repo-relative (GENERATE_ENUM_SERIALIZATION)
@@ -1810,6 +1880,7 @@ class TargetSpec:
         self.slot_headers = []                  # its headers, repo-relative
         self.slot_flags_from = None             # a source lending its flags to parsing them
         self.slot_codegen = []                  # protobuf libraries whose .pb.h they include, see slot_codegen
+        self.slot_self = False                  # the module calls the slot's functions itself, see SLOT_SELF
         self.slot_module_interfaces = []        # slots whose interface is another target of the module
         self.proto_plugins = list(mod.proto_plugins)   # CPP_PROTO_PLUGIN0
         self.link_plugins = set()               # `# gn: plugin` PEERDIRs: `plugins`, not deps
@@ -1841,13 +1912,24 @@ def slot_codegen(headers, graph, resolver, external, report, d):
             if rel.endswith(PROTO_EXTS):
                 owner = resolver.nearest_module(rel)
                 mod = resolver.mods.get(owner) if owner else None
-                if mod is None or mod.kind != "PROTO_LIBRARY":
+                if (mod.kind != "PROTO_LIBRARY" if mod is not None
+                        else not (owner and _is_contrib_proto_library(resolver.root, owner))):
                     report.slot_codegen_unsupported.append((d, rel))
                     continue
                 out.add(owner_label(owner, rel, resolver, external))
             elif rel.endswith(HEADER_EXTS):
                 queue.append(rel)
     return sorted(out)
+
+
+def _is_contrib_proto_library(root, d):
+    """True if contrib module `d` is a PROTO_LIBRARY: never parsed (its BUILD.gn
+    is hand-written, see ExternalTargets), it is a protobuf_library() there
+    too, with the `<target>_codegen` that slot_codegen waits for."""
+    if d != "contrib" and not d.startswith("contrib/"):
+        return False
+    text = strip_yamake_comments(read_text(os.path.join(root, d, "ya.make")) or "")
+    return re.search(r"^\s*PROTO_LIBRARY\s*\(", text, re.M) is not None
 
 
 def owner_label(owner, rel, resolver, external):
@@ -2104,6 +2186,10 @@ PUBLIC_DEP = "public dep"
 # whole. For the stubs whose functions abort.
 DEFAULT_PROVIDER = "default provider"
 
+# `# gn: slot <slot> self` on a header in SRCS, see GN_DIRECTIVES: the module
+# calls the functions of its link slot itself
+SLOT_SELF = "self"
+
 
 def plan_self_split(mods, cg):
     """{P: the modules P PEERDIRs that include it} for every ANTI_CYCLE_FACADE
@@ -2315,6 +2401,15 @@ def link_slot_providers(root, mods):
 
 _PROGRAM_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.+-]*$")
 
+# The programs whose binary keeps its own name, PROGRAM(<name>): their
+# linked_executable() gets `short_name = true`. Every other one is named after
+# its BUILD.gn dir and target (//build/gn/link_slots.gni): all binaries land in
+# root_out_dir, and two PROGRAM(ydb) in different dirs would collide there.
+MAIN_PROGRAMS = {
+    "ydb/apps/ydb",
+    "ydb/apps/ydbd",
+}
+
 
 def gen_spec(mod, resolver, graph, report, external):
     target_dir = mod.dir
@@ -2341,12 +2436,14 @@ def gen_spec(mod, resolver, graph, report, external):
         slot_spec = parts[owners.pop()] if len(owners) == 1 and None not in owners else spec
         slot_spec.slot_interface = slot
         slot_spec.slot_headers = paths
+        slot_spec.slot_self = slot in mod.slot_self
     # the module's code defines some functions its slot headers declare: every
     # target of it is the interface of the module's slots, not only the one
-    # holding the headers
+    # holding the headers -- unless it calls them too (SLOT_SELF): then its
+    # targets get the weak references like any caller
     for s in [spec] + spec.parts:
         s.slot_module_interfaces = sorted(t.slot_interface for t in [spec] + spec.parts
-                                          if t is not s and t.slot_interface)
+                                          if t is not s and t.slot_interface and not t.slot_self)
     for slot_spec in [spec] + spec.parts:
         if not slot_spec.slot_headers:
             continue
@@ -2362,7 +2459,11 @@ def gen_spec(mod, resolver, graph, report, external):
         stems = {os.path.splitext(os.path.basename(h))[0] for h in slot_spec.slot_headers}
         own.sort(key=lambda f: os.path.splitext(f)[0] not in stems)
         slot_spec.slot_flags_from = os.path.join(target_dir, own[0]) if own else None
-        slot_spec.slot_codegen = slot_codegen(slot_spec.slot_headers, graph, resolver, external,
+        # SLOT_SELF: the weak references parse the target's own sources too
+        own_srcs = ([src_path(mod, s) for s in mod.compiled_srcs()
+                     if s.endswith(SOURCE_EXTS) and mod.src_parts.get(s) == slot_spec.part]
+                    if slot_spec.slot_self else [])
+        slot_spec.slot_codegen = slot_codegen(slot_spec.slot_headers + own_srcs, graph, resolver, external,
                                               report, target_dir)
 
     # the headers among the module's files are its own: a test's of its dir
@@ -2784,13 +2885,17 @@ def buildgn_text(root, rendered, d):
     return text
 
 
+_BRACE_RE = re.compile(r"[{}]")
+
+
 def _block_end(text, start):
     """The offset right after the "}" closing the block whose "{" is at text[start - 1]."""
-    depth, j, n = 1, start, len(text)
-    while j < n and depth:
-        depth += {"{": 1, "}": -1}.get(text[j], 0)
-        j += 1
-    return j
+    depth = 1
+    for m in _BRACE_RE.finditer(text, start):
+        depth += 1 if m.group() == "{" else -1
+        if depth == 0:
+            return m.end()
+    return max(start, len(text))
 
 
 # a call of a target type or a template with a block; not template(), config(), ...
@@ -2857,7 +2962,8 @@ TEST_FRAMEWORK = "test_framework"
 def test_scope(mods):
     """The modules ya builds for tests only: the roots of the tree (the dirs
     no ya.make RECURSEs) reach them by RECURSE through a RECURSE_FOR_TESTS
-    only."""
+    only, and no module built not for tests PEERDIRs them (RECURSE_FOR_TESTS
+    of a library that is a dependency, e.g. file_storage/download)."""
     def closure(roots, edges):
         seen, stack = set(), list(roots)
         while stack:
@@ -2869,7 +2975,7 @@ def test_scope(mods):
         return seen
     roots = set(mods) - {r for m in mods.values() for r in m.recurses + m.test_recurses}
     return (closure(roots, lambda m: m.recurses + m.test_recurses)
-            - closure(roots, lambda m: m.recurses))
+            - closure(roots, lambda m: m.recurses + ([] if is_gen_test(m) else m.peerdirs)))
 
 
 def test_only_modules(mods, resolver, frameworks):
@@ -3190,13 +3296,17 @@ def _render_target(tmpl, name, public_deps, deps, sources,
                    serialize_enum_headers=(), commented=frozenset(),
                    resources=(), resource_files=(), notes=None, link_slot_provides=(),
                    link_slot_interface=None, link_slot_headers=(), link_slot_flags_from=(),
-                   link_slot_codegen=(), link_slot_module_interfaces=(), link_plugins=(), yql_abi_version=None, configs=(), public_configs=(), extra_plugins=(),
+                   link_slot_codegen=(), link_slot_self=False, link_slot_module_interfaces=(), link_plugins=(), yql_abi_version=None, configs=(), public_configs=(), extra_plugins=(),
                    include_dirs=(), data_deps=(), data=(), test_sbr=(),
                    test_depends_unbuilt=(), link_select=(), proto_transitive_headers=True,
-                   proto_imports=(), generate_grpc_services=False):
+                   proto_imports=(), generate_grpc_services=False, short_name=False,
+                   protoc_fatal_warnings=False):
     """`notes` maps a dep label to a trailing comment ("peerdir only")."""
     lines = ['%s("%s") {' % (tmpl, name)]
     notes = notes or {}
+    if short_name:
+        lines.append("    short_name = true")
+        lines.append("")
 
     def block(key, items):
         if not items:
@@ -3240,6 +3350,9 @@ def _render_target(tmpl, name, public_deps, deps, sources,
         lines.append("")
         block("link_slot_headers", link_slot_headers)
         block("link_slot_flags_from", link_slot_flags_from)
+        if link_slot_self and tmpl == "library":
+            lines.append("    link_slot_self = true")
+            lines.append("")
         if link_slot_codegen:   # labels, never commented (block() would match deps)
             lines.append("    link_slot_codegen = [")
             lines.extend('        "%s",' % l for l in link_slot_codegen)
@@ -3257,6 +3370,9 @@ def _render_target(tmpl, name, public_deps, deps, sources,
         lines.append("")
     if generate_grpc_services:
         lines.append("    generate_grpc_services = true")
+        lines.append("")
+    if protoc_fatal_warnings:
+        lines.append("    protoc_fatal_warnings = true")
         lines.append("")
     if (tmpl in ("library", "linked_executable") or tmpl in TEST_TEMPLATES) and yql_abi_version is not None:
         lines.append('    yql_abi_version = "%s"' % yql_abi_version)
@@ -3445,6 +3561,7 @@ def render_spec(spec, host, remap, uncommented, private_configs=None, proto_labe
         if spec.slot_flags_from:
             slot_flags_from = [os.path.relpath(spec.slot_flags_from, host)]
     out.append(_render_target(tmpl, spec.name, pub, dep, srcs, enums, commented=commented,
+                              short_name=spec.kind == "PROGRAM" and spec.dir in MAIN_PROGRAMS,
                               configs=configs, public_configs=public_configs,
                               resources=resources, resource_files=resource_files,
                               notes=notes, extra_plugins=plugins if spec.proto_sources else (),
@@ -3454,8 +3571,10 @@ def render_spec(spec, host, remap, uncommented, private_configs=None, proto_labe
                               link_slot_headers=[_slot_header(h, host) for h in spec.slot_headers],
                               link_slot_flags_from=slot_flags_from,
                               link_slot_codegen=spec.slot_codegen,
+                              link_slot_self=spec.slot_self,
                               proto_transitive_headers=spec.proto_transitive_headers,
                               generate_grpc_services=spec.grpc and bool(spec.proto_sources),
+                              protoc_fatal_warnings=spec.protoc_fatal_warnings and bool(spec.proto_sources),
                               # the libraries the .proto import: their `<target>_codegen`
                               proto_imports=sorted(render({l for l in spec.proto_public
                                                            if remap.get(l, l) in codegen_labels}),
@@ -3527,6 +3646,7 @@ class Report:
         self.generated = []
         self.earlier = []              # modules generated only as earlier runs' (--as-target)
         self.deleted = []
+        self.orphans = []              # BUILD.gn of no target any more, see orphan_buildgns
         self.preserved = []
         self.yql_abi_explicit = []     # (dir, "M.m.p")
         self.yql_abi_missing = []      # dirs including //yql/essentials/public/udf without YQL_*ABI_VERSION
@@ -3553,7 +3673,7 @@ class Report:
         info = not problems_only
         print("\n==================== yamake2gn report ====================", file=o)
         print("generated : %d   deleted(BUILD.gn): %d"
-              % (len(self.generated), len(self.deleted)), file=o)
+              % (len(self.generated), len(self.deleted) + len(self.orphans)), file=o)
         if info and self.earlier:
             print("of earlier runs only (modules): %d" % len(self.earlier), file=o)
         if info and self.merged:
@@ -3664,6 +3784,11 @@ class Report:
             print("\nDATA of tests not found (not in `data`):", file=o)
             for d, items in sorted(self.test_data_missing.items()):
                 print("  %-58s %s" % (d, " ".join(sorted(items))), file=o)
+        if self.orphans:
+            print("\ndeleted: BUILD.gn of no target (no module there any more, "
+                  "or one the generator skips):", file=o)
+            for d in self.orphans:
+                print("  %s" % d, file=o)
         if info and self.preserved:
             print("\npreserved (yamake2gn: keep -- not regenerated):", file=o)
             for d in sorted(set(self.preserved)):
@@ -3861,19 +3986,25 @@ def top_targets(mods, dirs):
     DEPENDS): what the rest is built for. Of modules reaching each other
     the first one stays. An aggregator (is_aggregator) is neither: what it
     PEERDIRs stands for it, unless something else reaches that."""
-    memo = {}
+    memo, edges = {}, {}
+
+    def edges_of(x):
+        if x not in edges:
+            m = mods.get(x)
+            edges[x] = [] if m is None else [_norm_dir(p) for p in m.peerdirs] + m.test_depends
+        return edges[x]
 
     def reach(d):
         if d not in memo:
             seen, stack = set(), [d]
             while stack:
-                x = stack.pop()
-                m = mods.get(x)
-                if m is None:
-                    continue
-                for q in [_norm_dir(p) for p in m.peerdirs] + m.test_depends:
-                    if q not in seen:
-                        seen.add(q)
+                for q in edges_of(stack.pop()):
+                    if q in seen:
+                        continue
+                    seen.add(q)
+                    if q in memo:
+                        seen |= memo[q]     # all q reaches, known already
+                    else:
                         stack.append(q)
             memo[d] = seen
         return memo[d]
@@ -4030,28 +4161,90 @@ def moved_labels(root, specs, specs_by_dir, all_specs, external, remap):
                     remap.setdefault("//%s:%s" % (P, n), module_part_label(c, t.part))
 
 
-def write_buildgn(root, out, text, no_format):
-    """Write a rendered BUILD.gn: as `gn format` lays it out, unless no_format."""
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(text)
-    if no_format:
-        return
-    subprocess.run(["gn", "format", out], cwd=root, check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    # `gn format` reflows the dep lists around the commented-out entries
-    # (blank line before each comment block, comment blocks dragged along when
-    # sorting) -- put them back in shape. This runs last on purpose, so the
-    # file on disk is the final word.
-    formatted = read_text(out)
-    normalized = normalize_dep_lists(formatted)
-    if normalized != formatted:
-        with open(out, "w", encoding="utf-8") as f:
-            f.write(normalized)
+# files per `gn format` call: well below the limit of a command line
+FORMAT_BATCH = 500
+
+
+def format_buildgns(root, texts):
+    """[text] of rendered BUILD.gn files -> [text as `gn format` lays it out]:
+    all of them formatted by a few calls of gn in a temporary dir (a text gn
+    can't parse stays as it is, as gn leaves such a file)."""
+    out = []
+    with tempfile.TemporaryDirectory(prefix="yamake2gn_format_") as tmp:
+        paths = []
+        for i, text in enumerate(texts):
+            os.mkdir(os.path.join(tmp, str(i)))
+            paths.append(os.path.join(tmp, str(i), "BUILD.gn"))
+            with open(paths[-1], "w", encoding="utf-8") as f:
+                f.write(text)
+        for i in range(0, len(paths), FORMAT_BATCH):
+            subprocess.run(["gn", "format"] + paths[i:i + FORMAT_BATCH], cwd=root, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for path in paths:
+            out.append(read_text(path))
+    return out
+
+
+def write_if_changed(path, text):
+    """Write `text` to `path` unless the file holds it already: an untouched
+    file keeps its mtime, and gn does not regenerate the build for it."""
+    data = text.encode("utf-8")
+    try:
+        with open(path, "rb") as f:
+            if f.read() == data:
+                return
+    except OSError:
+        pass
+    with open(path, "wb") as f:
+        f.write(data)
+
+
+def write_buildgns(root, texts, no_format):
+    """Write the rendered BUILD.gn files ({path: text}): as `gn format` lays them
+    out, unless no_format."""
+    paths = sorted(texts)
+    final = [texts[p] for p in paths]
+    if not no_format:
+        # `gn format` reflows the dep lists around the commented-out entries
+        # (blank line before each comment block, comment blocks dragged along
+        # when sorting) -- put them back in shape, last
+        final = [normalize_dep_lists(t) for t in format_buildgns(root, final)]
+    for path, text in zip(paths, final):
+        write_if_changed(path, text)
+
+
+# Never scanned for orphans: hand-written dependencies and GN's own files.
+ORPHAN_SCAN_SKIP = ("contrib", "build")
+
+
+def orphan_buildgns(args, root, rendered):
+    """The BUILD.gn files this run neither writes nor may keep: not keep-marked,
+    out of contrib/ and build/, not the root one. Their module is gone (no
+    ya.make, or one of RECURSE only), absorbed or skipped. A run over the whole
+    tree or --as-target (which rewrites every earlier file) scans the whole
+    tree; a run over subtrees, only them."""
+    if args.as_target or not args.paths:
+        tops = ["."]
+    else:
+        tops = [os.path.relpath(os.path.abspath(p), root) for p in args.paths]
+    out = set()
+    for top in tops:
+        for dp, dn, fn in os.walk(os.path.join(root, top)):
+            rel = os.path.relpath(dp, root)
+            if rel == ".":
+                dn[:] = [n for n in dn if n not in ORPHAN_SCAN_SKIP and not n.startswith(".")]
+                continue
+            dn[:] = [n for n in dn if not n.startswith(".")]
+            if ("BUILD.gn" in fn and rel not in rendered
+                    and not buildgn_is_protected(os.path.join(dp, "BUILD.gn"))):
+                out.add(rel)
+    return sorted(out)
 
 
 def update_root_groups(args, root, mods, resolver, external, specs_by_dir, remap, rendered,
-                       test_targets, as_target_roots, report):
-    """--as-target: the roots join the groups of the root BUILD.gn (see ROOT_GROUPS)."""
+                       test_targets, as_target_roots, report, gone=frozenset()):
+    """--as-target: the roots join the groups of the root BUILD.gn (see ROOT_GROUPS);
+    `gone`: the dirs whose BUILD.gn this run deletes."""
     groups = defaultdict(list)
     for d in as_target_roots:
         d = resolver.alias(d)
@@ -4081,7 +4274,8 @@ def update_root_groups(args, root, mods, resolver, external, specs_by_dir, remap
         for label in re.findall(r'"(//[^"]+)"', old_text):
             d, name = _label_node(label, "")
             if d not in names:
-                names[d] = {n for _, n, _, _ in target_blocks(buildgn_text(root, rendered, d))}
+                names[d] = (set() if d in gone else
+                            {n for _, n, _, _ in target_blocks(buildgn_text(root, rendered, d))})
             if name not in names[d]:
                 drop.add(_short_label(label))
         report.pruned = sorted(drop & {_short_label(l) for l in re.findall(r'"(//[^"]+)"', old_text)})
@@ -4338,16 +4532,12 @@ def main():
             report.test_only_programs.append((d, path))
     report.pch_stale = stale_pch(root, rendered)
     for host, text in sorted(rendered.items()):
-        out = os.path.join(root, host, "BUILD.gn")
         report.generated.append(host)
         if args.dry_run:
             print("# ----- %s/BUILD.gn -----\n%s" % (host, text))
-        else:
-            write_buildgn(root, out, text, args.no_format)
-
-    if args.as_target:
-        update_root_groups(args, root, mods, resolver, external, specs_by_dir, remap, rendered,
-                           test_targets, as_target_roots, report)
+    if not args.dry_run:
+        write_buildgns(root, {os.path.join(root, host, "BUILD.gn"): text
+                              for host, text in rendered.items()}, args.no_format)
 
     # the include-side half's own BUILD.gn is stale once its src module is written
     stale_aliases = {d for d, t in resolver.aliases.items()
@@ -4370,6 +4560,20 @@ def main():
             else:
                 os.remove(old)
 
+    # after every file is written: a failed run deletes nothing
+    report.orphans = [c for c in orphan_buildgns(args, root, rendered)
+                      if c not in report.deleted]
+    for c in report.orphans:
+        if args.dry_run:
+            print("# DELETE %s/BUILD.gn (no target)" % c)
+        else:
+            os.remove(os.path.join(root, c, "BUILD.gn"))
+
+    if args.as_target:
+        update_root_groups(args, root, mods, resolver, external, specs_by_dir, remap, rendered,
+                           test_targets, as_target_roots, report,
+                           set(report.orphans) | set(report.deleted))
+
     # the source lists of variant modules (see VARIANT_SOURCES_GNI): with
     # --as-target, of the variants the closure reached, wherever their
     # ya.make.inc lies
@@ -4390,8 +4594,7 @@ def main():
         if args.dry_run:
             print("# ----- %s -----\n%s" % (os.path.relpath(out, root), text))
         else:
-            with open(out, "w", encoding="utf-8") as f:
-                f.write(text)
+            write_if_changed(out, text)
 
     # a test's derived deps that its template itself brings are no difference
     implied = test_implied_deps(root, rendered)

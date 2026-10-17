@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/kqp/runtime/common",
+    "//ydb/core/kqp/runtime/streaming",
+    "//ydb/core/testlib/basics:pg",  # peerdir only
+    "//yql/essentials/ast",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/runtime_settings",
+    "//yql/essentials/minikql:terminator",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/v1/lexer/antlr4",
+    "//yql/essentials/sql/v1/lexer/antlr4_ansi",
+  ]
+
+  sources =
+      [ "//ydb/core/kqp/runtime/streaming/kqp_streaming_aggregation_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/kqp/runtime/streaming" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -9,4 +9,6 @@ protobuf_library("proto") {
   ]
 
   sources = [ "yq_internal.proto" ]
+
+  protoc_fatal_warnings = true
 }

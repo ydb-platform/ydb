@@ -1,0 +1,8 @@
+group("parquet_helpers") {
+  testonly = true
+
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/testing/unittest",
+  ]
+}

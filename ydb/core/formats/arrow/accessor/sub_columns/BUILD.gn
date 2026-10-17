@@ -1,8 +1,11 @@
 library("sub_columns") {
   public_deps = [
     "//contrib/libs/apache/arrow",
+    "//contrib/libs/xxhash",
+    # "//library/cpp/containers/absl",
     "//ydb/core/formats/arrow",
     "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/dictionary",
     "//ydb/core/formats/arrow/accessor/sparsed",
     "//ydb/library/accessor",
     "//ydb/library/actors/core",
@@ -11,20 +14,21 @@ library("sub_columns") {
     "//ydb/services/bg_tasks/abstract",
     "//ydb/services/metadata/abstract:request_features",
     "//yql/essentials/minikql/jsonpath/parser",
+    "//yql/essentials/types/binary_json",
   ]
 
   deps = [
     "//contrib/libs/simdjson",
-    "//contrib/libs/xxhash",
     "//library/cpp/json",  # peerdir only
     "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/formats/arrow/accessor/composite_serial",
+    "//ydb/core/formats/arrow/container/filterable",
     "//ydb/library/formats/arrow",
+    # "//ydb/library/formats/arrow/switch",
     "//ydb/library/formats/arrow/validation",
     "//ydb/library/formats/arrow:modifier",  # peerdir only
     "//ydb/library/signals",
     "//yql/essentials/minikql/jsonpath",
-    "//yql/essentials/types/binary_json",
   ]
 
   sources = [
@@ -32,6 +36,8 @@ library("sub_columns") {
     "columns_storage.cpp",
     "constructor.cpp",
     "data_extractor.cpp",
+    "dense_encoding/constructors.cpp",
+    "dense_encoding/encoding.cpp",
     "direct_builder.cpp",
     "header.cpp",
     "iterators.cpp",
@@ -43,5 +49,6 @@ library("sub_columns") {
     "settings.cpp",
     "signals.cpp",
     "stats.cpp",
+    "sub_column_name.cpp",
   ]
 }

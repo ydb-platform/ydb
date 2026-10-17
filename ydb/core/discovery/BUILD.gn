@@ -6,8 +6,7 @@ library("discovery") {
   ]
 
   deps = [
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/tx/scheme_cache",
     "//ydb/public/api/protos",
   ]

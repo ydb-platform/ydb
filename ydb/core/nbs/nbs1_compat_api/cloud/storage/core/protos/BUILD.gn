@@ -1,0 +1,10 @@
+protobuf_library("protos") {
+  public_deps = [ "//library/cpp/lwtrace/protos" ]
+
+  sources = [
+    "media.proto",
+    "request_source.proto",
+    "throttler.proto",
+    "trace.proto",
+  ]
+}

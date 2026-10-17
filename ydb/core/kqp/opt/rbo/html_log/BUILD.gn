@@ -1,0 +1,88 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# RUN_PYTHON3(build/scripts/cat.py ... STDOUT optimizer_trace.js): the viewer
+# script, the vendored libraries first
+action("optimizer_trace_js") {
+  script = "//build/gn/scripts/concat.py"
+  sources = [
+    "js/vendor/graphlib/graphlib.js",
+    "js/vendor/dagre/dagre.js",
+    "js/00_trace_worker_protocol.js",
+    "js/01_trace_data.js",
+    "js/02_trace_inspector.js",
+    "js/03_trace_state.js",
+    "js/04_core_services.js",
+    "js/05_trace_search_worker.js",
+    "js/06_icons.js",
+    "js/07_action_context.js",
+    "js/08_actions.js",
+    "js/09_info_target_controller.js",
+    "js/10_info_graph_model.js",
+    "js/11_action_events.js",
+    "js/12_runtime.js",
+    "js/13_layout_model.js",
+    "js/14_virtual_rows.js",
+    "js/15_trace_viewport_anchor.js",
+    "js/16_html_shell.js",
+    "js/17_plan_tree_rendering.js",
+    "js/18_rule_panels_lazy.js",
+    "js/19_fullscreen_overlay.js",
+    "js/20_display_navigation_controls.js",
+    "js/21_search.js",
+    "js/22_diff_ui.js",
+    "js/23_tree_diff.js",
+    "js/24_diff_renderer.js",
+    "js/25_resize.js",
+    "js/26_wheel_scroll.js",
+    "js/27_runtime_reset.js",
+    "js/28_bootstrap.js",
+  ]
+  outputs = [ "$target_gen_dir/optimizer_trace.js" ]
+  args = rebase_path(outputs, root_build_dir) + rebase_path(sources, root_build_dir)
+}
+
+config("private_config") {
+  defines = [ "OPTIMIZER_TRACE_ENABLE_BROTLI" ]
+}
+
+library("html_log") {
+  sources = [
+    "cpp/optimizer_trace.cpp",
+    "cpp/optimizer_trace_assets.cpp",
+    "cpp/optimizer_trace_output.cpp",
+  ]
+
+  configs = [ ":private_config" ]
+
+  resources = [
+    {
+      path = "$target_gen_dir/optimizer_trace.js"
+      key = "/ydb/core/kqp/opt/rbo/optimizer_trace.js"
+    },
+    {
+      path = "js/trace_view.css"
+      key = "/ydb/core/kqp/opt/rbo/optimizer_trace.css"
+    },
+    {
+      path = "js/vendor/brotli_dec_wasm/brotli_decoder.js"
+      key = "/ydb/core/kqp/opt/rbo/brotli_decoder.js"
+    },
+    {
+      path = "js/vendor/brotli_dec_wasm/brotli_dec_wasm_bg.wasm"
+      key = "/ydb/core/kqp/opt/rbo/brotli_dec_wasm_bg.wasm"
+    },
+    {
+      path = "js/vendor/brotli_dec_wasm/LICENSE-MIT"
+      key = "/ydb/core/kqp/opt/rbo/brotli_decoder_LICENSE-MIT"
+    },
+  ]
+  resource_deps = [ ":optimizer_trace_js" ]
+
+  deps = [
+    "//contrib/libs/brotli:enc",
+    "//library/cpp/http/misc",
+    "//library/cpp/http/server",
+    "//library/cpp/json",
+    "//library/cpp/resource",
+  ]
+}

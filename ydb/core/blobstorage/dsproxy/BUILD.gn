@@ -16,7 +16,6 @@ library("dsproxy") {
     "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/common",
     # "//ydb/core/blobstorage/crypto",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/lwtrace_probes",
     # "//ydb/core/blobstorage/nodewarden",
@@ -26,7 +25,7 @@ library("dsproxy") {
     # "//ydb/core/blobstorage/vdisk/query",
     "//ydb/core/mon",
     "//ydb/core/protos",
-    "//ydb/core/retro_tracing_impl",
+    "//ydb/core/retro_tracing_impl/spans",
     "//ydb/core/util",
     # "//ydb/library/actors/core",
     # "//ydb/library/actors/interconnect",
@@ -38,6 +37,7 @@ library("dsproxy") {
     # "//ydb/core/control/lib",  # peerdir only
     # "//ydb/core/node_whiteboard",
     # "//ydb/library/actors/async",
+    # "//ydb/library/actors/retro_tracing/collector",
   ]
 
   sources = [

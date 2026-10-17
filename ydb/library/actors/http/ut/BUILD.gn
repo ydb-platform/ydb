@@ -1,29 +1,29 @@
 unittest_executable("ut") {
   deps = [
+    "//contrib/libs/openssl",
     "//contrib/libs/poco/Crypto",  # peerdir only
     "//contrib/libs/poco/Foundation",  # peerdir only
     "//contrib/libs/poco/Net",
     "//contrib/libs/poco/NetSSL_OpenSSL",
+    "//library/cpp/json",
     "//library/cpp/resource",
     "//library/cpp/testing/unittest",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
     "//ydb/library/actors/core",
     "//ydb/library/actors/http",
     "//ydb/library/actors/testlib",
   ]
 
   sources = [
+    "//ydb/library/actors/http/http2_ut.cpp",
+    "//ydb/library/actors/http/http_cache_ut.cpp",
+    "//ydb/library/actors/http/http_tls_init_ut.cpp",
     "//ydb/library/actors/http/http_ut.cpp",
+    "http_obfuscation_ut.cpp",
     "tls_client_connection.cpp",
   ]
 
   include_dirs = [ "//ydb/library/actors/http" ]
 
-  link_select = [
-    "YqlServicePolicy=stub",
-    "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
-    "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
-  ]
+  link_select = [ "allocator=tcmalloc" ]
 }

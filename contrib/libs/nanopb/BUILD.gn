@@ -1,0 +1,13 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+contrib_library("nanopb") {
+    sources = [
+        "pb_common.c",
+        "pb_decode.c",
+        "pb_encode.c",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

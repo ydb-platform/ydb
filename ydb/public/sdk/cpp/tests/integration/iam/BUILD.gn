@@ -1,0 +1,32 @@
+gtest_executable("iam") {
+  deps = [
+    "//contrib/libs/grpc",  # peerdir only
+    "//contrib/libs/jwt-cpp",  # peerdir only
+    "//library/cpp/http/server",  # peerdir only
+    "//library/cpp/json",  # peerdir only
+    "//library/cpp/testing/common",  # peerdir only
+    "//library/cpp/testing/gtest",
+    "//ydb/public/api/client/yc_public/iam",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/iam",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+    "//ydb/public/sdk/cpp/tests/common/iam_mocks",
+  ]
+
+  data_deps = [ "//ydb/apps/ydbd" ]
+
+  sources = [
+    "driver_auth_it.cpp",
+    "iam_test_fixture.cpp",
+    "jwt_it.cpp",
+    "metadata_it.cpp",
+    "oauth_it.cpp",
+  ]
+
+  test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

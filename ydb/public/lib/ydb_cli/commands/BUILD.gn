@@ -1,5 +1,7 @@
 library("commands") {
   public_deps = [
+    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs",
     "//library/cpp/colorizer",
     "//library/cpp/containers/concurrent_hash",
     "//library/cpp/histogram/hdr",
@@ -23,8 +25,6 @@ library("commands") {
 
   deps = [
     "//contrib/libs/apache/arrow",
-    # "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
-    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-sqs",
     "//contrib/libs/fmt",
     "//contrib/libs/ftxui",
     # "//contrib/libs/openssl",
@@ -35,6 +35,7 @@ library("commands") {
     "//library/cpp/json",
     # "//library/cpp/protobuf/json",  # peerdir only
     "//library/cpp/regex/pcre",
+    "//library/cpp/streams/factory/open_by_signature",
     # "//library/cpp/string_utils/csv",
     "//library/cpp/string_utils/url",
     "//library/cpp/threading/local_executor",
@@ -46,6 +47,7 @@ library("commands") {
     "//ydb/library/backup",
     "//ydb/library/formats/arrow/csv/converter",
     "//ydb/library/formats/arrow/csv/table",
+    # "//ydb/library/vector_distance",  # peerdir only
     # "//ydb/library/workload",  # peerdir only
     "//ydb/library/workload/benchmark_base",
     "//ydb/library/yaml_config/public",
@@ -64,6 +66,7 @@ library("commands") {
     # "//ydb/public/lib/ydb_cli/dump/util",
     "//ydb/public/lib/ydb_cli/import",
     "//ydb/public/lib/yson_value",
+    "//ydb/public/sdk/cpp/src/client/cms",
     "//ydb/public/sdk/cpp/src/client/config",
     # "//ydb/public/sdk/cpp/src/client/coordination",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/debug",
@@ -73,6 +76,8 @@ library("commands") {
     "//ydb/public/sdk/cpp/src/client/monitoring",
     "//ydb/public/sdk/cpp/src/client/operation",
     "//ydb/public/sdk/cpp/src/client/proto",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/test_shard",
     "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange",
     "//ydb/public/sdk/cpp/src/client/types/status",
@@ -83,6 +88,13 @@ library("commands") {
   ]
 
   sources = [
+    "//ydb/library/workload/fulltext/fulltext.cpp",
+    "//ydb/library/workload/fulltext/fulltext_data_generator.cpp",
+    "//ydb/library/workload/fulltext/fulltext_quality_evaluator.cpp",
+    "//ydb/library/workload/fulltext/fulltext_workload_generator.cpp",
+    "//ydb/library/workload/fulltext/fulltext_workload_params.cpp",
+    "//ydb/library/workload/fulltext/markov_model_builder.cpp",
+    "//ydb/library/workload/fulltext/markov_model_evaluator.cpp",
     "//ydb/library/workload/tpcc/check.cpp",
     "//ydb/library/workload/tpcc/clean.cpp",
     "//ydb/library/workload/tpcc/common_queries.cpp",
@@ -166,6 +178,8 @@ library("commands") {
     "ydb_benchmark.cpp",
     "ydb_bridge.cpp",
     "ydb_cluster.cpp",
+    "ydb_config.cpp",
+    "ydb_database_attribute.cpp",
     "ydb_debug.cpp",
     "ydb_diagnostics.cpp",
     "ydb_dynamic_config.cpp",
@@ -198,6 +212,7 @@ library("commands") {
     "//ydb/library/workload/tpcc/constants.h",
     "//ydb/library/workload/tpcc/runner.h",
     "//ydb/library/workload/vector/vector_enums.h",
+    "tx_mode.h",
     "ydb_latency.h",
     "ydb_ping.h",
   ]

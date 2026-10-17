@@ -1,4 +1,8 @@
 library("exception") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+  ]
+
   deps = [ "//library/cpp/yt/assert" ]
 
   sources = [ "exception.cpp" ]

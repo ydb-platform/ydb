@@ -10,7 +10,8 @@ library("planner") {
     # "//ydb/core/formats/arrow",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
-    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector",  # peerdir only
   ]
 
   sources = [ "optimizer.cpp" ]

@@ -1,6 +1,0 @@
-group("cluster") {
-  public_deps = [
-    # "//library/cpp/threading/future",
-    # "//yql/essentials/sql/v1/complete/name/cluster/static",
-  ]
-}

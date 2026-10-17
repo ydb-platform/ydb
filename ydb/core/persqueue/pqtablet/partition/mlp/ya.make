@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/pqtablet/common
     ydb/core/persqueue/public/describer
+    ydb/core/persqueue/public/partition_key_range
     ydb/core/persqueue/public/write_meta
     ydb/core/util
     ydb/core/ymq/proto

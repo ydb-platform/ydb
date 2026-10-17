@@ -1,0 +1,7 @@
+linked_executable("experiment") {
+  deps = [ "//ydb/library/nmslib" ]
+
+  sources = [ "main.cc" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -2,20 +2,27 @@ unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/monlib/dynamic_counters",
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/groupinfo",  # peerdir only
+    "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/erasure",  # peerdir only
+    "//ydb/core/protos",
   ]
 
   sources = [
+    "//ydb/core/blobstorage/vdisk/common/blobstorage_cost_tracker_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/circlebuf_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/circlebufresize_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/circlebufstream_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/memusage_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/vdisk_config_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/common/vdisk_events_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/vdisk_lsnmngr_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/vdisk_outofspace_ut.cpp",
     "//ydb/core/blobstorage/vdisk/common/vdisk_pdisk_error_ut.cpp",
@@ -25,10 +32,7 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/blobstorage/vdisk/common" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

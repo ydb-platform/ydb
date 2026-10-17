@@ -1,10 +1,12 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",  # peerdir only
+    "//ydb/core/kqp/common/events",
     "//ydb/core/protos",  # peerdir only
     "//ydb/core/statistics",
     "//ydb/core/statistics/database",
     "//ydb/core/statistics:ut_common",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/table",
   ]
@@ -17,6 +19,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

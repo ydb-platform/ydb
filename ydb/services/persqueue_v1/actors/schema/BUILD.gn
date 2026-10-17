@@ -1,0 +1,7 @@
+group("schema") {
+  public_deps = [
+    # "//ydb/services/persqueue_v1/actors/schema/common",  # peerdir only
+    # "//ydb/services/persqueue_v1/actors/schema/pqv1",  # peerdir only
+    # "//ydb/services/persqueue_v1/actors/schema/topic",  # peerdir only
+  ]
+}

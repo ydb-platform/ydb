@@ -8,6 +8,7 @@ contrib_library("iterator") {
         "//contrib/restricted/boost/core",
         "//contrib/restricted/boost/detail",
         "//contrib/restricted/boost/fusion",
+        "//contrib/restricted/boost/mp11",  # iterator_facade.hpp
         "//contrib/restricted/boost/mpl",
         "//contrib/restricted/boost/type_traits",
     ]

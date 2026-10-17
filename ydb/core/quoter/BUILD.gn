@@ -8,16 +8,19 @@ library("quoter") {
     "//ydb/core/tablet",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/wilson",
   ]
 
   deps = [
     "//library/cpp/lwtrace/mon",
+    # "//ydb/core/control/lib",
     "//ydb/core/kesus/tablet",
     "//ydb/core/mon",
     # "//ydb/core/util",  # peerdir only
     # "//ydb/library/time_series_vec",
-    "//ydb/library/yql/public/ydb_issue",
-    "//yql/essentials/public/issue",  # peerdir only
+    # "//ydb/library/wilson_ids",
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
+    "//yql/essentials/public/issue",
   ]
 
   sources = [
@@ -56,6 +59,7 @@ linked_executable("quoter_service_bandwidth_test") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

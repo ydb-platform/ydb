@@ -562,8 +562,8 @@ public:
     TStateStorageRingInfo(const TStateStorageRingInfo &other) = default;
     TStateStorageRingInfo(TStateStorageRingInfo &&other) = default;
 
-    TStateStorageRingInfo &operator=(const TStateStorageRingInfo &other) = default;
-    TStateStorageRingInfo &operator=(TStateStorageRingInfo &&other) = default;
+    TStateStorageRingInfo &operator=(const TStateStorageRingInfo &other) = delete;
+    TStateStorageRingInfo &operator=(TStateStorageRingInfo &&other) = delete;
 
     static TString RingStateToString(RingState state) {
         switch (state) {

@@ -1,6 +1,11 @@
 #pragma once
-#include "defs.h"
 #include "immediate_control_board_control.h"
+
+#include <library/cpp/deprecated/atomic/atomic.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/ptr.h>
+#include <util/generic/utility.h>
 
 namespace NKikimr {
 

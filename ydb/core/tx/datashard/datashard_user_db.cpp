@@ -481,7 +481,7 @@ NTable::TRowState TDataShardUserDb::GetRowState(
             throw TNotReadyTabletException();
         }
         case NTable::EReady::Data: {
-            return std::move(rowState);
+            return rowState;
         }
         case NTable::EReady::Gone: {
             return NTable::TRowState();

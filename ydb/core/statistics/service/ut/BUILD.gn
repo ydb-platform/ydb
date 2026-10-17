@@ -13,7 +13,9 @@ unittest_executable("ut") {
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/datashard",
     "//ydb/core/util",
+    "//ydb/library/actors/core",
     "//ydb/library/actors/testlib",
+    "//yql/essentials/core/histogram",
   ]
 
   sources = [
@@ -28,6 +30,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -1,0 +1,24 @@
+library("external_idp") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    "//contrib/libs/jwt-cpp",
+    # "//contrib/libs/openssl",  # peerdir only
+    "//library/cpp/html/pcdata",
+    # "//library/cpp/json",
+    # "//library/cpp/string_utils/base64",
+    "//ydb/core/mon",
+    "//ydb/core/security/util",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/http",
+    "//ydb/library/security",
+    "//ydb/library/services",
+  ]
+
+  sources = [ "external_idp_provider.cpp" ]
+
+  serialize_enum_headers = [ "external_idp_provider.h" ]
+}

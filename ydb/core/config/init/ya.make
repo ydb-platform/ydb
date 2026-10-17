@@ -23,6 +23,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/driver
 )
+# gn: peerdir library/cpp/svnversion
 
 GENERATE_ENUM_SERIALIZATION(init.h)
 

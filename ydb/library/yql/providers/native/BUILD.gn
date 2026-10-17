@@ -1,0 +1,18 @@
+library("native") {
+  public_deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/threading/cancellation",
+    # "//library/cpp/threading/future",
+    # "//ydb/library/yql/dq/actors/compute",
+  ]
+
+  deps = [
+    # "//ydb/library/actors/core",
+    # "//yql/essentials/core",
+    # "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "actors/read_actor.cpp" ]
+}

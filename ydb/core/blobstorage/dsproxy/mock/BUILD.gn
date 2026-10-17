@@ -3,10 +3,11 @@ library("mock") {
     "//ydb/core/base",
     # "//ydb/core/blobstorage",
     # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/protos",
   ]
 
   deps = [
-    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/base",
     "//ydb/core/util",
   ]
 

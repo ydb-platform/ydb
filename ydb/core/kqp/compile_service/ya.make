@@ -24,6 +24,7 @@ PEERDIR(
     ydb/library/security
     library/cpp/protobuf/json
 )
+# gn: peerdir ydb/core/kqp/session_actor:worker_common
 
 YQL_LAST_ABI_VERSION()
 

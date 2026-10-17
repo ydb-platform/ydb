@@ -10,7 +10,7 @@
 #include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
-#include <ydb/services/metadata/manager/alter.h>
+#include <ydb/services/metadata/abstract/kqp_common.h>
 #include <util/system/type_name.h>
 
 namespace NKikimr::NMetadata::NFetcher {

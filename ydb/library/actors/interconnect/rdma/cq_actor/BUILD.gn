@@ -1,0 +1,20 @@
+library("cq_actor") {
+  public_deps = [ "//ydb/library/actors/core" ]
+
+  deps = [
+    "//contrib/libs/ibdrv",
+    # "//contrib/libs/protobuf",  # peerdir only
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/metrics",
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/poller",
+    "//ydb/library/actors/interconnect/rdma",
+    # "//ydb/library/actors/protos",  # peerdir only
+    # "//ydb/library/actors/util",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/library/actors/interconnect/rdma/rdma_cq.cpp",
+    "cq_actor.cpp",
+  ]
+}

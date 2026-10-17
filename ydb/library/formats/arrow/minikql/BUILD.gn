@@ -1,0 +1,18 @@
+library("minikql") {
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//yql/essentials/minikql",
+  ]
+
+  deps = [
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/public/udf",  # peerdir only
+    # "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "minikql.cpp" ]
+}

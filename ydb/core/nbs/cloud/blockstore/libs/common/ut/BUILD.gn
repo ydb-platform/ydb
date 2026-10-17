@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/xxhash",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_checksums_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/printable_params_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/common" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

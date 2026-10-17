@@ -1,5 +1,5 @@
 library("actor_system") {
-  public_deps = [
+  deps = [
     # "//ydb/library/actors/core",
     "//ydb/library/services",
     # "//yql/essentials/providers/common/metrics",

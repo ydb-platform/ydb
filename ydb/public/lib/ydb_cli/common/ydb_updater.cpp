@@ -56,6 +56,11 @@ namespace {
     const TString defaultTempFile = TStringBuilder() << homeDir << "/ydb/install/" << binaryName;
 }
 
+// Declared in ydb_updater.h. Defined here rather than in the application
+// (it used to live in ydb/apps/ydb/commands/ydb_version.cpp), so that this
+// library resolves the symbol on its own instead of depending on code above it.
+const char* VersionResourceName = "version.txt";
+
 TYdbUpdater::TYdbUpdater(std::string storageUrl)
     : MyVersion(StripString(NResource::Find(TStringBuf(VersionResourceName))))
     , StorageUrl(storageUrl)

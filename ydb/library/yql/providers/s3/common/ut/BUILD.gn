@@ -7,7 +7,10 @@ unittest_executable("ut") {
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "//ydb/library/yql/providers/s3/common/util_ut.cpp" ]
+  sources = [
+    "//ydb/library/yql/providers/s3/common/source_context_ut.cpp",
+    "//ydb/library/yql/providers/s3/common/util_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/library/yql/providers/s3/common" ]
 

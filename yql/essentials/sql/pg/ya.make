@@ -17,6 +17,8 @@ ADDINCL(
     yql/essentials/parser/pg_wrapper/postgresql/src/include
 )
 
+# gn: peerdir yql/essentials/core/cbo
+
 SRCS(
     pg_sql.cpp
     optimizer.cpp

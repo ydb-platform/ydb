@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    mkql_builtins.h  # gn: slot minikql_codegen
 )
 
 PEERDIR()

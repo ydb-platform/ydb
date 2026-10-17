@@ -47,7 +47,7 @@ SRCS(
     aio_map.cpp
     buffers.cpp
     buffers.h
-    device_type.cpp
+    device_type.cpp  # gn: device_type
     device_type.h
     drivedata.cpp
     drivedata.h
@@ -60,6 +60,7 @@ SRCS(
     wcache.cpp
     wcache.h
 )
+# gn: device_type headers device_type.h
 
 END()
 

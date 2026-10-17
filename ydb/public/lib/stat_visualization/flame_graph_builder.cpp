@@ -186,7 +186,7 @@ private:
         TJsonValue children;
         if (plan->GetValue("Plans", &children)) {
             for (auto child: children.GetArray()) {
-                planEntry->AddChild(std::move(ParsePlan(&child)));
+                planEntry->AddChild(ParsePlan(&child));
             }
         }
         return planEntry;

@@ -126,7 +126,7 @@ TExprBase KqpFloatUpStage(TExprBase node, TExprContext& ctx) {
 
     for (auto& precomputePtr: innerPrecomputePtrs) {
         innerPrecomputes.emplace_back(
-            std::make_pair<TDqPhyPrecompute, struct TStageData>(std::move(TDqPhyPrecompute(precomputePtr)), TStageData())
+            std::make_pair<TDqPhyPrecompute, struct TStageData>(TDqPhyPrecompute(precomputePtr), TStageData())
         );
     }
 
@@ -167,7 +167,7 @@ TExprBase KqpFloatUpStage(TExprBase node, TExprContext& ctx) {
                 .Done();
 
             newConnection = ctx.ReplaceNode(
-                std::move(item.first.Connection().Ptr()), innerStage.Ref(), newInnerStage.Ptr()
+                item.first.Connection().Ptr(), innerStage.Ref(), newInnerStage.Ptr()
             );
         } else {
             newConnection = item.first.Connection().Ptr();

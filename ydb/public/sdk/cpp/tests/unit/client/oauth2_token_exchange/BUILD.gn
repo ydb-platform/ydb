@@ -11,6 +11,7 @@ unittest_executable("oauth2_token_exchange") {
   deps = [
     "//contrib/libs/jwt-cpp",  # peerdir only
     "//library/cpp/string_utils/base64",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
     "//ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers",  # peerdir only
   ]
 

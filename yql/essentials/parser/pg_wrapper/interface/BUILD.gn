@@ -5,6 +5,7 @@ library("interface") {
     # "//yql/essentials/core/pg_settings",
     # "//yql/essentials/minikql",
     "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     "//yql/essentials/providers/common/codec/yt_arrow_converter_interface",
     # "//yql/essentials/public/issue",
     # "//yql/essentials/public/udf",
@@ -28,9 +29,10 @@ library("interface") {
     "compare.h",
     "config.h",
     "context.h",
+    "in_range.h",
     "pack.h",
     "raw_parser.h",
-    "type_desc.h",
+    "sign.h",
     "utils.h",
   ]
 
@@ -48,6 +50,7 @@ slot_interface_group("yql_pg_sql_translator") {
     "//yql/essentials/ast",
     # "//yql/essentials/core/cbo",
     # "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/public/issue",
   ]
 
   link_slot_interface = "yql_pg_sql_translator"

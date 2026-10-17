@@ -7,6 +7,7 @@ library("vdisk") {
 
   deps = [
     # "//ydb/core/blobstorage/vdisk/anubis_osiris",  # peerdir only
+    # "//ydb/core/blobstorage/vdisk/chunk_keeper",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/defrag",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/huge",  # peerdir only

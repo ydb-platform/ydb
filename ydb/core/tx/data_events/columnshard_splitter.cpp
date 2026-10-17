@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/schemeshard/olap/columns/schema.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -59,9 +60,9 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
         }
     }
 
-    NSchemeShard::TOlapSchema olapSchema;
-    olapSchema.ParseFromLocalDB(scheme);
-    auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(olapSchema, sharding);
+    NSchemeShard::TOlapColumnsDescription columns;
+    columns.Parse(scheme);
+    auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(columns, sharding);
     if (shardingConclusion.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, shardingConclusion.GetErrorMessage());
     }

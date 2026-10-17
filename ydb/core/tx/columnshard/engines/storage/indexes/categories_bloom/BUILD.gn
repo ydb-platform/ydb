@@ -7,6 +7,7 @@ library("categories_bloom") {
     "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/engines/protos",
     "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/helper",
     "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
     "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",

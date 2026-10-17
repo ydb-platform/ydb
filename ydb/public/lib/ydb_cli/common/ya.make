@@ -46,7 +46,7 @@ SRCS(
     tx_mode_utils.cpp
     recursive_list.cpp
     recursive_remove.cpp
-    retry_func.cpp
+    retry_func.cpp  # gn: retry_func
     root.cpp
     scoped_driver.cpp
     scheme_path_completer.cpp
@@ -59,6 +59,7 @@ SRCS(
     ydb_updater.cpp
     yt.cpp
 )
+# gn: retry_func headers retry_func.h
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3

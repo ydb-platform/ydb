@@ -105,8 +105,8 @@ namespace NKikimr {
             TSyncLogPageDeleter() = delete;
             TSyncLogPageDeleter(const TSyncLogPageDeleter &) = default;
             TSyncLogPageDeleter(TSyncLogPageDeleter &&) = default;
-            TSyncLogPageDeleter &operator=(const TSyncLogPageDeleter &) = default;
-            TSyncLogPageDeleter &operator=(TSyncLogPageDeleter &&) = default;
+            TSyncLogPageDeleter &operator=(const TSyncLogPageDeleter &) = delete;
+            TSyncLogPageDeleter &operator=(TSyncLogPageDeleter &&) = delete;
 
             void operator () (TSyncLogPage *page) noexcept {
                 char *ptr = (char *)page;

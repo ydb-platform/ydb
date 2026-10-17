@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    out.cpp
+    out.cpp  # gn: into ydb/public/api/protos
 )
 
 PEERDIR(

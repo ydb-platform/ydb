@@ -24,7 +24,7 @@ namespace NKikimr {
         THullDbRecovery(const THullDbRecovery &) = delete;
         THullDbRecovery(THullDbRecovery &&) = default;
         THullDbRecovery &operator=(const THullDbRecovery &) = delete;
-        THullDbRecovery &operator=(THullDbRecovery &&) = default;
+        THullDbRecovery &operator=(THullDbRecovery &&) = delete;
 
         ///////////////// LOGOBLOBS /////////////////////////////////////////////
         void ReplayAddLogoBlobCmd(

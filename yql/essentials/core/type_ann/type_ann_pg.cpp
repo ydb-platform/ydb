@@ -1947,7 +1947,7 @@ IGraphTransformer::TStatus PgInWrapper(const TExprNode::TPtr& input, TExprNode::
                     : NYql::WrapWithPgCast(input->ChildPtr(i), commonType->TypeId, ctx.Expr));
             }
         }
-        output = BuildUniTypePgIn(std::move((castRequired) ? items : input->ChildrenList()), ctx);
+        output = BuildUniTypePgIn((castRequired) ? items : input->ChildrenList(), ctx);
     }
     // clang-format off
     output = ctx.Expr.Builder(input->Pos())

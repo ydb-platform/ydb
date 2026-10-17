@@ -5,7 +5,10 @@ unittest_executable("ut") {
     "//ydb/library/actors/testlib",
   ]
 
-  sources = [ "//ydb/library/actors/testlib/decorator_ut.cpp" ]
+  sources = [
+    "//ydb/library/actors/testlib/decorator_ut.cpp",
+    "//ydb/library/actors/testlib/subsystem_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/library/actors/testlib" ]
 

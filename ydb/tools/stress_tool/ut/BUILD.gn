@@ -1,10 +1,14 @@
 unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/load_test/ddisk",  # peerdir only
+    "//ydb/library/pdisk_io",
     "//ydb/tools/stress_tool/proto",
     "//ydb/tools/stress_tool:lib",
+    "//ydb/tools/stress_tool:ydb_stress_tool",
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
@@ -12,15 +16,18 @@ unittest_executable("ut") {
     "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
   ]
 
-  sources = [ "//ydb/tools/stress_tool/device_test_tool_ut.cpp" ]
+  sources = [
+    "//ydb/tools/stress_tool/device_test_tool_ut.cpp",
+    "device_test_tool_cli_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/tools/stress_tool/lib" ]
 
   link_select = [
-    "YqlServicePolicy=exception_policy",
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
-    "topic_rpc=persqueue_v1",
+    "retro_spans=spans",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",

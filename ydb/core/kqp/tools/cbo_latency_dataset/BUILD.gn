@@ -1,0 +1,31 @@
+linked_executable("cbo_latency_dataset") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/iterator",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/opt/cbo/bench",
+    "//ydb/core/kqp/opt/cbo/solver",
+    "//ydb/core/testlib",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

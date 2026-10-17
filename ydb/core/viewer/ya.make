@@ -860,6 +860,7 @@ PEERDIR(
     ydb/core/graph/api
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
+    ydb/core/kqp/proxy_service
     ydb/core/health_check
     ydb/core/mon
     ydb/core/node_whiteboard
@@ -867,7 +868,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/sys_view/common
     ydb/core/tx/schemeshard
-    ydb/core/tx/tx_proxy
+    ydb/core/tx/tx_proxy  # gn: :public
     ydb/core/util
     ydb/core/viewer/json
     ydb/core/viewer/yaml
@@ -887,7 +888,9 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
+    ydb/services/persqueue_v1
 )
+# gn: peerdir ydb/core/driver_lib/run:config
 
 YQL_LAST_ABI_VERSION()
 

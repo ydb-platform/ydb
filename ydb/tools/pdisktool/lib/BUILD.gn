@@ -1,0 +1,46 @@
+library("lib") {
+  public_deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    # "//ydb/core/erasure",
+    "//ydb/core/protos",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/library/pdisk_io",
+    "//ydb/tools/pdisktool/proto",
+  ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/blockcodecs",
+    # "//library/cpp/getopt",
+    # "//library/cpp/protobuf/json",  # peerdir only
+    # "//ydb/core/blobstorage/crypto",
+    # "//ydb/core/scheme",
+    # "//yql/essentials/public/udf/service/stub",  # link slot
+    # "//yql/essentials/sql/pg_dummy",  # link slot
+  ]
+
+  sources = [
+    "blobs.cpp",
+    "blobsource.cpp",
+    "chunk.cpp",
+    "commands.cpp",
+    "device.cpp",
+    "format.cpp",
+    "hull.cpp",
+    "keys.cpp",
+    "log.cpp",
+    "output.cpp",
+    "sector.cpp",
+    "session.cpp",
+    "state.cpp",
+    "syslog.cpp",
+    "tabletdb.cpp",
+    "tabletdump.cpp",
+    "tabletlog.cpp",
+  ]
+}

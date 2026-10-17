@@ -16,14 +16,22 @@ unittest_executable("ut_index_build") {
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/schemeshard/index",
     "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/tx/sequenceproxy:public",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/wrappers:ut_helpers",
+    "//ydb/library/aws_init",
+    "//ydb/public/api/protos",
     "//ydb/public/lib/deprecated/kicli",
     "//ydb/public/sdk/cpp/src/client/table",
   ]
 
   sources = [
+    "ut_calc_progress_percent.cpp",
     "ut_fulltext_build.cpp",
     "ut_index_build.cpp",
+    "ut_json_index_build.cpp",
     "ut_schemeshard_build_index_helpers.cpp",
     "ut_vector_index_build.cpp",
   ]
@@ -34,6 +42,7 @@ unittest_executable("ut_index_build") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

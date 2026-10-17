@@ -1,20 +1,28 @@
 library("service") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/cms/console",
+    "//ydb/core/kqp/runtime",
     "//ydb/core/tx/conveyor/usage",
+    # "//ydb/core/tx/conveyor_composite/common/config",
     "//ydb/core/tx/conveyor_composite/usage",
     "//ydb/library/accessor",
     # "//ydb/library/actors/core",
     # "//ydb/library/conclusion",
+    "//ydb/library/services",
     "//ydb/library/signals",
+    # "//ydb/library/yql/dq/actors/compute",
   ]
 
   deps = [
     "//library/cpp/lwtrace/mon",
+    # "//ydb/core/base",
+    # "//ydb/core/config/validation",
+    # "//ydb/core/kqp/common/simple",
     "//ydb/core/kqp/query_data",
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/tx/conveyor_composite/tracing",
-    "//ydb/library/services",
+    # "//ydb/library/actors/async",
   ]
 
   sources = [
@@ -24,9 +32,12 @@ library("service") {
     "events.cpp",
     "manager.cpp",
     "process.cpp",
+    "query.cpp",
     "scope.cpp",
     "service.cpp",
     "worker.cpp",
     "workers_pool.cpp",
   ]
+
+  serialize_enum_headers = [ "work_status.h" ]
 }

@@ -1,0 +1,49 @@
+unittest_executable("partition_ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",  # peerdir only
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/mind/bscontroller:group_mapper",
+    "//ydb/core/nbs/cloud/blockstore/bootstrap",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/nbs_frontend",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/testlib",
+    "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/util/actorsys_test",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/bsc_proxy_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/part_database_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_ut.cpp",
+  ]
+
+  include_dirs =
+      [ "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

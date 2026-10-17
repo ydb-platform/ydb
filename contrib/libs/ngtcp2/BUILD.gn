@@ -51,6 +51,7 @@ contrib_library("ngtcp2") {
         "lib/ngtcp2_crypto.c",
         "lib/ngtcp2_dcidtr.c",
         "lib/ngtcp2_err.c",
+        "lib/ngtcp2_fmt.c",
         "lib/ngtcp2_frame_chain.c",
         "lib/ngtcp2_gaptr.c",
         "lib/ngtcp2_idtr.c",
@@ -81,7 +82,7 @@ contrib_library("ngtcp2") {
         "lib/ngtcp2_unreachable.c",
         "lib/ngtcp2_vec.c",
         "lib/ngtcp2_version.c",
-        "lib/ngtcp2_window_filter.c",
+        "lib/ngtcp2_wf.c",
     ]
 
     public_configs = [ ":public_config" ]

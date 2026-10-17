@@ -13,4 +13,6 @@ protobuf_library("proto") {
     "sink.proto",
     "source.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

@@ -1,24 +1,22 @@
 library("usage") {
   public_deps = [
-    # "//ydb/core/base",
-    "//ydb/core/protos",
+    "//ydb/core/base",
+    # "//ydb/core/kqp/runtime",
     "//ydb/core/tx/conveyor/usage",
-    # "//ydb/core/tx/conveyor_composite/service",
-    # "//ydb/library/accessor",
+    # "//ydb/core/tx/conveyor_composite/common",
+    # "//ydb/core/tx/conveyor_composite/common/config",
     # "//ydb/library/actors/core",
     # "//ydb/library/conclusion",
   ]
 
   deps = [
+    "//ydb/core/protos",  # peerdir only
     # "//ydb/services/metadata/request",  # peerdir only
   ]
 
   sources = [
     "common.cpp",
-    "config.cpp",
     "events.cpp",
     "service.cpp",
   ]
-
-  serialize_enum_headers = [ "common.h" ]
 }

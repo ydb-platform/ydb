@@ -3,13 +3,16 @@ library("ut_helpers") {
 
   public_deps = [
     # "//contrib/libs/protobuf",
+    # "//library/cpp/http/fetch",
     "//library/cpp/testing/unittest",
     # "//ydb/core/base",
     "//ydb/core/blobstorage/base",
     # "//ydb/core/cms/console",
+    # "//ydb/core/control/lib",
     # "//ydb/core/engine",
     "//ydb/core/persqueue/ut/common:pq_ut_common",
     "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
     # "//ydb/core/scheme",
     # "//ydb/core/tablet_flat",
     "//ydb/core/testlib",
@@ -17,6 +20,7 @@ library("ut_helpers") {
     "//ydb/core/tx/datashard",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/schemeshard/index",
     # "//ydb/library/actors/core",
     # "//ydb/library/login",
     "//ydb/library/ydb_issue/proto",
@@ -28,17 +32,23 @@ library("ut_helpers") {
   ]
 
   deps = [
+    # "//contrib/libs/openssl",
+    # "//library/cpp/json",
+    # "//library/cpp/string_utils/base64",
     # "//ydb/core/blockstore/core",
     # "//ydb/core/engine/minikql",
     # "//ydb/core/filestore/core",
+    # "//ydb/core/formats/arrow",
     # "//ydb/core/kqp/common/simple",
     # "//ydb/core/kqp/provider",
     "//ydb/core/kqp/proxy_service",
     "//ydb/core/kqp/rm_service",
+    # "//ydb/core/kqp/runtime",
     # "//ydb/core/metering",
     # "//ydb/core/persqueue/events",
-    "//ydb/core/protos/schemeshard",
-    # "//ydb/core/tx",  # peerdir only
+    # "//ydb/core/test_tablet",
+    # "//ydb/core/testlib/basics",
+    # "//ydb/core/tx",
     # "//ydb/core/tx/columnshard/test_helper",
     # "//ydb/core/tx/data_events",
     "//ydb/core/tx/sequenceproxy",
@@ -46,11 +56,15 @@ library("ut_helpers") {
     "//ydb/core/tx/tx_proxy",  # peerdir only
     # "//ydb/core/tx/tx_proxy:public",
     # "//ydb/core/util",
+    # "//ydb/library/actors/http",
+    # "//ydb/library/formats/arrow/simple_builder",
+    # "//ydb/library/login/hashes_checker",
     "//ydb/library/login/protos",
     # "//ydb/public/lib/deprecated/kicli",
     # "//ydb/public/lib/scheme_types",
     # "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/services/metadata/ds_table",
+    # "//yql/essentials/core",
     # "//yql/essentials/public/issue",
   ]
 
@@ -59,6 +73,9 @@ library("ut_helpers") {
     "failing_mtpq.cpp",
     "helpers.cpp",
     "ls_checks.cpp",
+    "mon_helpers.cpp",
+    "olap_helpers.cpp",
+    "schemeshard_counters.cpp",
     "shred_helpers.cpp",
     "test_env.cpp",
   ]

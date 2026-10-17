@@ -1,0 +1,3 @@
+protobuf_library("proto") {
+  sources = [ "eq_height_histogram.proto" ]
+}

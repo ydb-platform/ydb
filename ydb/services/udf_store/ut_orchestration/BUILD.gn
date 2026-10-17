@@ -1,0 +1,37 @@
+unittest_executable("ut_orchestration") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/services/metadata/abstract",
+    "//ydb/services/udf_store",
+    "//ydb/services/udf_store/compile_controller",
+    "//ydb/services/udf_store/compile_controller:events",
+    "//ydb/services/udf_store/compile_controller:protos",  # peerdir only
+    "//ydb/services/udf_store/metadata_subscription",
+    "//yql/essentials/minikql",
+  ]
+
+  sources = [
+    "chunk_read_ut.cpp",
+    "compile_controller_ut.cpp",
+    "dinode_client_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/services/udf_store/compile_controller" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

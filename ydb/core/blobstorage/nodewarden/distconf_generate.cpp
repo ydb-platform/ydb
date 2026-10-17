@@ -2,6 +2,7 @@
 #include "distconf_statestorage_config_generator.h"
 
 #include <ydb/core/mind/bscontroller/group_geometry_info.h>
+#include <ydb/library/yaml_config/public/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
 #include <library/cpp/streams/zstd/zstd.h>

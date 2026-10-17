@@ -1,9 +1,9 @@
 library("composite") {
   public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
     "//ydb/library/actors/core",
     "//ydb/library/yql/dq/common",
-    # "//ydb/library/yql/providers/pq/gateway/abstract",
-    "//ydb/public/sdk/cpp/src/client/topic",
+    # "//ydb/library/yql/providers/abstract/message_stream",
   ]
 
   deps = [
@@ -11,7 +11,10 @@ library("composite") {
     # "//library/cpp/threading/future",
     # "//ydb/library/accessor",
     "//ydb/library/services",
-    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/signals",
+    # "//ydb/library/yql/providers/abstract",  # peerdir only
+    "//ydb/library/yql/providers/pq/common",
+    # "//ydb/library/yql/providers/pq/gateway/abstract",  # peerdir only
     # "//ydb/library/yverify_stream",
   ]
 

@@ -1,5 +1,7 @@
 protobuf_library("proto") {
   sources = [ "proto/storage_meta.proto" ]
+
+  protoc_fatal_warnings = true
 }
 
 library("src") {
@@ -23,17 +25,21 @@ library("src") {
     # "//library/cpp/protobuf/json",
     # "//ydb/core/blob_depot",
     # "//ydb/core/client/server",
-    # "//ydb/core/kqp/common",
+    # "//ydb/core/grpc_services",
     # "//ydb/core/kqp/common/events",
     # "//ydb/core/kqp/common/simple",
     # "//ydb/core/kqp/executer_actor",
-    "//ydb/core/kqp/proxy_service",
     "//ydb/core/kqp/rm_service",
-    "//ydb/core/kqp/workload_service/actors",
+    # "//ydb/core/kqp/script_executions/common",
+    # "//ydb/core/kqp/script_executions/table_queries",
     # "//ydb/core/testlib",
     # "//ydb/core/testlib/basics",
+    # "//ydb/core/util",  # peerdir only
+    # "//ydb/library/aws_init",
     # "//ydb/public/sdk/cpp/src/client/query",
+    # "//ydb/services/keyvalue",
     "//ydb/services/persqueue_v1",
+    # "//ydb/services/workload_manager/actors",
     # "//yql/essentials/utils/log",
     # "//yt/yql/providers/yt/mkql_dq",  # peerdir only
   ]

@@ -1,3 +1,15 @@
 library("histogram") {
-  sources = [ "eq_width_histogram.cpp" ]
+  public_deps = [ "//yql/essentials/core/histogram/proto" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",
+    # "//yql/essentials/public/decimal",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "eq_height_histogram.cpp",
+    "eq_height_histogram_reader.cpp",
+    "eq_width_histogram.cpp",
+  ]
 }

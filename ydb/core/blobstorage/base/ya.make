@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/protos
     ydb/library/actors/util
 )
+# gn: peerdir ydb/core/blobstorage/vdisk/common:guids
 
 SRCS(
     dsproxy_events.h

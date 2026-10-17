@@ -1,0 +1,8 @@
+library("path_aliasing") {
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "path_normalizer.cpp" ]
+}

@@ -7,6 +7,7 @@ library("mlp") {
   ]
 
   deps = [
+    # "//library/cpp/containers/absl",
     # "//ydb/core/base",
     # "//ydb/core/persqueue/common",
     "//ydb/core/persqueue/public",
@@ -14,11 +15,14 @@ library("mlp") {
     "//ydb/core/protos",
     # "//ydb/core/util",
     # "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+    "//ydb/core/persqueue/public/partition_key_range",  # peerdir only
   ]
 
   sources = [
     "mlp.cpp",
     "mlp_changer.cpp",
+    "mlp_describer.cpp",
     "mlp_purger.cpp",
     "mlp_reader.cpp",
     "mlp_writer.cpp",

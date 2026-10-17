@@ -5,7 +5,13 @@ config("private_config") {
 }
 
 llvm_library("MCTargetDesc") {
-    public_deps = [ "//contrib/libs/llvm16/lib/Target/X86:GenRegisterInfo" ]
+    # the .inc that X86MCTargetDesc.h includes
+    public_deps = [
+        "//contrib/libs/llvm16/lib/Target/X86:GenInstrInfo",
+        "//contrib/libs/llvm16/lib/Target/X86:GenMnemonicTables",
+        "//contrib/libs/llvm16/lib/Target/X86:GenRegisterInfo",
+        "//contrib/libs/llvm16/lib/Target/X86:GenSubtargetInfo",
+    ]
 
     deps = [
         "//contrib/libs/llvm16/lib/BinaryFormat",

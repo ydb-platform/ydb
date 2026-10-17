@@ -1,0 +1,7 @@
+group("tvm_client") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/tvm_client/dummy",
+    # "//yt/yql/providers/yt/lib/tvm_client/full",
+    "//yt/yql/providers/yt/lib/tvm_client/proto",
+  ]
+}

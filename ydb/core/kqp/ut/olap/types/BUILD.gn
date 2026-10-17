@@ -5,12 +5,15 @@ unittest_executable("types") {
     "//library/cpp/threading/local_executor",
     "//ydb/core/base",
     "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/sub_columns",
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/ut/common",
     "//ydb/core/kqp/ut/olap/combinatory",
     "//ydb/core/kqp/ut/olap/helpers",
     "//ydb/core/testlib",
-    "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/engines",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/columnshard/test_helper",
@@ -29,6 +32,7 @@ unittest_executable("types") {
     "//yql/essentials/minikql/jsonpath/parser",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
     "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
     "//yql/essentials/types/uuid",
   ]
 
@@ -36,19 +40,24 @@ unittest_executable("types") {
     "bool_ut.cpp",
     "datatime64_ut.cpp",
     "decimal_ut.cpp",
+    "dictionary_ut.cpp",
+    "dynumber_ut.cpp",
+    "interval_ut.cpp",
     "json_ut.cpp",
+    "uuid_ut.cpp",
   ]
 
   include_dirs = [
     "//ydb/core/kqp",  # peerdir only
   ]
 
-  serialize_enum_headers = [ "bool_test_enums.h" ]
+  serialize_enum_headers = [ "column_type_test_enums.h" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

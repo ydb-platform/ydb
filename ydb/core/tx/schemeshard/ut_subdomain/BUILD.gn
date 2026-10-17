@@ -3,6 +3,7 @@ unittest_executable("ut_subdomain") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//ydb/core/blobstorage/base",
     "//ydb/core/persqueue/events",
     "//ydb/core/protos",
     "//ydb/core/scheme_types",
@@ -24,6 +25,7 @@ unittest_executable("ut_subdomain") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

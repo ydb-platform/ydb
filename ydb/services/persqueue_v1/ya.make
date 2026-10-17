@@ -43,6 +43,8 @@ PEERDIR(
     ydb/services/persqueue_v1/actors
 )
 
+PROVIDES(topic_rpc)
+# gn: default provider
 END()
 
 RECURSE(

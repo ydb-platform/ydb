@@ -6,12 +6,15 @@ unittest_executable("ut_stats") {
     "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/protos",
+    "//ydb/core/tablet_flat/test/libs/rows",
     "//ydb/core/tablet_flat/test/libs/table",
     "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/datashard",  # peerdir only
     "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/schemeshard/ut_helpers",
     "//ydb/library/ut",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/result",
@@ -28,6 +31,7 @@ unittest_executable("ut_stats") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

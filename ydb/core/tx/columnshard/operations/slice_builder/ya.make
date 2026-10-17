@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     builder.cpp
     pack_builder.cpp
@@ -14,5 +16,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/tracing
 )
+# gn: peerdir ydb/core/tx/columnshard:write_actor
+# gn: peerdir ydb/core/tx/columnshard/operations:events
 
 END()

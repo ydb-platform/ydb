@@ -1,0 +1,8 @@
+group("test_util") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/library/actors/wilson:test_util",
+  ]
+}

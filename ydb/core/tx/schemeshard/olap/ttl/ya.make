@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     schema.cpp
     update.cpp
-    validator.cpp
+    validator.cpp  # gn: into ydb/core/tx/schemeshard
 )
 
 PEERDIR(

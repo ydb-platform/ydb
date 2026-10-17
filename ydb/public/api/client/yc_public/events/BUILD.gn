@@ -11,4 +11,6 @@ protobuf_library("events") {
   ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

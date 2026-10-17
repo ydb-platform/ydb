@@ -91,7 +91,7 @@ namespace NKikimr {
         THull(const THull &) = delete;
         THull(THull &&) = default;
         THull &operator =(const THull &) = delete;
-        THull &operator =(THull &&) = default;
+        THull &operator =(THull &&) = delete;
         ~THull();
 
         // Run all required hull facilities, like actors that perform compactions, etc

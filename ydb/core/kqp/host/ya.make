@@ -5,10 +5,12 @@ SRCS(
     kqp_gateway_proxy.cpp
     kqp_host.cpp
     kqp_runner.cpp
-    kqp_transform.cpp
-    kqp_translate.cpp
+    kqp_transform.cpp  # gn: transform
+    kqp_translate.cpp  # gn: into ydb/core/kqp/provider
+    kqp_translate.h  # gn: into ydb/core/kqp/provider
     kqp_statement_rewrite.cpp
 )
+# gn: transform headers kqp_transform.h
 
 PEERDIR(
     ydb/library/yql/providers/ydb_external/common

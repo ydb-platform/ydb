@@ -4,6 +4,7 @@ SRCS(
     events.cpp
     retro_collector.cpp
     retro_span_deserialization.cpp
+    retro_span_deserialization.h  # gn: slot retro_spans self
 )
 
 PEERDIR(

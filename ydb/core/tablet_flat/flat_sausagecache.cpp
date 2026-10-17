@@ -106,7 +106,7 @@ TSharedPageRef TPrivatePageCache::TryGetPage(TPageOffset offset, TPageCollection
         return {};
     }
 
-    return std::move(sharedBody);
+    return sharedBody;
 }
 
 void TPrivatePageCache::DropPage(TPageOffset offset, TPageCollection* pageCollection) {

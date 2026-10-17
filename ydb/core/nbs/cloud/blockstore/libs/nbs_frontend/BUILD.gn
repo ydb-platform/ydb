@@ -1,0 +1,23 @@
+library("nbs_frontend") {
+  public_deps = [
+    # "//library/cpp/logger",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/hot_swap",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model/nbs1_compat",
+    # "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+    "//ydb/core/protos",
+  ]
+
+  sources = [
+    "blockstore_facade.cpp",
+    "partition_registry.cpp",
+  ]
+}

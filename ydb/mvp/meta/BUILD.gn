@@ -1,22 +1,30 @@
 library("meta") {
   public_deps = [
-    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/cgiparam",
     # "//library/cpp/deprecated/atomic",
     # "//library/cpp/getopt",
+    # "//library/cpp/json",
     "//ydb/library/actors/core",
     "//ydb/library/actors/http",
     "//ydb/mvp/core",
+    # "//ydb/mvp/core:protos",
+    "//ydb/mvp/meta/protos",
+    # "//ydb/public/sdk/cpp/src/client/result",
+    # "//ydb/public/sdk/cpp/src/client/table",
   ]
 
   deps = [
-    # "//contrib/libs/protobuf",
+    # "//contrib/libs/fmt",
+    # "//contrib/libs/yaml-cpp",
     # "//library/cpp/digest/md5",
     "//library/cpp/protobuf/json",  # peerdir only
+    # "//library/cpp/string_utils/quote",
+    # "//library/cpp/string_utils/url",
+    # "//library/cpp/uri",
     # "//ydb/core/ydb_convert",
     # "//ydb/library/aclib/protos",  # peerdir only
-    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
-    # "//ydb/mvp/core:protos",
     "//ydb/public/api/client/yc_private/resourcemanager",
     "//ydb/public/api/grpc",
     "//ydb/public/api/protos",
@@ -24,8 +32,6 @@ library("meta") {
     # "//ydb/public/sdk/cpp/src/client/draft",
     # "//ydb/public/sdk/cpp/src/client/driver",
     # "//ydb/public/sdk/cpp/src/client/proto",
-    # "//ydb/public/sdk/cpp/src/client/result",
-    # "//ydb/public/sdk/cpp/src/client/table",
     # "//ydb/public/sdk/cpp/src/library/grpc/client",
     # "//yql/essentials/core/expr_nodes",  # peerdir only
     # "//yql/essentials/providers/result/expr_nodes",  # peerdir only
@@ -37,8 +43,21 @@ library("meta") {
   sources = [
     "meta.cpp",
     "meta_cache.cpp",
+    "meta_cluster_info.cpp",
+    "meta_settings.cpp",
     "meta_versions.cpp",
     "mvp.cpp",
+    "support_links/entity.cpp",
+    "support_links/grafana_dashboard_common.cpp",
+    "support_links/grafana_dashboard_search_source.cpp",
+    "support_links/grafana_dashboard_source.cpp",
+    "support_links/grafana_logging_source.cpp",
+    "support_links/param_bindings.cpp",
+    "support_links/response.cpp",
+    "support_links/source.cpp",
+    "support_links/support_links_resolver.cpp",
+    "support_links/url_source.cpp",
+    "support_links/url_template.cpp",
   ]
 }
 

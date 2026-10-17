@@ -1,0 +1,25 @@
+unittest_executable("ut_real_pdisk") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/backpressure",
+    "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/syncer",
+    "//ydb/core/blobstorage/vdisk/synclog",
+    "//ydb/core/testlib/actors",
+    "//ydb/library/keys",  # peerdir only
+    "//ydb/library/pdisk_io",
+  ]
+
+  sources = [ "synclog_real_pdisk_ut.cpp" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "retro_spans=spans",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

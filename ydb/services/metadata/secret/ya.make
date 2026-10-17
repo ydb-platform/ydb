@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/grpc_services/local_rpc
     ydb/core/grpc_services/base
     ydb/core/grpc_services
+    ydb/services/metadata/initializer
     ydb/services/metadata/request
     ydb/services/metadata/secret/accessor
 )

@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     GLOBAL optimizer.cpp
     counters.cpp

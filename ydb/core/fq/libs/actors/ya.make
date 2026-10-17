@@ -90,6 +90,7 @@ PEERDIR(
     yql/essentials/sql/settings
     yql/essentials/utils
 )
+# gn: peerdir ydb/core/fq/libs/control_plane_config:service_id
 
 YQL_LAST_ABI_VERSION()
 

@@ -1,9 +1,7 @@
 library("worker_manager") {
   public_deps = [
     # "//ydb/library/actors/core",
-    # "//ydb/library/actors/helpers",
     "//ydb/library/yql/dq/actors/compute",
-    "//ydb/library/yql/providers/dq/actors",
     # "//ydb/library/yql/providers/dq/task_runner",
     "//ydb/library/yql/providers/dq/task_runner_actor",
     "//ydb/library/yql/providers/dq/worker_manager/interface",
@@ -11,9 +9,11 @@ library("worker_manager") {
   ]
 
   deps = [
+    # "//ydb/library/actors/helpers",
     "//ydb/library/actors/interconnect",
     "//ydb/library/ydb_issue",  # peerdir only
     # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/dq/actors",
     # "//ydb/library/yql/providers/dq/api/grpc",  # peerdir only
     # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
     "//ydb/library/yql/providers/dq/runtime",

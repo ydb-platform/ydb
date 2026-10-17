@@ -1,5 +1,8 @@
 library("tracing") {
   public_deps = [ "//library/cpp/lwtrace" ]
 
-  sources = [ "probes.cpp" ]
+  sources = [
+    "data_source_probes.cpp",
+    "probes.cpp",
+  ]
 }

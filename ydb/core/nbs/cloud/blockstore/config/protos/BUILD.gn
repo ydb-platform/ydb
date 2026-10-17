@@ -1,0 +1,6 @@
+protobuf_library("protos") {
+  sources = [
+    "ddisk_config.proto",
+    "storage.proto",
+  ]
+}

@@ -2,7 +2,11 @@
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
+#include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/generic/scope.h>
 
@@ -1224,7 +1228,7 @@ namespace NKikimr::NBsController {
             err.RealmLocationKey = keyName(realmKey);
             err.DomainLocationKey = keyName(domainKey);
 
-            return std::move(err);
+            return err;
         }
 
         void UpdateReservation(ui32 groupId, ui32 groupSizeInUnits, TPDiskId previous, TPDiskId next) {

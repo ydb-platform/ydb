@@ -6,7 +6,6 @@ library("ldap_auth_provider") {
 
   deps = [
     "//contrib/libs/openldap",
-    "//ydb/core/security",
     "//ydb/core/util",
     "//ydb/library/actors/core",
     "//ydb/library/login/protos",
@@ -20,7 +19,9 @@ library("ldap_auth_provider") {
 }
 
 library("test_utils") {
-  public_deps = [ "//ydb/core/security/certificate_check" ]
+  public_deps = [
+    # "//ydb/core/security/certificate_check/test_utils",
+  ]
 
   deps = [ "//ydb/core/protos" ]
 

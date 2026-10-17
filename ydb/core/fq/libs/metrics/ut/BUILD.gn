@@ -3,7 +3,7 @@ unittest_executable("ut") {
     "//contrib/libs/protobuf",
     "//library/cpp/testing/unittest",
     "//ydb/core/fq/libs/metrics",
-    "//yql/essentials/core/issue/protos",
+    "//yql/essentials/public/issue/protos",
   ]
 
   sources = [

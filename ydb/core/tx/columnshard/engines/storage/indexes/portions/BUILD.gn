@@ -29,6 +29,7 @@ library("portions") {
     "//ydb/core/formats/arrow",
     "//ydb/core/tx/columnshard/engines/portions",
     # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/schemeshard/olap/schema",
     # "//ydb/library/formats/arrow/protos",  # peerdir only
   ]
 

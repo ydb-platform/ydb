@@ -1,0 +1,17 @@
+library("meta") {
+  public_deps = [
+    # "//library/cpp/yt/misc",
+  ]
+
+  sources = [
+    "ensure.cpp",
+    "function.cpp",
+    "hash.cpp",
+    "maybe.cpp",
+    "out.cpp",
+    "preprocessor.cpp",
+    "reflection.cpp",
+    "small_string.cpp",
+    "struct.cpp",
+  ]
+}

@@ -2,7 +2,8 @@ LIBRARY()
 
 SRCS(
     metadata_helpers.cpp
-    scheme_helpers.cpp
+    scheme_helpers.cpp  # gn: into ydb/core/kqp/provider
+    scheme_helpers.h  # gn: into ydb/core/kqp/provider
 )
 
 PEERDIR(

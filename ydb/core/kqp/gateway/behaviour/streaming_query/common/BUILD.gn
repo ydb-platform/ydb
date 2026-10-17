@@ -1,11 +1,15 @@
 library("common") {
-  public_deps = [ "//yql/essentials/sql/v1" ]
+  public_deps = [
+    # "//yql/essentials/sql/v1/translation",
+  ]
 
   deps = [
     "//ydb/core/base",
     "//ydb/core/protos",
+    # "//ydb/library/conclusion",  # peerdir only
     "//ydb/library/yql/providers/pq/proto",
     # "//ydb/library/yverify_stream",
+    "//yql/essentials/minikql",
   ]
 
   sources = [ "utils.cpp" ]

@@ -18,6 +18,7 @@ library("task_runner_actor") {
     # "//ydb/library/yql/providers/dq/counters",
     "//ydb/library/yql/providers/dq/runtime",
     # "//ydb/library/yql/utils/actors",  # peerdir only
+    # "//yql/essentials/minikql/runtime_settings",
   ]
 
   sources = [ "task_runner_actor.cpp" ]

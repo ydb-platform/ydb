@@ -1,6 +1,8 @@
 LIBRARY()
 
-SRCS()
+SRCS(
+    dq_yt_factory.h  # gn: slot yt_codegen
+)
 
 PEERDIR(
 )

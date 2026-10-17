@@ -1,0 +1,27 @@
+unittest_executable("ut_light") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/schema",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/services/lib/actors:monitoring_settings",
+  ]
+
+  sources = [ "//ydb/core/persqueue/public/schema/validation_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/schema" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

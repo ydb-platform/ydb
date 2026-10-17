@@ -6,6 +6,7 @@ protobuf_library("client") {
     ]
 
     sources = [
+        "api/common/proto/schema.proto",
         "api/rpc_proxy/proto/api_service.proto",
         "api/rpc_proxy/proto/discovery_service.proto",
         "bundle_controller/proto/bundle_controller_service.proto",
@@ -31,6 +32,7 @@ protobuf_library("client") {
         "table_chunk_format/proto/wire_protocol.proto",
         "table_client/proto/versioned_io_options.proto",
         "tablet_client/proto/lock_mask.proto",
+        "tablet_client/proto/secondary_index.proto",
         "transaction_client/proto/timestamp_service.proto",
     ]
 }

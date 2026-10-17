@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/path_aliasing",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "path_aliasing_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/grpc_services/base" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

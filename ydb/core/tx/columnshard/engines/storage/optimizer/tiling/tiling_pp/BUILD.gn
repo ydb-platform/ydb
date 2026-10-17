@@ -1,0 +1,24 @@
+library("tiling_pp") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets:planner",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling",
+    # "//ydb/library/intersection_tree",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//ydb/core/formats/arrow",  # peerdir only
+    "//ydb/core/protos",
+    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/data_locks:manager",
+    # "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/library/actors/core",
+  ]
+
+  sources = [ "wrapper.cpp" ]
+}

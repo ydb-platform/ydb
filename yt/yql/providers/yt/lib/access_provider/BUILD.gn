@@ -1,0 +1,7 @@
+library("access_provider") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/tvm_client",
+  ]
+
+  serialize_enum_headers = [ "yt_access_provider.h" ]
+}

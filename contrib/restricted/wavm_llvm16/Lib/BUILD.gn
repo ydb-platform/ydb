@@ -1,0 +1,115 @@
+config("public_config") {
+    defines = [
+        "WASM_C_API=WAVM_API",
+        "WAVM_API=",
+    ]
+    include_dirs = [ "../Include" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-c++23-extensions",
+        "-Wno-exceptions",
+        "-Wno-inconsistent-missing-override",
+        "-Wno-invalid-noreturn",
+        "-Wno-unused-function",
+    ]
+    defines = [
+        "HAS_FUTIMENS",
+        "HAS_UTIMENSAT",
+    ]
+    configs = [ "//contrib/libs/llvm16:public_config" ]
+}
+
+contrib_library("Lib") {
+    deps = [
+        "//contrib/libs/libunwind",
+        "//contrib/libs/llvm16",
+        "//contrib/libs/llvm16/lib/BinaryFormat",
+        "//contrib/libs/llvm16/lib/DebugInfo:DWARF",
+        "//contrib/libs/llvm16/lib/ExecutionEngine/RuntimeDyld",
+        "//contrib/libs/llvm16/lib/Target",
+        "//library/cpp/sanitizer/include",
+    ]
+
+    sources = [
+        "Emscripten/Emscripten.cpp",
+        "Emscripten/EmscriptenThreads.cpp",
+        "IR/DisassemblyNames.cpp",
+        "IR/FeatureSpec.cpp",
+        "IR/FloatPrinting.cpp",
+        "IR/Module.cpp",
+        "IR/Operators.cpp",
+        "IR/RandomModule.cpp",
+        "IR/Types.cpp",
+        "IR/Validate.cpp",
+        "LLVMJIT/EmitConvert.cpp",
+        "LLVMJIT/EmitCore.cpp",
+        "LLVMJIT/EmitExceptions.cpp",
+        "LLVMJIT/EmitFunction.cpp",
+        "LLVMJIT/EmitMem.cpp",
+        "LLVMJIT/EmitModule.cpp",
+        "LLVMJIT/EmitNumeric.cpp",
+        "LLVMJIT/EmitTable.cpp",
+        "LLVMJIT/EmitVar.cpp",
+        "LLVMJIT/LLVMCompile.cpp",
+        "LLVMJIT/LLVMJIT.cpp",
+        "LLVMJIT/LLVMModule.cpp",
+        "LLVMJIT/Thunk.cpp",
+        "LLVMJIT/Win64EH.cpp",
+        "Logging/Logging.cpp",
+        "NFA/NFA.cpp",
+        "ObjectCache/ObjectCache.cpp",
+        "Platform/POSIX/ClockPOSIX.cpp",
+        "Platform/POSIX/DiagnosticsPOSIX.cpp",
+        "Platform/POSIX/ErrorPOSIX.cpp",
+        "Platform/POSIX/EventPOSIX.cpp",
+        "Platform/POSIX/FilePOSIX.cpp",
+        "Platform/POSIX/MemoryPOSIX.cpp",
+        "Platform/POSIX/MutexPOSIX.cpp",
+        "Platform/POSIX/POSIX-X86_64.S",
+        "Platform/POSIX/RWMutexPOSIX.cpp",
+        "Platform/POSIX/RandomPOSIX.cpp",
+        "Platform/POSIX/SignalPOSIX.cpp",
+        "Platform/POSIX/ThreadPOSIX.cpp",
+        "RegExp/RegExp.cpp",
+        "Runtime/Atomics.cpp",
+        "Runtime/Compartment.cpp",
+        "Runtime/Context.cpp",
+        "Runtime/Exception.cpp",
+        "Runtime/Global.cpp",
+        "Runtime/Instance.cpp",
+        "Runtime/Intrinsics.cpp",
+        "Runtime/Invoke.cpp",
+        "Runtime/Linker.cpp",
+        "Runtime/Memory.cpp",
+        "Runtime/Module.cpp",
+        "Runtime/ModuleDebugInfo.cpp",
+        "Runtime/ObjectGC.cpp",
+        "Runtime/ResourceQuota.cpp",
+        "Runtime/Runtime.cpp",
+        "Runtime/Table.cpp",
+        "Runtime/VectorOverMMap.cpp",
+        "Runtime/WAVMIntrinsics.cpp",
+        "ThreadTest/ThreadTest.cpp",
+        "VFS/SandboxFS.cpp",
+        "VFS/VFS.cpp",
+        "WASI/WASI.cpp",
+        "WASI/WASIArgsEnvs.cpp",
+        "WASI/WASIClocks.cpp",
+        "WASI/WASIDiagnostics.cpp",
+        "WASI/WASIFile.cpp",
+        "WASM/WASMSerialization.cpp",
+        "WASTParse/Lexer.cpp",
+        "WASTParse/Parse.cpp",
+        "WASTParse/ParseFunction.cpp",
+        "WASTParse/ParseModule.cpp",
+        "WASTParse/ParseNumbers.cpp",
+        "WASTParse/ParseTests.cpp",
+        "WASTPrint/Print.cpp",
+        "wavm-c/wavm-c.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

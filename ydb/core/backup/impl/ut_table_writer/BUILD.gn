@@ -4,6 +4,7 @@ unittest_executable("ut_table_writer") {
     "//ydb/core/backup/impl",
     "//ydb/core/protos",
     "//ydb/core/tx/replication/ut_helpers",  # peerdir only
+    "//ydb/library/aclib",
   ]
 
   sources = [ "//ydb/core/backup/impl/table_writer_ut.cpp" ]
@@ -14,6 +15,7 @@ unittest_executable("ut_table_writer") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

@@ -1,5 +1,7 @@
 PROGRAM(mvp_meta)
 
+# gn: move into parent
+
 CFLAGS(
     -DPROFILE_MEMORY_ALLOCATIONS
 )

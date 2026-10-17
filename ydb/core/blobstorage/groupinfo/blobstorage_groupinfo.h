@@ -257,7 +257,7 @@ public:
         TTopology(const TTopology&) = delete;
         TTopology &operator =(const TTopology&) = delete;
         TTopology(TTopology&&) = default;
-        TTopology &operator =(TTopology&&) = default;
+        TTopology &operator =(TTopology&&) = delete;
         ~TTopology();
         void FinalizeConstruction();
 
@@ -348,7 +348,7 @@ public:
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
         TDynamicInfo(TDynamicInfo&&) = default;
-        TDynamicInfo &operator =(TDynamicInfo&&) = default;
+        TDynamicInfo &operator =(TDynamicInfo&&) = delete;
         ~TDynamicInfo() = default;
 
         void PushBackActorId(const TActorId &aid) {

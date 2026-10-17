@@ -1,0 +1,7 @@
+unittest_executable("ut") {
+  deps = [ "//library/cpp/testing/unittest" ]
+
+  sources = [ "binary_trie_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

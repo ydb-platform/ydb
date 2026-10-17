@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/containers/absl",  # peerdir only
+    "//library/cpp/containers/stack_vector",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/opt/rbo",
+  ]
+
+  sources = [ "kqp_info_unit_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

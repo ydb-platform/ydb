@@ -85,9 +85,9 @@ const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef
         }
 
         // It is range, where read was interrupted. Restart operation from last read key.
-        ranges.emplace_back(std::move(TSerializedTableRange(
+        ranges.emplace_back(TSerializedTableRange(
             TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
-        )));
+        ));
 
         // And push all others
         ranges.insert(ranges.end(), ++rangeIt, Ranges.end());

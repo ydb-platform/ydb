@@ -1,6 +1,7 @@
 unittest_executable("ut_schema") {
   deps = [
     "//contrib/libs/apache/arrow",
+    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
     "//library/cpp/deprecated/atomic",
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
@@ -9,8 +10,9 @@ unittest_executable("ut_schema") {
     "//ydb/core/base",
     "//ydb/core/cms/console",
     "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/protos",
     "//ydb/core/testlib/default",  # peerdir only
-    "//ydb/core/tx",  # peerdir only
+    "//ydb/core/tx",
     "//ydb/core/tx/columnshard",
     "//ydb/core/tx/columnshard/blobs_reader",
     "//ydb/core/tx/columnshard/engines",
@@ -20,12 +22,15 @@ unittest_executable("ut_schema") {
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/columnshard/operations",
     "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_proxy:public",
-    "//ydb/core/util",
+    "//ydb/core/util",  # peerdir only
     "//ydb/core/wrappers",
     "//ydb/library/actors/core",
     "//ydb/library/actors/protos",
+    "//ydb/library/actors/struct_log",
+    "//ydb/library/testlib/s3_recipe_helper",
     "//ydb/library/yverify_stream",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/table",
@@ -33,6 +38,7 @@ unittest_executable("ut_schema") {
   ]
 
   sources = [
+    "ut_columnshard_backup.cpp",
     "ut_columnshard_copy_table.cpp",
     "ut_columnshard_move_table.cpp",
     "ut_columnshard_schema.cpp",
@@ -40,10 +46,16 @@ unittest_executable("ut_schema") {
 
   include_dirs = [ "//ydb/core/tx/columnshard" ]
 
+  test_depends_unbuilt = [
+    "//contrib/python/moto/bin",
+    "//ydb/tests/tools/s3_recipe",
+  ]
+
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

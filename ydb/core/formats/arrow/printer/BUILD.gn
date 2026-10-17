@@ -4,7 +4,7 @@ library("printer") {
   deps = [
     # "//contrib/libs/apache/arrow",  # peerdir only
     "//yql/essentials/core/arrow_kernels/request",
-    # "//yql/essentials/core/issue/protos",  # peerdir only
+    # "//yql/essentials/public/issue/protos",  # peerdir only
     # "//yql/essentials/public/types",  # peerdir only
   ]
 

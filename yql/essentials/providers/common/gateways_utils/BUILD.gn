@@ -1,10 +1,14 @@
 library("gateways_utils") {
   public_deps = [
     # "//yql/essentials/providers/common/provider",
+    # "//yql/essentials/sql/settings/flags",
     "//yql/essentials/utils",
   ]
 
-  deps = [ "//yql/essentials/providers/common/proto" ]
+  deps = [
+    "//yql/essentials/providers/common/activation",
+    "//yql/essentials/providers/common/proto",
+  ]
 
   sources = [ "gateways_utils.cpp" ]
 }

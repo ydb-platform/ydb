@@ -17,6 +17,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/client/table
 )
+# gn: peerdir ydb/core/fq/libs/control_plane_storage:util
 
 YQL_LAST_ABI_VERSION()
 

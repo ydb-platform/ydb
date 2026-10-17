@@ -1,0 +1,16 @@
+library("span") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    "//contrib/proto/opentelemetry",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "retro_span.cpp",
+    "span_buffer.cpp",
+  ]
+}

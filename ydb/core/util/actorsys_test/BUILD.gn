@@ -29,7 +29,6 @@ library("actorsys_test") {
     # "//ydb/core/grpc_services",
     "//ydb/core/tx/scheme_board",
     "//ydb/core/util",
-    # "//ydb/library/actors/interconnect/mock",  # peerdir only
     # "//ydb/library/actors/wilson",  # peerdir only
     # "//ydb/library/yverify_stream",  # peerdir only
   ]

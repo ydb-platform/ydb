@@ -2,6 +2,8 @@ library("common") {
   testonly = true
 
   public_deps = [
+    # "//library/cpp/http/io",
+    # "//library/cpp/json",
     "//library/cpp/testing/unittest",
     # "//library/cpp/threading/local_executor",
     "//ydb/public/sdk/cpp/src/client/draft",

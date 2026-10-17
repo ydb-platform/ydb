@@ -1,21 +1,24 @@
 library("checkpointing") {
   public_deps = [
+    # "//library/cpp/threading/future",
     "//ydb/core/fq/libs/checkpoint_storage/events",
     # "//ydb/core/fq/libs/checkpointing/events",
     "//ydb/core/fq/libs/checkpointing_common",
+    "//ydb/core/fq/libs/state",
     # "//ydb/library/accessor",
     "//ydb/library/actors/core",
     # "//ydb/library/yql/dq/actors/common",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/dq/proto",
     "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
   ]
 
   deps = [
-    # "//ydb/core/fq/libs/actors/logging",
     "//ydb/core/fq/libs/config/protos",
+    "//ydb/library/actors/async",
     # "//ydb/library/yql/dq/actors",
-    "//ydb/library/yql/dq/state",
   ]
 
   sources = [

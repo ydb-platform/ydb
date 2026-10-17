@@ -1,5 +1,6 @@
 library("barriers") {
   public_deps = [
+    # "//ydb/core/base",
     # "//ydb/core/blobstorage/vdisk/hulldb/base",
     # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     # "//ydb/core/blobstorage/vdisk/hulldb/fresh",

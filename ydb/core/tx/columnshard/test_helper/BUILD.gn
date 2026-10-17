@@ -39,11 +39,13 @@ library("test_helper") {
     "//ydb/core/tx/columnshard/blobs_action/tier",
     # "//ydb/core/tx/columnshard/counters",
     "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/protos",  # peerdir only
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions",
     "//ydb/core/tx/columnshard/engines/storage/indexes/max",
     # "//ydb/core/tx/tiering/tier",
     "//ydb/core/wrappers",
     # "//ydb/library/actors/core",
+    # "//ydb/public/lib/value",
     "//yql/essentials/minikql/invoke_builtins",
   ]
 

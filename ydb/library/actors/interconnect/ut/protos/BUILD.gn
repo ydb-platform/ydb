@@ -1,3 +1,5 @@
 protobuf_library("protos") {
   sources = [ "interconnect_test.proto" ]
+
+  protoc_fatal_warnings = true
 }

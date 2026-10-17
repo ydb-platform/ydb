@@ -1,17 +1,22 @@
 unittest_executable("indexes") {
   deps = [
+    "//library/cpp/string_utils/base64",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
+    "//ydb/core/formats/arrow",
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/ut/common",
     "//ydb/core/kqp/ut/olap/combinatory",
     "//ydb/core/kqp/ut/olap/helpers",
+    "//ydb/core/local_indexes/bloom",
     "//ydb/core/statistics",
     "//ydb/core/testlib",  # peerdir only
     "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard/engines",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/columnshard/test_helper",
     "//ydb/public/sdk/cpp/src/client/types",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
@@ -25,6 +30,7 @@ unittest_executable("indexes") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

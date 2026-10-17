@@ -1,4 +1,11 @@
 library("bloom_ngramm") {
+  public_deps = [
+    # "//ydb/core/local_indexes/bloom",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/helper",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",
+  ]
+
   deps = [
     # "//contrib/libs/apache/arrow",
     # "//library/cpp/deprecated/atomic",
@@ -6,16 +13,15 @@ library("bloom_ngramm") {
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
-    "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/bits_storage",
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
-    "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",
     # "//ydb/core/tx/program",
     "//ydb/core/tx/schemeshard/olap/schema",
+    # "//ydb/library/conclusion",  # peerdir only
     # "//ydb/library/formats/arrow/hash",
   ]
 
   sources = [
-    "const.cpp",
     "constructor.cpp",
     "meta.cpp",
   ]

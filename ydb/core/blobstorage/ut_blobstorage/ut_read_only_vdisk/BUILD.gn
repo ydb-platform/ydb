@@ -2,7 +2,8 @@ unittest_executable("ut_read_only_vdisk") {
   deps = [
     "//library/cpp/protobuf/util",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
-    "//ydb/core/load_test",
+    "//ydb/core/load_test",  # peerdir only
+    "//ydb/core/load_test/common",
   ]
 
   sources = [ "//ydb/core/blobstorage/ut_blobstorage/read_only_vdisk.cpp" ]
@@ -13,6 +14,7 @@ unittest_executable("ut_read_only_vdisk") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -5,6 +5,7 @@ library("http_client") {
     "//yt/cpp/mapreduce/common",
     "//yt/cpp/mapreduce/http",
     # "//yt/cpp/mapreduce/interface",
+    "//yt/yt/core/http",
   ]
 
   deps = [
@@ -12,6 +13,8 @@ library("http_client") {
     # "//library/cpp/yt/yson_string",
     "//yt/cpp/mapreduce/interface/logging",
     # "//yt/cpp/mapreduce/io",
+    # "//yt/yt/core",
+    "//yt/yt/core/https",
   ]
 
   sources = [

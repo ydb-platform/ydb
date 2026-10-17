@@ -16,6 +16,7 @@ unittest_executable("ut") {
     "//util/stream/length_ut.cpp",
     "//util/stream/mem_ut.cpp",
     "//util/stream/multi_ut.cpp",
+    "//util/stream/output_ut.cpp",
     "//util/stream/printf_ut.cpp",
     "//util/stream/str_ut.cpp",
     "//util/stream/tokenizer_ut.cpp",

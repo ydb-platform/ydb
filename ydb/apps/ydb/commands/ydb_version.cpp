@@ -7,8 +7,6 @@
 
 namespace NYdb::NConsoleClient {
 
-const char* VersionResourceName = "version.txt";
-
 TCommandVersion::TCommandVersion()
     : TClientCommand("version", {}, "Print YDB CLI version")
 {}

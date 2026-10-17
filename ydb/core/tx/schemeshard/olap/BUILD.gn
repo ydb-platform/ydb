@@ -8,6 +8,7 @@ group("olap") {
     # "//ydb/core/tx/schemeshard/olap/layout",  # peerdir only
     # "//ydb/core/tx/schemeshard/olap/options",  # peerdir only
     # "//ydb/core/tx/schemeshard/olap/schema",  # peerdir only
+    # "//ydb/core/tx/schemeshard/olap/statistics",  # peerdir only
     # "//ydb/core/tx/schemeshard/olap/ttl",  # peerdir only
   ]
 }

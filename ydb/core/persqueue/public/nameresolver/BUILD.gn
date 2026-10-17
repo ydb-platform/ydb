@@ -1,0 +1,9 @@
+library("nameresolver") {
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public",
+  ]
+
+  sources = [ "nameresolver.cpp" ]
+}

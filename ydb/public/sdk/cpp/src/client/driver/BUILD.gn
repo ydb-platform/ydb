@@ -2,6 +2,8 @@ library("driver") {
   public_deps = [
     "//library/cpp/logger",
     "//ydb/public/sdk/cpp/src/client/common_client",
+    # "//ydb/public/sdk/cpp/src/client/metrics",
+    # "//ydb/public/sdk/cpp/src/client/trace",
     # "//ydb/public/sdk/cpp/src/client/types",
     "//ydb/public/sdk/cpp/src/client/types/credentials",
     # "//ydb/public/sdk/cpp/src/client/types/executor",
@@ -14,6 +16,7 @@ library("driver") {
     "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
     "//ydb/public/sdk/cpp/src/client/impl/internal/logger",
     # "//ydb/public/sdk/cpp/src/client/resources",
+    # "//ydb/public/sdk/cpp/src/client/types/exceptions",
   ]
 
   sources = [ "driver.cpp" ]

@@ -8,7 +8,9 @@ library("computation") {
     # "//library/cpp/threading/future",
     # "//library/cpp/time_provider",
     "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/aligned_page_pool",
     "//yql/essentials/minikql/arrow",
+    "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/minikql:alloc",
     "//yql/essentials/minikql:terminator",
     "//yql/essentials/public/decimal",
@@ -21,9 +23,11 @@ library("computation") {
   deps = [
     # "//library/cpp/containers/stack_vector",
     # "//library/cpp/resource",
+    "//library/cpp/string_utils/base64",
     # "//library/cpp/yson/node",
     # "//yql/essentials/parser/pg_wrapper/interface",
     # "//yql/essentials/public/types",  # peerdir only
+    # "//yql/essentials/utils/meta",  # peerdir only
   ]
 
   sources = [
@@ -32,6 +36,10 @@ library("computation") {
     "mkql_block_reader.cpp",
     "mkql_block_transport.cpp",
     "mkql_block_trimmer.cpp",
+    "mkql_bridge.cpp",
+    "mkql_bridge_inprocess.cpp",
+    "mkql_bridge_outprocess.cpp",
+    "mkql_bridge_protocol.cpp",
     "mkql_computation_node.cpp",
     "mkql_computation_node_holders.cpp",
     "mkql_computation_node_impl.cpp",
@@ -40,6 +48,7 @@ library("computation") {
     "mkql_computation_pattern_cache.cpp",
     "mkql_custom_list.cpp",
     "mkql_datum_validate.cpp",
+    "mkql_external_node_invalidator.cpp",
     "mkql_validate.cpp",
     "mkql_value_builder.cpp",
     "presort.cpp",

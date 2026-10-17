@@ -8,7 +8,9 @@ library("ut_common") {
     "//ydb/core/kqp/ut/common",
     "//ydb/core/protos",
     # "//ydb/core/testlib",
+    # "//ydb/core/testlib/actors",
     "//ydb/core/tx/datashard",
+    # "//ydb/core/tx/long_tx_service/public",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/library/ut",
   ]
@@ -22,13 +24,17 @@ library("ut_common") {
     # "//ydb/core/testlib/basics",
     # "//ydb/core/tx/balance_coverage",
     # "//ydb/core/tx/data_events",
-    # "//ydb/core/tx/schemeshard",
+    # "//ydb/core/tx/schemeshard/index",
     "//ydb/core/tx/tx_allocator",
     # "//ydb/core/tx/tx_proxy:public",
     "//ydb/core/tx/tx_proxy:upload_rows",
+    # "//ydb/library/aclib",
     # "//ydb/public/sdk/cpp/src/client/result",
     # "//yql/essentials/minikql",
   ]
 
-  sources = [ "datashard_ut_common.cpp" ]
+  sources = [
+    "datashard_ut_common.cpp",
+    "datashard_ut_common_tx.cpp",
+  ]
 }

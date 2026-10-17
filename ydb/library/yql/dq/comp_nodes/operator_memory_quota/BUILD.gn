@@ -1,0 +1,3 @@
+library("operator_memory_quota") {
+  sources = [ "dq_operator_memory_quota.cpp" ]
+}

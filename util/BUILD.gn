@@ -1,7 +1,5 @@
 # yamake2gn: keep  -- hand-written, do not regenerate
 
-import("//build/gn/yasm.gni")
-
 config("public_config") {
     cflags = [ "-Wno-nontrivial-memcall" ]
 }
@@ -20,18 +18,10 @@ ragel6_sources("datetime_parser") {
     ]
 }
 
-yasm_source_set("system_context") {
-    deps = []
-    sources = [
-        "system/context_x86.asm",
-    ]
-}
-
 shared_library("util") {
     deps = []
     deps += [
         ":datetime_parser",
-        ":system_context",
         "//contrib/libs/double-conversion",
         "//contrib/libs/libc_compat",
         "//contrib/libs/zlib",
@@ -211,6 +201,7 @@ shared_library("util") {
         "system/compat.cpp",
         "system/condvar.cpp",
         "system/context.cpp",
+        "system/context_x86.S",
         "system/cpu_id.cpp",
         "system/daemon.cpp",
         "system/datetime.cpp",

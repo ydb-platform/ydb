@@ -7,6 +7,8 @@ protobuf_library("protos") {
     "copy_to_test.proto",
   ]
 
+  protoc_fatal_warnings = true
+
   extra_plugins = [
     {
       name = "config_proto_plugin"

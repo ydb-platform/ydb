@@ -29,6 +29,7 @@ library("base_types") {
     # ":base",
     "//ydb/core/base",
     # "//ydb/core/blobstorage/groupinfo",
+    # "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/ingress",
     "//ydb/core/protos",
@@ -36,7 +37,7 @@ library("base_types") {
   ]
 
   deps = [
-    # "//contrib/libs/xxhash",
+    # "//ydb/core/blobstorage/base",
   ]
 
   sources = [

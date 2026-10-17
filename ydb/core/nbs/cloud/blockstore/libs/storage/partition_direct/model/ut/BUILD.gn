@@ -1,0 +1,29 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/blockstore/config",
+    "//ydb/core/nbs/cloud/blockstore/config/protos",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ddisk_balance_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_health_policy_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/time_predictor_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config_ut.cpp",
+  ]
+
+  include_dirs =
+      [ "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

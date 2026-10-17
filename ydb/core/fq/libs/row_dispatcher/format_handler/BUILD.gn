@@ -3,14 +3,14 @@ library("filters") {
     # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/fq/libs/row_dispatcher/events",
     # "//ydb/core/fq/libs/row_dispatcher/format_handler/common",
+    "//ydb/core/fq/libs/row_dispatcher/memory",
     # "//yql/essentials/public/udf",
   ]
 
   deps = [
     "//contrib/libs/fmt",
-    # "//ydb/core/fq/libs/actors/logging",
     # "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
-    # "//ydb/library/actors/core",  # peerdir only
+    "//ydb/library/actors/core",
     # "//yql/essentials/minikql",  # peerdir only
     # "//yql/essentials/minikql/comp_nodes",  # peerdir only
     "//yql/essentials/minikql/computation",
@@ -31,16 +31,21 @@ library("format_handler") {
     "//ydb/core/fq/libs/row_dispatcher/common",
     # "//ydb/core/fq/libs/row_dispatcher/events",
     "//ydb/core/fq/libs/row_dispatcher/format_handler/parsers",
+    # "//ydb/core/fq/libs/row_dispatcher/memory",
     # "//ydb/library/actors/core",
     # "//ydb/library/actors/util",
-  ]
-
-  deps = [
-    # "//ydb/core/fq/libs/actors/logging",
-    "//ydb/core/fq/libs/row_dispatcher/format_handler/common",  # peerdir only
-    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yql/providers/abstract/message_stream",
     "//yql/essentials/minikql/computation",
   ]
 
-  sources = [ "format_handler.cpp" ]
+  deps = [
+    "//ydb/core/fq/libs/row_dispatcher/format_handler/common",  # peerdir only
+    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "data_packer.cpp",
+    "format_handler.cpp",
+  ]
 }

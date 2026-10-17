@@ -12,13 +12,16 @@ unittest_executable("ut_change_exchange") {
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/public/write_meta",
+    "//ydb/core/protos/schemeshard",
     "//ydb/core/testlib/actors",
     "//ydb/core/testlib/pg",  # peerdir only
     "//ydb/core/tx",  # peerdir only
-    "//ydb/core/tx/datashard",  # peerdir only
+    "//ydb/core/tx/datashard",
     "//ydb/core/tx/datashard/ut_common",
     "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/aclib",
     "//ydb/library/ut",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/datastreams",
@@ -30,14 +33,13 @@ unittest_executable("ut_change_exchange") {
 
   sources = [ "//ydb/core/tx/datashard/datashard_ut_change_exchange.cpp" ]
 
-  include_dirs = [
-    "//ydb/core/tx/datashard",  # peerdir only
-  ]
+  include_dirs = [ "//ydb/core/tx/datashard" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

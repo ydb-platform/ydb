@@ -9,7 +9,7 @@ library("common") {
     "//ydb/core/fq/libs/protos",
     # "//ydb/core/fq/libs/shared_resources",
     # "//ydb/core/fq/libs/ydb",
-    "//ydb/core/kqp/proxy_service/script_executions_utils",
+    "//ydb/core/kqp/script_executions/common",
     "//ydb/library/actors/core",
     # "//ydb/library/yql/providers/common/token_accessor/client",
     # "//ydb/library/yql/providers/dq/provider",
@@ -36,9 +36,10 @@ library("common") {
     "//ydb/core/fq/libs/db_id_async_resolver_impl",
     # "//ydb/core/fq/libs/grpc",  # peerdir only
     "//ydb/core/fq/libs/private_client",
-    "//ydb/library/plan2svg",
+    "//ydb/library/plan2svg",  # peerdir only
     # "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
     # "//ydb/library/yql/providers/generic/connector/api/service/protos",  # peerdir only
+    # "//ydb/public/lib/ydb_cli/common",
     # "//ydb/public/sdk/cpp/src/client/proto",
     # "//yql/essentials/public/issue",
     "//yql/essentials/public/issue/protos",

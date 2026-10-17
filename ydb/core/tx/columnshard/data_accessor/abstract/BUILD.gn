@@ -1,27 +1,36 @@
 library("abstract") {
   public_deps = [
+    ":constructor",
     # "//library/cpp/cache",
-    "//library/cpp/json",
-    "//ydb/core/protos",
-    # "//ydb/core/tx/columnshard/blobs_action/counters",
     # "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/data_accessor",
-    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    "//ydb/core/tx/columnshard/engines/portions",
     # "//ydb/core/tx/columnshard/tx_reader",
-    # "//ydb/library/accessor",
-    # "//ydb/library/conclusion",
-    "//ydb/services/bg_tasks/abstract",
   ]
 
   deps = [
+    "//ydb/core/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/reader/tracing",  # peerdir only
   ]
 
   sources = [
     "//ydb/core/tx/columnshard/data_accessor/local_db/constructor.cpp",
     "//ydb/core/tx/columnshard/data_accessor/local_db/manager.cpp",
     "collector.cpp",
-    "constructor.cpp",
     "manager.cpp",
   ]
+}
+
+library("constructor") {
+  public_deps = [
+    "//library/cpp/json",
+    "//ydb/core/protos",
+    # "//ydb/library/accessor",
+    # "//ydb/library/conclusion",
+    "//ydb/services/bg_tasks/abstract",
+  ]
+
+  sources = [ "constructor.cpp" ]
 }

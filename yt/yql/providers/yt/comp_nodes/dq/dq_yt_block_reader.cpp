@@ -218,12 +218,12 @@ public:
         size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
         for (size_t i = 0; i < ColumnTypes_->size(); ++i) {
             ColumnBuilders_.push_back(
-                std::move(NUdf::MakeArrayBuilder(
+                NUdf::MakeArrayBuilder(
                     TTypeInfoHelper(), ColumnTypes_->at(i),
                     pool,
                     maxBlockLen,
                     pgBuilder
-                ))
+                )
             );
         }
     }
@@ -240,7 +240,7 @@ public:
         std::vector<arrow::Datum> columns;
         columns.reserve(ColumnBuilders_.size());
         for (size_t i = 0; i < ColumnBuilders_.size(); ++i) {
-            columns.emplace_back(std::move(ColumnBuilders_[i]->Build(false)));
+            columns.emplace_back(ColumnBuilders_[i]->Build(false));
         }
         auto res = std::make_shared<TResultBatch>(RowsCnt_, std::move(columns));
         RowsCnt_ = 0;
@@ -299,7 +299,7 @@ public:
                 }
                 ++matchedColumns;
                 auto columnIdx =  columnIdxIt->second;
-                result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
+                result[columnIdx] = ColumnConverters_[columnIdx]->Convert(batch->column(i)->data());
             }
             Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         }
@@ -478,9 +478,9 @@ public:
         Reader_ = currentReader_;
         FallbackReader_.Next();
         while (FallbackReader_.IsValid()) {
-            auto currentRow = std::move(FallbackReader_.GetRow());
+            auto currentRow = FallbackReader_.GetRow();
             if (!Settings_->Specs->InputGroups.empty()) {
-                currentRow = std::move(HolderFactory.CreateVariantHolder(currentRow.Release(), Settings_->Specs->InputGroups.at(Settings_->OriginalIndexes[idx])));
+                currentRow = HolderFactory.CreateVariantHolder(currentRow.Release(), Settings_->Specs->InputGroups.at(Settings_->OriginalIndexes[idx]));
             }
             BlockBuilder_.Add(currentRow);
             FallbackReader_.Next();

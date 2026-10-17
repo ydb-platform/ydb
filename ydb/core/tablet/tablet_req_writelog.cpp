@@ -222,7 +222,7 @@ public:
         if (RequestSpan) {
             auto res = BlobSpans.try_emplace(actualLogEntryId, TWilsonTablet::TabletDetailed, RequestSpan.GetTraceId(), "Tablet.WriteLog.LogEntry");
 
-            traceId = std::move(res.first->second.GetTraceId());
+            traceId = res.first->second.GetTraceId();
         }
 
         SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog, CommitTactic,

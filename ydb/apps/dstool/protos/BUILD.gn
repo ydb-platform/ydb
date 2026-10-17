@@ -1,0 +1,5 @@
+protobuf_library("protos") {
+  sources = [ "cluster_workload.proto" ]
+
+  protoc_fatal_warnings = true
+}

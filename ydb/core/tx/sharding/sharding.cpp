@@ -2,6 +2,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
+#include <ydb/core/tx/schemeshard/olap/columns/schema.h>
 #include <util/string/join.h>
 #include "hash_intervals.h"
 #include "hash_modulo.h"
@@ -23,6 +24,14 @@ TConclusionStatus IShardingBase::ValidateBehaviour(const NSchemeShard::TOlapSche
 }
 
 TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProto(const NSchemeShard::TOlapSchema* schema, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
+    return BuildFromProtoImpl(schema ? &schema->GetColumns() : nullptr, shardingProto);
+}
+
+TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProto(const NSchemeShard::TOlapColumnsDescription& columns, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
+    return BuildFromProtoImpl(&columns, shardingProto);
+}
+
+TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProtoImpl(const NSchemeShard::TOlapColumnsDescription* columns, const NKikimrSchemeOp::TColumnTableSharding& shardingProto) {
     if (!shardingProto.GetColumnShards().size()) {
         return TConclusionStatus::Fail("config is incorrect for construct sharding behaviour");
     }
@@ -37,11 +46,11 @@ TConclusion<std::unique_ptr<IShardingBase>> IShardingBase::BuildFromProto(const 
         } else {
             for (auto&& i : hashSharding.GetColumns()) {
                 columnNames.emplace_back(i);
-                if (schema) {
-                    if (!schema->GetColumns().GetByName(i)) {
+                if (columns) {
+                    if (!columns->GetByName(i)) {
                         return TConclusionStatus::Fail("incorrect sharding column name: " + i);
                     }
-                    if (!schema->GetColumns().GetByName(i)->IsKeyColumn()) {
+                    if (!columns->GetByName(i)->IsKeyColumn()) {
                         return TConclusionStatus::Fail("sharding column name have to been primary key column: " + i);
                     }
                 }

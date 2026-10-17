@@ -1,0 +1,3 @@
+library("abi_version_check") {
+  sources = [ "abi_version_check.cpp" ]
+}

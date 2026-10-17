@@ -1,0 +1,21 @@
+library("model") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  sources = [
+    "channel_data_kind.cpp",
+    "counters_helpers.cpp",
+    "disk_description.cpp",
+    "log_prefix.cpp",
+    "log_title.cpp",
+  ]
+
+  serialize_enum_headers = [ "channel_data_kind.h" ]
+}

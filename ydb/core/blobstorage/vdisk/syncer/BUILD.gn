@@ -22,6 +22,7 @@ library("syncer") {
     # "//library/cpp/random_provider",
     # "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/vdisk/anubis_osiris",
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
     "//ydb/core/blobstorage/vdisk/synclog",
     # "//ydb/core/control/lib",
     # "//ydb/library/actors/interconnect",
@@ -43,5 +44,6 @@ library("syncer") {
     "guid_recovery.cpp",
     "syncer_job_actor.cpp",
     "syncer_job_task.cpp",
+    "syncer_merger.cpp",
   ]
 }

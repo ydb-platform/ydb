@@ -1,9 +1,9 @@
 library("file_storage") {
   public_deps = [
-    # "//library/cpp/cache",
-    # "//library/cpp/threading/future",
+    "//library/cpp/cache",
+    "//library/cpp/threading/future",
     "//library/cpp/uri",
-    # "//yql/essentials/core/file_storage/defs",
+    "//yql/essentials/core/file_storage/defs",
   ]
 
   deps = [
@@ -12,10 +12,10 @@ library("file_storage") {
     # "//library/cpp/logger/global",  # peerdir only
     "//library/cpp/protobuf/util",
     "//library/cpp/resource",
-    # "//yql/essentials/core/file_storage/download",
+    "//yql/essentials/core/file_storage/download",
     "//yql/essentials/core/file_storage/http_download",
     "//yql/essentials/core/file_storage/proto",
-    # "//yql/essentials/public/issue",
+    "//yql/essentials/public/issue",
     "//yql/essentials/utils",
     "//yql/essentials/utils/fetch",
     "//yql/essentials/utils/log",

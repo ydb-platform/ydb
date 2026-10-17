@@ -11,7 +11,7 @@
 #include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
-#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+#include <ydb/core/tx/schemeshard/olap/columns/schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -236,7 +236,7 @@ public:
     }
 
     std::shared_ptr<void> ExtractBatch() override {
-        auto r = std::make_shared<TOwnedCellVecBatch>(std::move(Extract()));
+        auto r = std::make_shared<TOwnedCellVecBatch>(Extract());
         return std::reinterpret_pointer_cast<void>(r);
     }
 
@@ -464,9 +464,9 @@ public:
         AFL_ENSURE(description.HasSharding());
         const auto& sharding = description.GetSharding();
 
-        NSchemeShard::TOlapSchema olapSchema;
-        olapSchema.ParseFromLocalDB(scheme);
-        auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(olapSchema, sharding);
+        NSchemeShard::TOlapColumnsDescription columns;
+        columns.Parse(scheme);
+        auto shardingConclusion = NSharding::IShardingBase::BuildFromProto(columns, sharding);
         if (shardingConclusion.IsFail()) {
             ythrow yexception() << "Ydb::StatusIds::SCHEME_ERROR : " <<  shardingConclusion.GetErrorMessage();
         }
@@ -617,7 +617,7 @@ public:
                 Memory -= batch->GetMemory();
             }
         }
-        return std::move(newBatches);
+        return newBatches;
     }
 
     IDataBatchPtr FlushBatch(ui64 shardId) override {

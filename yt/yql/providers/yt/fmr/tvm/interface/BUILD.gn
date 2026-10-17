@@ -1,0 +1,3 @@
+library("interface") {
+  sources = [ "yql_yt_fmr_tvm_interface.cpp" ]
+}

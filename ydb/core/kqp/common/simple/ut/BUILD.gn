@@ -1,0 +1,17 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "session_id_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

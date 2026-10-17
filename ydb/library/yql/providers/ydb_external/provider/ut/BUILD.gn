@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/providers/dq/expr_nodes",
+    "//ydb/library/yql/providers/ydb_external/common",
+    # "//ydb/library/yql/providers/ydb_external/expr_nodes",  # no target
+    "//ydb/library/yql/providers/ydb_external/proto",
+    "//ydb/library/yql/providers/ydb_external/provider",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+    "//yql/essentials/core",
+    "//yql/essentials/core/dq_integration",
+    "//yql/essentials/core/sql_types",
+    "//yql/essentials/providers/common/provider",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "metadata_rpc_ut.cpp",
+    "provider_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/ydb_external/provider" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

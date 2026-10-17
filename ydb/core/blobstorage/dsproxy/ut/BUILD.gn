@@ -7,8 +7,10 @@ unittest_executable("ut") {
     "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/dsproxy",
     "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/nodewarden",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/query",
+    "//ydb/core/node_whiteboard",
     "//ydb/core/testlib",
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
@@ -16,8 +18,10 @@ unittest_executable("ut") {
   ]
 
   sources = [
+    "dsproxy_check_integrity_ut.cpp",
     "dsproxy_counters_ut.cpp",
     "dsproxy_discover_ut.cpp",
+    "dsproxy_dormant_ut.cpp",
     "dsproxy_get_block_ut.cpp",
     "dsproxy_get_ut.cpp",
     "dsproxy_patch_ut.cpp",
@@ -31,6 +35,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

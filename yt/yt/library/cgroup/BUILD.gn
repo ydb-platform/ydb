@@ -1,0 +1,15 @@
+library("cgroup") {
+  public_deps = [
+    # "//library/cpp/yt/error",
+    # "//library/cpp/yt/misc",
+  ]
+
+  deps = [
+    # "//library/cpp/yt/logging",
+  ]
+
+  sources = [
+    "process.cpp",
+    "statistics.cpp",
+  ]
+}

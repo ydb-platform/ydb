@@ -1,0 +1,20 @@
+unittest_executable("row_ranges") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/row_ranges",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/value",
+  ]
+
+  sources = [
+    "row_ranges_public_include_ut.cpp",
+    "row_ranges_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

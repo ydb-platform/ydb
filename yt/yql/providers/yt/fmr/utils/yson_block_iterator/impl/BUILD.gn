@@ -1,18 +1,21 @@
 library("impl") {
   public_deps = [
+    # "//library/cpp/threading/future",
+    # "//library/cpp/yson",
     # "//yql/essentials/providers/common/codec",
     # "//yt/cpp/mapreduce/interface",
     # "//yt/yql/providers/yt/fmr/request_options",
     # "//yt/yql/providers/yt/fmr/table_data_service/interface",
     # "//yt/yql/providers/yt/fmr/utils",
     # "//yt/yql/providers/yt/fmr/utils/comparator",
+    # "//yt/yql/providers/yt/fmr/utils/hasher",
+    # "//yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface",
   ]
 
   deps = [
-    # "//library/cpp/threading/future",  # peerdir only
-    # "//library/cpp/yson",  # peerdir only
     # "//library/cpp/yt/yson",  # peerdir only
     # "//yql/essentials/utils",  # peerdir only
+    # "//yql/essentials/utils/log",
     # "//yt/yql/providers/yt/codec",
   ]
 

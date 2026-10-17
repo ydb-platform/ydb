@@ -4,6 +4,7 @@ group("actor_client") {
     "//library/cpp/digest/crc32c",
     "//ydb/core/util",
     "//ydb/library/actors/core",
+    "//ydb/library/protobuf_printer",
     "//ydb/library/services",
     "//ydb/public/sdk/cpp/src/library/grpc/client",
   ]

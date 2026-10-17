@@ -1,0 +1,13 @@
+gtest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/tools/ydb_bench/memory:memory_benchmark",
+  ]
+
+  sources = [
+    "//ydb/tools/ydb_bench/memory/main_ut.cpp",
+    "//ydb/tools/ydb_bench/memory/options.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

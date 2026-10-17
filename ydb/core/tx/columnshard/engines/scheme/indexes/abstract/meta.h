@@ -19,10 +19,6 @@ class TExprBase;
 namespace NKikimr::NOlap {
 struct TIndexInfo;
 class TIndexChunk;
-
-namespace NReader::NCommon {
-class IKernelFetchLogic;
-}
 }   // namespace NKikimr::NOlap
 
 namespace NKikimr::NSchemeShard {
@@ -48,9 +44,6 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, DefaultStorageId, IStoragesManager::DefaultStorageId);
     YDB_READONLY_DEF(bool, InheritPortionStorage);
-
-    virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-        const std::shared_ptr<IIndexMeta>& selfPtr, const std::shared_ptr<IStoragesManager>& storagesManager) const;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const {
         return std::make_shared<TDefaultHeader>(data.GetSize());
@@ -88,11 +81,6 @@ public:
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);
-    }
-
-    std::shared_ptr<NReader::NCommon::IKernelFetchLogic> BuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
-        const std::shared_ptr<IIndexMeta>& meta, const std::shared_ptr<IStoragesManager>& storagesManager) const {
-        return DoBuildFetchTask(dataAddresses, meta, storagesManager);
     }
 
     bool IsInplaceData(const TString& specialTier) const {

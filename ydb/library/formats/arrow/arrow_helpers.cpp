@@ -228,7 +228,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const std::shared_ptr<arrow::Da
         ReserveData(*builder, reserveSize);
     }
     TStatusValidator::Validate(builder->Reserve(reserveItems));
-    return std::move(builder);
+    return builder;
 }
 
 std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builder) {

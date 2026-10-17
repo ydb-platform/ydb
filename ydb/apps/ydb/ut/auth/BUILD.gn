@@ -1,0 +1,28 @@
+unittest_executable("auth") {
+  deps = [
+    "//contrib/libs/fmt",
+    "//contrib/libs/grpc",
+    "//contrib/libs/jwt-cpp",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/security/certificate_check/test_utils",
+    "//ydb/public/api/client/yc_public/iam",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers",
+    "//ydb/public/sdk/cpp/tests/unit/client/oidc/helpers",
+  ]
+
+  data_deps = [ "//ydb/apps/ydb" ]
+
+  sources = [
+    "//ydb/apps/ydb/ut/mock_env.cpp",
+    "//ydb/apps/ydb/ut/oidc.cpp",
+    "//ydb/apps/ydb/ut/oidc_interactive.cpp",
+    "//ydb/apps/ydb/ut/parse_command_line.cpp",
+    "//ydb/apps/ydb/ut/run_ydb.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

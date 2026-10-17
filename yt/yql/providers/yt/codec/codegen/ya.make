@@ -1,6 +1,8 @@
 LIBRARY()
 
-SRCS()
+SRCS(
+    yt_codec_cg.h  # gn: slot yt_codegen
+)
 
 PEERDIR()
 

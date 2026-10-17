@@ -1,0 +1,20 @@
+linked_executable("otel_tracing_example") {
+  deps = [
+    "//contrib/libs/opentelemetry-cpp",
+    "//contrib/libs/opentelemetry-cpp/api",  # peerdir only
+    "//library/cpp/getopt",
+    "//ydb/public/sdk/cpp/plugins/metrics/otel",  # peerdir only
+    "//ydb/public/sdk/cpp/plugins/trace/otel",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/metrics",
+    "//ydb/public/sdk/cpp/src/client/params",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/status",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,0 +1,22 @@
+library("join_perf") {
+  testonly = true
+
+  public_deps = [
+    # "//yql/essentials/minikql",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/json",
+    # "//library/cpp/threading/future",
+    # "//ydb/library/yql/dq/comp_nodes",
+    # "//ydb/library/yql/dq/comp_nodes/ut/utils",
+    # "//yql/essentials/minikql/computation",
+  ]
+
+  sources = [
+    "benchmark_settings.cpp",
+    "construct_join_graph.cpp",
+    "joins.cpp",
+  ]
+}

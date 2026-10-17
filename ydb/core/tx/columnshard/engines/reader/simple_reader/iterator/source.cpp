@@ -15,6 +15,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -301,8 +302,8 @@ TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDat
     std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>> result;
     for (auto&& i : addresses) {
         auto indexMeta = GetSourceSchema()->GetIndexInfo().GetIndexVerified(i.first);
-        result.emplace_back(
-            indexMeta->BuildFetchTask(i.second, indexMeta.GetObjectPtrVerified(), GetContext()->GetCommonContext()->GetStoragesManager()));
+        result.emplace_back(std::make_shared<NIndexes::TIndexFetcherLogic>(
+            i.second, indexMeta.GetObjectPtrVerified(), GetContext()->GetCommonContext()->GetStoragesManager()));
     }
     return result;
 }

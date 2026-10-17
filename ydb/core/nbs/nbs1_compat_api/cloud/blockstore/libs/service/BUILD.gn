@@ -1,0 +1,8 @@
+group("service") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/core/nbs/cloud/blockstore/libs/service",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos",
+  ]
+}

@@ -1,0 +1,23 @@
+library("pure_ast") {
+  public_deps = [
+    "//contrib/libs/antlr4_cpp_runtime",
+    "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",
+  ]
+
+  deps = [
+    "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",
+    "//yql/essentials/parser/common/antlr4",
+    "//yql/essentials/public/issue",
+    "//yql/essentials/sql/settings",
+  ]
+
+  sources = [
+    "ansi.cpp",
+    "base_visitor.cpp",
+    "cursor_text.cpp",
+    "narrowing_visitor.cpp",
+    "parse_tree.cpp",
+    "parser.cpp",
+    "path_visitor.cpp",
+  ]
+}

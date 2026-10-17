@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     control_plane_storage_requester_actor.cpp
     query_utils.cpp

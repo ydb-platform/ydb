@@ -2,15 +2,24 @@ unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
     "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
     "//ydb/core/testlib/pg",  # peerdir only
     "//ydb/core/ydb_convert",
     "//ydb/library/aclib",
+    "//ydb/library/actors/core",
   ]
 
   sources = [
+    "//ydb/core/ydb_convert/column_table_index_entity_id_ut.cpp",
     "//ydb/core/ydb_convert/compression_ut.cpp",
+    "//ydb/core/ydb_convert/dictionary_feature_flag_ut.cpp",
     "//ydb/core/ydb_convert/table_description_ut.cpp",
+    "//ydb/core/ydb_convert/table_settings_ut.cpp",
     "//ydb/core/ydb_convert/ydb_convert_ut.cpp",
+    "topic_description_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/ydb_convert" ]
@@ -19,6 +28,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/library/actors/interconnect/poller",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/yql/providers/dq/actors",  # peerdir only
+    "//ydb/library/yql/providers/dq/worker_manager",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "local_worker_manager_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/dq/worker_manager" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

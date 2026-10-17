@@ -1,0 +1,15 @@
+library("kafka") {
+  public_deps = [
+    # "//ydb/public/sdk/cpp/src/library/decimal",
+  ]
+
+  deps = [ "//library/cpp/streams/zstd" ]
+
+  sources = [
+    "kafka_messages_int.cpp",
+    "kafka_records.cpp",
+    "kafka_write_buffer.cpp",
+  ]
+
+  serialize_enum_headers = [ "kafka.h" ]
+}

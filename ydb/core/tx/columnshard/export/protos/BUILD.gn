@@ -1,6 +1,13 @@
 protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/core/scheme/protos",
+  ]
+
   sources = [
     "cursor.proto",
     "task.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

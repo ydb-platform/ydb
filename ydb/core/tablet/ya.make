@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    ../base/tablet_pipe.h
     bootstrapper.cpp
     bootstrapper.h
     bootstrapper_impl.h
@@ -50,8 +51,8 @@ SRCS(
     tablet_setup.h
     tablet_sys.cpp
     tablet_sys.h
-    simple_tablet.cpp
-    simple_tablet.h
+    simple_tablet.cpp  # gn: into ydb/core/tablet_flat
+    simple_tablet.h  # gn: into ydb/core/tablet_flat
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
     detailed_metrics/detailed_metrics_binding.cpp
@@ -60,7 +61,7 @@ SRCS(
     detailed_metrics/detailed_metrics_tree.h
     detailed_metrics/detailed_values_accumulator.cpp
     detailed_metrics/detailed_values_accumulator.h
-    detailed_metrics/memory_tags.cpp
+    detailed_metrics/memory_tags.cpp  # gn: memory_tags
     detailed_metrics/memory_tags.h
     detailed_metrics/metric_value_aggregator.cpp
     detailed_metrics/metric_value_aggregator.h
@@ -80,6 +81,7 @@ SRCS(
     private/labeled_db_counters.cpp
     private/labeled_db_counters.h
 )
+# gn: memory_tags headers detailed_metrics/memory_tags.h
 
 PEERDIR(
     ydb/library/actors/async

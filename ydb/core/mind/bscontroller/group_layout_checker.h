@@ -1,8 +1,18 @@
 #pragma once
 
-#include "defs.h"
 #include "types.h"
 #include "group_geometry_info.h"
+
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/library/actors/core/interconnect.h>
+
+#include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/stream/str.h>
+#include <util/string/builder.h>
 
 namespace NKikimr::NBsController {
 

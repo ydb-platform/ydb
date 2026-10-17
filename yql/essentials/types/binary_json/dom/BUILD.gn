@@ -1,0 +1,12 @@
+library("dom") {
+  deps = [
+    # "//library/cpp/json",  # peerdir only
+    "//yql/essentials/minikql/dom",
+    "//yql/essentials/types/binary_json",
+  ]
+
+  sources = [
+    "//yql/essentials/types/binary_json/read_dom.cpp",
+    "//yql/essentials/types/binary_json/write_dom.cpp",
+  ]
+}

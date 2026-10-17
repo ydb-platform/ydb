@@ -1,12 +1,15 @@
 library("constructor") {
-  deps = [
+  public_deps = [
     ":level",
+    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector",
+  ]
+
+  deps = [
     # "//contrib/libs/apache/arrow",  # peerdir only
     # "//ydb/core/formats/arrow",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/changes/abstract",  # peerdir only
-    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
-    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector",
     "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner",
     # "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level",
     # "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector",

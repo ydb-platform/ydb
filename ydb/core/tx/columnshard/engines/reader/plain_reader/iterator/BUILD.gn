@@ -1,6 +1,6 @@
 library("iterator") {
   public_deps = [
-    # "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow",
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/common",
@@ -12,6 +12,7 @@ library("iterator") {
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/core/tx/columnshard/resource_subscriber",
     "//ydb/core/tx/limiter/grouped_memory/service",
@@ -26,6 +27,7 @@ library("iterator") {
     # "//ydb/core/tx/conveyor/usage",
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/formats/arrow",
     # "//yql/essentials/minikql:terminator",
   ]

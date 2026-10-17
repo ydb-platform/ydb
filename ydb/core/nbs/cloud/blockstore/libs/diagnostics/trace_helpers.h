@@ -18,8 +18,8 @@ public:
         std::shared_ptr<NWilson::TSpan> span,
         const NProto::TError& error);
 
-    TEndSpanWithError(TEndSpanWithError&&) = default;
-    TEndSpanWithError& operator=(TEndSpanWithError&&) = default;
+    TEndSpanWithError(TEndSpanWithError&&) = delete;
+    TEndSpanWithError& operator=(TEndSpanWithError&&) = delete;
 
     ~TEndSpanWithError();
 

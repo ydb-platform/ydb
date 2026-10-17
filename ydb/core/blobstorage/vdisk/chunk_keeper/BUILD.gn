@@ -1,0 +1,22 @@
+library("chunk_keeper") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/core/blobstorage",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/util",
+    "//ydb/library/actors/core",  # peerdir only
+    # "//ydb/library/yverify_stream",
+  ]
+
+  sources = [
+    "chunk_keeper_actor.cpp",
+    "chunk_keeper_ctx.cpp",
+    "chunk_keeper_data.cpp",
+    "chunk_keeper_events.cpp",
+  ]
+}

@@ -1,23 +1,32 @@
 library("logical") {
   public_deps = [
+    # "//ydb/core/kqp/opt/cbo",
     "//ydb/core/kqp/opt:helpers",
+    "//ydb/core/kqp/provider",
     # "//yql/essentials/ast",
-    "//yql/essentials/core/cbo",
   ]
 
   deps = [
     "//ydb/core/base",
     # "//ydb/core/kqp/common",
+    # "//ydb/core/kqp/expr_nodes",
+    "//ydb/core/kqp/opt/cbo/solver",
     "//ydb/core/kqp/opt/physical",
-    "//ydb/core/kqp/provider",
     "//ydb/core/protos",
+    "//ydb/library/json_index",
     # "//ydb/library/yql/dq/common",  # peerdir only
     "//ydb/library/yql/dq/opt",
+    "//ydb/library/yql/dq/type_ann",
     # "//ydb/library/yql/providers/dq/common",
+    # "//ydb/library/yql/providers/dq/expr_nodes",
     # "//yql/essentials/core",
     "//yql/essentials/core/common_opt",
     "//yql/essentials/core/extract_predicate",
+    # "//yql/essentials/core/histogram",
+    # "//yql/essentials/core/sql_types",
+    # "//yql/essentials/providers/common/provider",
     "//yql/essentials/providers/common/transform",
+    # "//yql/essentials/public/issue",
     # "//yql/essentials/utils/log",
   ]
 
@@ -29,6 +38,7 @@ library("logical") {
     "kqp_opt_log_helpers.cpp",
     "kqp_opt_log_indexes.cpp",
     "kqp_opt_log_join.cpp",
+    "kqp_opt_log_json_index.cpp",
     "kqp_opt_log_ranges.cpp",
     "kqp_opt_log_ranges_predext.cpp",
     "kqp_opt_log_sort.cpp",

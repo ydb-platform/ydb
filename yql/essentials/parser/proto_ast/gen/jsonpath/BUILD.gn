@@ -4,48 +4,68 @@ import("//build/gn/antlr.gni")
 
 _grammar = "//yql/essentials/minikql/jsonpath/JsonPath.g"
 
-expand_template("stg") {
-  sources = [
-    "//yql/essentials/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in",
-    "//yql/essentials/parser/proto_ast/org/antlr/codegen/templates/protobuf/protobuf.stg.in",
-  ]
+# Private copies: other modules configure the same .stg.in with other values.
+# antlr finds them by the resource path below, relative to templates_dir.
+expand_template("java_stg") {
+  sources = [ "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in" ]
+  output_dir = "$target_gen_dir/org/antlr/v4/tool/templates/codegen/Java"
   substitutions = [
+    "ANTLR_AST_NAME=TJsonPathParserAST",
     "ANTLR_PACKAGE_NAME=NJsonPathGenerated",
-    "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/jsonpath",
-    "PROTOBUF_SUFFIX_PATH=.pb.h",
-    "LEXER_PARSER_NAMESPACE=NALP",
   ]
 }
 
-antlr3_run("antlr3_proto") {
+expand_template("cpp_stg") {
+  sources = [
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Cpp.stg.in",
+    "//yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Cpp/Files.stg.in",
+  ]
+  output_dir = "$target_gen_dir/org/antlr/v4/tool/templates/codegen/Cpp"
+  substitutions = [
+    "ANTLR_AST_NAME=TJsonPathParserAST",
+    "ANTLR_PACKAGE_NAME=NJsonPathGenerated",
+    "ANTLR_PARSER_NAME=JsonPathParser",
+    "PROTOBUF_HEADER_PATH=yql/essentials/parser/proto_ast/gen/jsonpath",
+    "PROTOBUF_SUFFIX_PATH=.pb.h",
+  ]
+}
+
+antlr4_run("antlr4_proto") {
   grammar = _grammar
-  language = "protobuf"
-  templates_target = ":stg"
-  templates_dir = "$root_gen_dir/yql/essentials/parser/proto_ast"
+  language = "Java"
+  templates_target = ":java_stg"
+  templates_dir = target_gen_dir
+  extra_args = [ "-no-listener" ]
 }
 
 protobuf_library("proto") {
-  sources = get_target_outputs(":antlr3_proto")
+  sources = get_target_outputs(":antlr4_proto")
   generated_sources = true
-  deps = [ ":antlr3_proto" ]
+  deps = [ ":antlr4_proto" ]
   public_deps = [ "//yql/essentials/public/issue/protos" ]
 }
 
-antlr3_run("antlr3_cpp") {
+antlr4_run("antlr4_cpp") {
   grammar = _grammar
   language = "Cpp"
-  templates_target = ":stg"
-  templates_dir = "$root_gen_dir/yql/essentials/parser/proto_ast"
+  templates_target = ":cpp_stg"
+  templates_dir = target_gen_dir
+  extra_args = [
+    "-no-listener",
+    "-package",
+    "NALP",
+  ]
+  deps = [ ":proto" ]
 }
 
 library("jsonpath") {
-  sources = get_target_outputs(":antlr3_cpp")
+  sources = get_target_outputs(":antlr4_cpp")
 
-  deps = [ ":antlr3_cpp" ]
+  deps = [ ":antlr4_cpp" ]
 
   public_deps = [
     ":proto",
-    "//contrib/libs/antlr3_cpp_runtime",
-    "//yql/essentials/parser/proto_ast/antlr3",
+    "//contrib/libs/antlr4_cpp_runtime",
+    "//yql/essentials/parser/proto_ast/antlr4",
   ]
 }

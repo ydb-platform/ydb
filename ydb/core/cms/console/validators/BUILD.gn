@@ -8,6 +8,7 @@ library("validators") {
 
   deps = [
     # "//ydb/core/base",
+    "//ydb/core/config/validation",
     "//ydb/core/tablet",
     # "//ydb/library/actors/interconnect",
   ]
@@ -17,6 +18,7 @@ library("validators") {
     "registry.cpp",
     "validator.cpp",
     "validator_bootstrap.cpp",
+    "validator_composite_conveyor.cpp",
     "validator_nameservice.cpp",
   ]
 }

@@ -1,0 +1,12 @@
+library("full") {
+  public_deps = [
+    # "//yt/yql/providers/yt/lib/tvm_client",
+    "//yt/yql/providers/yt/lib/tvm_client/proto",
+  ]
+
+  deps = [
+    # "//yt/yql/providers/yt/lib/tvm_client/dummy",
+  ]
+
+  sources = [ "tvm_client_dummy.cpp" ]
+}

@@ -1,0 +1,27 @@
+library("common") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    "//library/cpp/histogram/hdr",
+    # "//library/cpp/json",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/monlib/dynamic_counters/percentile",
+    # "//library/cpp/random_provider",
+    "//ydb/core/base",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/services",
+  ]
+
+  deps = [
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/time_provider",
+  ]
+
+  sources = [
+    "//ydb/core/load_test/events.cpp",
+    "//ydb/core/load_test/memory.cpp",
+    "//ydb/core/load_test/util.cpp",
+  ]
+
+  serialize_enum_headers = [ "//ydb/core/load_test/percentile.h" ]
+}

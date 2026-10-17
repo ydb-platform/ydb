@@ -4,4 +4,6 @@ protobuf_library("access") {
   sources = [ "access.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

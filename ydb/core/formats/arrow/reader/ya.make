@@ -15,11 +15,11 @@ PEERDIR(
 )
 
 SRCS(
-    batch_iterator.cpp
-    merger.cpp
-    position.cpp
-    heap.cpp
-    result_builder.cpp
+    batch_iterator.cpp  # gn: into ydb/core/formats/arrow
+    merger.cpp  # gn: into ydb/core/formats/arrow
+    position.cpp  # gn: into ydb/core/formats/arrow
+    heap.cpp  # gn: into ydb/core/formats/arrow
+    result_builder.cpp  # gn: into ydb/core/formats/arrow
 )
 
 END()

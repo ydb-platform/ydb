@@ -1,0 +1,35 @@
+unittest_executable("volume_ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/engine/minikql",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/testlib",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/volume",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api",
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/basics",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume_actor_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume_database_ut.cpp",
+    "volume_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/storage/volume" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

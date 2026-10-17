@@ -1,0 +1,14 @@
+library("constraints") {
+  public_deps = [
+    # "//yql/essentials/ast",
+    "//yql/essentials/core",
+  ]
+
+  deps = [
+    # "//ydb/library/yql/dq/expr_nodes",
+    "//ydb/library/yql/dq/type_ann",
+    "//yql/essentials/providers/common/transform",
+  ]
+
+  sources = [ "dq_constraints.cpp" ]
+}

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hulldefs.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 
 #include <ydb/library/actors/util/named_tuple.h>

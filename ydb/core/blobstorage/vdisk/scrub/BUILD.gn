@@ -1,7 +1,7 @@
 library("scrub") {
   public_deps = [
     "//ydb/core/blobstorage/backpressure",
-    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
     # "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/hulldb",
@@ -11,8 +11,7 @@ library("scrub") {
   ]
 
   deps = [
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    # "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
     # "//ydb/core/blobstorage/vdisk/skeleton",  # peerdir only
   ]
 

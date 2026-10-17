@@ -7,10 +7,11 @@ library("operations") {
   deps = [
     # "//library/cpp/json",
     "//ydb/core/formats/arrow",
-    # "//ydb/core/kqp/gateway/utils",
+    # "//ydb/core/kqp/gateway/utils",  # peerdir only
     "//ydb/core/kqp/provider",
     "//ydb/core/protos/schemeshard",
-    # "//ydb/core/tx/columnshard/data_accessor/abstract",
+    # "//ydb/core/tx/columnshard/data_accessor/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_accessor/abstract:constructor",
     "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
     # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
     # "//ydb/library/actors/core",

@@ -21,6 +21,7 @@ library("synclog") {
   deps = [
     # "//library/cpp/monlib/service/pages",
     # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/chunk_keeper",
     # "//ydb/core/blobstorage/vdisk/hulldb",
     # "//ydb/core/blobstorage/vdisk/syncer",
     # "//ydb/library/actors/interconnect",
@@ -43,7 +44,10 @@ library("synclog") {
     "blobstorage_synclogneighbors.cpp",
     "blobstorage_synclogreader.cpp",
     "blobstorage_synclogrecovery.cpp",
+    "phantom_flag_storage/phantom_flag_chunk_extractor.cpp",
     "phantom_flag_storage/phantom_flag_storage_builder.cpp",
+    "phantom_flag_storage/phantom_flag_storage_data.cpp",
+    "phantom_flag_storage/phantom_flag_storage_processor.cpp",
     "phantom_flag_storage/phantom_flag_storage_snapshot.cpp",
     "phantom_flag_storage/phantom_flag_storage_state.cpp",
     "phantom_flag_storage/phantom_flag_thresholds.cpp",

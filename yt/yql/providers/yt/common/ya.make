@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     yql_configuration.cpp
     yql_names.cpp
+    yql_yt_ypath_attrs.cpp
     yql_yt_settings.cpp
 )
 
@@ -11,6 +12,7 @@ PEERDIR(
     library/cpp/string_utils/parse_size
     library/cpp/yson/node
     library/cpp/json
+    yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/utils/log

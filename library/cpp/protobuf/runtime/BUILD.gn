@@ -1,5 +1,5 @@
-group("runtime") {
-  deps = [
-    # "//contrib/libs/protobuf",  # peerdir only
-  ]
+library("runtime") {
+  deps = [ "//contrib/libs/protobuf" ]
+
+  sources = [ "escaping_arcadia.cpp" ]
 }

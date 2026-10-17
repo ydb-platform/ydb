@@ -1,0 +1,31 @@
+library("dirty_map") {
+  public_deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/memory",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos",
+    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+  ]
+
+  deps = [
+    # "//library/cpp/containers/stack_vector",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+  ]
+
+  sources = [
+    "block_field_serializer.cpp",
+    "ddisk_state.cpp",
+    "dirty_map.cpp",
+    "hints.cpp",
+    "inflight_info.cpp",
+    "mon_model.cpp",
+    "range_locker.cpp",
+  ]
+
+  serialize_enum_headers = [
+    "ddisk_state.h",
+    "dirty_map.h",
+    "inflight_info.h",
+  ]
+}

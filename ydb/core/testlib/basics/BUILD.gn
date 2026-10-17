@@ -40,11 +40,12 @@ library("basics") {
     "//ydb/core/tx/columnshard",
     "//ydb/core/tx/columnshard/column_fetching",
     "//ydb/core/tx/columnshard/data_accessor/cache_policy",
+    # "//ydb/core/tx/general_cache",  # peerdir only
+    # "//ydb/core/tx/general_cache/service",
     "//ydb/core/tx/scheme_board",
     # "//ydb/core/tx/scheme_cache",
     "//ydb/library/actors/dnsresolver",
     # "//ydb/library/actors/interconnect/rdma",
-    # "//ydb/library/pdisk_io",
     # "//ydb/services/kesus",  # peerdir only
     # "//ydb/services/persqueue_cluster_discovery",  # peerdir only
     # "//ydb/services/ydb",  # peerdir only

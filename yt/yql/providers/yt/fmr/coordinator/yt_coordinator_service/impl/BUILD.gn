@@ -5,7 +5,6 @@ library("impl") {
 
   deps = [
     # "//library/cpp/yt/error",
-    # "//yql/essentials/utils",
     # "//yql/essentials/utils/log",
     # "//yt/cpp/mapreduce/common",
     # "//yt/yql/providers/yt/fmr/utils",  # peerdir only

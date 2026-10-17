@@ -14,11 +14,11 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
-    cpu_consumption.cpp
-    pool.cpp
-    shared_info.cpp
-    waiting_stats.cpp
-    harmonizer.cpp
+    cpu_consumption.cpp  # gn: into ydb/library/actors/core
+    pool.cpp  # gn: into ydb/library/actors/core
+    shared_info.cpp  # gn: into ydb/library/actors/core
+    waiting_stats.cpp  # gn: into ydb/library/actors/core
+    harmonizer.cpp  # gn: into ydb/library/actors/core
     harmonizer_metrics.h
 )
 

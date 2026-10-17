@@ -1,5 +1,7 @@
 PROGRAM()
 
+# gn: move into parent
+
 SRCS(
     flowctlmain.cpp
 )

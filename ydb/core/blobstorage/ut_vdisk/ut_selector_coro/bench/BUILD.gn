@@ -1,0 +1,25 @@
+linked_executable("selector_coro_bench") {
+  testonly = true
+
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/vdisk/hulldb",
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/compstrat",
+    "//ydb/core/blobstorage/vdisk/hulldb:test",  # peerdir only
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/library/actors/core",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

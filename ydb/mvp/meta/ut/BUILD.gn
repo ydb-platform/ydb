@@ -1,16 +1,28 @@
 unittest_executable("ut") {
   deps = [
+    "//contrib/libs/protobuf",
+    "//contrib/libs/yaml-cpp",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/testlib/actors",  # peerdir only
     "//ydb/library/actors/core",
+    "//ydb/library/actors/http",
     "//ydb/library/actors/testlib",
-    "//ydb/mvp/core",  # peerdir only
+    "//ydb/mvp/core",
     "//ydb/mvp/meta",
   ]
 
-  sources = [ "//ydb/mvp/meta/meta_cache_ut.cpp" ]
+  sources = [
+    "//ydb/mvp/meta/meta_cache_ut.cpp",
+    "//ydb/mvp/meta/meta_capabilities_ut.cpp",
+    "//ydb/mvp/meta/meta_support_links_ut.cpp",
+    "//ydb/mvp/meta/meta_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/mvp/meta" ]
+
+  data = [ "//ydb/mvp/meta/examples/" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",

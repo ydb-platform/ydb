@@ -8,6 +8,7 @@ IF (OS_LINUX)
         mem_pool.cpp
         rdma.cpp
         rdma.h
+        rdma_cq.cpp  # gn: into ydb/library/actors/interconnect/rdma/cq_actor
     )
 
     PEERDIR(

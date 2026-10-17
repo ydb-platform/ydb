@@ -154,7 +154,7 @@ NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::Bui
         return TConclusionStatus::Fail(TStringBuilder() << "incorrect level for codec `" << arrow::util::Codec::GetCodecAsString(cType)
                                                         << "`. have to be: [" << levelMin << ":" << levelMax << "]");
     }
-    std::shared_ptr<arrow::util::Codec> codecPtr = std::move(NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType, levelDef)));
+    std::shared_ptr<arrow::util::Codec> codecPtr = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType, levelDef));
     return codecPtr;
 }
 

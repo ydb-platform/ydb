@@ -1,0 +1,40 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/describer",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/grpc_request",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+    "//ydb/services/persqueue_v1/actors",
+    "//ydb/services/persqueue_v1/actors/schema/topic",
+  ]
+
+  sources = [
+    "//ydb/services/persqueue_v1/actors/schema/topic/reset_offset_actor_ut.cpp",
+    "//ydb/services/persqueue_v1/actors/schema/topic/schema_ops_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/services/persqueue_v1/actors/schema/topic" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

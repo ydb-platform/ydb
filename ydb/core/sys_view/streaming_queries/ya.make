@@ -1,5 +1,7 @@
 YQL_LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     streaming_queries.cpp
 )

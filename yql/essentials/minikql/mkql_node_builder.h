@@ -29,7 +29,7 @@ class TTupleLiteralBuilder {
 public:
     explicit TTupleLiteralBuilder(const TTypeEnvironment& env);
     TTupleLiteralBuilder(const TTupleLiteralBuilder&) = default;
-    TTupleLiteralBuilder& operator=(const TTupleLiteralBuilder&) = default;
+    TTupleLiteralBuilder& operator=(const TTupleLiteralBuilder&) = delete;
     void Reserve(ui32 size);
     TTupleLiteralBuilder& Add(TRuntimeNode value);
     TTupleLiteral* Build();

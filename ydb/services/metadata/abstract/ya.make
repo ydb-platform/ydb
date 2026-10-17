@@ -8,8 +8,10 @@ SRCS(
     initialization.cpp
     kqp_common.cpp
     parsing.cpp
-    request_features.cpp
+    service_operator.cpp
+    request_features.cpp  # gn: request_features
 )
+# gn: request_features headers request_features.h
 
 GENERATE_ENUM_SERIALIZATION(kqp_common.h)
 

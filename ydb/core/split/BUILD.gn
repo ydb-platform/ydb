@@ -1,0 +1,12 @@
+library("split") {
+  public_deps = [
+    # "//ydb/core/scheme",
+    # "//ydb/core/scheme_types",
+    # "//ydb/core/tablet_flat",
+  ]
+
+  sources = [
+    "data_size.cpp",
+    "key_access.cpp",
+  ]
+}

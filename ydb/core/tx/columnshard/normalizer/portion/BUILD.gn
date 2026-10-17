@@ -4,6 +4,8 @@ library("portion") {
     # "//ydb/core/formats/arrow",
     # "//ydb/core/keyvalue",
     "//ydb/core/protos",
+    # "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
     "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/blobs_action/counters",
     "//ydb/core/tx/columnshard/blobs_reader",
@@ -17,6 +19,7 @@ library("portion") {
     # "//ydb/core/tx/conveyor/usage",
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
   ]
 
   sources = [
@@ -28,6 +31,7 @@ library("portion") {
     "clean_deprecated_snapshot.cpp",
     "clean_empty.cpp",
     "clean_index_columns.cpp",
+    "clean_index_columns_v1.cpp",
     "clean_inserted_portions.cpp",
     "clean_sub_columns_portions.cpp",
     "clean_ttl_preset_setting_info.cpp",

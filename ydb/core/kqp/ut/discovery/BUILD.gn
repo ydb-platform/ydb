@@ -3,6 +3,7 @@ unittest_executable("discovery") {
     "//library/cpp/testing/unittest",
     "//ydb/core/discovery",
     "//ydb/core/kqp/ut/common",
+    "//ydb/public/api/grpc",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
@@ -12,6 +13,7 @@ unittest_executable("discovery") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

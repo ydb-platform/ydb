@@ -10,8 +10,8 @@ ADDINCL(
 )
 
 SRCS(
-    ColumnsCommon.cpp
-    ColumnAggregateFunction.cpp
+    ColumnsCommon.cpp  # gn: into ydb/library/arrow_clickhouse
+    ColumnAggregateFunction.cpp  # gn: into ydb/library/arrow_clickhouse
 )
 
 END()

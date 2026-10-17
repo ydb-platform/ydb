@@ -8,6 +8,7 @@ unittest_executable("ut") {
     "//yql/essentials/minikql/comp_nodes/no_llvm",  # peerdir only
     "//yql/essentials/minikql/computation",
     "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/public/decimal",
     "//yql/essentials/public/udf",
     "//yql/essentials/public/udf/arrow",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
@@ -26,6 +27,8 @@ unittest_executable("ut") {
   ]
 
   include_dirs = [ "//ydb/library/yql/dq/comp_nodes/hash_join_utils" ]
+
+  serialize_enum_headers = [ "scalar_layout_converter_test_enums.h" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",

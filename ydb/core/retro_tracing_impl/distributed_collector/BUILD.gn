@@ -1,0 +1,18 @@
+library("distributed_collector") {
+  public_deps = [
+    # "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/base/services",
+    # "//ydb/core/blobstorage/nodewarden",
+    # "//ydb/core/control/lib",
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/library/actors/retro_tracing",  # peerdir only
+    # "//ydb/library/actors/retro_tracing/collector",
+    # "//ydb/library/actors/retro_tracing/span",
+  ]
+
+  sources = [ "distributed_retro_collector.cpp" ]
+}

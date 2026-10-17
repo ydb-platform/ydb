@@ -18,13 +18,14 @@ SRCS(
     kqp_timeouts.h
     kqp_tx.cpp
     kqp_tx_manager.cpp
-    kqp_types.cpp
+    kqp_types.cpp  # gn: types
     kqp_types.h
     kqp_user_request_context.cpp
     kqp_user_request_context.h
     kqp_yql.cpp
     kqp_yql.h
 )
+# gn: types headers kqp_types.h
 
 PEERDIR(
     library/cpp/json/writer
@@ -59,6 +60,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/issue
 )
+# gn: peerdir ydb/core/kqp/topics
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)

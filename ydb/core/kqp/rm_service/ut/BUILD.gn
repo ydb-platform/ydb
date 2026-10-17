@@ -1,7 +1,11 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
+    "//library/cpp/threading/local_executor",
+    "//ydb/core/base",
+    "//ydb/core/cms/console",
     "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/node_service",
     "//ydb/core/kqp/rm_service",
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/tablet",
@@ -19,6 +23,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

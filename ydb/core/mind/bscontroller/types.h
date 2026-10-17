@@ -7,6 +7,8 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h> // NTabletFlatExecutor
 
+#include <util/stream/output.h>
+
 // protobuf forward declarations
 namespace NKikimrBlobStorage::NDDisk {
     class TDDiskId;
@@ -519,4 +521,8 @@ inline NKikimr::NBsController::TPDiskId Max<NKikimr::NBsController::TPDiskId>() 
         Max<T::NodeID::Type>(),
         Max<T::PDiskID::Type>()
     };
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NBsController::TPDiskId, str, value) {
+    str << value.ToString();
 }

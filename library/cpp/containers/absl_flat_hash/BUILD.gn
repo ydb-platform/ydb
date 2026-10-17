@@ -1,8 +1,0 @@
-library("absl_flat_hash") {
-  public_deps = [ "//contrib/restricted/abseil-cpp" ]
-
-  sources = [
-    "flat_hash_map.cpp",
-    "flat_hash_set.cpp",
-  ]
-}

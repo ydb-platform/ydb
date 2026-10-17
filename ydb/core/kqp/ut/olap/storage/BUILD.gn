@@ -1,24 +1,35 @@
 unittest_executable("storage") {
   deps = [
+    "//contrib/libs/apache/arrow",
     "//contrib/libs/fmt",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/formats/arrow",
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/ut/common",
-    "//ydb/core/kqp/ut/olap/combinatory",  # peerdir only
+    "//ydb/core/kqp/ut/olap/combinatory",
     "//ydb/core/kqp/ut/olap/helpers",
     "//ydb/core/testlib",  # peerdir only
     "//ydb/core/tx/columnshard",  # peerdir only
     "//ydb/core/tx/columnshard/data_locks/locks",
     "//ydb/core/tx/columnshard/engines/changes/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     "//ydb/core/tx/columnshard/engines/scheme/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/limiter/grouped_memory/service",
     "//ydb/core/wrappers",
+    "//ydb/library/formats/arrow",
+    "//ydb/library/signals",
+    "//ydb/public/lib/scheme_types",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
   sources = [
     "compaction_ut.cpp",
     "compression_ut.cpp",
+    "dictionary_ut.cpp",
   ]
 
   include_dirs = [
@@ -29,6 +40,7 @@ unittest_executable("storage") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -12,6 +12,7 @@ library("format") {
     "//yql/essentials/core/sql_types",
     # "//yql/essentials/parser/lexer_common",
     # "//yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4",
+    # "//yql/essentials/utils",
   ]
 
   sources = [ "sql_format.cpp" ]

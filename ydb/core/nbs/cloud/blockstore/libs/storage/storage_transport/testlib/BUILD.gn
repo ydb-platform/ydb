@@ -1,0 +1,30 @@
+library("testlib") {
+  testonly = true
+
+  public_deps = [
+    # "//library/cpp/testing/unittest",
+    # "//ydb/core/blobstorage/ddisk",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport",
+    # "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
+    # "//ydb/core/testlib/actors",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/util",
+  ]
+
+  deps = [
+    # "//library/cpp/threading/future",
+    # "//ydb/core/base",
+    # "//ydb/core/mind/bscontroller",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/storage/model",
+    # "//ydb/core/testlib",  # peerdir only
+  ]
+
+  sources = [
+    "ddisk_stub_actor.cpp",
+    "fake_direct_session.cpp",
+    "ic_storage_transport_test_adapter.cpp",
+    "storage_transport_test_fixture.cpp",
+  ]
+}

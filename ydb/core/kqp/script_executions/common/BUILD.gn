@@ -1,0 +1,27 @@
+library("common") {
+  public_deps = [
+    # "//contrib/libs/protobuf",
+    # "//library/cpp/json",
+    "//ydb/core/protos",
+    # "//ydb/library/aclib",
+    "//ydb/public/api/protos",
+    # "//ydb/public/sdk/cpp/src/library/operation_id",
+    # "//yql/essentials/public/issue",
+  ]
+
+  deps = [
+    # "//library/cpp/blockcodecs",
+    # "//library/cpp/protobuf/interop",
+    # "//library/cpp/protobuf/json",
+    "//ydb/core/base",
+    "//ydb/core/tx/datashard",
+    # "//ydb/library/yverify_stream",
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
+  ]
+
+  sources = [
+    "kqp_script_execution_compression.cpp",
+    "kqp_script_execution_retries.cpp",
+    "kqp_script_executions.cpp",
+  ]
+}

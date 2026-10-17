@@ -5,7 +5,10 @@ library("in_mem") {
     "//ydb/core/tx/columnshard/tx_reader",
   ]
 
-  deps = [ "//ydb/core/tx/columnshard/engines" ]
+  deps = [
+    # "//ydb/core/tx/columnshard/data_accessor/abstract:constructor",
+    "//ydb/core/tx/columnshard/engines",
+  ]
 
   sources = [
     "constructor.cpp",

@@ -1,0 +1,10 @@
+linked_executable("docs_generate") {
+  deps = [
+    "//library/cpp/archive",
+    "//library/cpp/getopt",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

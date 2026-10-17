@@ -1,0 +1,16 @@
+linked_executable("event_serialize_bench") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/dnsresolver",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/interconnect/poller",
+  ]
+
+  sources = [
+    "bench.proto",
+    "main.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

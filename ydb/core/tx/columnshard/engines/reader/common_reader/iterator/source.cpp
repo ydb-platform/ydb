@@ -257,7 +257,7 @@ IDataSource::IDataSource(const EType type, const ui32 sourceIdx, const std::shar
 std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> IDataSource::ExtractResourceGuards() {
     auto result = std::move(ResourceGuards);
     ResourceGuards.clear();
-    return std::move(result);
+    return result;
 }
 
 bool IDataSource::IsSourceInMemory() const {
@@ -359,7 +359,7 @@ std::unique_ptr<TFetchedData> IDataSource::ExtractStageData() {
     AFL_VERIFY(StageData)("source_idx", SourceIdx);
     auto result = std::move(StageData);
     StageData.reset();
-    return std::move(result);
+    return result;
 }
 
 const TFetchedData& IDataSource::GetStageData() const {

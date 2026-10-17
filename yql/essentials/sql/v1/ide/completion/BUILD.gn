@@ -1,0 +1,39 @@
+library("completion") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    "//yql/essentials/parser/lexer_common",
+    "//yql/essentials/sql/v1/ide/completion/core",
+    "//yql/essentials/sql/v1/ide/completion/name/service",
+    "//yql/essentials/sql/v1/ide/completion/name/service/ranking",
+    "//yql/essentials/sql/v1/ide/completion/text",
+    "//yql/essentials/sql/v1/ide/core",
+    "//yql/essentials/sql/v1/lexer",
+  ]
+
+  deps = [
+    "//yql/essentials/core/issue",
+    "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",
+    # "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",
+    "//yql/essentials/sql/v1/ide/completion/analysis/global",
+    "//yql/essentials/sql/v1/ide/completion/antlr4",
+    "//yql/essentials/sql/v1/ide/completion/name/object/simple/static",
+    "//yql/essentials/sql/v1/ide/completion/name/service/binding",
+    "//yql/essentials/sql/v1/ide/completion/name/service/column",
+    "//yql/essentials/sql/v1/ide/completion/name/service/schema",
+    "//yql/essentials/sql/v1/ide/completion/name/service/static",
+    "//yql/essentials/sql/v1/ide/completion/name/service/union",
+    "//yql/essentials/sql/v1/ide/completion/syntax",
+    "//yql/essentials/sql/v1/ide/pure_ast",
+  ]
+
+  sources = [
+    "analysis/local/cursor_token_context.cpp",
+    "analysis/local/local.cpp",
+    "analysis/local/parser_call_stack.cpp",
+    "configuration.cpp",
+    "name_mapping.cpp",
+    "sql_complete.cpp",
+  ]
+
+  serialize_enum_headers = [ "sql_complete.h" ]
+}

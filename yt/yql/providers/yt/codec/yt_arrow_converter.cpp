@@ -941,12 +941,12 @@ TYtColumnConverterSettings::TYtColumnConverterSettings(TType* type, const NUdf::
     YQL_ENSURE(ConvertArrowType(type, ArrowType), "Can't convert type to arrow");
     size_t maxBlockItemSize = CalcMaxBlockItemSize(type);
     size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
-    Builder = std::move(NUdf::MakeArrayBuilder(
+    Builder = NUdf::MakeArrayBuilder(
                     TTypeInfoHelper(), type,
                     pool,
                     maxBlockLen,
                     pgBuilder
-                ));
+                );
 }
 
 template<typename Common, template <bool...> typename T, typename Args, bool... Acc>

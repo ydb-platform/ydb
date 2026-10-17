@@ -3,6 +3,7 @@ library("impl") {
     # "//contrib/libs/protobuf",
     # "//library/cpp/containers/disjoint_interval_tree",
     "//library/cpp/threading/future",
+    "//library/cpp/yt/threading",
     "//ydb/public/api/grpc",
     "//ydb/public/api/grpc/draft",
     "//ydb/public/sdk/cpp/src/client/common_client/impl",
@@ -14,15 +15,20 @@ library("impl") {
     "//ydb/public/sdk/cpp/src/client/topic/common",
     "//ydb/public/sdk/cpp/src/client/topic:_self",
     # "//ydb/public/sdk/cpp/src/client/types",
+    # "//ydb/public/sdk/cpp/src/client/types/status",
+    "//ydb/public/sdk/cpp/src/library/kafka",
   ]
 
   deps = [
     # "//library/cpp/monlib/dynamic_counters",  # peerdir only
     # "//library/cpp/monlib/metrics",  # peerdir only
-    # "//library/cpp/string_utils/url",
+    "//library/cpp/string_utils/url",
     "//library/cpp/threading/future/subscription",
+    "//ydb/public/api/protos",
     # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers",
     "//ydb/public/sdk/cpp/src/client/topic/codecs",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types/operation",
     # "//ydb/public/sdk/cpp/src/library/decimal",
     # "//ydb/public/sdk/cpp/src/library/grpc/client",  # peerdir only
     # "//ydb/public/sdk/cpp/src/library/persqueue/obfuscate",  # peerdir only
@@ -31,9 +37,12 @@ library("impl") {
   sources = [
     "common.cpp",
     "deferred_commit.cpp",
+    "deferred_publication_ack_tracker.cpp",
+    "deferred_publications.cpp",
     "direct_reader.cpp",
     "event_handlers.cpp",
     "offsets_collector.cpp",
+    "producer.cpp",
     "proto_accessor.cpp",
     "read_session.cpp",
     "read_session_event.cpp",

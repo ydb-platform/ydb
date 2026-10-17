@@ -10,6 +10,8 @@ library("ydb_resources") {
 }
 
 linked_executable("ydb") {
+    short_name = true
+
     link_select = [
         "YqlServicePolicy=exception_policy",
         "allocator=tcmalloc",

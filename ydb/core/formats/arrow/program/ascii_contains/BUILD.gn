@@ -1,0 +1,3 @@
+library("ascii_contains") {
+  sources = [ "ascii_contains.cpp" ]
+}

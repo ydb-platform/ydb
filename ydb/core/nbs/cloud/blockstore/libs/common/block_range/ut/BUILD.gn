@@ -1,0 +1,23 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",  # peerdir only
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/memory",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_algorithms_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field_bitmask_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field_set_fuzz_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field_set_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field_simple_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_field_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/common/block_range" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3
+    library/cpp/testing/unittest
 )
 
 END()

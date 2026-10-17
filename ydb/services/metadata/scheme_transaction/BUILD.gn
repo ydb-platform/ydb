@@ -1,0 +1,9 @@
+group("scheme_transaction") {
+  public_deps = [
+    # "//ydb/core/tx/tx_proxy:public",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+  ]
+}

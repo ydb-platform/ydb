@@ -1,5 +1,7 @@
 LIBRARY(library-formats-arrow-modifier)
 
+# gn: move into parent
+
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/conclusion

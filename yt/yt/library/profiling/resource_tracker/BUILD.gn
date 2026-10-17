@@ -2,7 +2,9 @@ library("resource_tracker") {
   deps = [
     # "//library/cpp/yt/memory",
     # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/system",
     # "//yt/yt/core",
+    # "//yt/yt/library/cgroup",
     # "//yt/yt/library/profiling",
     # "//yt/yt_proto/yt/core",  # peerdir only
   ]

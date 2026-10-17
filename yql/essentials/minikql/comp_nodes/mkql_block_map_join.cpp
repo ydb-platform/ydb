@@ -934,7 +934,7 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TBlockIndex>(
             KeyColumns_,
-            std::move(BlockStorage_->GetValue(ctx)),
+            BlockStorage_->GetValue(ctx),
             Any_,
             ResourceTag_);
     }
@@ -1210,8 +1210,8 @@ public:
                                                       ResultItemTypes_.size(),
                                                       joinState,
                                                       RightIOMap_,
-                                                      std::move(LeftStream_->GetValue(ctx)),
-                                                      std::move(RightBlockStorage_->GetValue(ctx)),
+                                                      LeftStream_->GetValue(ctx),
+                                                      RightBlockStorage_->GetValue(ctx),
                                                       ctx.RuntimeSettings.DatumValidation.Get());
     }
 

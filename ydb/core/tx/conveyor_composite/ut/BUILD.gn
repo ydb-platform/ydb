@@ -5,15 +5,23 @@ unittest_executable("ut") {
     "//library/cpp/retry",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",  # peerdir only
+    "//ydb/core/cms/console",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/query_data",
+    "//ydb/core/kqp/runtime",
+    "//ydb/core/protos",
     "//ydb/core/tablet",  # peerdir only
     "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/columnshard/counters",  # peerdir only
     "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
     "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
     "//ydb/core/tx/columnshard/test_helper",  # peerdir only
     "//ydb/core/tx/conveyor/usage",
-    "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+    "//ydb/core/tx/conveyor_composite/common/config",
+    "//ydb/core/tx/conveyor_composite/service",
     "//ydb/core/tx/conveyor_composite/usage",
     "//ydb/library/actors/core",
     "//ydb/library/signals",
@@ -21,16 +29,21 @@ unittest_executable("ut") {
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "ut_simple.cpp" ]
-
-  include_dirs = [
-    "//ydb/core/tx/conveyor_composite/service",  # peerdir only
+  sources = [
+    "ut_config.cpp",
+    "ut_config_subscription.cpp",
+    "ut_runtime_update.cpp",
+    "ut_scheduler.cpp",
+    "ut_simple.cpp",
   ]
+
+  include_dirs = [ "//ydb/core/tx/conveyor_composite/service" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

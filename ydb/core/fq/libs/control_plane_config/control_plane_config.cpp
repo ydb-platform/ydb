@@ -282,11 +282,6 @@ private:
     }
 };
 
-TActorId ControlPlaneConfigActorId() {
-    constexpr TStringBuf name = "FQCTLCFG";
-    return NActors::TActorId(0, name);
-}
-
 NActors::IActor* CreateControlPlaneConfigActor(const ::NFq::TYqSharedResources::TPtr& yqSharedResources,
                                                const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
                                                const NConfig::TControlPlaneStorageConfig& config,

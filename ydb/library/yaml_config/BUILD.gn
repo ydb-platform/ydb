@@ -10,6 +10,8 @@ protobuf_library("protos") {
     "protos/config.proto",
   ]
 
+  protoc_fatal_warnings = true
+
   extra_plugins = [
     {
       name = "config_proto_plugin"
@@ -46,6 +48,7 @@ library("yaml_config") {
   deps = [
     # "//contrib/libs/xxhash",
     "//ydb/core/cms/console/util",
+    "//ydb/core/config/protos",
     "//ydb/core/config/validation",
     # "//ydb/core/viewer/json",
     # "//ydb/library/pdisk_io:device_type",

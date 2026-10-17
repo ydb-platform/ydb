@@ -2,10 +2,12 @@ gtest_executable("ut") {
   deps = [
     "//contrib/libs/ibdrv",
     "//library/cpp/testing/gtest",
-    "//ydb/library/actors/core",  # peerdir only
+    "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect",
     "//ydb/library/actors/interconnect/address",
+    "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/rdma/cq_actor",
     "//ydb/library/actors/interconnect/rdma/ut/utils",  # peerdir only
     "//ydb/library/actors/testlib",
     "//ydb/library/actors/util",

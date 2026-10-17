@@ -116,7 +116,7 @@ public:
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_, MaxLength_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       state,
-                                                      std::move(Stream_->GetValue(ctx)),
+                                                      Stream_->GetValue(ctx),
                                                       MaxLength_,
                                                       ctx.RuntimeSettings.DatumValidation.Get());
     }
@@ -608,7 +608,7 @@ public:
         const auto state = ctx.HolderFactory.Create<TState>(ctx, Types_);
         return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
                                                       state,
-                                                      std::move(Stream_->GetValue(ctx)));
+                                                      Stream_->GetValue(ctx));
     }
 
 private:
@@ -1198,7 +1198,7 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TExpanderState>(ctx.HolderFactory, std::move(Stream_->GetValue(ctx)), Width_);
+        return ctx.HolderFactory.Create<TExpanderState>(ctx.HolderFactory, Stream_->GetValue(ctx), Width_);
     }
     void RegisterDependencies() const override {
         DependsOn(Stream_);

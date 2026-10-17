@@ -1,6 +1,7 @@
 library("utils") {
   public_deps = [
     # "//library/cpp/http/io",
+    # "//library/cpp/http/server",
     # "//library/cpp/http/simple",
     # "//library/cpp/yson",
     # "//library/cpp/yson_pull",
@@ -10,7 +11,9 @@ library("utils") {
     # "//yt/yql/providers/yt/fmr/job/impl",
     # "//yt/yql/providers/yt/fmr/request_options",
     # "//yt/yql/providers/yt/fmr/table_data_service/interface",
+    # "//yt/yql/providers/yt/fmr/tvm/interface",
     # "//yt/yql/providers/yt/fmr/utils/comparator",
+    # "//yt/yql/providers/yt/fmr/utils/yson_block_iterator/interface",
     # "//yt/yql/providers/yt/fmr/yt_job_service/interface",
     # "//yt/yql/providers/yt/lib/yson_helpers",
   ]
@@ -21,6 +24,7 @@ library("utils") {
     # "//yql/essentials/utils",
     # "//yql/essentials/utils/log",
     # "//yt/cpp/mapreduce/client",  # peerdir only
+    # "//yt/yql/providers/yt/fmr/test_tools/yson",  # peerdir only
   ]
 
   sources = [
@@ -30,8 +34,10 @@ library("utils") {
     "yql_yt_log_context.cpp",
     "yql_yt_parse_records.cpp",
     "yql_yt_parser_fragment_list_index.cpp",
+    "yql_yt_raw_table_queue.cpp",
     "yql_yt_sort_helper.cpp",
     "yql_yt_table_data_service_key.cpp",
     "yql_yt_table_input_streams.cpp",
+    "yql_yt_tvm_helpers.cpp",
   ]
 }

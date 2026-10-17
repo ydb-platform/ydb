@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS

@@ -6,4 +6,6 @@ protobuf_library("proto") {
   ]
 
   sources = [ "mock.proto" ]
+
+  protoc_fatal_warnings = true
 }

@@ -1,10 +1,11 @@
 YQL_LIBRARY()
 
 SRCS(
-    kqp_query_data.cpp
+    kqp_query_data.cpp  # gn: into ydb/core/kqp/provider
+    kqp_query_data.h  # gn: into ydb/core/kqp/provider
     kqp_prepared_query.cpp
     kqp_predictor.cpp
-    kqp_type_mismatch.cpp
+    kqp_type_mismatch.cpp  # gn: into ydb/core/kqp/provider
 )
 
 PEERDIR(

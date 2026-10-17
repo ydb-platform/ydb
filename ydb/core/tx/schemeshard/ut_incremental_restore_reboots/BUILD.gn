@@ -3,6 +3,7 @@ unittest_executable("ut_incremental_restore_reboots") {
     "//library/cpp/testing/unittest",
     "//ydb/core/protos",
     "//ydb/core/protos/schemeshard",
+    "//ydb/core/testlib",
     "//ydb/core/testlib/actors",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/schemeshard/ut_helpers",
@@ -10,7 +11,10 @@ unittest_executable("ut_incremental_restore_reboots") {
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "ut_incremental_restore_reboots.cpp" ]
+  sources = [
+    "ut_incremental_restore_reboots.cpp",
+    "ut_init_recovery_dropped_invariant.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/tx/schemeshard" ]
 
@@ -18,6 +22,7 @@ unittest_executable("ut_incremental_restore_reboots") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

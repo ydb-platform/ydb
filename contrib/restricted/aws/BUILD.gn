@@ -174,6 +174,7 @@ contrib_library("checksums") {
         ":avx_checksums",
         ":avx512_checksums",
         ":common",
+        "//contrib/libs/xxhash",
     ]
 
     sources = [
@@ -184,6 +185,7 @@ contrib_library("checksums") {
         "aws-checksums/source/crc64_sw.c",
         "aws-checksums/source/crc64.c",
         "aws-checksums/source/intel/asm/crc32c_sse42_asm.c",
+        "aws-checksums/source/xxhash.c",
     ]
 
     public_configs = [ ":public_config" ]
@@ -372,7 +374,6 @@ contrib_library("event-stream") {
         "aws-c-event-stream/source/event_stream.c",
         "aws-c-event-stream/source/event_stream_channel_handler.c",
         "aws-c-event-stream/source/event_stream_rpc.c",
-        "aws-c-event-stream/source/event_stream_rpc_client.c",
         "aws-c-event-stream/source/event_stream_rpc_server.c",
     ]
 
@@ -479,13 +480,13 @@ contrib_library("mqtt") {
         "aws-c-mqtt/source/client_impl_shared.c",
         "aws-c-mqtt/source/client.c",
         "aws-c-mqtt/source/fixed_header.c",
+        "aws-c-mqtt/source/mqtt_iot_metrics.c",
         "aws-c-mqtt/source/mqtt_subscription_set.c",
         "aws-c-mqtt/source/mqtt.c",
         "aws-c-mqtt/source/mqtt311_decoder.c",
         "aws-c-mqtt/source/mqtt311_listener.c",
         "aws-c-mqtt/source/packets.c",
         "aws-c-mqtt/source/request-response/protocol_adapter.c",
-        "aws-c-mqtt/source/request-response/request_response_client.c",
         "aws-c-mqtt/source/request-response/request_response_subscription_set.c",
         "aws-c-mqtt/source/request-response/subscription_manager.c",
         "aws-c-mqtt/source/shared.c",

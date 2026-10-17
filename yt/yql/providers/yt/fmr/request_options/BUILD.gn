@@ -2,6 +2,7 @@ library("request_options") {
   public_deps = [
     # "//library/cpp/yson/node",
     # "//yt/cpp/mapreduce/interface",
+    # "//yt/yql/providers/yt/fmr/tvm/interface",
     # "//yt/yql/providers/yt/fmr/utils/comparator",
   ]
 

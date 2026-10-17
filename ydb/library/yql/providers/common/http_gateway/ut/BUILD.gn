@@ -8,6 +8,7 @@ unittest_executable("ut") {
   sources = [
     "//ydb/library/yql/providers/common/http_gateway/yql_aws_signature_ut.cpp",
     "//ydb/library/yql/providers/common/http_gateway/yql_dns_gateway_ut.cpp",
+    "//ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/library/yql/providers/common/http_gateway" ]

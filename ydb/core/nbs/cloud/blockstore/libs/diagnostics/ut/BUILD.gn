@@ -1,0 +1,18 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/monlib/metrics",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics/dbg_counters_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters_ut.cpp",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/diagnostics" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -1,5 +1,7 @@
 protobuf_library("protos") {
   sources = [ "protos/config.proto" ]
+
+  protoc_fatal_warnings = true
 }
 
 linked_executable("workload_keyvalue_volume") {

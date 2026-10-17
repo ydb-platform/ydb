@@ -313,7 +313,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     } else {
         result->SetTxResult(engine->GetShardReply(DataShard.TabletID()));
 
-        op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
+        op->ChangeRecords() = tx->GetDataTx()->GetCollectedChanges();
     }
 
     YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: executed operation with status",

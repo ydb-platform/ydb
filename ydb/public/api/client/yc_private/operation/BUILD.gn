@@ -4,4 +4,6 @@ protobuf_library("operation") {
   sources = [ "operation.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

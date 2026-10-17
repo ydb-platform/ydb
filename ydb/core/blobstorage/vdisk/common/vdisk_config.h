@@ -81,7 +81,7 @@ namespace NKikimr {
             {}
 
             TBaseInfo(const TBaseInfo &) = default;
-            TBaseInfo &operator=(const TBaseInfo &) = default;
+            TBaseInfo &operator=(const TBaseInfo &) = delete;
 
             static TBaseInfo SampleForTests() {
                 return TBaseInfo();

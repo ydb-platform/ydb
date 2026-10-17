@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/getopt/small",
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+  ]
+
+  sources = [
+    "completion_ut.cpp",
+    "oidc_credentials_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/commands" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

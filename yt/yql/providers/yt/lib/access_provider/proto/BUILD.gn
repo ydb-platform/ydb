@@ -1,0 +1,5 @@
+protobuf_library("proto") {
+  public_deps = [ "//yt/yql/providers/yt/proto" ]
+
+  sources = [ "access_provider.proto" ]
+}

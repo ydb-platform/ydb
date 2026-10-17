@@ -1,10 +1,16 @@
 library("resource_pools") {
   public_deps = [ "//contrib/libs/protobuf" ]
 
-  deps = [ "//ydb/library/aclib" ]
+  deps = [
+    "//library/cpp/regex/pcre",
+    "//ydb/library/aclib",
+  ]
 
   sources = [
+    "regex_predicate.cpp",
     "resource_pool_classifier_settings.cpp",
     "resource_pool_settings.cpp",
   ]
+
+  serialize_enum_headers = [ "resource_pool_classifier_settings.h" ]
 }

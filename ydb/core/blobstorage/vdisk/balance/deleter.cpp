@@ -313,7 +313,7 @@ namespace {
         }
 
     public:
-        TDeleter() = default;
+        TDeleter() = delete;
         TDeleter(
             TActorId notifyId,
             TVector<TLogoBlobID>&& parts,

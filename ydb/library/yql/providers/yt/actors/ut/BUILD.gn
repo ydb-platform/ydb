@@ -5,7 +5,6 @@ unittest_executable("ut") {
     "//ydb/library/actors/testlib",
     "//ydb/library/yql/providers/yt/actors",
     "//yql/essentials/minikql",
-    "//yql/essentials/minikql/codegen/no_llvm",  # peerdir only
     "//yql/essentials/minikql:alloc",
     "//yql/essentials/parser/pg_wrapper/interface",  # peerdir only
     "//yql/essentials/public/udf",
@@ -13,8 +12,8 @@ unittest_executable("ut") {
     "//yql/essentials/sql/pg",  # peerdir only
     "//yql/essentials/utils/log",
     "//yql/essentials/utils/log/proto",
-    "//yt/yql/providers/yt/codec/codegen/no_llvm",  # peerdir only
-    "//yt/yql/providers/yt/comp_nodes/no_llvm",  # peerdir only
+    "//yt/yql/providers/yt/codec/codegen/llvm16",  # peerdir only
+    "//yt/yql/providers/yt/comp_nodes/llvm16",  # peerdir only
     "//yt/yql/providers/yt/gateway/file",
   ]
 
@@ -25,9 +24,9 @@ unittest_executable("ut") {
   link_select = [
     "YqlServicePolicy=terminate_policy",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
-    "yt_codegen=no_llvm",
+    "yt_codegen=llvm16",
   ]
 }

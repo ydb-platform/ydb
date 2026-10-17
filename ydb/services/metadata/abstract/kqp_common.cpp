@@ -1,9 +1,10 @@
 #include "initialization.h"
 #include "kqp_common.h"
+#include "service_operator.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
-#include <ydb/services/metadata/manager/abstract.h>
-#include <ydb/services/metadata/service.h>
+
+#include <util/folder/path.h>
 
 namespace NKikimr::NMetadata {
 namespace {

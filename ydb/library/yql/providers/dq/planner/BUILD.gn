@@ -22,8 +22,9 @@ library("planner") {
     # "//yql/essentials/core/services",  # peerdir only
     # "//yql/essentials/core/services:pipeline",
     # "//yql/essentials/core/type_ann",
+    # "//yql/essentials/minikql/aligned_page_pool",
     # "//yql/essentials/minikql/comp_nodes",  # peerdir only
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/providers/common/mkql",
     "//yql/essentials/providers/common/provider",
     # "//yql/essentials/providers/common/schema/expr",

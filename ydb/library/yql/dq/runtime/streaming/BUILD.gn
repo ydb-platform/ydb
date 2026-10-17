@@ -1,0 +1,12 @@
+library("streaming") {
+  public_deps = [
+    # "//library/cpp/monlib/dynamic_counters",
+  ]
+
+  deps = [ "//ydb/library/actors/core" ]
+
+  sources = [
+    "dq_compute_actor_watermarks.cpp",
+    "dq_watermark_generator_tracker.cpp",
+  ]
+}

@@ -9,11 +9,11 @@ unittest_executable("indexes") {
     "//ydb/core/kqp/host",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/protos",
+    "//ydb/core/statistics:ut_common",
     "//ydb/core/testlib",
     "//ydb/core/tx/datashard",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",
-    "//ydb/public/sdk/cpp/src/client/operation",
     "//ydb/public/sdk/cpp/src/client/proto",
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/core/services/mounts",
@@ -23,9 +23,7 @@ unittest_executable("indexes") {
 
   sources = [
     "kqp_indexes_multishard_ut.cpp",
-    "kqp_indexes_prefixed_vector_ut.cpp",
     "kqp_indexes_ut.cpp",
-    "kqp_indexes_vector_ut.cpp",
     "kqp_stream_indexes_ut.cpp",
   ]
 
@@ -37,6 +35,7 @@ unittest_executable("indexes") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

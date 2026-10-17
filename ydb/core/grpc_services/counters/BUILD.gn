@@ -2,7 +2,6 @@ library("counters") {
   public_deps = [
     "//library/cpp/monlib/dynamic_counters",
     # "//ydb/core/sys_view/common",
-    # "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
   ]
 
@@ -12,6 +11,7 @@ library("counters") {
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/sys_view/service",
     # "//ydb/core/util",
+    # "//ydb/library/actors/core",
     "//ydb/public/api/protos",
   ]
 

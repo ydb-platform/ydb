@@ -332,7 +332,7 @@ public:
             TString Type;
             TString Attributes;
 
-            auto operator<=>(const TFolderItem&) const = default;
+            bool operator==(const TFolderItem&) const = default;
         };
         std::variant<TVector<TFolderItem>, TFileLinkPtr> ItemsOrFileLink;
     };

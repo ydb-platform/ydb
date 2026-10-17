@@ -1,0 +1,9 @@
+library("retro_tracing") {
+  public_deps = [ "//ydb/library/actors/retro_tracing/span" ]
+
+  deps = [
+    # "//ydb/library/actors/retro_tracing",  # peerdir only
+  ]
+
+  sources = [ "spans.cpp" ]
+}

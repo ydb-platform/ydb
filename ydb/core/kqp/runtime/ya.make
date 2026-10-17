@@ -25,7 +25,8 @@ SRCS(
     kqp_stream_lookup_join_helpers.cpp
     kqp_stream_lookup_worker.cpp
     kqp_stream_lookup_worker.h
-    kqp_sys_view_source.cpp
+    kqp_sys_view_source.cpp  # gn: into ydb/core/kqp/compute_actor
+    kqp_sys_view_source.h  # gn: into ydb/core/kqp/compute_actor
     kqp_transport.cpp
     kqp_vector_actor.cpp
     kqp_vector_index_levels_cache.cpp
@@ -58,6 +59,7 @@ PEERDIR(
     ydb/core/kqp/common/result_set_format
     ydb/core/kqp/runtime/common
     ydb/core/kqp/runtime/streaming
+    ydb/core/kqp/topics
     ydb/core/kqp/tracing
     ydb/core/mon
     ydb/core/persqueue/events
@@ -81,9 +83,10 @@ PEERDIR(
     ydb/library/yverify_stream
     ydb/public/sdk/cpp/src/client/params
     yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/computation/llvm16
+    yql/essentials/minikql/computation/llvm16  # gn: public dep
     yql/essentials/utils
 )
+# gn: peerdir ydb/core/tx/datashard:range_ops ydb/core/tx/datashard:read_events
 
 END()
 

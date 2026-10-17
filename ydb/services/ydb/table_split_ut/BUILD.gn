@@ -11,7 +11,7 @@ unittest_executable("table_split_ut") {
     "//ydb/core/grpc_services/base",  # peerdir only
     "//ydb/core/kqp/ut/common",  # peerdir only
     "//ydb/core/protos/schemeshard",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/datashard",
@@ -48,6 +48,7 @@ unittest_executable("table_split_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

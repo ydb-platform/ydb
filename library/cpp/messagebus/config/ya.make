@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 PEERDIR(
     library/cpp/getopt
     library/cpp/deprecated/enum_codegen

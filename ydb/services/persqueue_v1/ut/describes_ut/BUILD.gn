@@ -4,13 +4,13 @@ unittest_executable("describes_ut") {
     "//contrib/libs/protobuf",
     "//library/cpp/testing/unittest",
     "//ydb/core/client/server",
+    "//ydb/core/persqueue/public/describer",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/public/api/grpc",
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
     "//ydb/services/persqueue_v1",  # peerdir only
-    "//ydb/services/persqueue_v1/actors",
   ]
 
   sources = [
@@ -26,6 +26,7 @@ unittest_executable("describes_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

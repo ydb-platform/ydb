@@ -25,6 +25,7 @@ library("external_sources") {
     "//ydb/library/yql/providers/s3/object_listers",
     "//ydb/library/yql/providers/s3/path_generator",
     "//ydb/library/yql/providers/s3/proto",
+    # "//ydb/library/yql/providers/ydb_external/common",
     "//ydb/public/sdk/cpp/adapters/issue",
     # "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/value",

@@ -1,19 +1,32 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/protobuf/util",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/ddisk",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
     "//ydb/core/load_test",
-    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/load_test/blobstorage",  # peerdir only
+    "//ydb/core/load_test/common",
+    "//ydb/core/load_test/ddisk",  # peerdir only
+    "//ydb/core/protos",
+    "//ydb/core/util/actorsys_test",
   ]
 
-  sources = [ "group_test_ut.cpp" ]
-
-  include_dirs = [ "//ydb/core/load_test" ]
+  sources = [
+    "ddisk_load_ut.cpp",
+    "group_test_ut.cpp",
+    "nbs_dbg_like_alloc_helper_ut.cpp",
+    "nbs_dbg_like_load_registry_ut.cpp",
+    "nbs_dbg_like_range_coordinator_ut.cpp",
+    "util_ut.cpp",
+  ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -5042,7 +5042,7 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
     }
 
     if (isYql) {
-        output = ctx.Expr.NewCallable(input->Pos(), "AsList", std::move(input->ChildrenList()));
+        output = ctx.Expr.NewCallable(input->Pos(), "AsList", input->ChildrenList());
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -5091,7 +5091,7 @@ IGraphTransformer::TStatus SqlValuesListWrapper(const TExprNode::TPtr& input, TE
         commonTypes[j] = commonType->TypeId;
     }
     if (!needRetype) {
-        output = ctx.Expr.NewCallable(input->Pos(), "AsListStrict", std::move(input->ChildrenList()));
+        output = ctx.Expr.NewCallable(input->Pos(), "AsListStrict", input->ChildrenList());
 
         return IGraphTransformer::TStatus::Repeat;
     }

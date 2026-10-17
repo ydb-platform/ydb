@@ -1,0 +1,37 @@
+unittest_executable("ut_large") {
+  deps = [
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/base/services",
+    "//ydb/core/blobstorage/crypto",  # peerdir only
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/util/actorsys_test",  # peerdir only
+    "//ydb/library/actors/async",
+    "//ydb/library/actors/core",
+    "//ydb/library/pdisk_io",
+  ]
+
+  sources = [
+    "ddisk_actor_pdisk_large_ut.cpp",
+    "ddisk_actor_pdisk_sync_ut.cpp",
+    "persistent_buffer_benchmark_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ddisk" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

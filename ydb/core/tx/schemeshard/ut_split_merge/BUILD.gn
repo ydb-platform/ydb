@@ -14,12 +14,14 @@ unittest_executable("ut_split_merge") {
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/schemeshard",  # peerdir only
     "//ydb/core/tx/schemeshard/ut_helpers",
+    "//ydb/public/lib/value",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
   ]
 
   sources = [
     "ut_find_split_key.cpp",
     "ut_split_merge.cpp",
+    "ut_table_partitions_format.cpp",
   ]
 
   include_dirs = [
@@ -30,6 +32,7 @@ unittest_executable("ut_split_merge") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

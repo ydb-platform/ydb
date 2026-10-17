@@ -1,0 +1,33 @@
+unittest_executable("ut_manual") {
+  deps = [
+    "//library/cpp/testing/gmock_in_unittest",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/control/lib",
+    "//ydb/core/kesus/tablet",
+    "//ydb/core/protos",
+    "//ydb/core/quoter",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/schemeshard",
+  ]
+
+  sources = [
+    "//ydb/core/quoter/ut_helpers.cpp",
+    "kesus_quoter_manual_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/quoter" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

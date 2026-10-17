@@ -1,0 +1,25 @@
+library("syntax") {
+  public_deps = [
+    # "//contrib/libs/antlr4_cpp_runtime",
+    "//yql/essentials/parser/antlr_ast/gen/v1_antlr4",
+    "//yql/essentials/sql/v1/ide/completion/antlr4",
+    # "//yql/essentials/sql/v1/ide/core",
+  ]
+
+  deps = [
+    "//contrib/libs/re2",
+    "//yql/essentials/core/issue",  # peerdir only
+    # "//yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4",  # peerdir only
+    # "//yql/essentials/parser/lexer_common",  # peerdir only
+    # "//yql/essentials/sql/v1/ide/completion/core",  # peerdir only
+    # "//yql/essentials/sql/v1/ide/completion/text",  # peerdir only
+    # "//yql/essentials/sql/v1/lexer",  # peerdir only
+    "//yql/essentials/sql/v1/lexer/regex",
+    "//yql/essentials/sql/v1/reflect",
+  ]
+
+  sources = [
+    "format.cpp",
+    "grammar.cpp",
+  ]
+}

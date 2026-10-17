@@ -1,5 +1,6 @@
 unittest_executable("ut_sysview_reboots") {
   deps = [
+    "//ydb/core/protos",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/schemeshard",  # peerdir only
@@ -17,6 +18,7 @@ unittest_executable("ut_sysview_reboots") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

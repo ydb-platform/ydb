@@ -35,6 +35,7 @@ contrib_library("tbb") {
         "src/tbb/market.cpp",
         "src/tbb/misc_ex.cpp",
         "src/tbb/misc.cpp",
+        "src/tbb/numa_allocation.cpp",
         "src/tbb/observer_proxy.cpp",
         "src/tbb/parallel_pipeline.cpp",
         "src/tbb/private_server.cpp",

@@ -993,9 +993,9 @@ private:
             for (const auto& incomingModuleExport : IncomingModule_->exports) {
                 if (incomingModuleExport.name == objectName) {
                     auto name = std::string("wasm!env!" + CppDemangle(TString(objectName)));
-                    Compartment_->LinkingData_.WeakFunctions.emplace_back(std::move(std::make_unique<Runtime::WeakFunction>(
+                    Compartment_->LinkingData_.WeakFunctions.emplace_back(std::make_unique<Runtime::WeakFunction>(
                         std::move(name),
-                        incomingModuleExport.index)));
+                        incomingModuleExport.index));
                     return Compartment_->LinkingData_.WeakFunctions.back().get();
                 }
             }

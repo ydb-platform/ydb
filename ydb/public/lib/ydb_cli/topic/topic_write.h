@@ -61,7 +61,7 @@ namespace NYdb::NConsoleClient {
     class TTopicWriter {
     public:
         TTopicWriter();
-        TTopicWriter(const TTopicWriter&) = default;
+        TTopicWriter(const TTopicWriter&) = delete;
         TTopicWriter(TTopicWriter&&) = default;
         TTopicWriter(std::shared_ptr<NTopic::IWriteSession>, TTopicWriterParams);
 

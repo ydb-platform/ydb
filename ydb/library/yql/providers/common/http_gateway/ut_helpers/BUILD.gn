@@ -1,0 +1,12 @@
+library("ut_helpers") {
+  public_deps = [
+    # "//ydb/library/yql/providers/common/http_gateway",
+    # "//ydb/library/yql/utils/actor_log",
+  ]
+
+  deps = [
+    # "//library/cpp/logger",
+  ]
+
+  sources = [ "http_gateway_holder.cpp" ]
+}

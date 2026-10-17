@@ -1,0 +1,12 @@
+library("misc") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    # "//ydb/public/lib/scheme_types",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [ "misc.cpp" ]
+}

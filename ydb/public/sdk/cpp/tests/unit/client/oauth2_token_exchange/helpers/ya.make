@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/http/server
     library/cpp/json
     library/cpp/string_utils/base64
+    library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
 )
 

@@ -1,18 +1,34 @@
 library("ddisk") {
   public_deps = [
+    # "//contrib/restricted/abseil-cpp",
+    # "//library/cpp/containers/absl",
+    # "//library/cpp/time_provider",
     "//ydb/core/base",
     # "//ydb/core/blobstorage",
     "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/protos",
+    "//ydb/core/util",
+    "//ydb/library/actors/async",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/metrics",
+    # "//ydb/library/actors/util",
     "//ydb/library/actors/wilson",
+    # "//ydb/library/pdisk_io",
+    "//ydb/library/services",
     # "//ydb/library/wilson_ids",
   ]
 
   deps = [
     # "//contrib/libs/xxhash",
+    # "//library/cpp/json",
+    # "//library/cpp/lwtrace",
+    # "//library/cpp/monlib/service/pages",
+    # "//ydb/core/base/services",
+    # "//ydb/core/blobstorage/base",
+    # "//ydb/core/mon",
     # "//ydb/core/node_whiteboard",
-    "//ydb/core/util",
+    # "//ydb/library/pdisk_io:device_type",
   ]
 
   sources = [
@@ -21,10 +37,20 @@ library("ddisk") {
     "ddisk_actor_boot.cpp",
     "ddisk_actor_chunks.cpp",
     "ddisk_actor_connect.cpp",
+    "ddisk_actor_metrics.cpp",
+    "ddisk_actor_mon.cpp",
     "ddisk_actor_persistent_buffer.cpp",
     "ddisk_actor_read_write.cpp",
     "ddisk_actor_sync.cpp",
+    "ddisk_actor_tablet_stats.cpp",
+    "ddisk_checksums.cpp",
+    "direct_io_op.cpp",
+    "integrity_manager.cpp",
+    "metric_rates.cpp",
+    "persistent_buffer_barriers_manager.cpp",
+    "persistent_buffer_mon.cpp",
     "persistent_buffer_space_allocator.cpp",
-    "segment_manager.cpp",
+    "tablet_stats_actor.cpp",
+    "write_persistent_buffers_request_actor.cpp",
   ]
 }

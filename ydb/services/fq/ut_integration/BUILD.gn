@@ -23,7 +23,7 @@ unittest_executable("ut_integration") {
     "//ydb/core/fq/libs/events",
     "//ydb/core/fq/libs/mock",
     "//ydb/core/fq/libs/private_client",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/testlib",
@@ -55,6 +55,7 @@ unittest_executable("ut_integration") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

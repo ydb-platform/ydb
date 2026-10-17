@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+  ]
+
+  sources = [
+    "kafka_messages_int_ut.cpp",
+    "kafka_records_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/public/sdk/cpp/src/library/kafka" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

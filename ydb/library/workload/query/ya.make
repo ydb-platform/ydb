@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     GLOBAL registrar.cpp
     data_generator.cpp

@@ -6,6 +6,7 @@ library("coordination") {
     # "//ydb/public/sdk/cpp/src/client/common_client",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/common_client/impl",
     "//ydb/public/sdk/cpp/src/client/impl/internal/make_request",
+    # "//ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers",
     # "//ydb/public/sdk/cpp/src/client/proto",
     # "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/types/status",  # peerdir only
@@ -13,6 +14,7 @@ library("coordination") {
 
   sources = [
     "coordination.cpp",
+    "distributed_lock.cpp",
     "proto_accessor.cpp",
   ]
 

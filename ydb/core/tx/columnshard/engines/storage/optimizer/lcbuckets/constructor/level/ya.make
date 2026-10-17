@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     constructor.cpp
     GLOBAL zero_level.cpp

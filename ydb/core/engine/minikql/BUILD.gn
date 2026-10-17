@@ -1,5 +1,6 @@
 library("minikql") {
   public_deps = [
+    "//ydb/core/base",
     # "//ydb/core/engine",
     "//ydb/core/scheme",
     # "//ydb/core/tablet",
@@ -9,19 +10,29 @@ library("minikql") {
 
   deps = [
     # "//library/cpp/containers/stack_vector",
-    "//ydb/core/base",
+    # "//library/cpp/json",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/string_utils/base64",
     "//ydb/core/client/minikql_compile",
     # "//ydb/core/formats",
+    "//ydb/core/io_formats/cell_maker",
+    "//ydb/core/io_formats/json",
     "//ydb/core/protos",
     # "//ydb/core/tx/locks",
+    # "//ydb/library/aclib",
+    # "//ydb/library/actors/core",
     "//ydb/library/ydb_issue/proto",
-    "//ydb/library/yql/public/ydb_issue",
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
     "//ydb/public/api/protos",
     "//yql/essentials/minikql/computation",
     # "//yql/essentials/parser/pg_wrapper/interface",
+    # "//yql/essentials/public/issue",
+    # "//yql/essentials/types/binary_json",
   ]
 
   sources = [
+    "//ydb/core/tablet_flat/flat_executor_recovery.cpp",
+    "//ydb/core/tablet_flat/flat_executor_recovery.h",
     "flat_local_tx_factory.cpp",
     "minikql_engine_host.cpp",
   ]

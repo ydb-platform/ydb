@@ -4,6 +4,7 @@ group("storagepoolmon") {
     # "//ydb/core/blobstorage",
     "//ydb/core/blobstorage/base",
     "//ydb/core/mon",
+    # "//ydb/core/util",
   ]
 
   deps = [

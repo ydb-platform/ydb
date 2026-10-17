@@ -4,18 +4,22 @@ unittest_executable("ut") {
     "//library/cpp/json",
     "//library/cpp/retry",
     "//library/cpp/testing/unittest",
-    "//ydb/core/testlib/basics",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/services",
     "//ydb/library/testlib/solomon_helpers",
+    "//ydb/library/yql/dq/actors/common",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     "//ydb/library/yql/providers/common/ut_helpers",
     "//ydb/library/yql/providers/solomon/actors",
+    "//ydb/library/yql/providers/solomon/events",
     "//yql/essentials/minikql",
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
     "//yql/essentials/minikql/computation",
     "//yql/essentials/minikql/computation/llvm16",  # peerdir only
     "//yql/essentials/minikql:alloc",
     "//yql/essentials/providers/common/comp_nodes",  # peerdir only
+    "//yql/essentials/public/udf",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
@@ -23,6 +27,8 @@ unittest_executable("ut") {
   ]
 
   sources = [
+    "dq_solomon_actors_util_ut.cpp",
+    "dq_solomon_metrics_queue_ut.cpp",
     "dq_solomon_write_actor_ut.cpp",
     "ut_helpers.cpp",
   ]
@@ -38,9 +44,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
-    "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
-    "yt_codegen=llvm16",
   ]
 }

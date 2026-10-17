@@ -1,12 +1,12 @@
 library("hive") {
   public_deps = [
-    # "//library/cpp/containers/absl_flat_hash",
+    # "//library/cpp/containers/absl",
     # "//library/cpp/containers/ring_buffer",
     "//ydb/core/base",
-    "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
     # "//ydb/core/cms/console",
     "//ydb/core/engine/minikql",
-    # "//ydb/core/mind",
+    "//ydb/core/mind",
     # "//ydb/core/node_whiteboard",
     "//ydb/core/protos",
     # "//ydb/core/scheme",
@@ -17,17 +17,18 @@ library("hive") {
     "//ydb/core/tx/scheme_cache",
     # "//ydb/core/util",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
   ]
 
   deps = [
     "//library/cpp/digest/md5",
+    "//library/cpp/html/pcdata",
     # "//library/cpp/json",
     # "//library/cpp/monlib/dynamic_counters",  # peerdir only
     # "//library/cpp/monlib/service/pages",
     "//library/cpp/protobuf/json",
     # "//library/cpp/random_provider",
     # "//library/cpp/time_provider",
-    # "//ydb/core/blobstorage/base",  # peerdir only
     # "//ydb/core/blobstorage/crypto",  # peerdir only
     # "//ydb/core/blobstorage/nodewarden",  # peerdir only
     "//ydb/library/aclib",
@@ -40,6 +41,7 @@ library("hive") {
     "boot_queue.cpp",
     "domain_info.cpp",
     "drain.cpp",
+    "event_history.cpp",
     "fill.cpp",
     "follower_tablet_info.cpp",
     "hive.cpp",
@@ -49,6 +51,7 @@ library("hive") {
     "hive_statics.cpp",
     "leader_tablet_info.cpp",
     "monitoring.cpp",
+    "move_data_actor.cpp",
     "node_info.cpp",
     "reassign_actor.cpp",
     "sequencer.cpp",
@@ -88,6 +91,7 @@ library("hive") {
     "tx__seize_tablets.cpp",
     "tx__seize_tablets_reply.cpp",
     "tx__set_down.cpp",
+    "tx__shrink_pool.cpp",
     "tx__start_tablet.cpp",
     "tx__status.cpp",
     "tx__stop_tablet.cpp",

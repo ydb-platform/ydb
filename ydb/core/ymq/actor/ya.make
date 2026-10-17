@@ -81,7 +81,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
-    ydb/core/tx/tx_proxy
+    ydb/core/tx/tx_proxy  # gn: :public
     ydb/core/util
     ydb/core/ymq/attributes
     ydb/core/ymq/base

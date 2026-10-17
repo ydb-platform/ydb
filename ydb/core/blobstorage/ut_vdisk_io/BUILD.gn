@@ -9,22 +9,20 @@ unittest_executable("ut_vdisk_io") {
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/cms/console",
     "//ydb/core/driver_lib/version",  # peerdir only
-    "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/scheme_board",  # peerdir only
     "//ydb/core/util/actorsys_test",
     "//ydb/library/actors/testlib",
-    "//ydb/library/pdisk_io",
   ]
 
   sources = [ "vdisk_io.cpp" ]
 
   link_select = [
-    "YqlServicePolicy=exception_policy",
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
-    "yt_codegen=llvm16",
   ]
 }

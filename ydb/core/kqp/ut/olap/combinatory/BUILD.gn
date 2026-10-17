@@ -9,10 +9,12 @@ library("combinatory") {
 
   deps = [
     # "//contrib/libs/apache/arrow",
+    # "//library/cpp/monlib/dynamic_counters",
     # "//ydb/core/base",
     # "//ydb/core/formats/arrow",
     # "//ydb/core/kqp/ut/olap/helpers",
-    # "//ydb/core/testlib",  # peerdir only
+    "//ydb/core/protos",
+    # "//ydb/core/testlib",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     # "//ydb/core/tx/columnshard/hooks/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
@@ -25,10 +27,12 @@ library("combinatory") {
     "abstract.cpp",
     "actualization.cpp",
     "bulk_upsert.cpp",
+    "check_counter.cpp",
     "compaction.cpp",
     "execute.cpp",
     "executor.cpp",
     "select.cpp",
     "variator.cpp",
+    "wait_background_processes.cpp",
   ]
 }

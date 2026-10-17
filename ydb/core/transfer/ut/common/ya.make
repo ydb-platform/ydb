@@ -9,6 +9,7 @@ ENV(YDB_REPORT_MONITORING_INFO="true")
 ENV(YDB_GRPC_SERVICES="replication")
 
 PEERDIR(
+    library/cpp/testing/unittest
     library/cpp/threading/local_executor
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic

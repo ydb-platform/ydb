@@ -2,7 +2,7 @@ library("init") {
   public_deps = [
     # "//contrib/libs/protobuf",
     "//library/cpp/getopt/small",
-    "//library/cpp/svnversion",
+    # "//library/cpp/json",
     "//ydb/core/base",
     # "//ydb/core/config/validation",
     "//ydb/core/driver_lib/cli_config_base",
@@ -21,6 +21,8 @@ library("init") {
   ]
 
   deps = [
+    # "//contrib/libs/yaml-cpp",
+    "//library/cpp/svnversion",  # peerdir only
     # "//ydb/core/driver_lib/cli_base",  # peerdir only
     "//ydb/library/yaml_json",
     # "//yql/essentials/minikql",  # peerdir only
@@ -31,6 +33,7 @@ library("init") {
     "dummy.cpp",
     "init.cpp",
     "init_noop.cpp",
+    "yaml_config_helpers.cpp",
   ]
 
   serialize_enum_headers = [ "init.h" ]

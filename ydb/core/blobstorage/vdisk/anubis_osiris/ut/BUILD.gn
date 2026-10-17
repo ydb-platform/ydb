@@ -15,10 +15,8 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/blobstorage/vdisk/anubis_osiris" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "retro_spans=spans",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

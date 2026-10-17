@@ -54,5 +54,6 @@ codegen("generated") {
 
     sources = [
         "dispatch_op.h.in",
+        "operation_registry.h.in",
     ]
 }

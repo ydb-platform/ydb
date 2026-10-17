@@ -31,7 +31,7 @@ namespace NYql {
 
         bool operator==(const TSelectKey& other) const = default;
 
-        TSelectKey& operator=(const TSelectKey& other) = default;
+        TSelectKey& operator=(const TSelectKey& other) = delete;
 
         size_t CalculateHash() const;
     };

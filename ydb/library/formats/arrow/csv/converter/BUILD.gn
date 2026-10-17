@@ -4,5 +4,10 @@ library("converter") {
     "//ydb/public/api/protos",
   ]
 
+  deps = [
+    # "//ydb/public/lib/scheme_types",
+    # "//yql/essentials/types/uuid",
+  ]
+
   sources = [ "csv_arrow.cpp" ]
 }

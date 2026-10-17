@@ -1,7 +1,9 @@
 library("codecs") {
   deps = [
     "//library/cpp/streams/zstd",
+    "//ydb/public/api/protos",
     # "//ydb/public/sdk/cpp/src/client/topic:_self",
+    "//ydb/public/sdk/cpp/src/library/kafka",
   ]
 
   sources = [ "codecs.cpp" ]

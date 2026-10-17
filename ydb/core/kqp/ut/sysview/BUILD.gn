@@ -1,9 +1,19 @@
 unittest_executable("sysview") {
   deps = [
+    "//library/cpp/json",
+    "//ydb/core/base",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/compile_service",
+    "//ydb/core/kqp/compute_actor:events",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/sys_view/service",
+    "//ydb/library/actors/core",
+    "//ydb/library/query_actor",
+    "//ydb/library/ydb_issue/proto",
     "//ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections",
+    "//ydb/services/workload_manager/ut/common",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
@@ -20,6 +30,7 @@ unittest_executable("sysview") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

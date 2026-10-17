@@ -1,0 +1,18 @@
+linked_executable("pdisktool") {
+  deps = [
+    "//library/cpp/getopt",  # peerdir only
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/tools/pdisktool/lib",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -25,7 +25,7 @@ public:
     TRetroSpan(const TRetroSpan&) = default;
 
     TRetroSpan& operator=(TRetroSpan&&) = default;
-    TRetroSpan& operator=(const TRetroSpan&) = default;
+    TRetroSpan& operator=(const TRetroSpan&) = delete;
 
     ui32 GetType() const;
     ui32 GetSize() const;

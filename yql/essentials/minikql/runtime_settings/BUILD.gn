@@ -1,0 +1,21 @@
+library("runtime_settings") {
+  public_deps = [
+    "//yql/essentials/core/credentials",
+    "//yql/essentials/minikql/runtime_settings/proto",
+    "//yql/essentials/providers/common/config",
+    "//yql/essentials/utils",
+  ]
+
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/hyperloglog",
+    "//yql/essentials/providers/common/activation",
+  ]
+
+  sources = [
+    "runtime_settings.cpp",
+    "runtime_settings_configuration.cpp",
+    "runtime_settings_hash.cpp",
+    "runtime_settings_serialization.cpp",
+  ]
+}

@@ -4,7 +4,7 @@ library("batch_builder") {
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/counters",
-    "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/conveyor/usage",
     # "//ydb/core/tx/data_events",
   ]
@@ -14,11 +14,12 @@ library("batch_builder") {
     "//ydb/core/formats/arrow",
     # "//ydb/core/scheme",
     "//ydb/core/tx/columnshard/data_reader",
-    "//ydb/core/tx/columnshard/engines/predicate",
+    "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/writer",
     "//ydb/core/tx/columnshard/engines/writer:buffer",
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/core/tx/data_events/common",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/conclusion",
     # "//ydb/library/formats/arrow",
     "//ydb/public/api/protos",
@@ -35,11 +36,12 @@ library("common") {
   public_deps = [
     "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/counters",
-    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
   ]
 
   deps = [
     # "//ydb/core/formats/arrow",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/scheme",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/writer",  # peerdir only
     # "//ydb/core/tx/conveyor/usage",  # peerdir only
     # "//ydb/core/tx/data_events",  # peerdir only
@@ -50,13 +52,9 @@ library("common") {
 
 library("events") {
   public_deps = [
-    "//ydb/core/protos",
-    "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/common",
     "//ydb/core/tx/columnshard/engines/portions",
-    # "//ydb/core/tx/columnshard:ev_ids",
-    # "//ydb/core/tx/data_events",
-    # "//ydb/library/actors/core",
   ]
 
   deps = [ "//ydb/core/tx/columnshard/engines" ]
@@ -73,17 +71,19 @@ library("operations") {
     # "//ydb/core/tx/columnshard/common",
     "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/core/tx/columnshard/transactions/locks",
     "//ydb/core/tx/data_events",
     # "//ydb/core/tx/locks",
     # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
     # "//ydb/library/signals",
   ]
 
   deps = [
     ":batch_builder",
     ":slice_builder",  # peerdir only
-    # "//library/cpp/time_provider",
+    # "//library/cpp/lwtrace",
     "//ydb/core/base",
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/blobs_action",
@@ -92,6 +92,7 @@ library("operations") {
     # "//ydb/core/tx/columnshard/engines/writer",
     # "//ydb/core/tx/conveyor/usage",
     "//ydb/core/tx/conveyor_composite/usage",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/services/metadata",  # peerdir only
   ]
 
@@ -108,7 +109,7 @@ library("slice_builder") {
     "//ydb/core/formats/arrow",
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/common",
-    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/conveyor/usage",
     "//ydb/core/tx/data_events",
     # "//ydb/library/signals",
@@ -117,10 +118,12 @@ library("slice_builder") {
   deps = [
     ":events",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/writer",
     "//ydb/core/tx/columnshard/engines/writer:buffer",
-    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
+    # "//ydb/core/tx/columnshard/tracing",
     "//ydb/core/tx/columnshard:write_actor",  # peerdir only
+    # "//ydb/library/actors/struct_log",
   ]
 
   sources = [

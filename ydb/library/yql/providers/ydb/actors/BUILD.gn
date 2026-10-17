@@ -1,16 +1,13 @@
 library("actors") {
-  public_deps = [
-    # "//ydb/library/yql/dq/actors/compute",
-    # "//ydb/library/yql/providers/common/token_accessor/client",
-    # "//ydb/public/sdk/cpp/src/client/driver",
-  ]
-
   deps = [
     # "//ydb/core/scheme",
     # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
     "//ydb/library/yql/providers/ydb/proto",
     # "//ydb/public/lib/experimental",
     # "//ydb/public/sdk/cpp/adapters/issue",
+    # "//ydb/public/sdk/cpp/src/client/driver",
     # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/computation",  # peerdir only
     # "//yql/essentials/public/types",  # peerdir only

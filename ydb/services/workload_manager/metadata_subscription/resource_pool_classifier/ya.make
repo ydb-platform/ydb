@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/cms/console
+    ydb/core/grpc_services
     ydb/services/workload_manager/actors
     ydb/core/protos
     ydb/core/resource_pools

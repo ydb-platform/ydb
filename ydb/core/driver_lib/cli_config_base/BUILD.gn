@@ -6,10 +6,7 @@ library("cli_config_base") {
     "//ydb/core/protos",
     "//ydb/core/util",
     "//ydb/public/lib/deprecated/client",
-  ]
-
-  deps = [
-    # "//yql/essentials/minikql",  # peerdir only
+    "//yql/essentials/minikql",
   ]
 
   sources = [ "config_base.cpp" ]

@@ -1,7 +1,7 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/case_insensitive_string",
-    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/containers/absl",
     "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
   ]
@@ -38,6 +38,7 @@ unittest_executable("ut") {
     "//util/generic/overloaded_ut.cpp",
     "//util/generic/ptr_ut.cpp",
     "//util/generic/queue_ut.cpp",
+    "//util/generic/ranges_ut.cpp",
     "//util/generic/scope_ut.cpp",
     "//util/generic/serialized_enum_ut.cpp",
     "//util/generic/set_ut.cpp",

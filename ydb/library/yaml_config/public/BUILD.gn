@@ -11,5 +11,9 @@ library("public") {
     # "//library/cpp/protobuf/json",  # peerdir only
   ]
 
-  sources = [ "yaml_config.cpp" ]
+  sources = [
+    "migration/config_migration.cpp",
+    "migration/static_group_layout.cpp",
+    "yaml_config.cpp",
+  ]
 }

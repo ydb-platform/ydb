@@ -1,10 +1,16 @@
 unittest_executable("ut") {
   deps = [
+    "//contrib/libs/jwt-cpp",
+    "//contrib/libs/openssl",
+    "//library/cpp/json",
+    "//library/cpp/string_utils/base64",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/grpc_services",
+    "//ydb/core/protos",
     "//ydb/core/security",
-    "//ydb/core/security/certificate_check",
+    "//ydb/core/security/certificate_check/test_utils",
+    "//ydb/core/security/external_idp/test_utils",
     "//ydb/core/security/ldap_auth_provider",
     "//ydb/core/security/token_manager",
     "//ydb/core/testlib",
@@ -25,6 +31,7 @@ unittest_executable("ut") {
 
   sources = [
     "//ydb/core/security/audit_ut.cpp",
+    "//ydb/core/security/secure_request_ut.cpp",
     "//ydb/core/security/ticket_parser_ut.cpp",
     "//ydb/core/security/ut_common.cpp",
   ]
@@ -35,6 +42,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -2,13 +2,17 @@ gtest_executable("value") {
   deps = [
     "//contrib/libs/protobuf",
     "//contrib/restricted/googletest/googletest",
+    "//library/cpp/testing/gtest",
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/types/exceptions",
     "//ydb/public/sdk/cpp/src/client/value",
   ]
 
-  sources = [ "value_ut.cpp" ]
+  sources = [
+    "embedding_ut.cpp",
+    "value_ut.cpp",
+  ]
 
   link_select = [ "allocator=tcmalloc" ]
 }

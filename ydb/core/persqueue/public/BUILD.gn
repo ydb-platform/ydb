@@ -7,12 +7,15 @@ library("public") {
     "//ydb/core/metering",
     "//ydb/core/protos",
     "//ydb/core/tx/scheme_board",
+    "//ydb/library/actors/core",
   ]
 
   deps = [
+    # "//library/cpp/time_provider",
     "//ydb/core/base",
     # "//ydb/core/grpc_services/base",
-    "//ydb/library/actors/core",
+    # "//ydb/core/persqueue/events",  # peerdir only
+    # "//ydb/core/persqueue/public/cloud_events",  # peerdir only
   ]
 
   sources = [
@@ -32,8 +35,12 @@ library("utils") {
 
   deps = [
     # ":public",
+    # "//ydb/core/persqueue/events",
     # "//ydb/library/yverify_stream",
   ]
 
-  sources = [ "utils.cpp" ]
+  sources = [
+    "pqdata_transaction_compat.cpp",
+    "utils.cpp",
+  ]
 }

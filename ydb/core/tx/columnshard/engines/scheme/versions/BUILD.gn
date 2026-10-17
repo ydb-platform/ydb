@@ -1,0 +1,34 @@
+library("versions") {
+  public_deps = [
+    # "//ydb/core/formats/arrow",
+    # "//ydb/core/tx/columnshard/blobs_action/abstract",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/columnshard/counters",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/abstract",
+    # "//ydb/core/tx/columnshard/engines/scheme/common",
+    # "//ydb/core/tx/data_events/common",
+    # "//ydb/core/tx/sharding",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines",
+    # "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
+    # "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/core/tx/columnshard/splitter",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",
+  ]
+
+  sources = [
+    "abstract_scheme.cpp",
+    "filtered_scheme.cpp",
+    "preset_schemas.cpp",
+    "snapshot_scheme.cpp",
+    "versioned_index.cpp",
+  ]
+}

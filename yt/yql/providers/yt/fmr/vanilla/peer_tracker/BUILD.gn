@@ -1,0 +1,16 @@
+library("peer_tracker") {
+  public_deps = [
+    # "//yql/essentials/utils",
+    # "//yt/cpp/mapreduce/interface",
+  ]
+
+  deps = [
+    # "//library/cpp/http/server",
+    # "//library/cpp/http/simple",
+    # "//yql/essentials/utils/log",
+    # "//yt/cpp/mapreduce/client",  # peerdir only
+    # "//yt/yql/providers/yt/fmr/vanilla/common",
+  ]
+
+  sources = [ "yql_yt_vanilla_peer_tracker.cpp" ]
+}

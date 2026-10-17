@@ -12,7 +12,7 @@ library("abstract") {
     # "//ydb/core/tx/columnshard/data_reader",
     "//ydb/core/tx/columnshard/engines/changes/counters",
     "//ydb/core/tx/columnshard/engines/portions",
-    # "//ydb/core/tx/columnshard/engines/scheme",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/core/tx/columnshard/engines/storage/actualizer:common",
     # "//ydb/core/tx/columnshard/resource_subscriber",
     # "//ydb/core/tx/columnshard/splitter:settings",
@@ -27,6 +27,7 @@ library("abstract") {
     # "//ydb/core/tx/columnshard/blobs_action",
     # "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/hooks/abstract",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/signals",  # peerdir only
     # "//yql/essentials/core/expr_nodes",  # peerdir only
   ]
@@ -35,6 +36,8 @@ library("abstract") {
     "abstract.cpp",
     "changes.cpp",
     "compaction_info.cpp",
+    "move_portions.cpp",
+    "remove_portions.cpp",
     "settings.cpp",
   ]
 

@@ -1,6 +1,7 @@
 library("client") {
   public_deps = [
     # "//yt/yql/providers/yt/fmr/coordinator/interface",
+    # "//yt/yql/providers/yt/fmr/tvm/interface",
   ]
 
   deps = [

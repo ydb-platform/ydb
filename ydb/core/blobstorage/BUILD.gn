@@ -10,7 +10,6 @@ group("blobstorage") {
     # "//ydb/core/blobstorage/base",  # peerdir only
     # "//ydb/core/blobstorage/crypto",  # peerdir only
     # "//ydb/core/blobstorage/dsproxy",  # peerdir only
-    # "//ydb/core/blobstorage/events",  # peerdir only
     # "//ydb/core/blobstorage/groupinfo",  # peerdir only
     # "//ydb/core/blobstorage/incrhuge",  # peerdir only
     # "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only

@@ -11,7 +11,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/threading/future
     ydb/core/base
-    ydb/core/client/minikql_compile
+    ydb/core/client/minikql_compile  # gn: :db_key_resolver
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet

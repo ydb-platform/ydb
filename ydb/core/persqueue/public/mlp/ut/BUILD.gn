@@ -1,10 +1,14 @@
 unittest_executable("ut") {
   public_deps = [
     "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
     "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/public/describer",
     "//ydb/core/persqueue/public/mlp",
     "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",
+    "//ydb/library/aclib",
     "//ydb/public/sdk/cpp/src/client/query",
     "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
   ]
@@ -15,6 +19,7 @@ unittest_executable("ut") {
 
   sources = [
     "//ydb/core/persqueue/public/mlp/mlp_changer_ut.cpp",
+    "//ydb/core/persqueue/public/mlp/mlp_describer_ut.cpp",
     "//ydb/core/persqueue/public/mlp/mlp_purger_ut.cpp",
     "//ydb/core/persqueue/public/mlp/mlp_reader_ut.cpp",
     "//ydb/core/persqueue/public/mlp/mlp_writer_ut.cpp",
@@ -26,6 +31,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

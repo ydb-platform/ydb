@@ -271,7 +271,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 .WriteSource = TWriteSource::GroupWriteLoadActor,
             });
             InFlightTracker.Request(blobSize);
-            return std::move(ev);
+            return ev;
         }
 
         std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> ManageKeepFlags(ui64 tabletId, ui32 gen, ui32 step,

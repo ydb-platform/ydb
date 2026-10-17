@@ -15,7 +15,6 @@ SRCS(
     export_s3_buffer_ut.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb/core/tx/datashard/backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(ydb/core/tx/datashard/ut_export/export_parquet_ut_enums.h)
 
 END()

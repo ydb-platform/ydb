@@ -1,0 +1,20 @@
+library("ru_quoter") {
+  public_deps = [
+    # "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/public",
+    # "//ydb/library/actors/core",
+    "//ydb/public/api/protos",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/metering",
+    # "//ydb/core/persqueue/common",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/scheme_cache",
+  ]
+
+  sources = [ "ru_quoter.cpp" ]
+
+  serialize_enum_headers = [ "ru_quoter.h" ]
+}

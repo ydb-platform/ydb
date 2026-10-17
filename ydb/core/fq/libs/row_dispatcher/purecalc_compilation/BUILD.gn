@@ -1,16 +1,16 @@
 library("purecalc_compilation") {
   public_deps = [
-    "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/fq/libs/row_dispatcher/common",
     # "//ydb/library/actors/core",
   ]
 
   deps = [
-    # "//ydb/core/fq/libs/actors/logging",
     # "//ydb/core/fq/libs/config/protos",  # peerdir only
     # "//ydb/core/fq/libs/row_dispatcher/events",
     # "//ydb/core/fq/libs/row_dispatcher/format_handler/common",
+    "//ydb/core/fq/libs/row_dispatcher/memory",
     # "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
+    # "//yql/essentials/minikql/aligned_page_pool",
     "//yql/essentials/public/purecalc/common",
   ]
 

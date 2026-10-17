@@ -17,6 +17,10 @@ library("ut_resources") {
       key = "counters_topics_extended.html"
     },
     {
+      path = "resources/counters_topics_read.html"
+      key = "counters_topics_read.html"
+    },
+    {
       path = "resources/partition_counters/federation/after_write.html"
       key = "federation_after_write.html"
     },
@@ -88,6 +92,7 @@ unittest_executable("ut") {
   deps = [
     ":ut_resources",
     "//contrib/libs/fmt",
+    "//library/cpp/digest/md5",
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/json",
     "//library/cpp/regex/pcre",  # peerdir only
@@ -95,12 +100,11 @@ unittest_executable("ut") {
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/jaeger_tracing",
+    "//ydb/core/kafka_proxy",
     "//ydb/core/keyvalue",
     "//ydb/core/metering",
     "//ydb/core/mon",
     "//ydb/core/persqueue/common",
-    "//ydb/core/persqueue/pqrb",
-    "//ydb/core/persqueue/pqtablet/blob",
     "//ydb/core/persqueue/pqtablet/common",
     "//ydb/core/persqueue/pqtablet/quota",
     "//ydb/core/persqueue/public",
@@ -119,33 +123,37 @@ unittest_executable("ut") {
     "//ydb/core/tx/scheme_cache",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/schemeshard/ut_helpers",  # peerdir only
+    "//ydb/library/aclib",
     "//ydb/library/actors/core",
+    "//ydb/library/actors/protos",
     "//ydb/library/persqueue/topic_parser",
     "//ydb/public/api/protos",
     "//ydb/public/lib/base",
     "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",
-    "//ydb/public/sdk/cpp/src/client/topic",
-    "//ydb/services/metadata",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+    "//ydb/services/lib/sharding",
     "//yql/essentials/public/decimal",
   ]
 
   sources = [
     "counters_ut.cpp",
+    "events_ut.cpp",
     "inflight_limiter_ut.cpp",
     "internals_ut.cpp",
     "make_config.cpp",
     "metering_sink_ut.cpp",
     "partition_chooser_ut.cpp",
-    "partition_scale_manager_graph_cmp_ut.cpp",
     "partition_ut.cpp",
     "partitiongraph_ut.cpp",
+    "partitioning_keys_manager_ut.cpp",
     "pq_ut.cpp",
-    "pqrb_describes_ut.cpp",
+    "pqdata_transaction_compat_ut.cpp",
     "pqtablet_mock.cpp",
     "pqtablet_ut.cpp",
     "sourceid_ut.cpp",
     "user_info_ut.cpp",
     "utils_ut.cpp",
+    "write_id_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/core/persqueue" ]
@@ -154,6 +162,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

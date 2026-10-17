@@ -1,7 +1,5 @@
 protobuf_library("protos") {
-  deps = [
-    # "//library/cpp/lwtrace/protos",  # peerdir only
-  ]
+  public_deps = [ "//library/cpp/lwtrace/protos" ]
 
   sources = [
     "error.proto",

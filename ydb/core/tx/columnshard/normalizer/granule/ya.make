@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     GLOBAL normalizer.cpp
     GLOBAL clean_granule.cpp

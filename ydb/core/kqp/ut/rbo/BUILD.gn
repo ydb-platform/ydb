@@ -14,19 +14,34 @@ library("rbo_resources") {
 unittest_executable("rbo") {
   deps = [
     ":rbo_resources",
-    "//library/cpp/resource",
+    "//library/cpp/json",
+    "//library/cpp/random_provider",
+    "//library/cpp/resource",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//library/cpp/time_provider",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/common",
     "//ydb/core/kqp/common/events",
     "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/counters",
     "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/opt/rbo",
+    "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/query_data",
     "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/olap/helpers",
     "//ydb/core/statistics:ut_common",
+    "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/library/aclib",
     "//ydb/library/actors/testlib",
     "//ydb/library/benchmarks/queries/tpch",  # peerdir only
+    "//ydb/library/plan2svg",
     "//ydb/public/lib/ut_helpers",
-    "//ydb/public/sdk/cpp/src/client/proto",
-    "//ydb/public/sdk/cpp/src/client/table",
-    "//ydb/public/sdk/cpp/src/client/value",
+    "//ydb/public/lib/ydb_cli/common",
+    "//yql/essentials/core",
+    "//yql/essentials/core/pg_settings",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/invoke_builtins",
     "//yql/essentials/parser/pg_catalog",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/parser/pg_wrapper/interface",
@@ -36,7 +51,13 @@ unittest_executable("rbo") {
   ]
 
   sources = [
-    "kqp_rbo_pg_ut.cpp",
+    "kqp_rbo_compatibility_ut.cpp",
+    "kqp_rbo_copy_ut.cpp",
+    "kqp_rbo_decorrelation_ut.cpp",
+    "kqp_rbo_global_ut.cpp",
+    "kqp_rbo_lookup_join_ut.cpp",
+    "kqp_rbo_lowering_ut.cpp",
+    "kqp_rbo_olap_ut.cpp",
     "kqp_rbo_yql_ut.cpp",
   ]
 
@@ -53,6 +74,7 @@ unittest_executable("rbo") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",

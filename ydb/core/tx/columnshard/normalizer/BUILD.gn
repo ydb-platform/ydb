@@ -41,13 +41,19 @@ library("tables") {
 }
 
 library("tablet") {
-  deps = [
+  public_deps = [
     "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/normalizer/abstract",
   ]
 
+  deps = [
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard/blobs_action",
+  ]
+
   sources = [
     "tablet/broken_txs.cpp",
+    "tablet/clean_orphaned_operations.cpp",
     "tablet/gc_counters.cpp",
   ]
 }

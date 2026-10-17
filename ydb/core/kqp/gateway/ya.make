@@ -1,10 +1,11 @@
 LIBRARY()
 
 SRCS(
-    kqp_gateway.cpp
+    kqp_gateway.cpp  # gn: interface
     kqp_ic_gateway.cpp
     kqp_metadata_loader.cpp
 )
+# gn: interface headers kqp_gateway.h
 
 PEERDIR(
     ydb/core/kqp/tracing

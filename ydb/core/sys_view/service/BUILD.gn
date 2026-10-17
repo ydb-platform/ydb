@@ -3,14 +3,16 @@ library("service") {
     "//ydb/core/base",
     "//ydb/core/protos",
     # "//ydb/core/scheme",
+    # "//ydb/core/sys_view/common",
     "//ydb/library/actors/core",
   ]
 
   deps = [
     # "//library/cpp/time_provider",
     "//ydb/core/graph/api",
-    # "//ydb/core/sys_view/common",
+    # "//ydb/core/graph/service",  # peerdir only
     # "//ydb/core/tablet",
+    "//ydb/core/tablet:memory_tags",
     "//ydb/core/tx/scheme_cache",
     # "//ydb/library/aclib/protos",  # peerdir only
     "//ydb/library/services",
@@ -18,6 +20,7 @@ library("service") {
 
   sources = [
     "db_counters.cpp",
+    "db_counters_codec.cpp",
     "ext_counters.cpp",
     "query_interval.cpp",
     "sysview_service.cpp",

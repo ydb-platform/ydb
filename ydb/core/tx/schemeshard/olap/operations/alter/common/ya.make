@@ -1,8 +1,8 @@
 YQL_LIBRARY()
 
 SRCS(
-    update.cpp
-    object.cpp
+    update.cpp  # gn: into ydb/core/tx/schemeshard
+    object.cpp  # gn: into ydb/core/tx/schemeshard
 )
 
 PEERDIR(

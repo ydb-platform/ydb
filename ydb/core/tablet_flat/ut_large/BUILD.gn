@@ -4,6 +4,7 @@ unittest_executable("ut_large") {
     "//ydb/core/scheme",
     "//ydb/core/tablet",
     "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/protos",
     "//ydb/core/tablet_flat/test/libs/exec",
     "//ydb/core/tablet_flat/test/libs/rows",
     "//ydb/core/tablet_flat/test/libs/table",

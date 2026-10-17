@@ -14,7 +14,9 @@ unittest_executable("ut") {
 
   sources = [
     "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_appendix_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data_reservation_ut.cpp",
     "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_data_ut.cpp",
+    "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate_ut.cpp",
     "//ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_segment_ut.cpp",
     "//ydb/core/blobstorage/vdisk/hulldb/fresh/snap_vec_ut.cpp",
   ]
@@ -22,10 +24,7 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/fresh" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

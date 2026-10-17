@@ -1,13 +1,18 @@
 library("service") {
   public_deps = [
     "//library/cpp/threading/future",
-    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//library/cpp/threading/hot_swap",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
     "//ydb/core/nbs/cloud/storage/core/libs/common",
+    # "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
     "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/library/actors/wilson",
   ]
 
   deps = [
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
     # "//ydb/core/nbs/cloud/blockstore/public/api/protos",  # peerdir only
+    # "//ydb/core/nbs/cloud/storage/core/libs/coroutine",  # peerdir only
   ]
 
   sources = [
@@ -15,7 +20,13 @@ library("service") {
     "blocks_info.cpp",
     "context.cpp",
     "device_handler.cpp",
+    "durable_wrapper.cpp",
+    "overlapped_requests_guard_wrapper.cpp",
     "request.cpp",
+    "split_requests_wrapper.cpp",
+    "storage.cpp",
+    "storage_gate.cpp",
+    "trace_service_gate.cpp",
     "unaligned_device_handler.cpp",
   ]
 

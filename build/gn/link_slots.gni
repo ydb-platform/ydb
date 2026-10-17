@@ -148,14 +148,14 @@ template("linked_executable") {
   }
 
   # .proto among `sources`: as library() does (//build/gn/base.gni)
-  not_needed(invoker, [ "generate_grpc_services", "proto_imports" ])
+  not_needed(invoker, [ "generate_grpc_services", "proto_imports", "protoc_fatal_warnings" ])
   _proto = []
   if (defined(invoker.sources)) {
     _proto = filter_include(invoker.sources, [ "*.proto" ])
   }
   if (_proto != []) {
     protobuf_sources("${_exe}_proto") {
-      forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "testonly" ])
+      forward_variables_from(invoker, [ "extra_plugins", "generate_grpc_services", "protoc_fatal_warnings", "testonly" ])
       sources = _proto
       if (defined(invoker.proto_imports)) {
         imports = invoker.proto_imports
@@ -183,9 +183,26 @@ template("linked_executable") {
                              "generate_grpc_services",
                              "link_select",
                              "proto_imports",
+                             "protoc_fatal_warnings",
                              "serialize_enum_headers",
+                             "short_name",
                              "yql_abi_version",
                            ])
+
+    # The binary is named after the dir and the target
+    # (ydb-apps-ydb-experimental-ydb): all binaries land in root_out_dir, and
+    # two PROGRAM(ydb) in different dirs would collide there.
+    # `short_name = true` -- after the target only (ydb).
+    if (!defined(output_name)) {
+      if (defined(invoker.short_name) && invoker.short_name) {
+        output_name = target_name
+      } else {
+        output_name = string_replace(rebase_path(".", "//"), "/", "-") +
+                      "-" + target_name
+      }
+    } else {
+      not_needed(invoker, [ "short_name" ])
+    }
 
     # Append to default configs (assigning would drop them)
     if (defined(invoker.configs)) {
@@ -212,6 +229,7 @@ template("linked_executable") {
         ":${_exe}_enum_objs",
         "//tools/enum_parser:runtime",
       ]
+      configs += [ ":${_exe}_enum_include" ]
     }
     if (defined(invoker.yql_abi_version)) {
       _abi = string_split(invoker.yql_abi_version, ".")
@@ -276,6 +294,9 @@ template("link_slot_provider_config") {
 #   codegen: the protobuf_library() targets whose generated headers the
 #     headers include, `link_slot_codegen` -- written by yamake2gn; the action
 #     waits for their protoc (`<target>_codegen`), not for any compile or link
+#   sources: the interface's own sources, for an interface that calls the
+#     functions itself (`link_slot_self`): what they define is left out of the
+#     list, which then applies to the interface as well
 # An action lists the functions from the headers' AST
 # (build/gn/scripts/link_slot_weak.py); it reruns only when the headers or
 # what they include change (depfile), and leaves the list untouched when it
@@ -307,6 +328,15 @@ template("link_slot_weak_refs") {
     # TODO: rerun when the flags in compile_commands.json change; gn rejects
     # it in inputs (a file of the build dir no target generates)
     inputs = invoker.headers
+    _sources = []
+    if (defined(invoker.sources)) {
+      _sources = filter_include(invoker.sources,
+                                [
+                                  "*.cpp",
+                                  "*.cc",
+                                ])
+      inputs += _sources
+    }
     outputs = [ _weak_header ]
     depfile = "$target_gen_dir/${target_name}.d"
     args = [
@@ -325,6 +355,12 @@ template("link_slot_weak_refs") {
       args += [
         "--header",
         rebase_path(_h, "//"),
+      ]
+    }
+    foreach(_s, _sources) {
+      args += [
+        "--source",
+        rebase_path(_s, "//"),
       ]
     }
     if (_flags_from != []) {

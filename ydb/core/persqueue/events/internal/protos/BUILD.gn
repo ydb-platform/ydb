@@ -1,0 +1,12 @@
+protobuf_library("protos") {
+  public_deps = [
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [ "events.proto" ]
+
+  proto_transitive_headers = false
+
+  protoc_fatal_warnings = true
+}

@@ -6,6 +6,7 @@
 #include <ydb/core/tablet/resource_broker.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {

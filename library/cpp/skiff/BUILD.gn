@@ -1,4 +1,9 @@
 library("skiff") {
+  deps = [
+    "//library/cpp/yt/coding",
+    "//library/cpp/yt/exception",
+  ]
+
   sources = [
     "skiff.cpp",
     "skiff_schema.cpp",

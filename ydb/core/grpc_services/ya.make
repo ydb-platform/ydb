@@ -9,20 +9,23 @@ SRCS(
     grpc_mon.cpp
     grpc_publisher_service_actor.cpp
     grpc_request_proxy.cpp
+    grpc_request_proxy_handle_methods.cpp
     grpc_request_proxy_simple.cpp
     # Own TU: this file reaches into ydb/core/client/server, which already
     # PEERDIRs this library. Joining it would force every grpc_services
     # dependent to resolve msgbus symbols.
-    legacy/rpc_legacy.cpp
+    legacy/rpc_legacy.cpp  # gn: into ydb/core/client/server
     query/rpc_execute_script.cpp
     query/service_query.h
     rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
+    rpc_bistream_ping.cpp
     rpc_bridge.cpp
     rpc_cluster_state.cpp
     rpc_cms.cpp
     rpc_config.cpp
+    rpc_coordination_session.cpp
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_create_coordination_node.cpp
@@ -52,7 +55,7 @@ SRCS(
     rpc_list_operations.cpp
     rpc_load_rows.cpp
     rpc_rate_limiter_api.cpp
-    rpc_read_columns.cpp
+    rpc_read_columns.cpp  # gn: into ydb/services/ydb
     rpc_read_rows.cpp
     rpc_read_table.cpp
     rpc_remove_directory.cpp
@@ -61,7 +64,9 @@ SRCS(
     rpc_rollback_transaction.cpp
     rpc_stream_execute_scan_query.cpp
     rpc_stream_execute_yql_script.cpp
+    service_topic.h  # gn: slot topic_rpc
 )
+# gn: topic_rpc headers service_topic.h service_topic_deferred_publish.h
 
 JOIN_SRCS(
     all_audit.cpp
@@ -123,7 +128,7 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_misc_2_m4.cpp
-    query/rpc_fetch_script_results.cpp
+    query/rpc_fetch_script_results.cpp  # gn: into ydb/core/kqp/proxy_service
     rpc_dynamic_config.cpp
 )
 
@@ -170,7 +175,7 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_misc_6_m1.cpp
     rpc_test_shard.cpp
-    rpc_topic_deferred_publish.cpp
+    rpc_topic_deferred_publish.cpp  # gn: into ydb/services/persqueue_v1
     table_settings.cpp
 )
 
@@ -203,6 +208,7 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
+    ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/opt
@@ -217,7 +223,7 @@ PEERDIR(
     ydb/core/sys_view
     ydb/core/tx
     ydb/core/tx/data_events
-    ydb/core/tx/datashard
+    ydb/core/tx/datashard  # gn: :read_events
     ydb/core/tx/schemeshard/olap/bg_tasks/events
     ydb/core/tx/sharding
     ydb/core/util
@@ -260,6 +266,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/storage/core/libs/common
     )
 ENDIF()
+# gn: peerdir ydb/core/fq/libs/control_plane_storage:util ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:read_table ydb/core/tx/tx_proxy:upload_rows
 
 END()
 

@@ -1,6 +1,6 @@
 unittest_executable("ut_read_only_pdisk") {
   deps = [
-    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/nodewarden",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
   ]
@@ -13,6 +13,7 @@ unittest_executable("ut_read_only_pdisk") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

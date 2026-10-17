@@ -1,0 +1,8 @@
+protobuf_library("grpc") {
+  public_deps = [
+    "//contrib/libs/googleapis-common-protos",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos",
+  ]
+
+  sources = [ "service.proto" ]
+}

@@ -1,22 +1,35 @@
 library("actors") {
   public_deps = [
-    # "//library/cpp/retry",
     # "//library/cpp/threading/future",
     "//ydb/core/kqp/common/events",
-    "//ydb/core/protos",
-    "//ydb/core/tx/scheme_board",
-    # "//ydb/core/tx/scheme_cache",
-    # "//ydb/core/tx/schemeshard",
-    "//ydb/core/tx/tx_proxy:public",
-    # "//ydb/library/aclib",
     # "//ydb/library/actors/core",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/proto",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/library/grpc/client",
   ]
 
   deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/fq/libs/checkpointing/events",
     # "//ydb/core/kqp/common/simple",
-    # "//ydb/services/metadata",
-    "//ydb/services/metadata/secret",
+    # "//ydb/core/mind",  # peerdir only
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/protos",
+    # "//ydb/core/util",
+    # "//ydb/library/aclib",
+    "//ydb/library/services",
+    "//ydb/library/ycloud/api",
+    "//ydb/library/ycloud/impl",
+    # "//ydb/library/yql/dq/common",
+    "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/services/scheme_secret",
   ]
 
-  sources = [ "kqp_federated_query_actors.cpp" ]
+  sources = [
+    "kqp_federated_query_actors.cpp",
+    "streaming_query_nodes_manager.cpp",
+  ]
 }

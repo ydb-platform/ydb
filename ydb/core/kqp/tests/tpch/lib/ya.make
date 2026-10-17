@@ -1,5 +1,7 @@
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     tpch_runner.cpp
     tpch_tables.cpp

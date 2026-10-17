@@ -1,7 +1,12 @@
 protobuf_library("proto") {
+  public_deps = [ "//ydb/public/api/protos" ]
+
   sources = [
     "dq_io.proto",
     "dq_io_state.proto",
+    "dq_pq_control_plane.proto",
     "dq_task_params.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

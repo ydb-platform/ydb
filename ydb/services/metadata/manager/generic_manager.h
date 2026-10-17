@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/service.h>
 

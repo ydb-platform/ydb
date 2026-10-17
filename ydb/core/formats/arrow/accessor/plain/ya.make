@@ -8,9 +8,9 @@ PEERDIR(
 )
 
 SRCS(
-    accessor.cpp
-    GLOBAL constructor.cpp
-    GLOBAL request.cpp
+    accessor.cpp  # gn: into ydb/core/formats/arrow
+    GLOBAL constructor.cpp  # gn: into ydb/core/formats/arrow
+    GLOBAL request.cpp  # gn: into ydb/core/formats/arrow
 )
 
 END()

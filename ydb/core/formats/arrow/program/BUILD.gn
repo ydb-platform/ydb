@@ -5,7 +5,9 @@ library("program") {
     # "//library/cpp/string_utils/quote",
     "//ydb/core/formats/arrow",
     "//ydb/core/formats/arrow/accessor/common",
-    "//ydb/core/formats/arrow/accessor:composite",
+    "//ydb/core/formats/arrow/accessor/composite",
+    # "//ydb/core/formats/arrow/accessor/dictionary",
+    "//ydb/core/formats/arrow/accessor/sub_columns",
     # "//ydb/library/accessor",
     "//ydb/library/arrow_kernels",
     # "//ydb/library/conclusion",
@@ -15,7 +17,6 @@ library("program") {
 
   deps = [
     "//ydb/core/formats/arrow/accessor/sparsed",
-    "//ydb/core/formats/arrow/accessor/sub_columns",
     # "//ydb/library/actors/core",
     "//ydb/library/arrow_clickhouse",  # peerdir only
     # "//ydb/library/formats/arrow",
@@ -41,6 +42,7 @@ library("program") {
     "assign_internal.cpp",
     "collection.cpp",
     "custom_registry.cpp",
+    "distinct_marker.cpp",
     "execution.cpp",
     "filter.cpp",
     "functions.cpp",

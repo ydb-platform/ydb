@@ -26,6 +26,7 @@ PEERDIR(
     ydb/core/node_whiteboard
     ydb/core/util
 )
+# gn: peerdir ydb/core/tx/tx_proxy:public
 
 YQL_LAST_ABI_VERSION()
 

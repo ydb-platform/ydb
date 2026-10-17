@@ -11,6 +11,9 @@ SRCS(
     mkql_bridge_outprocess.cpp
     mkql_bridge_protocol.cpp
     mkql_computation_node.cpp
+    mkql_computation_node.h  # gn: slot minikql_codegen
+    mkql_computation_node_graph_saveload.h  # gn: slot minikql_codegen
+    mkql_computation_node_holders_codegen.h  # gn: slot minikql_codegen
     mkql_datum_validate.cpp
     mkql_computation_node_holders.cpp
     mkql_computation_node_impl.cpp

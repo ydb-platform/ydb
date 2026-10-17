@@ -60,6 +60,7 @@ PEERDIR(
     ydb/services/metadata/abstract
     ydb/services/udf_store/wasm
 )
+# gn: peerdir ydb/core/kqp/gateway:interface ydb/core/kqp/session_actor:worker_common
 
 GENERATE_ENUM_SERIALIZATION(
     kqp_executer.h

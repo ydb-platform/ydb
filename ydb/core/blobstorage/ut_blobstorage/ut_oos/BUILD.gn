@@ -1,0 +1,30 @@
+unittest_executable("ut_oos") {
+  deps = [
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/blobstorage/vdisk/huge",
+    "//ydb/core/blobstorage/vdisk/hullop",
+    "//ydb/core/util",
+  ]
+
+  sources = [
+    "//ydb/core/blobstorage/ut_blobstorage/fresh_space_projection.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/huge_space_admission.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/out_of_space.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/blobstorage/ut_blobstorage" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

@@ -8,12 +8,12 @@ library("other") {
     "//library/cpp/json",
     # "//library/cpp/threading/future",
     "//ydb/core/base",
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/blobstorage/base",
   ]
 
   sources = [
     "mon_blob_range_page.cpp",
+    "mon_check_integrity.cpp",
     "mon_get_blob_page.cpp",
     "mon_vdisk_stream.cpp",
   ]

@@ -1,12 +1,7 @@
 LIBRARY()
 
-SET(
-    SOURCE
-    empty.cpp
-)
-
 SRCS(
-    ${SOURCE}
+    empty.cpp
 )
 
 PEERDIR(

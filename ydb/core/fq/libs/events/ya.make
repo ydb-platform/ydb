@@ -1,5 +1,9 @@
 YQL_LIBRARY()
 
+SRCS(
+    events.cpp
+)
+
 GENERATE_ENUM_SERIALIZATION(events.h)
 
 GENERATE_ENUM_SERIALIZATION(event_ids.h)

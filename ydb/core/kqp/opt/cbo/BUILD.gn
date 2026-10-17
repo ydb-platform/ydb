@@ -1,0 +1,26 @@
+library("cbo") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//yql/essentials/core",
+    "//yql/essentials/core/histogram",
+    "//yql/essentials/core/minsketch",
+  ]
+
+  deps = [
+    # "//library/cpp/disjoint_sets",
+    # "//library/cpp/iterator",
+    "//library/cpp/string_utils/base64",
+    "//yql/essentials/ast",
+    "//yql/essentials/utils/log",
+  ]
+
+  sources = [
+    "cbo_hints.cpp",
+    "cbo_interesting_orderings.cpp",
+    "cbo_optimizer_hints.cpp",
+    "cbo_optimizer_new.cpp",
+    "kqp_statistics.cpp",
+  ]
+
+  serialize_enum_headers = [ "cbo_optimizer_new.h" ]
+}

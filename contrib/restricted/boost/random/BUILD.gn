@@ -1,0 +1,24 @@
+config("public_config") {
+    include_dirs = [ "include" ]
+}
+
+contrib_library("random") {
+    public_deps = [
+        "//contrib/restricted/boost/assert",
+        "//contrib/restricted/boost/config",
+        "//contrib/restricted/boost/core",
+        "//contrib/restricted/boost/dynamic_bitset",
+        "//contrib/restricted/boost/integer",
+        "//contrib/restricted/boost/io",
+        "//contrib/restricted/boost/system",
+        "//contrib/restricted/boost/throw_exception",
+        "//contrib/restricted/boost/type_traits",
+        "//contrib/restricted/boost/utility",
+    ]
+
+    sources = [
+        "src/random_device.cpp",
+    ]
+
+    public_configs = [ ":public_config" ]
+}

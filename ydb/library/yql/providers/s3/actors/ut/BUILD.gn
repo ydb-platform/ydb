@@ -3,20 +3,38 @@ unittest_executable("ut") {
     "//contrib/libs/apache/arrow",
     "//contrib/libs/protobuf",
     "//library/cpp/testing/unittest",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/services",
+    "//ydb/library/yql/dq/actors/common",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/common/http_gateway",
+    "//ydb/library/yql/providers/common/http_gateway:mock",
+    "//ydb/library/yql/providers/common/ut_helpers",
     "//ydb/library/yql/providers/s3/actors",
-    "//yql/essentials/minikql",  # peerdir only
+    "//ydb/library/yql/providers/s3/events",
+    "//ydb/library/yql/providers/s3/proto",
+    "//ydb/library/yql/udfs/common/clickhouse/client",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf/arrow",
     "//yql/essentials/public/udf/service/stub",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "yql_arrow_push_down_ut.cpp" ]
+  sources = [
+    "yql_arrow_column_converters_ut.cpp",
+    "yql_arrow_push_down_ut.cpp",
+    "yql_s3_read_actor_retry_ut.cpp",
+    "yql_s3_read_actor_ut.cpp",
+    "yql_s3_source_queue_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/library/yql/providers/s3/actors" ]
 
   link_select = [
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
   ]

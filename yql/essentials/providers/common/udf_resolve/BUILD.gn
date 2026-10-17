@@ -2,6 +2,7 @@ library("udf_resolve") {
   public_deps = [
     "//yql/essentials/core",
     "//yql/essentials/core/file_storage",
+    # "//yql/essentials/core/url_preprocessing/interface",
     # "//yql/essentials/minikql",
     # "//yql/essentials/minikql:alloc",
     "//yql/essentials/providers/common/proto",
@@ -12,6 +13,7 @@ library("udf_resolve") {
     # "//library/cpp/json",
     "//library/cpp/protobuf/util",
     "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/providers/common/mkql",
     "//yql/essentials/providers/common/schema/expr",
     # "//yql/essentials/public/udf",  # peerdir only

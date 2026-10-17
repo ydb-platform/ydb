@@ -1,5 +1,7 @@
 protobuf_library("protos") {
   sources = [ "protos/shop.proto" ]
+
+  protoc_fatal_warnings = true
 }
 
 library("shop") {

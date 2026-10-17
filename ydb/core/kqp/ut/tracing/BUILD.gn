@@ -1,0 +1,42 @@
+unittest_executable("tracing") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/cancelation",
+    "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/node_service",
+    "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/tracing",
+    "//ydb/core/kqp/tracing/test_util",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/datashard/ut_common",
+    "//ydb/core/tx/long_tx_service/public",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/actors/wilson",
+    "//ydb/library/actors/wilson:test_util",
+    "//ydb/library/wilson_ids",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/public/sdk/cpp/src/client/draft",
+  ]
+
+  sources = [ "kqp_query_trace_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/kqp",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

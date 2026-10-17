@@ -6,6 +6,8 @@ protobuf_library("protos") {
   ]
 
   sources = [ "protos/fq.proto" ]
+
+  protoc_fatal_warnings = true
 }
 
 library("public_http") {

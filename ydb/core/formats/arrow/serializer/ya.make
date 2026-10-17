@@ -9,11 +9,11 @@ PEERDIR(
 )
 
 SRCS(
-    abstract.cpp
-    GLOBAL native.cpp
-    stream.cpp
-    parsing.cpp
-    utils.cpp
+    abstract.cpp  # gn: into ydb/core/formats/arrow
+    GLOBAL native.cpp  # gn: into ydb/core/formats/arrow
+    stream.cpp  # gn: into ydb/core/formats/arrow
+    parsing.cpp  # gn: into ydb/core/formats/arrow
+    utils.cpp  # gn: into ydb/core/formats/arrow
 )
 
 END()

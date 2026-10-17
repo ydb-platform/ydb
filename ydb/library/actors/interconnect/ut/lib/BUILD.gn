@@ -1,11 +1,13 @@
 group("lib") {
   public_deps = [
     ":tls",
+    # "//library/cpp/logger",
     # "//library/cpp/testing/unittest",
     # "//ydb/library/actors/core",
     "//ydb/library/actors/dnsresolver",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/actors/interconnect/rdma",
+    # "//ydb/library/actors/interconnect/rdma/cq_actor",
     "//ydb/library/actors/interconnect/ut/protos",
   ]
 }

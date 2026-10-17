@@ -1,0 +1,14 @@
+library("interface") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/utils",
+    # "//yt/yql/providers/yt/fmr/utils/comparator",
+  ]
+
+  deps = [
+    # "//library/cpp/yson",  # peerdir only
+    # "//library/cpp/yt/yson",  # peerdir only
+    # "//yql/essentials/utils",  # peerdir only
+  ]
+
+  sources = [ "yql_yt_yson_block_iterator.cpp" ]
+}

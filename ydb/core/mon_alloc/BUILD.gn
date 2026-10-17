@@ -12,11 +12,13 @@ library("mon_alloc") {
     # "//library/cpp/cache",
     # "//library/cpp/dwarf_backtrace",  # peerdir only
     "//library/cpp/execprofile",
+    # "//library/cpp/html/escape",
     "//library/cpp/html/pcdata",
     # "//library/cpp/lfalloc/alloc_profiler",  # peerdir only
     "//library/cpp/lfalloc/dbg_info",
     "//library/cpp/malloc/api",
     # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/svnversion",
     "//ydb/core/base",
     "//ydb/core/mon",
     # "//ydb/library/actors/prof",

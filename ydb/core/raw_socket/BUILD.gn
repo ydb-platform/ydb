@@ -1,14 +1,14 @@
 library("raw_socket") {
   public_deps = [
     "//contrib/libs/openssl",
+    "//ydb/core/base",
     "//ydb/library/actors/core",
-    "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/services",
   ]
 
   deps = [
-    # "//ydb/core/base",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
   ]
 

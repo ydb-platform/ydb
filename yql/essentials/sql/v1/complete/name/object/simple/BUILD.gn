@@ -1,7 +1,0 @@
-library("simple") {
-  public_deps = [ "//yql/essentials/sql/v1/complete/name/object" ]
-
-  deps = [ "//library/cpp/case_insensitive_string" ]
-
-  sources = [ "schema.cpp" ]
-}

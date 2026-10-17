@@ -54,7 +54,7 @@ class TPersQueueMetaCacheActor : public TActorBootstrapped<TPersQueueMetaCacheAc
     using TBase = TActorBootstrapped<TPersQueueMetaCacheActor>;
 public:
     TPersQueueMetaCacheActor(TPersQueueMetaCacheActor&&) = default;
-    TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = default;
+    TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = delete;
 
     TPersQueueMetaCacheActor(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters)

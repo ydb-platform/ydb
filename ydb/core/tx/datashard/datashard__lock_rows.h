@@ -23,7 +23,7 @@ namespace NKikimr::NDataShard {
             return MultiHash(Sender, RequestId);
         }
 
-        bool operator<=>(const TLockRowsRequestId& rhs) const = default;
+        bool operator==(const TLockRowsRequestId& rhs) const = default;
     };
 
     struct TLockRowsRequestPipeServerListTag {};

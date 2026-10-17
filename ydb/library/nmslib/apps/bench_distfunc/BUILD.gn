@@ -1,0 +1,9 @@
+linked_executable("bench_distfunc") {
+  deps = [
+    "//ydb/library/nmslib",  # peerdir only
+  ]
+
+  sources = [ "bench_distfunc.cc" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

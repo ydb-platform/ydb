@@ -12,7 +12,7 @@ library("lib") {
     "//ydb/core/blobstorage/lwtrace_probes",
     "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/vdisk/common",
-    "//ydb/core/load_test",
+    # "//ydb/core/load_test/common",
     # "//ydb/core/node_whiteboard",
     "//ydb/core/protos",
     # "//ydb/core/tablet",
@@ -27,26 +27,50 @@ library("lib") {
   ]
 
   deps = [
+    # ":ydb_stress_tool",
     # "//contrib/libs/protobuf",  # peerdir only
+    # "//ydb/core/load_test/blobstorage",  # peerdir only
   ]
 
-  sources = [ "device_test_tool_trim_test.cpp" ]
+  sources = [
+    "device_test_tool_cli.cpp",
+    "device_test_tool_trim_test.cpp",
+  ]
 }
 
 linked_executable("ydb_stress_tool") {
-  deps = [
+  public_deps = [
     ":lib",
+    "//library/cpp/containers/stack_vector",
     "//library/cpp/getopt",
-    "//ydb/core/base",  # peerdir only
-    "//ydb/core/blobstorage/crypto",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/vdisk/common",
+    "//ydb/core/load_test/common",
+    "//ydb/core/node_whiteboard",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
+    "//ydb/library/services",
+    "//ydb/tools/stress_tool/proto",
+  ]
+
+  deps = [
+    "//library/cpp/monlib/dynamic_counters/percentile",
     "//ydb/core/blobstorage/lwtrace_probes",  # peerdir only
-    "//ydb/core/blobstorage/pdisk",  # peerdir only
     "//ydb/core/driver_lib/version",  # peerdir only
-    "//ydb/core/load_test",  # peerdir only
-    "//ydb/core/node_whiteboard",  # peerdir only
-    "//ydb/core/tablet",  # peerdir only
-    "//ydb/library/pdisk_io",  # peerdir only
-    "//ydb/tools/stress_tool/proto",  # peerdir only
+    "//ydb/core/load_test/blobstorage",  # peerdir only
+    "//ydb/core/load_test/ddisk",  # peerdir only
+    "//ydb/core/load_test/interconnect",  # peerdir only
+    "//ydb/core/util",
+    "//ydb/library/actors/dnsresolver",
+    "//ydb/library/actors/interconnect/poller",
+    "//ydb/library/pdisk_io",
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
@@ -57,10 +81,10 @@ linked_executable("ydb_stress_tool") {
   sources = [ "device_test_tool.cpp" ]
 
   link_select = [
-    "YqlServicePolicy=exception_policy",
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
-    "topic_rpc=persqueue_v1",
+    "retro_spans=spans",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",

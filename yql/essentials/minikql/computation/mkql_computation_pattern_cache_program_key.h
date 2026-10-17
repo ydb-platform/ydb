@@ -30,7 +30,7 @@ public:
         return SerializedProgram_;
     }
 
-    bool operator<=>(const TProgramKey& other) const = default;
+    bool operator==(const TProgramKey& other) const = default;
 
 private:
     NYql::TLangVersion LanguageVersion_;

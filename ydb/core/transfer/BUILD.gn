@@ -1,33 +1,33 @@
 library("transfer") {
   public_deps = [
-    # "//ydb/core/base",
-    "//ydb/core/tx/replication/service",
-  ]
-
-  deps = [
     "//library/cpp/yson/node",
+    # "//ydb/core/base",
     # "//ydb/core/fq/libs/row_dispatcher/events",
-    # "//ydb/core/fq/libs/row_dispatcher/purecalc_compilation",
-    # "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
     "//ydb/core/kqp/runtime",
     "//ydb/core/protos",
-    # "//ydb/core/scheme",
     # "//ydb/core/scheme_types",
+    "//ydb/core/tx/replication/service",
     "//ydb/core/tx/replication/ydb_proxy",
     "//ydb/core/tx/scheme_cache",
-    "//ydb/core/tx/tx_proxy",
     "//ydb/core/tx/tx_proxy:public",
-    "//ydb/core/tx/tx_proxy:upload_rows",
     # "//ydb/core/util",
     # "//ydb/library/actors/core",
     "//ydb/library/services",
     "//ydb/public/api/protos",
-    # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/computation",
     # "//yql/essentials/public/issue",
     # "//yql/essentials/public/purecalc/common",
-    # "//yql/essentials/public/purecalc/helpers/stream",
     # "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    # "//ydb/core/fq/libs/row_dispatcher/purecalc_compilation",
+    # "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
+    # "//ydb/core/scheme",
+    "//ydb/core/tx/tx_proxy",
+    "//ydb/core/tx/tx_proxy:upload_rows",
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/public/purecalc/helpers/stream",
     # "//yql/essentials/utils",
   ]
 

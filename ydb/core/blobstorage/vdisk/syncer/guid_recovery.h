@@ -108,9 +108,9 @@ namespace NKikimr {
             {}
 
             TOutcome(const TOutcome &) = default;
-            TOutcome &operator=(const TOutcome &) = default;
+            TOutcome &operator=(const TOutcome &) = delete;
             TOutcome(TOutcome &&) = default;
-            TOutcome &operator=(TOutcome &&) = default;
+            TOutcome &operator=(TOutcome &&) = delete;
             ~TOutcome() = default;
             bool BadDecision() const { return IsBad(Decision); }
             void Output(IOutputStream &str) const;

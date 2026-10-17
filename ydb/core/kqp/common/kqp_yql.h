@@ -213,7 +213,7 @@ public:
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
 
-    bool operator == (const TKqpReadTableSettings&) const = default;
+    bool operator == (const TKqpReadTableSettings&) const = delete;
 
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);

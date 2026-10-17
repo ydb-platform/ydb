@@ -1,6 +1,5 @@
 library("sasl") {
   public_deps = [
-    "//library/cpp/threading/atomic_shared_ptr",
     "//ydb/core/base",
     "//ydb/library/actors/core",
     "//ydb/library/login/password_checker",
@@ -16,7 +15,7 @@ library("sasl") {
     "//ydb/core/protos",
     "//ydb/core/security",
     "//ydb/core/security/ldap_auth_provider",
-    "//ydb/core/tablet",
+    "//ydb/core/tablet",  # peerdir only
     "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
     "//ydb/library/login/hashes_checker",
@@ -32,6 +31,5 @@ library("sasl") {
     "plain_auth_actor.cpp",
     "plain_ldap_auth_proxy_actor.cpp",
     "scram_auth_actor.cpp",
-    "static_credentials_provider.cpp",
   ]
 }

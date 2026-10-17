@@ -1,0 +1,25 @@
+library("collector") {
+  public_deps = [
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/retro_tracing/span",
+    "//ydb/library/actors/wilson",
+  ]
+
+  deps = [
+    "//contrib/proto/opentelemetry",  # peerdir only
+  ]
+
+  sources = [
+    "events.cpp",
+    "retro_collector.cpp",
+    "retro_span_deserialization.cpp",
+  ]
+
+  link_slot_interface = "retro_spans"
+
+  link_slot_headers = [ "retro_span_deserialization.h" ]
+
+  link_slot_self = true
+
+  link_slot_codegen = [ "//contrib/proto/opentelemetry" ]
+}

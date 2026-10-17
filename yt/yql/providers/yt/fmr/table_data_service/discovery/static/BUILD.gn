@@ -1,0 +1,7 @@
+library("static") {
+  public_deps = [
+    # "//yt/yql/providers/yt/fmr/table_data_service/discovery/interface",
+  ]
+
+  sources = [ "yql_yt_static_service_discovery.cpp" ]
+}

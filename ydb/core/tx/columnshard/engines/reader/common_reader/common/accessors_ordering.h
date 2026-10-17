@@ -254,7 +254,7 @@ public:
         AFL_VERIFY(it != Accessors.end());
         auto result = std::move(it->second);
         Accessors.erase(it);
-        return std::move(result);
+        return result;
     }
 
     void StartRequest(std::shared_ptr<TDataAccessorsRequest>&& request, const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context);
@@ -282,7 +282,7 @@ public:
         }
 
         if (Accessors.empty()) {
-            Accessors = std::move(accessors.ExtractPortions());
+            Accessors = accessors.ExtractPortions();
         } else {
             for (auto&& i : accessors.ExtractPortions()) {
                 AFL_VERIFY(Accessors.emplace(i.first, std::move(i.second)).second);

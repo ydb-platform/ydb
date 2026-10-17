@@ -1,0 +1,8 @@
+library("object") {
+  public_deps = [
+    "//library/cpp/threading/future",
+    # "//yql/essentials/utils/meta",
+  ]
+
+  sources = [ "schema.cpp" ]
+}

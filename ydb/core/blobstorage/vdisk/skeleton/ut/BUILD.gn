@@ -1,9 +1,14 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/monlib/dynamic_counters",
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/base/services",
     "//ydb/core/blobstorage",  # peerdir only
+    "//ydb/core/blobstorage/groupinfo",
+    "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk/common",
     "//ydb/core/blobstorage/vdisk/hullop",
     "//ydb/core/blobstorage/vdisk/skeleton",
@@ -13,6 +18,7 @@ unittest_executable("ut") {
   ]
 
   sources = [
+    "//ydb/core/blobstorage/vdisk/skeleton/skeleton_front_latency_ut.cpp",
     "//ydb/core/blobstorage/vdisk/skeleton/skeleton_oos_logic_ut.cpp",
     "//ydb/core/blobstorage/vdisk/skeleton/skeleton_vpatch_actor_ut.cpp",
   ]
@@ -23,6 +29,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -1,11 +1,19 @@
 library("common") {
   public_deps = [
-    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
   ]
 
   deps = [
+    # "//contrib/libs/xxhash",
     # "//library/cpp/lwtrace",  # peerdir only
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/memory",  # peerdir only
   ]
 
-  sources = [ "block_range.cpp" ]
+  sources = [
+    "block_checksums.cpp",
+    "printable_params.cpp",
+    "thread_checker.cpp",
+  ]
 }

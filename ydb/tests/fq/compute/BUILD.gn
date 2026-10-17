@@ -1,0 +1,29 @@
+unittest_executable("compute") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/fq/libs/compute/ydb/control_plane",
+    "//ydb/core/fq/libs/compute/ydb:events",
+    "//ydb/core/fq/libs/config/protos",
+    "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
+    "//ydb/core/fq/libs/control_plane_storage/events",
+    "//ydb/core/fq/libs/control_plane_storage:service_id",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/security",  # peerdir only
+  ]
+
+  sources = [ "compute_database_control_plane_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/compute/ydb/control_plane" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

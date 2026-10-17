@@ -1,10 +1,10 @@
-gtest_executable("ut") {
+unittest_executable("ut") {
   deps = [
-    "//library/cpp/testing/gtest",
+    "//library/cpp/testing/unittest",
     "//ydb/services/sqs_topic/queue_url",
   ]
 
-  sources = [ "//ydb/services/sqs_topic/queue_url/utils_ut.cpp" ]
+  sources = [ "utils_ut.cpp" ]
 
   link_select = [ "allocator=tcmalloc" ]
 }

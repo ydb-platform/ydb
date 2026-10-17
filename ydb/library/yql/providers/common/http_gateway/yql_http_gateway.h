@@ -129,7 +129,7 @@ public:
         ~TCountedContent();
 
         TCountedContent(TCountedContent&&) = default;
-        TCountedContent& operator=(TCountedContent&& src) = default;
+        TCountedContent& operator=(TCountedContent&& src) = delete;
 
         TString Extract();
     private:

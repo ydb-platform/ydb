@@ -1,0 +1,5 @@
+linked_executable("background_load") {
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

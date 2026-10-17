@@ -1,6 +1,7 @@
 unittest_executable("draft") {
   deps = [
     "//contrib/libs/grpc",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/public/api/grpc",
     "//ydb/public/api/grpc/draft",
@@ -10,6 +11,7 @@ unittest_executable("draft") {
 
   sources = [
     "ydb_scripting_response_headers_ut.cpp",
+    "ydb_udf_ut.cpp",
     "ydb_view_ut.cpp",
   ]
 

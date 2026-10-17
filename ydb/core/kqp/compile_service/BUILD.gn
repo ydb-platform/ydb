@@ -1,10 +1,13 @@
 library("compile_service") {
   public_deps = [
+    # "//ydb/core/base",
     "//ydb/core/kqp/common",
     # "//ydb/core/kqp/common/simple",
     "//ydb/core/kqp/federated_query",
     "//ydb/core/kqp/gateway:interface",
-    "//ydb/core/kqp/host",
+    # "//ydb/core/kqp/provider",
+    "//ydb/core/protos",
+    # "//ydb/library/actors/core",
   ]
 
   deps = [
@@ -15,25 +18,37 @@ library("compile_service") {
     # "//library/cpp/protobuf/json",
     "//library/cpp/string_utils/base64",
     "//ydb/core/actorlib_impl",
-    # "//ydb/core/base",
     # "//ydb/core/client/minikql_compile",
     # "//ydb/core/cms/console",
+    # "//ydb/core/kqp/common/compilation",
+    # "//ydb/core/kqp/common/events",
     # "//ydb/core/kqp/counters",
     "//ydb/core/kqp/gateway",
+    "//ydb/core/kqp/host",
     "//ydb/core/kqp/rm_service",
     "//ydb/core/kqp/session_actor:worker_common",
+    # "//ydb/core/kqp/tracing",
     "//ydb/core/ydb_convert",
     # "//ydb/library/aclib",
-    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",  # peerdir only
     # "//ydb/library/actors/wilson",
+    # "//ydb/library/query_actor",
+    # "//ydb/library/security",
+    "//ydb/library/services",
     # "//ydb/library/wilson_ids",
+    # "//ydb/library/ydb_issue",
+    "//ydb/library/ydb_issue/proto",
+    # "//ydb/library/yql/public/ydb_issue",
     "//ydb/library/yql/utils/actor_log",
+    "//ydb/public/api/protos",
+    # "//yql/essentials/public/issue",
   ]
 
   sources = [
     "kqp_compile_actor.cpp",
     "kqp_compile_computation_pattern_service.cpp",
     "kqp_compile_service.cpp",
+    "kqp_warmup_compile_actor.cpp",
   ]
 }
 

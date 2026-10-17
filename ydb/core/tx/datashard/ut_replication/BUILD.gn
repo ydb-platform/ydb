@@ -5,6 +5,7 @@ unittest_executable("ut_replication") {
     "//library/cpp/svnversion",  # peerdir only
     "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/kqp/ut/common",  # peerdir only
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/datashard",
@@ -24,6 +25,7 @@ unittest_executable("ut_replication") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

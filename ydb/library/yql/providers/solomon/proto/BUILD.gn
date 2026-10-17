@@ -5,4 +5,6 @@ protobuf_library("proto") {
     "dq_solomon_shard.proto",
     "metrics_queue.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

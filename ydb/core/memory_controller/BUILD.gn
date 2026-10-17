@@ -10,8 +10,7 @@ library("memory_controller") {
 
   deps = [
     # "//contrib/libs/apache/arrow",
-    # "//contrib/libs/tcmalloc",
-    "//contrib/libs/tcmalloc:malloc_extension",  # peerdir only
+    "//contrib/libs/tcmalloc",
     # "//ydb/core/cms/console",
     # "//ydb/core/node_whiteboard",
     # "//ydb/core/tablet",
@@ -21,12 +20,13 @@ library("memory_controller") {
     # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
     "//ydb/library/services",
     # "//yql/essentials/minikql",  # peerdir only
-    "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/aligned_page_pool",
     # "//yql/essentials/public/udf/arrow",
     # "//yql/essentials/utils/memory_profiling",  # peerdir only
   ]
 
   sources = [
+    "consumer_collection.cpp",
     "memory_controller.cpp",
     "memtable_collection.cpp",
   ]

@@ -1,5 +1,8 @@
 unittest_executable("ut_donor") {
-  deps = [ "//ydb/core/blobstorage/ut_blobstorage/lib" ]
+  deps = [
+    "//ydb/core/blobstorage/nodewarden",
+    "//ydb/core/blobstorage/ut_blobstorage/lib",
+  ]
 
   sources = [ "//ydb/core/blobstorage/ut_blobstorage/donor.cpp" ]
 
@@ -9,6 +12,7 @@ unittest_executable("ut_donor") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

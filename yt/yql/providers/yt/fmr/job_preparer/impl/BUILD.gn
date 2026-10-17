@@ -3,17 +3,18 @@ library("impl") {
     # "//library/cpp/threading/future",
     # "//yql/essentials/core/file_storage",
     # "//yt/yql/providers/yt/fmr/job_preparer/interface",
+    # "//yt/yql/providers/yt/fmr/table_data_service/discovery/interface",
   ]
 
   deps = [
     # "//library/cpp/random_provider",
+    # "//library/cpp/string_utils/quote",
     "//yql/essentials/core/file_storage/proto",
     # "//yql/essentials/utils",
     # "//yql/essentials/utils/log",
     # "//yt/yql/providers/yt/fmr/job/impl",
     # "//yt/yql/providers/yt/fmr/request_options",
     # "//yt/yql/providers/yt/fmr/table_data_service/client/impl",
-    # "//yt/yql/providers/yt/fmr/table_data_service/discovery/file",
     # "//yt/yql/providers/yt/fmr/utils",
     # "//yt/yql/providers/yt/fmr/yt_job_service/impl",
   ]

@@ -1,0 +1,20 @@
+gtest_executable("observability") {
+  deps = [
+    "//library/cpp/logger",
+    "//library/cpp/testing/gtest",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",
+    "//ydb/public/sdk/cpp/src/client/impl/observability/error_category",
+    "//ydb/public/sdk/cpp/src/client/impl/stats",
+    "//ydb/public/sdk/cpp/src/client/metrics",
+    "//ydb/public/sdk/cpp/src/client/query",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/table",  # peerdir only
+  ]
+
+  sources = [
+    "metric_buffer_ut.cpp",
+    "metrics_ut.cpp",
+    "spans_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

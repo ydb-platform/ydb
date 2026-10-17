@@ -1,0 +1,18 @@
+library("api") {
+  public_deps = [
+    # "//library/cpp/yt/assert",
+    "//library/cpp/yt/memory",
+    # "//library/cpp/yt/misc",
+  ]
+
+  deps = [ "//library/cpp/yt/error" ]
+
+  sources = [
+    "bytecode.cpp",
+    "compartment.cpp",
+    "data_transfer.cpp",
+    "function.cpp",
+    "memory_pool.cpp",
+    "type_builder.cpp",
+  ]
+}

@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/tablet
     ydb/core/tx/data_events
 )
 

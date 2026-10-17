@@ -18,6 +18,7 @@ library("core") {
     "//yql/essentials/core/file_storage",
     "//yql/essentials/core/histogram",
     "//yql/essentials/core/issue",
+    "//yql/essentials/core/langver",
     "//yql/essentials/core/layers",
     "//yql/essentials/core/minsketch",
     # "//yql/essentials/core/qplayer/storage/interface",
@@ -25,13 +26,16 @@ library("core") {
     # "//yql/essentials/core/url_lister/interface",
     # "//yql/essentials/core/url_preprocessing/interface",
     "//yql/essentials/minikql",
+    "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/parser/pg_catalog",
+    # "//yql/essentials/parser/pg_wrapper/interface",
     "//yql/essentials/protos",
     "//yql/essentials/providers/common/proto",
     "//yql/essentials/public/issue",
     # "//yql/essentials/public/langver",
     # "//yql/essentials/public/udf",
     "//yql/essentials/sql",
+    # "//yql/essentials/sql/settings/flags",
     # "//yql/essentials/utils",
   ]
 
@@ -44,7 +48,6 @@ library("core") {
     # "//yql/essentials/core/type_ann",
     "//yql/essentials/minikql/dom",
     "//yql/essentials/minikql/jsonpath/parser",
-    # "//yql/essentials/parser/pg_wrapper/interface",
     # "//yql/essentials/public/decimal",
     # "//yql/essentials/sql/settings",  # peerdir only
     "//yql/essentials/utils/log",
@@ -61,6 +64,7 @@ library("core") {
     "yql_expr_csee.cpp",
     "yql_expr_optimize.cpp",
     "yql_expr_type_annotation.cpp",
+    "yql_expr_type_annotation_pg.cpp",
     "yql_func_stack.cpp",
     "yql_gc_transformer.cpp",
     "yql_graph_transformer.cpp",
@@ -78,6 +82,9 @@ library("core") {
     "yql_opt_rewrite_io.cpp",
     "yql_opt_utils.cpp",
     "yql_opt_window.cpp",
+    "yql_opt_window_stream_transformers.cpp",
+    "yql_sql_combine_expander.cpp",
+    "yql_sqlselect.cpp",
     "yql_statistics.cpp",
     "yql_type_annotation.cpp",
     "yql_type_helpers.cpp",
@@ -88,6 +95,7 @@ library("core") {
     "yql_user_data_storage.cpp",
     "yql_window_features.cpp",
     "yql_window_frame_settings.cpp",
+    "yql_window_frame_settings_pg.cpp",
     "yql_window_frames_collector_params_serializer.cpp",
   ]
 

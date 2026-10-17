@@ -11,6 +11,7 @@ library("helpers") {
 
   sources = [
     "activeactors.cpp",
+    "actor_liveness_checker.cpp",
     "collector_counters.cpp",
     "pool_stats_collector.cpp",
     "selfping_actor.cpp",

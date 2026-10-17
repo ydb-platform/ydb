@@ -11,9 +11,11 @@ library("provider") {
 
     deps = [
         "//contrib/libs/openssl",
+        "//library/cpp/random_provider",  # yql_yt_qplayer_gateway.h
         "//contrib/libs/re2",
         "//library/cpp/time_provider",
         "//library/cpp/type_info/tz",
+        "//library/cpp/yson/node",  # yql_yt_qplayer_gateway.cpp
         "//yql/essentials/ast",
         "//yql/essentials/core",
         "//yql/essentials/core/cbo",
@@ -21,16 +23,21 @@ library("provider") {
         "//yql/essentials/core/dqs_expr_nodes",
         "//yql/essentials/core/extract_predicate",
         "//yql/essentials/core/file_storage",
+        "//yql/essentials/core/langver",
         "//yql/essentials/core/peephole_opt",
+        "//yql/essentials/core/qplayer/storage/interface",  # yql_yt_qplayer_gateway.h
         "//yql/essentials/core/services",
         "//yql/essentials/providers/common/activation",
         "//yql/essentials/providers/common/codec",
+        "//yql/essentials/providers/common/config/transformer",
         "//yql/essentials/providers/common/dq",
         "//yql/essentials/providers/common/mkql",
         "//yql/essentials/providers/common/provider",
         "//yql/essentials/providers/common/structured_token",
         "//yql/essentials/providers/common/transform",
-        "//yql/essentials/sql/v1",
+        "//yql/essentials/public/issue/protos",
+        "//yql/essentials/sql/settings/flags",
+        "//yql/essentials/sql/v1/translation",
         "//yql/essentials/sql/v1/lexer/antlr4",
         "//yql/essentials/sql/v1/lexer/antlr4_ansi",
         "//yql/essentials/sql/v1/proto_parser/antlr4",
@@ -38,6 +45,7 @@ library("provider") {
         "//yql/essentials/utils/log",
         "//yql/providers/stat/expr_nodes",
         "//yt/cpp/mapreduce/common",
+        "//yt/cpp/mapreduce/interface",  # yql_yt_qplayer_gateway.cpp
         "//yt/yql/providers/yt/common",
         "//yt/yql/providers/yt/expr_nodes",
         "//yt/yql/providers/yt/lib/hash",
@@ -59,6 +67,7 @@ library("provider") {
     ]
 
     sources = [
+        "//yt/yql/providers/yt/gateway/qplayer/yql_yt_qplayer_gateway.cpp",
         "phy_opt/yql_yt_phy_opt_content.cpp",
         "phy_opt/yql_yt_phy_opt_create.cpp",
         "phy_opt/yql_yt_phy_opt_field_subset.cpp",
@@ -91,6 +100,7 @@ library("provider") {
         "yql_yt_datasink.cpp",
         "yql_yt_datasource_constraints.cpp",
         "yql_yt_datasource_exec.cpp",
+        "yql_yt_datasource_trackable.cpp",
         "yql_yt_datasource_type_ann.cpp",
         "yql_yt_datasource.cpp",
         "yql_yt_dq_hybrid.cpp",
@@ -124,8 +134,6 @@ library("provider") {
         "yql_yt_provider_impl.h",
         "yql_yt_provider.cpp",
         "yql_yt_provider.h",
-        "yql_yt_qplayer_gateway.cpp",
-        "yql_yt_qplayer_gateway.h",
         "yql_yt_table_desc.cpp",
         "yql_yt_table.cpp",
         "yql_yt_wide_flow.cpp",

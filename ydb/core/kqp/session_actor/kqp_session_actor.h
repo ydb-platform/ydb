@@ -1,5 +1,7 @@
 #pragma once
 
+#include "kqp_worker_settings.h"
+
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -26,74 +28,6 @@ namespace NKikimr::NKqp::NRm {
 }
 
 namespace NKikimr::NKqp {
-
-struct TKqpWorkerSettings {
-    TString Cluster;
-    TString Database;
-    TMaybe<TString> ApplicationName;
-    TMaybe<TString> UserName;
-    bool LongSession = false;
-
-    TIntrusivePtr<TExecuterMutableConfig> MutableExecuterConfig;
-
-private:
-    std::shared_ptr<const NKikimrConfig::TTableServiceConfig> TableServicePtr;
-    std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> QueryServicePtr;
-    std::shared_ptr<const NKikimrConfig::TTliConfig> TliConfigPtr;
-
-public:
-    const NKikimrConfig::TTableServiceConfig& TableService;
-    const NKikimrConfig::TQueryServiceConfig& QueryService;
-    const NKikimrConfig::TTliConfig& TliConfig;
-
-    TControlWrapper MkqlInitialMemoryLimit;
-    TControlWrapper MkqlMaxMemoryLimit;
-
-    TKqpDbCountersPtr DbCounters;
-
-    explicit TKqpWorkerSettings(const TString& cluster, const TString& database,
-            const TMaybe<TString>& applicationName, const TMaybe<TString>& userName,
-            const TIntrusivePtr<TExecuterMutableConfig> mutableExecuterConfig,
-            std::shared_ptr<const NKikimrConfig::TTableServiceConfig> tableServiceConfig,
-            std::shared_ptr<const NKikimrConfig::TQueryServiceConfig> queryServiceConfig,
-            std::shared_ptr<const NKikimrConfig::TTliConfig> tliConfig,
-            TControlWrapper mkqlInitialMemoryLimit,
-            TControlWrapper mkqlMaxMemoryLimit,
-            TKqpDbCountersPtr dbCounters)
-        : Cluster(cluster)
-        , Database(database)
-        , ApplicationName(applicationName)
-        , UserName(userName)
-        , MutableExecuterConfig(mutableExecuterConfig)
-        , TableServicePtr(std::move(tableServiceConfig))
-        , QueryServicePtr(std::move(queryServiceConfig))
-        , TliConfigPtr(std::move(tliConfig))
-        , TableService(*TableServicePtr)
-        , QueryService(*QueryServicePtr)
-        , TliConfig(*TliConfigPtr)
-        , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
-        , MkqlMaxMemoryLimit(mkqlMaxMemoryLimit)
-        , DbCounters(dbCounters)
-    {}
-
-    TKqpWorkerSettings(const TKqpWorkerSettings& other)
-        : Cluster(other.Cluster)
-        , Database(other.Database)
-        , ApplicationName(other.ApplicationName)
-        , UserName(other.UserName)
-        , LongSession(other.LongSession)
-        , MutableExecuterConfig(other.MutableExecuterConfig)
-        , TableServicePtr(other.TableServicePtr)
-        , QueryServicePtr(other.QueryServicePtr)
-        , TliConfigPtr(other.TliConfigPtr)
-        , TableService(*TableServicePtr)
-        , QueryService(*QueryServicePtr)
-        , TliConfig(*TliConfigPtr)
-        , MkqlInitialMemoryLimit(other.MkqlInitialMemoryLimit)
-        , MkqlMaxMemoryLimit(other.MkqlMaxMemoryLimit)
-        , DbCounters(other.DbCounters)
-    {}
-};
 
 class TKqpQueryCache;
 

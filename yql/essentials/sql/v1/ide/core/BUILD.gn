@@ -1,0 +1,12 @@
+library("core") {
+  public_deps = [
+    "//library/cpp/yson/node",
+    # "//yql/essentials/utils/meta",
+  ]
+
+  sources = [
+    "environment.cpp",
+    "format.cpp",
+    "position.cpp",
+  ]
+}

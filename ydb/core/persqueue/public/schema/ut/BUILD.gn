@@ -1,0 +1,51 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/base",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",
+    "//ydb/core/persqueue/public/describer",
+    "//ydb/core/persqueue/public/schema",
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/actors",  # peerdir only
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/grpc_request",  # peerdir only
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+    "//ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+    "//ydb/services/lib/actors:monitoring_settings",
+  ]
+
+  sources = [
+    "//ydb/core/persqueue/public/schema/create_topic_ut.cpp",
+    "//ydb/core/persqueue/public/schema/describe_operation_ut.cpp",
+    "//ydb/core/persqueue/public/schema/propose_create_ut.cpp",
+    "//ydb/core/persqueue/public/schema/schema_operation_ut.cpp",
+    "//ydb/core/persqueue/public/schema/schema_ops_ut.cpp",
+    "//ydb/core/persqueue/public/schema/validation_ut.cpp",
+    "check_dlq_topics_ut.cpp",
+    "dlq_acl_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/schema" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

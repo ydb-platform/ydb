@@ -1,6 +1,7 @@
 library("signals") {
   public_deps = [
     "//library/cpp/monlib/dynamic_counters",
+    # "//library/cpp/threading/future",
     "//ydb/library/accessor",
     "//ydb/library/actors/core",
     "//ydb/library/services",
@@ -18,6 +19,7 @@ library("signals") {
     "object_counter.cpp",
     "owner.cpp",
     "private.cpp",
+    "signal_utils.cpp",
     "states.cpp",
   ]
 }

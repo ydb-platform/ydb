@@ -1,10 +1,10 @@
 LIBRARY()
 
 SRCS(
-    tx_start_from_initiator.cpp
-    tx_data_from_source.cpp
-    tx_finish_from_source.cpp
-    tx_finish_ack_from_initiator.cpp
+    tx_start_from_initiator.cpp  # gn: into ydb/core/tx/columnshard
+    tx_data_from_source.cpp  # gn: into ydb/core/tx/columnshard
+    tx_finish_from_source.cpp  # gn: into ydb/core/tx/columnshard
+    tx_finish_ack_from_initiator.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

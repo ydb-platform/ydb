@@ -1,3 +1,12 @@
 protobuf_library("protos") {
-  sources = [ "events.proto" ]
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+  ]
+
+  sources = [
+    "events.proto",
+    "space_report.proto",
+  ]
+
+  protoc_fatal_warnings = true
 }

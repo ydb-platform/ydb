@@ -2,4 +2,6 @@ protobuf_library("services") {
   sources = [ "services.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

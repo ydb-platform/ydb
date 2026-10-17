@@ -19,7 +19,6 @@ library("ydb") {
   deps = [
     # "//ydb/core/base",
     # "//ydb/core/base/generated",  # peerdir only
-    # "//ydb/core/fq/libs/actors/logging",
     # "//ydb/core/fq/libs/config",  # peerdir only
     "//ydb/core/fq/libs/events",
     "//ydb/core/protos",

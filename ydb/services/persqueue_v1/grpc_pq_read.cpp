@@ -228,17 +228,3 @@ void DoPQReadInfoRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRp
 
 } // namespace NGRpcService
 } // namespace NKikimr
-
-
-void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
-}
-
-void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
-}
-
-
-void NKikimr::NGRpcService::TGRpcRequestProxyHandleMethods::Handle(NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), ev->Release().Release());
-}

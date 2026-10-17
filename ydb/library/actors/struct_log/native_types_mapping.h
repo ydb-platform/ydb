@@ -85,7 +85,7 @@ struct TNativeTypeCodeMapping {
 
     template <typename TCallable>
     static TInvokerMap CreateInvokerMap(TCallable& callable) {
-        TInvokerMap result = TBase::template CreateInvokerMap(callable);
+        TInvokerMap result = TBase::CreateInvokerMap(callable);
         TInvoker invoker = CreateTypedInvoker<TValueType>(callable);
         result.insert({TPair::Code, invoker});
         return result;

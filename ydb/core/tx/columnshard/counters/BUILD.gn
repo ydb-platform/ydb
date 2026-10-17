@@ -11,6 +11,7 @@ library("counters") {
     # "//ydb/core/tx/columnshard/blobs_action/abstract",
     "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/overload_manager",
     "//ydb/core/tx/columnshard/resource_subscriber",
     # "//ydb/core/tx/columnshard/resources",
@@ -23,7 +24,6 @@ library("counters") {
 
   deps = [
     # "//ydb/core/formats/arrow/program",
-    "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/library/services",
   ]
 

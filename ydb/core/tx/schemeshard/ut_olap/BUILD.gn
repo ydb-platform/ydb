@@ -1,22 +1,34 @@
 unittest_executable("ut_olap") {
   deps = [
+    "//contrib/libs/protobuf",
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/regex/pcre",  # peerdir only
     "//library/cpp/svnversion",  # peerdir only
+    "//library/cpp/testing/unittest",
     "//ydb/core/formats",  # peerdir only
     "//ydb/core/formats/arrow",
+    "//ydb/core/kqp/compute_actor",  # peerdir only
     "//ydb/core/protos",
+    "//ydb/core/scheme_types",
+    "//ydb/core/testlib/actors",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/engines/changes/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/schemeshard",  # peerdir only
+    "//ydb/core/tx/schemeshard/olap/common",
+    "//ydb/core/tx/schemeshard/olap/schema",
     "//ydb/core/tx/schemeshard/ut_helpers",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
   ]
 
-  sources = [ "ut_olap.cpp" ]
+  sources = [
+    "ut_olap.cpp",
+    "ut_olap_schema_entity_id.cpp",
+  ]
 
   include_dirs = [
     "//ydb/core/tx/schemeshard",  # peerdir only
@@ -26,6 +38,7 @@ unittest_executable("ut_olap") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

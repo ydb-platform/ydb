@@ -1,3 +1,8 @@
+config("simple_private_config") {
+  # session_id.cpp
+  cflags = [ "-Wno-deprecated-enum-enum-conversion" ]
+}
+
 library("simple") {
   public_deps = [
     "//ydb/core/base",
@@ -11,8 +16,12 @@ library("simple") {
 
   deps = [
     # "//contrib/libs/protobuf",
+    # "//library/cpp/cgiparam",
     # "//library/cpp/random_provider",
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/uri",
     # "//ydb/library/yql/dq/actors",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/operation_id/protos",
   ]
 
   sources = [
@@ -21,7 +30,10 @@ library("simple") {
     "query_id.cpp",
     "reattach.cpp",
     "services.cpp",
+    "session_id.cpp",
     "settings.cpp",
     "temp_tables.cpp",
   ]
+
+  configs = [ ":simple_private_config" ]
 }

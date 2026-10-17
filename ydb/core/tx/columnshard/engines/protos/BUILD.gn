@@ -1,12 +1,13 @@
 protobuf_library("protos") {
-  public_deps = [ "//ydb/core/tx/columnshard/common/protos" ]
-
-  deps = [
-    # "//ydb/library/formats/arrow/protos",  # peerdir only
+  public_deps = [
+    "//ydb/core/tx/columnshard/common/protos",
+    "//ydb/library/formats/arrow/protos",
   ]
 
   sources = [
     "index.proto",
     "portion_info.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

@@ -148,7 +148,7 @@ void ReadCallback(NYT::TErrorOr<NYT::TSharedRef>&& res_, std::shared_ptr<TParall
     NYT::NApi::NRpcProxy::NProto::TRowsetDescriptor descriptor;
     NYT::NApi::NRpcProxy::NProto::TRowsetStatistics statistics;
 
-    auto CurrentPayload_ = std::move(NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics));
+    auto CurrentPayload_ = NYT::NApi::NRpcProxy::DeserializeRowStreamBlockEnvelope(block, &descriptor, &statistics);
     // skip no-skiff data
     if (descriptor.rowset_format() != NYT::NApi::NRpcProxy::NProto::RF_FORMAT) {
         state->WaitPromise.TrySet();
@@ -162,7 +162,7 @@ void ReadCallback(NYT::TErrorOr<NYT::TSharedRef>&& res_, std::shared_ptr<TParall
     }
     std::lock_guard lock(state->Lock);
 
-    state->Results.emplace(std::move(TParallelFileInputState::TResult{inputIdx, std::move(CurrentPayload_)}));
+    state->Results.emplace(TParallelFileInputState::TResult{inputIdx, std::move(CurrentPayload_)});
     state->WaitPromise.TrySet();
 }
 
@@ -198,7 +198,7 @@ bool TParallelFileInputState::NextValue() {
             RunNext();
         }
         if (MkqlReader_.IsValid()) {
-            CurrentValue_ = std::move(MkqlReader_.GetRow());
+            CurrentValue_ = MkqlReader_.GetRow();
             if (!Spec_->InputGroups.empty()) {
                 CurrentValue_ = HolderFactory_.CreateVariantHolder(CurrentValue_.Release(), Spec_->InputGroups.at(OriginalIndexes_[CurrentInput_]));
             }

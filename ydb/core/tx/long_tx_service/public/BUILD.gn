@@ -5,9 +5,12 @@ config("public_private_config") {
 library("public") {
   public_deps = [
     # "//library/cpp/lwtrace",
+    # "//library/cpp/threading/atomic_shared_ptr",
     # "//ydb/core/base",
     "//ydb/core/protos",
+    # "//ydb/core/scheme",
     "//ydb/core/util",
+    "//ydb/library/actors/core",
     "//ydb/public/api/protos",
     "//yql/essentials/public/issue",
   ]
@@ -15,12 +18,13 @@ library("public") {
   deps = [
     # "//library/cpp/cgiparam",
     "//library/cpp/uri",
-    "//ydb/library/actors/core",
   ]
 
   sources = [
     "events.cpp",
     "lock_handle.cpp",
+    "snapshot_handle.cpp",
+    "snapshot_registry.cpp",
     "types.cpp",
   ]
 

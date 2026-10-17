@@ -13,6 +13,7 @@ unittest_executable("ut_truncate") {
     "//ydb/library/ut",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/library/issue",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
   ]
 
@@ -22,6 +23,7 @@ unittest_executable("ut_truncate") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

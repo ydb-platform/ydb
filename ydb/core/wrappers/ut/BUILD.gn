@@ -3,18 +3,23 @@ unittest_executable("ut") {
     "//library/cpp/digest/md5",
     "//library/cpp/testing/hook",
     "//library/cpp/testing/unittest",
-    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/protos",
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/basics:default",  # peerdir only
-    "//ydb/core/util",
+    "//ydb/core/util",  # peerdir only
     "//ydb/core/wrappers",
+    "//ydb/core/wrappers/events",
     "//ydb/core/wrappers:ut_helpers",
     "//ydb/library/actors/core",
+    "//ydb/library/aws_init",
     "//ydb/library/services",
     "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
   ]
 
-  sources = [ "//ydb/core/wrappers/s3_wrapper_ut.cpp" ]
+  sources = [
+    "//ydb/core/wrappers/fs_storage_ut.cpp",
+    "//ydb/core/wrappers/s3_wrapper_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/wrappers" ]
 
@@ -22,6 +27,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

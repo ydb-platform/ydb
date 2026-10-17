@@ -7,6 +7,10 @@ library("test_tablet") {
     # "//ydb/core/tablet_flat",
     # "//ydb/core/util",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect/poller",
+  ]
+
+  deps = [
     # "//ydb/library/actors/interconnect",
   ]
 

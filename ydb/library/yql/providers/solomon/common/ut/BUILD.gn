@@ -1,5 +1,6 @@
 unittest_executable("ut") {
   deps = [
+    "//contrib/libs/protobuf",
     "//library/cpp/testing/unittest",
     "//ydb/library/yql/providers/solomon/common",
   ]

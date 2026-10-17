@@ -1,0 +1,29 @@
+library("metadata_subscription") {
+  public_deps = [
+    "//ydb/core/base",
+    # "//ydb/library/accessor",
+    # "//ydb/services/metadata/abstract",
+    "//ydb/services/metadata/manager",
+  ]
+
+  deps = [
+    # "//library/cpp/digest/md5",  # peerdir only
+    # "//ydb/core/keyvalue",  # peerdir only
+    # "//ydb/core/tx/scheme_cache",  # peerdir only
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/core",  # peerdir only
+    # "//ydb/library/table_creator",  # peerdir only
+    # "//ydb/services/metadata",
+    # "//ydb/services/metadata/request",  # peerdir only
+    # "//yql/essentials/minikql",  # peerdir only
+  ]
+
+  sources = [
+    "snapshot.cpp",
+    "storage_paths.cpp",
+    "udf_module.cpp",
+    "wasm_artifact.cpp",
+  ]
+
+  serialize_enum_headers = [ "udf_module.h" ]
+}

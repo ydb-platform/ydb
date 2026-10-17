@@ -22,6 +22,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/common
     yql/essentials/public/issue
 )
+# gn: peerdir ydb/library/plan2svg
 
 YQL_LAST_ABI_VERSION()
 

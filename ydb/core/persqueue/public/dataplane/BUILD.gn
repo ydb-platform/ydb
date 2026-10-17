@@ -1,0 +1,19 @@
+library("dataplane") {
+  public_deps = [
+    "//ydb/core/persqueue/writer",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/persqueue/common",
+    "//ydb/core/persqueue/deferred_publish",
+    # "//ydb/core/persqueue/events",  # peerdir only
+    # "//ydb/library/actors/wilson",
+  ]
+
+  sources = [
+    "write/deferred_destination_upsert_actor.cpp",
+    "write/partition_writer.cpp",
+    "write/partition_writer_cache_actor.cpp",
+  ]
+}

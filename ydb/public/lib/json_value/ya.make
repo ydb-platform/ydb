@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     ydb_json_value.cpp
-    ydb_json_value_ut.cpp
 )
 
 PEERDIR(

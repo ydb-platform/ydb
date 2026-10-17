@@ -18,7 +18,7 @@ namespace {
     public:
         using TSnapshotMap = THashMap<NKikimr::TTableId, TVector<TRowVersion>>;
 
-        TImmutableSnapshotRegistry() = default;
+        TImmutableSnapshotRegistry() = delete;
         
         explicit TImmutableSnapshotRegistry(TSnapshotMap&& snapshots, TRowVersion snapshotBorder, TInstant oldestCollectionTime)
             : Snapshots(std::move(snapshots))

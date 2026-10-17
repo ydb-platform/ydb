@@ -4,14 +4,18 @@ library("ut_helpers") {
   public_deps = [
     # "//library/cpp/testing/unittest",
     "//ydb/core/base",
+    # "//ydb/core/grpc_services/base",
+    # "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/protos",
     "//ydb/core/testlib",
     "//ydb/core/tx/replication/ydb_proxy",
     # "//ydb/core/tx/schemeshard",
+    "//ydb/public/api/grpc",
     # "//ydb/public/sdk/cpp/src/client/topic",
   ]
 
   deps = [
+    # "//ydb/core/grpc_services",  # peerdir only
     # "//ydb/core/testlib/pg",  # peerdir only
     # "//ydb/core/tx/replication/service",
     # "//ydb/library/actors/core",

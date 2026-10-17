@@ -1,4 +1,9 @@
 library("tiling") {
+  public_deps = [
+    "//ydb/core/tx/columnshard/counters",
+    # "//ydb/library/actors/core",
+  ]
+
   deps = [
     # "//contrib/libs/apache/arrow",  # peerdir only
     # "//library/cpp/json",
@@ -6,15 +11,15 @@ library("tiling") {
     # "//ydb/core/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/common",
-    "//ydb/core/tx/columnshard/counters",
     "//ydb/core/tx/columnshard/data_locks:manager",
     "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/engines/changes/abstract",
     "//ydb/core/tx/columnshard/engines/portions",
+    # "//ydb/core/tx/columnshard/engines/scheme",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets:planner",  # peerdir only
     # "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/library/accessor",
-    # "//ydb/library/actors/core",
     # "//ydb/library/intersection_tree",
   ]
 

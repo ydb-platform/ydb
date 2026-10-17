@@ -1,0 +1,16 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/subsystems/inmemory_metrics_monitoring",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/metrics",
+    "//ydb/library/actors/testlib",
+  ]
+
+  sources = [ "viewer_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/subsystems/inmemory_metrics_monitoring" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

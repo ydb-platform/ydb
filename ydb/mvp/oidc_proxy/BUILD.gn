@@ -6,18 +6,21 @@ linked_executable("mvp_oidc_proxy") {
 
   sources = [ "bin/main.cpp" ]
 
-  link_select = [ "allocator=dbg" ]
+  link_select = [
+    "allocator=dbg",
+    "yql_pg_runtime=pg_dummy",
+  ]
 }
 
 library("oidc_proxy") {
   public_deps = [
-    # "//contrib/libs/yaml-cpp",
     # "//library/cpp/deprecated/atomic",
     # "//library/cpp/getopt",
     "//ydb/library/actors/core",
     "//ydb/library/actors/http",
     "//ydb/mvp/core",
     "//ydb/mvp/core:protos",
+    "//ydb/mvp/oidc_proxy/protos",
     "//ydb/public/api/client/nc_private/iam/v1",
     "//ydb/public/api/client/yc_private/oauth",
     # "//ydb/public/sdk/cpp/src/library/grpc/client",
@@ -25,18 +28,19 @@ library("oidc_proxy") {
 
   deps = [
     # "//contrib/libs/openssl",
+    # "//contrib/libs/yaml-cpp",
+    # "//library/cpp/cgiparam",
     # "//library/cpp/json",
     "//library/cpp/protobuf/json",
     "//library/cpp/string_utils/base64",
     # "//ydb/core/util",
-    # "//ydb/library/actors/interconnect",
+    # "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/security",
   ]
 
   sources = [
     "context.cpp",
-    "cracked_page.cpp",
     "extension.cpp",
     "extension_final.cpp",
     "extension_manager.cpp",

@@ -1,0 +1,34 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/kqp/ut/common",
+    "//ydb/core/local_proxy/local_pq_client",
+    "//ydb/library/aclib",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "common.cpp",
+    "local_deferred_publish_client_ut.cpp",
+    "local_federated_topic_client_ut.cpp",
+    "local_topic_client_factory_ut.cpp",
+    "local_topic_client_ut.cpp",
+    "local_topic_read_session_ut.cpp",
+    "local_topic_write_session_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/local_proxy/local_pq_client" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

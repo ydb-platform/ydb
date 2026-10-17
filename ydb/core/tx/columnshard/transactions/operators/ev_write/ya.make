@@ -1,11 +1,11 @@
 LIBRARY()
 
 SRCS(
-    GLOBAL secondary.cpp
-    GLOBAL simple.cpp
-    GLOBAL primary.cpp
-    abstract.cpp
-    sync.cpp
+    GLOBAL secondary.cpp  # gn: into ydb/core/tx/columnshard
+    GLOBAL simple.cpp  # gn: into ydb/core/tx/columnshard
+    GLOBAL primary.cpp  # gn: into ydb/core/tx/columnshard
+    abstract.cpp  # gn: into ydb/core/tx/columnshard
+    sync.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

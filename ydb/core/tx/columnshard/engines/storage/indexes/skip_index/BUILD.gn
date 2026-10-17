@@ -1,7 +1,6 @@
 library("skip_index") {
   public_deps = [
     # "//ydb/core/tx/columnshard/engines/portions",
-    "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/scheme/abstract",
     # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
     "//ydb/core/tx/columnshard/engines/storage/indexes/bits_storage",
@@ -11,7 +10,6 @@ library("skip_index") {
 
   sources = [
     "constructor.cpp",
-    "index_info_ext.cpp",
     "meta.cpp",
   ]
 }

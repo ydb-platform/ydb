@@ -1759,7 +1759,7 @@ public:
 };
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::TPtr& ev, const TActorContext& /*ctx*/) {
-    Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), std::move(ev->Get()->DetachPortions())));
+    Execute(new TTxAskPortionChunks(this, ev->Get()->GetCallback(), ev->Get()->DetachPortions()));
 }
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& /*ctx*/) {

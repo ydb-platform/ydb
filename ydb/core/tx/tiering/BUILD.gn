@@ -25,6 +25,7 @@ library("tiering") {
     # "//ydb/library/table_creator",
     # "//ydb/public/api/protos",  # peerdir only
     # "//ydb/services/bg_tasks/abstract",  # peerdir only
+    "//ydb/services/scheme_secret",
   ]
 
   sources = [

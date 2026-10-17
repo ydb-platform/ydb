@@ -1,4 +1,6 @@
 PROTO_LIBRARY()
+
+# gn: move into parent
 PROTOC_FATAL_WARNINGS()
 
 IF (OS_WINDOWS)

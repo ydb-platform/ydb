@@ -1,0 +1,21 @@
+linked_executable("actors_core_ut_fat") {
+  testonly = true
+
+  deps = [
+    "//library/cpp/deprecated/atomic",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/testing/unittest_main",  # peerdir only
+    "//library/cpp/threading/chunk_queue",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/actors/util",
+  ]
+
+  sources = [
+    "//ydb/library/actors/core/ut_fat/actor_benchmark.cpp",
+    "//ydb/library/actors/core/ut_fat/executor_pool_basic_waker.cpp",
+    "//ydb/library/actors/core/ut_fat/waiting_benchs.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

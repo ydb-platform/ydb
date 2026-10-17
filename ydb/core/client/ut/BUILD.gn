@@ -12,6 +12,8 @@ unittest_executable("ut") {
     "//ydb/core/client",  # peerdir only
     "//ydb/core/client/scheme_cache_lib",  # peerdir only
     "//ydb/core/engine",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/protos/schemeshard",
     "//ydb/core/tablet_flat",
     "//ydb/core/tablet_flat/test/libs/rows",
@@ -24,6 +26,7 @@ unittest_executable("ut") {
     "//ydb/public/api/grpc/draft",
     "//ydb/public/api/protos",
     "//ydb/public/lib/deprecated/kicli",
+    "//ydb/public/sdk/cpp/src/client/table",
   ]
 
   sources = [
@@ -45,6 +48,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -4,4 +4,6 @@ protobuf_library("common") {
   sources = [ "validation.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

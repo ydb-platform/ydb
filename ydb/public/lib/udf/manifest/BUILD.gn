@@ -1,0 +1,5 @@
+library("manifest") {
+  deps = [ "//library/cpp/json" ]
+
+  sources = [ "manifest.cpp" ]
+}

@@ -1,0 +1,34 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/type_info/tz",
+    "//ydb/library/formats/arrow/minikql",
+    "//ydb/library/yverify_stream",
+    "//ydb/public/lib/scheme_types",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/parser/pg_wrapper",
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/dynumber",
+    "//yql/essentials/utils",
+  ]
+
+  sources = [
+    "minikql_ut.cpp",
+    "ut_helpers.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/formats/arrow/minikql" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

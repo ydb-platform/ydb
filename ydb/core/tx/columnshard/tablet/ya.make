@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    ext_tx_base.cpp
-    write_queue.cpp
+    ext_tx_base.cpp  # gn: into ydb/core/tx/columnshard
+    write_queue.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

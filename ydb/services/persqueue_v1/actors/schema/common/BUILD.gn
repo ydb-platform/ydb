@@ -1,0 +1,8 @@
+library("common") {
+  public_deps = [
+    "//ydb/core/base",
+    "//ydb/core/grpc_services",
+  ]
+
+  sources = [ "grpc_proxy_actor.cpp" ]
+}

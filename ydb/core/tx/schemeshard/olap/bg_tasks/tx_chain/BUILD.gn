@@ -14,6 +14,7 @@ library("tx_chain") {
     # "//ydb/core/tx/columnshard/bg_tasks/session",
     # "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_allocator_client",
+    # "//ydb/library/actors/struct_log",
   ]
 
   sources = [

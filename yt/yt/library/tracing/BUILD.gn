@@ -5,7 +5,7 @@ library("tracing") {
   ]
 
   deps = [
-    "//library/cpp/yt/threading",
+    # "//library/cpp/yt/system",
     # "//yt/yt/build",  # peerdir only
     # "//yt/yt_proto/yt/core",  # peerdir only
   ]

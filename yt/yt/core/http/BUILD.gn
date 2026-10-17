@@ -3,7 +3,7 @@ library("http") {
     "//contrib/deprecated/http-parser",
     "//library/cpp/yt/memory",
     # "//library/cpp/yt/misc",
-    "//library/cpp/yt/threading",
+    # "//library/cpp/yt/system",
     "//yt/yt/core",
     "//yt/yt/library/profiling",
   ]
@@ -12,6 +12,7 @@ library("http") {
     "//library/cpp/blockcodecs",
     # "//library/cpp/blockcodecs/core",  # peerdir only
     "//library/cpp/streams/brotli",
+    # "//library/cpp/yt/string",
   ]
 
   sources = [

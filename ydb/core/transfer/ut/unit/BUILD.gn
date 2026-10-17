@@ -1,0 +1,48 @@
+unittest_executable("unit") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/fq/libs/row_dispatcher/events",
+    "//ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper",  # peerdir only
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/transfer",
+    "//ydb/core/tx/locks",
+    "//ydb/core/tx/replication/service",
+    "//ydb/core/tx/replication/ydb_proxy",
+    "//ydb/core/tx/scheme_cache",
+    "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/services",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//yql/essentials/minikql/codegen/llvm16",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes",  # peerdir only
+    "//yql/essentials/minikql/comp_nodes/llvm16",  # peerdir only
+    "//yql/essentials/minikql/computation",  # peerdir only
+    "//yql/essentials/minikql/computation/llvm16",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins",  # peerdir only
+    "//yql/essentials/minikql/invoke_builtins/llvm16",  # peerdir only
+    "//yql/essentials/public/purecalc/common",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "purecalc_io_ut.cpp",
+    "scheme_ut.cpp",
+    "uploader_ut.cpp",
+    "writer_ut.cpp",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

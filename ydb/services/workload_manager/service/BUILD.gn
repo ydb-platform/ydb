@@ -1,0 +1,29 @@
+group("ids") {
+  public_deps = [ "//ydb/library/actors/core" ]
+}
+
+library("service") {
+  public_deps = [
+    ":ids",
+    # "//library/cpp/monlib/dynamic_counters",
+    "//ydb/core/resource_pools",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    # "//ydb/core/cms/console",
+    "//ydb/core/kqp/common/events",
+    # "//ydb/core/kqp/common/simple",
+    "//ydb/core/mind:tenant_node_enumeration",
+    "//ydb/core/protos",
+    # "//ydb/library/aclib",  # peerdir only
+    # "//ydb/library/actors/interconnect",
+    "//ydb/services/workload_manager/actors",
+    "//ydb/services/workload_manager/actors:cpu_load_actors",  # peerdir only
+    "//ydb/services/workload_manager/common",
+    "//ydb/services/workload_manager/tables",
+  ]
+
+  sources = [ "service.cpp" ]
+}

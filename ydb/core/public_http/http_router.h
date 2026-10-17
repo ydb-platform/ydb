@@ -15,7 +15,7 @@ struct THandlerWithParams {
     THandlerWithParams() = default;
     THandlerWithParams(THandlerWithParams&&) = default;
     THandlerWithParams& operator=(const THandlerWithParams&) = default;
-    THandlerWithParams& operator=(const THandlerWithParams&&) = default;
+    THandlerWithParams& operator=(const THandlerWithParams&&) = delete;
 
     TString PathPattern;
     THttpHandler Handler;

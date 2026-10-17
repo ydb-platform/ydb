@@ -5,4 +5,6 @@ protobuf_library("protos") {
   ]
 
   sources = [ "masking_test.proto" ]
+
+  protoc_fatal_warnings = true
 }

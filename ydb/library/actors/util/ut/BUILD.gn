@@ -6,6 +6,8 @@ unittest_executable("ut") {
 
   sources = [
     "//ydb/library/actors/util/cpu_load_log_ut.cpp",
+    "//ydb/library/actors/util/cpu_topology_ut.cpp",
+    "//ydb/library/actors/util/intrusive_funnel_queue_ut.cpp",
     "//ydb/library/actors/util/memory_tracker_ut.cpp",
     "//ydb/library/actors/util/rc_buf_ut.cpp",
     "//ydb/library/actors/util/rope_ut.cpp",
@@ -18,6 +20,8 @@ unittest_executable("ut") {
   ]
 
   include_dirs = [ "//ydb/library/actors/util" ]
+
+  data = [ "//ydb/library/actors/util/testdata/cpu_topology/" ]
 
   link_select = [ "allocator=tcmalloc" ]
 }

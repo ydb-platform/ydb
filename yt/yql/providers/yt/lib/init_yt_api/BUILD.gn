@@ -1,8 +1,9 @@
 library("init_yt_api") {
+  public_deps = [ "//yt/cpp/mapreduce/client" ]
+
   deps = [
     # "//library/cpp/yson/node",
     "//yql/essentials/utils/log",
-    "//yt/cpp/mapreduce/client",
     # "//yt/cpp/mapreduce/common",  # peerdir only
     "//yt/cpp/mapreduce/interface",
   ]

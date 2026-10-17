@@ -3,14 +3,12 @@ library("engines") {
     ":filter",
     "//ydb/core/base",
     # "//ydb/core/formats/arrow",
-    # "//ydb/core/tx",
     # "//ydb/core/tx/columnshard",
     # "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/common",
     "//ydb/core/tx/columnshard/counters",
     "//ydb/core/tx/columnshard/data_accessor",
     # "//ydb/core/tx/columnshard/data_accessor/abstract",
-    # "//ydb/core/tx/columnshard/data_locks/locks",
     "//ydb/core/tx/columnshard/engines/changes/abstract",
     "//ydb/core/tx/columnshard/engines/changes/actualization:controller",
     "//ydb/core/tx/columnshard/engines/portions",
@@ -18,16 +16,21 @@ library("engines") {
     "//ydb/core/tx/columnshard/engines/protos",
     # "//ydb/core/tx/columnshard/engines/scheme",
     "//ydb/core/tx/columnshard/engines/scheme/tiering",
+    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/core/tx/columnshard/engines/storage/actualizer:abstract",
     "//ydb/core/tx/columnshard/engines/storage/actualizer:common",
     # "//ydb/core/tx/columnshard/engines/storage/actualizer:counters",
     "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
     "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/core/tx/columnshard/resource_subscriber",
+    # "//ydb/core/tx/columnshard/splitter:settings",
     "//ydb/core/tx/columnshard/tx_reader",
+    # "//ydb/core/tx/long_tx_service/public",
     # "//ydb/core/tx/priorities/usage",
+    # "//ydb/core/tx/tiering",
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",
     # "//ydb/library/range_treap",
   ]
 
@@ -45,18 +48,22 @@ library("engines") {
     # "//ydb/core/tx/columnshard/engines/changes/actualization",  # peerdir only
     "//ydb/core/tx/columnshard/engines/changes/compaction",
     # "//ydb/core/tx/columnshard/engines/changes/counters",
+    # "//ydb/core/tx/columnshard/engines/reader/common",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+    # "//ydb/core/tx/columnshard/engines/reader/plain_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/reader/tracing",
+    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections",
     "//ydb/core/tx/columnshard/engines/storage/indexes/max",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",
     # "//ydb/core/tx/columnshard/splitter",
-    # "//ydb/core/tx/columnshard/splitter:settings",
     "//ydb/core/tx/columnshard/subscriber/events:tables_erased",
     "//ydb/core/tx/columnshard/tracing",
     "//ydb/core/tx/columnshard:background_controller",  # peerdir only
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/core/tx/program",  # peerdir only
     # "//ydb/core/tx/sharding",
-    # "//ydb/core/tx/tiering",
     # "//ydb/library/conclusion",
-    # "//ydb/library/formats/arrow",
     # "//yql/essentials/public/udf/service/exception_policy",  # link slot
   ]
 
@@ -67,8 +74,6 @@ library("engines") {
     "changes/compaction.cpp",
     "changes/general_compaction.cpp",
     "changes/merge_subset.cpp",
-    "changes/move_portions.cpp",
-    "changes/remove_portions.cpp",
     "changes/ttl.cpp",
     "changes/with_appended.cpp",
     "column_engine.cpp",
@@ -77,6 +82,7 @@ library("engines") {
     "defs.cpp",
     "loading/stages.cpp",
     "metadata_accessor.cpp",
+    "snapshot_holders.cpp",
     "storage/actualizer/index/index.cpp",
     "storage/actualizer/scheme/counters.cpp",
     "storage/actualizer/scheme/scheme.cpp",
@@ -97,6 +103,8 @@ library("engines") {
   plugins = [
     "//ydb/core/tx/columnshard/engines/reader",
     "//ydb/core/tx/columnshard/engines/storage",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets:planner",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner",
   ]
 }
 

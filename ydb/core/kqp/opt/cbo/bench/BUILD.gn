@@ -1,0 +1,17 @@
+library("bench") {
+  public_deps = [
+    # "//library/cpp/disjoint_sets",
+    # "//library/cpp/json",
+  ]
+
+  deps = [
+    # "//library/cpp/iterator",  # peerdir only
+    # "//ydb/core/kqp/opt/cbo",  # peerdir only
+    # "//ydb/core/kqp/opt/cbo/solver",  # peerdir only
+  ]
+
+  sources = [
+    "kqp_benches.cpp",
+    "kqp_join_topology_generator.cpp",
+  ]
+}

@@ -1,0 +1,35 @@
+library("effects") {
+  public_deps = [
+    "//ydb/core/kqp/opt:helpers",
+    # "//ydb/core/kqp/provider",
+    # "//yql/essentials/ast",
+  ]
+
+  deps = [
+    # "//ydb/core/base",
+    "//ydb/core/kqp/common",  # peerdir only
+    # "//ydb/core/kqp/opt/physical",
+    "//ydb/core/kqp/opt/physical:helpers",  # peerdir only
+    # "//ydb/library/yql/dq/common",  # peerdir only
+    # "//ydb/library/yql/dq/opt",
+    # "//yql/essentials/core",
+    # "//yql/essentials/core/expr_nodes",
+    # "//yql/essentials/providers/common/provider",
+  ]
+
+  sources = [
+    "kqp_opt_phy_delete_index.cpp",
+    "kqp_opt_phy_effects.cpp",
+    "kqp_opt_phy_fulltext_index.cpp",
+    "kqp_opt_phy_indexes.cpp",
+    "kqp_opt_phy_insert.cpp",
+    "kqp_opt_phy_insert_index.cpp",
+    "kqp_opt_phy_returning.cpp",
+    "kqp_opt_phy_uniq_helper.cpp",
+    "kqp_opt_phy_update.cpp",
+    "kqp_opt_phy_update_index.cpp",
+    "kqp_opt_phy_upsert_defaults.cpp",
+    "kqp_opt_phy_upsert_index.cpp",
+    "kqp_opt_phy_vector_index.cpp",
+  ]
+}

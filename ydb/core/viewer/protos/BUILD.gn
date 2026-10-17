@@ -6,4 +6,6 @@ protobuf_library("protos") {
   ]
 
   sources = [ "viewer.proto" ]
+
+  protoc_fatal_warnings = true
 }

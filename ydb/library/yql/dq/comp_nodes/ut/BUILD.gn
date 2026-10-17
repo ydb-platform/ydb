@@ -7,6 +7,7 @@ unittest_executable("ut") {
     "//yql/essentials/minikql/comp_nodes",
     "//yql/essentials/minikql/computation",
     "//yql/essentials/minikql/invoke_builtins",
+    "//yql/essentials/minikql/runtime_settings",
     "//yql/essentials/minikql:terminator",
   ]
 
@@ -14,16 +15,26 @@ unittest_executable("ut") {
     "//contrib/libs/apache/arrow",
     "//library/cpp/dwarf_backtrace",  # peerdir only
     "//library/cpp/dwarf_backtrace/registry",  # peerdir only
-    "//ydb/core/kqp/runtime",  # peerdir only
-    "//ydb/core/kqp/tools/join_perf",
+    "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
+    "//ydb/library/yql/dq/comp_nodes/ut/join_perf",  # peerdir only
     "//ydb/library/yql/dq/comp_nodes/ut/utils",  # peerdir only
+    "//ydb/library/yql/dq/runtime/streaming",
+    "//yql/essentials/core/sql_types",
+    "//yql/essentials/minikql/udf_value_test_support",
+    "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils",
   ]
 
   sources = [
+    "dq_hash_combine_layout_ut.cpp",
     "dq_hash_combine_ut.cpp",
     "dq_hash_join_ut.cpp",
+    "dq_multihopping_saveload_ut.cpp",
+    "dq_rh_hash_ut.cpp",
+    "dq_watermark_generator_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/library/yql/dq/comp_nodes" ]

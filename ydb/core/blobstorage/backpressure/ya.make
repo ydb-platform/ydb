@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    ../vdisk/common/vdisk_queues.h
     common.h
     defs.h
     event.cpp

@@ -27,7 +27,7 @@ public:
         size_t maxReserveSize = 64_KB);
 
     TChunkedOutputStream(TChunkedOutputStream&&) = default;
-    TChunkedOutputStream& operator=(TChunkedOutputStream&&) = default;
+    TChunkedOutputStream& operator=(TChunkedOutputStream&&) = delete;
 
     //! Returns a sequence of written chunks.
     //! The stream is no longer usable after this call.

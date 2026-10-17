@@ -1,0 +1,10 @@
+group("sys_view") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/abstract",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/chunks",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/granules",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/optimizer",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/portions",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/sys_view/schemas",  # peerdir only
+  ]
+}

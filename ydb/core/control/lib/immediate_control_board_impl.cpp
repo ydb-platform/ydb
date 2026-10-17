@@ -4,6 +4,8 @@
 
 #include <library/cpp/iterator/enumerate.h>
 
+#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/generic/string.h>
 
 namespace NKikimr {

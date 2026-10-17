@@ -7,7 +7,7 @@ PEERDIR(
 )
 
 SRCS(
-    dictionary.cpp
+    dictionary.cpp  # gn: into ydb/core/formats/arrow
 )
 
 END()

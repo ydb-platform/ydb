@@ -9,7 +9,7 @@ SRCS(
     kqp_opt_phy_precompute.cpp
     kqp_opt_phy_sort.cpp
     kqp_opt_phy_source.cpp
-    kqp_opt_phy_helpers.cpp
+    kqp_opt_phy_helpers.cpp  # gn: helpers
     kqp_opt_phy_stage_float_up.cpp
     kqp_opt_phy.cpp
     predicate_collector.cpp
@@ -24,5 +24,7 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/utils/plan
 )
+# gn: helpers peerdir ydb/core/kqp/opt:helpers
+# gn: peerdir ydb/core/kqp/opt:helpers
 
 END()

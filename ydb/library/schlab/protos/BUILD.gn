@@ -1,3 +1,5 @@
 protobuf_library("protos") {
   sources = [ "schlab.proto" ]
+
+  protoc_fatal_warnings = true
 }

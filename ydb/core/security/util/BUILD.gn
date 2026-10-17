@@ -1,0 +1,22 @@
+library("util") {
+  public_deps = [
+    # "//library/cpp/json",
+    # "//library/cpp/monlib/dynamic_counters",
+  ]
+
+  deps = [
+    # "//contrib/libs/openssl",
+    "//library/cpp/ipv6_address",
+    "//library/cpp/string_utils/base64",
+    "//ydb/core/base",
+    "//ydb/core/security/certificate_check",
+  ]
+
+  sources = [
+    "counters.cpp",
+    "jwk.cpp",
+    "net.cpp",
+  ]
+
+  serialize_enum_headers = [ "jwk.h" ]
+}

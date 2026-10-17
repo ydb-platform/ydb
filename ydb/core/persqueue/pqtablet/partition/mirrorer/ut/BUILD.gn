@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/string_utils/base64",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/persqueue/common/proxy",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/pqtablet/partition/mirrorer",
+    "//ydb/core/protos",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/public/lib/base",
+    "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/library/kafka",
+  ]
+
+  sources = [ "mirrorer_actor_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/pqtablet/partition/mirrorer" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

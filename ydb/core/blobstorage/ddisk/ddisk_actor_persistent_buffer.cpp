@@ -883,7 +883,7 @@ namespace NKikimr::NDDisk {
                         }
                         ReplyReadPersistentBuffer(pr, inflight.Status, inflight.ErrorMessage);
                     } else {
-                        TRope reconstructed = std::move(inflightRecord.JoinData(SectorSize));
+                        TRope reconstructed = inflightRecord.JoinData(SectorSize);
                         if (Config.EnableChecksums && Config.CheckChecksumWhenRead
                                 && !pr.PayloadChecksums.empty())
                         {
@@ -1784,7 +1784,7 @@ namespace NKikimr::NDDisk {
             TRope data;
             std::vector<ui64> checksums;
             if (pr.Data) {
-                data = std::move(TrimData(pr.Data, pr.OffsetInBytes, pr.Size, inflightRecord.OffsetInBytes, inflightRecord.Size));
+                data = TrimData(pr.Data, pr.OffsetInBytes, pr.Size, inflightRecord.OffsetInBytes, inflightRecord.Size);
                 if (Config.EnableChecksums && !pr.PayloadChecksums.empty()) {
                     // Persisted checksums cover [pr.OffsetInBytes, pr.OffsetInBytes + pr.Size) one entry
                     // per MinSectorSize block, same order as the trimmed data above - slice out the

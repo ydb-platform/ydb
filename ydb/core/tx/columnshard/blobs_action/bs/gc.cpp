@@ -87,7 +87,7 @@ std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const T
         new TVector<TLogoBlobID>(it->second.DontKeepList.begin(), it->second.DontKeepList.end()), TInstant::Max(), true,
         TWriteSource::ColumnShardGC);
     result->PerGenerationCounter = PerGenerationCounter.Add(result->PerGenerationCounterStepSize());
-    return std::move(result);
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NBlobStorage

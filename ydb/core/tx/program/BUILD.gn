@@ -11,6 +11,7 @@ library("program") {
   ]
 
   deps = [
+    # "//ydb/core/base",
     # "//ydb/core/tablet_flat",  # peerdir only
     # "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/engines/scheme/abstract",

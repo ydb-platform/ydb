@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/core/protos",
+  ]
+
+  sources = [ "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session/partition_session_state_ut.cpp" ]
+
+  include_dirs = [
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session",
+  ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

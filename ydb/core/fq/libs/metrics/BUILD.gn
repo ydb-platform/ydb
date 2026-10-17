@@ -5,7 +5,7 @@ library("metrics") {
     "//yql/essentials/public/issue",
   ]
 
-  deps = [ "//yql/essentials/core/issue/protos" ]
+  deps = [ "//yql/essentials/public/issue/protos" ]
 
   sources = [
     "sanitize_label.cpp",

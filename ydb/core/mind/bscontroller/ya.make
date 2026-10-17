@@ -39,9 +39,9 @@ SRCS(
     get_group.cpp
     grouper.cpp
     grouper.h
-    group_layout_checker.cpp
+    group_layout_checker.cpp  # gn: group_mapper
     group_layout_checker.h
-    group_mapper.cpp
+    group_mapper.cpp  # gn: group_mapper
     group_mapper.h
     group_metrics_exchange.cpp
     impl.h
@@ -82,6 +82,7 @@ SRCS(
     virtual_group.cpp
     yaml_config_helpers.h
 )
+# gn: group_mapper headers diff.h group_geometry_info.h group_layout_checker.h group_mapper.h mood.h scheme.h types.h
 
 PEERDIR(
     ydb/library/actors/core

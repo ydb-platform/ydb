@@ -4,6 +4,7 @@ PROVIDES(
     yql_pg_sql_translator
     yql_pg_runtime
 )
+# gn: default provider
 
 PEERDIR(
     yql/essentials/parser/pg_wrapper/interface

@@ -4,7 +4,8 @@ library("ydb_convert") {
     "//ydb/core/protos",
     # "//ydb/core/scheme",
     # "//ydb/core/scheme_types",
-    # "//ydb/core/tx/tx_proxy:public",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/library/aclib",
     "//ydb/library/mkql_proto/protos",
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/value",
@@ -16,13 +17,22 @@ library("ydb_convert") {
     "//library/cpp/protobuf/json",
     # "//ydb/core/engine",
     "//ydb/core/external_sources",
+    # "//ydb/core/formats/arrow/accessor/common",
     # "//ydb/core/formats/arrow/switch",
     # "//ydb/core/kafka_proxy",
+    # "//ydb/core/kqp/provider",
+    # "//ydb/core/local_indexes/bloom",
+    # "//ydb/core/persqueue/events",
+    # "//ydb/core/persqueue/public",
     "//ydb/core/persqueue/public:utils",
     "//ydb/core/protos/schemeshard",
     "//ydb/core/scheme/protos",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/helper",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc",
     # "//ydb/core/util",  # peerdir only
     # "//ydb/library/conclusion",
+    "//ydb/library/formats/arrow/protos",
     "//ydb/library/mkql_proto",
     "//ydb/library/persqueue/topic_parser",
     "//ydb/library/ydb_issue",
@@ -32,7 +42,7 @@ library("ydb_convert") {
     # "//yql/essentials/core/expr_nodes",
     # "//yql/essentials/minikql",
     "//yql/essentials/minikql/dom",
-    "//yql/essentials/public/decimal",
+    # "//yql/essentials/providers/result/expr_nodes",  # peerdir only
     "//yql/essentials/public/issue",
     # "//yql/essentials/public/udf",
     "//yql/essentials/types/binary_json",
@@ -54,4 +64,6 @@ library("ydb_convert") {
     "tx_proxy_status.cpp",
     "ydb_convert.cpp",
   ]
+
+  serialize_enum_headers = [ "table_description.h" ]
 }

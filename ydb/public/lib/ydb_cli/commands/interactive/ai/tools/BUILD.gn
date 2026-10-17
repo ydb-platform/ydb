@@ -1,15 +1,18 @@
 library("tools") {
   public_deps = [
     # "//library/cpp/json",
+    "//ydb/public/lib/ydb_cli/commands/interactive/common",
     # "//ydb/public/lib/ydb_cli/common",
-    # "//ydb/public/sdk/cpp/src/client/driver",
   ]
 
   deps = [
+    # "//contrib/libs/yaml-cpp",
+    "//library/cpp/archive",
     # "//library/cpp/colorizer",  # peerdir only
+    # "//library/cpp/resource",
+    # "//library/cpp/yaml/as",
     # "//ydb/library/yverify_stream",
     # "//ydb/public/lib/json_value",
-    "//ydb/public/lib/ydb_cli/commands/interactive/common",
     "//ydb/public/lib/ydb_cli/commands/interactive/highlight",
     # "//ydb/public/lib/ydb_cli/dump",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/query",
@@ -18,8 +21,10 @@ library("tools") {
 
   sources = [
     "describe_tool.cpp",
+    "docs_search_tool.cpp",
     "exec_query_tool.cpp",
     "exec_shell_tool.cpp",
+    "explain_query_tool.cpp",
     "list_directory_tool.cpp",
     "tool_base.cpp",
     "tool_interface.cpp",

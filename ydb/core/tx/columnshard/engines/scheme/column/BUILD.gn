@@ -2,6 +2,7 @@ library("column") {
   public_deps = [
     # "//contrib/libs/apache/arrow",
     "//ydb/core/formats/arrow",
+    # "//ydb/core/scheme",
     # "//ydb/core/tx/columnshard/engines/scheme/abstract",
     "//ydb/core/tx/columnshard/engines/scheme/defaults/common",
     # "//ydb/library/accessor",
@@ -10,6 +11,9 @@ library("column") {
   ]
 
   deps = [
+    # "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/dictionary",
+    # "//ydb/core/tx/columnshard/engines/protos",  # peerdir only
     # "//ydb/core/tx/columnshard/splitter/abstract",
   ]
 

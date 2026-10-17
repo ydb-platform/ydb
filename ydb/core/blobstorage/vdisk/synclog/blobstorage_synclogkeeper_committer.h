@@ -121,7 +121,7 @@ namespace NKikimr {
                 , RecoveryLogConfirmedLsn(recoveryLogConfirmedLsn)
             {}
             TSyncLogKeeperCommitData(TSyncLogKeeperCommitData &&) = default;
-            TSyncLogKeeperCommitData &operator=(TSyncLogKeeperCommitData &&) = default;
+            TSyncLogKeeperCommitData &operator=(TSyncLogKeeperCommitData &&) = delete;
             TSyncLogKeeperCommitData(const TSyncLogKeeperCommitData &) = delete;
             TSyncLogKeeperCommitData &operator=(const TSyncLogKeeperCommitData &) = delete;
 

@@ -4,4 +4,6 @@ protobuf_library("schemeshard") {
   proto_transitive_headers = false
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

@@ -1,0 +1,13 @@
+linked_executable("kv_volume_tool") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//contrib/libs/protobuf",
+    "//library/cpp/getopt",
+    "//ydb/public/api/grpc",
+    "//ydb/public/api/protos",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

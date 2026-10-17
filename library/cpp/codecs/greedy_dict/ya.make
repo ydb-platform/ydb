@@ -1,6 +1,8 @@
 
 LIBRARY()
 
+# gn: move into parent
+
 SRCS(
     gd_builder.cpp
     gd_entry.cpp

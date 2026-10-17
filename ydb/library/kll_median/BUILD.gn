@@ -1,0 +1,6 @@
+library("kll_median") {
+  sources = [
+    "dynamic_sketch.cpp",
+    "sketch.cpp",
+  ]
+}

@@ -6,5 +6,9 @@ library("common") {
 
   deps = [ "//ydb/core/protos" ]
 
-  sources = [ "worker_id.cpp" ]
+  sources = [
+    "family_settings.cpp",
+    "schema_change.cpp",
+    "worker_id.cpp",
+  ]
 }

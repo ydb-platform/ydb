@@ -1201,7 +1201,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
             for (auto& state : task.States) {
                 logic.Apply(state);
             }
-            states.push_back(std::move(logic.Build()));
+            states.push_back(logic.Build());
         }
     } catch (...) {
         issues.AddIssue(CurrentExceptionMessage());

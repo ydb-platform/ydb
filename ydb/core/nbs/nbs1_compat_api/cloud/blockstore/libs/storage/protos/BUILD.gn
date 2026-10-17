@@ -1,0 +1,5 @@
+protobuf_library("protos") {
+  public_deps = [ "//ydb/core/nbs/cloud/storage/core/protos" ]
+
+  sources = [ "volume.proto" ]
+}

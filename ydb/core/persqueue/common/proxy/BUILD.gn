@@ -5,6 +5,7 @@ library("proxy") {
     # "//ydb/library/actors/core",
     "//ydb/library/logger",
     # "//ydb/public/sdk/cpp/src/client/driver",
+    # "//ydb/public/sdk/cpp/src/client/iam",
     # "//ydb/public/sdk/cpp/src/client/topic",
   ]
 

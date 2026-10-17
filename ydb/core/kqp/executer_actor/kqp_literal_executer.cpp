@@ -257,7 +257,7 @@ public:
         TaskRunners.emplace_back(taskRunner);
 
         auto taskSettings = NDq::TDqTaskSettings(&protoTask);
-        taskSettings.SetParamsProvider(std::move(TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params)));
+        taskSettings.SetParamsProvider(TQueryData::GetParameterProvider(stageInfo.Meta.Tx.Params));
         taskRunner->Prepare(taskSettings, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext());
 
         auto status = taskRunner->Run();

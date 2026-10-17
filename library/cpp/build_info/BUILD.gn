@@ -1,8 +1,30 @@
 # yamake2gn: keep  -- hand-written, do not regenerate
 
+# CREATE_BUILDINFO_FOR(buildinfo_data.h): the compiler and its version; the
+# flags are per target in gn, none is passed
+if (clang_bin_path != "") {
+    _cxx = "$clang_bin_path/clang++"
+} else {
+    _cxx = "clang++-18"
+}
+
+action("buildinfo_data") {
+    script = "//build/scripts/build_info_gen.py"
+    outputs = [ "$target_gen_dir/buildinfo_data.h" ]
+    args = [
+        rebase_path(outputs[0], root_build_dir),
+        _cxx,
+
+        # the flags: gn drops an empty argument, the script strips the space
+        " ",
+    ]
+}
+
 library("build_info") {
     sources = [
         "build_info_static.cpp",
         "sandbox_static.cpp",
     ]
+
+    deps = [ ":buildinfo_data" ]
 }

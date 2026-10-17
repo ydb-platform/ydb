@@ -571,7 +571,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto state = ctx.HolderFactory.Create<TState>(Width_, FilterColumn_, AggsParams_, ctx);
-        return ctx.HolderFactory.Create<TStreamValue>(state, std::move(Stream_->GetValue(ctx)));
+        return ctx.HolderFactory.Create<TStreamValue>(state, Stream_->GetValue(ctx));
     }
 
 private:

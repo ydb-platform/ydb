@@ -1,0 +1,30 @@
+unittest_executable("ut_cut_history") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/max",
+    "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
+    "//ydb/core/tx/columnshard/test_helper",
+  ]
+
+  sources = [ "ut_cut_history.cpp" ]
+
+  include_dirs = [ "//ydb/core/tx/columnshard" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

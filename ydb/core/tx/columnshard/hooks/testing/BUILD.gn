@@ -1,6 +1,4 @@
 library("testing") {
-  testonly = true
-
   public_deps = [
     # "//ydb/core/testlib/basics",
     # "//ydb/core/tx/columnshard",
@@ -13,6 +11,7 @@ library("testing") {
 
   deps = [
     # "//contrib/libs/apache/arrow",
+    # "//ydb/core/tx/columnshard/bg_tasks/manager",
     # "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/engines/portions",
   ]

@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/public",  # peerdir only
+    "//ydb/core/persqueue/public:utils",
+    "//ydb/core/persqueue/writer",
+    "//ydb/core/persqueue/writer:partition_chooser",
+    "//ydb/core/tablet",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/library/persqueue/topic_parser",
+    "//ydb/services/metadata",
+  ]
+
+  sources = [
+    "partition_chooser_actor_scenarios_ut.cpp",
+    "partition_chooser_exception_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/core/persqueue/writer" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

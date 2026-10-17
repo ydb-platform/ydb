@@ -1,0 +1,15 @@
+library("actor_system_monitoring") {
+  public_deps = [
+    # "//library/cpp/time_provider",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/metrics",
+  ]
+
+  deps = [ "//ydb/core/protos" ]
+
+  sources = [
+    "config.cpp",
+    "subsystem.cpp",
+    "viewer.cpp",
+  ]
+}

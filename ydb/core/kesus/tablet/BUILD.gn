@@ -22,6 +22,7 @@ linked_executable("quoter_performance_test") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
@@ -57,6 +58,7 @@ library("tablet") {
   sources = [
     "events.cpp",
     "probes.cpp",
+    "public_counters.cpp",
     "quoter_resource_tree.cpp",
     "quoter_runtime.cpp",
     "rate_accounting.cpp",

@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    transfer.cpp
-    control.cpp
+    transfer.cpp  # gn: into ydb/core/tx/columnshard
+    control.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

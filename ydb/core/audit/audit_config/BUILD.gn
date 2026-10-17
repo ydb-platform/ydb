@@ -1,7 +1,7 @@
 library("audit_config") {
   public_deps = [
     "//ydb/core/protos",
-    "//ydb/library/aclib/protos",
+    "//ydb/library/aclib/protos/identity",
   ]
 
   sources = [ "audit_config.cpp" ]

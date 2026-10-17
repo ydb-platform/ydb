@@ -1,10 +1,15 @@
 unittest_executable("ut") {
   deps = [
+    "//contrib/libs/ftxui",
+    "//contrib/libs/jwt-cpp",  # peerdir only
     "//contrib/libs/protobuf",
+    "//contrib/libs/yaml-cpp",
     "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/public/api/protos",
     "//ydb/public/lib/ydb_cli/common",
+    "//ydb/public/sdk/cpp/src/client/types/core_facility",
+    "//ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers",
   ]
 
   sources = [
@@ -13,9 +18,19 @@ unittest_executable("ut") {
     "//ydb/public/lib/ydb_cli/common/csv_parser_ut.cpp",
     "//ydb/public/lib/ydb_cli/common/duration_ut.cpp",
     "//ydb/public/lib/ydb_cli/common/normalize_path_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/oidc_config_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/oidc_options_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/oidc_token_cache_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/oidc_ut.cpp",
     "//ydb/public/lib/ydb_cli/common/pg_dump_parser_ut.cpp",
     "//ydb/public/lib/ydb_cli/common/recursive_remove_ut.cpp",
+    "//ydb/public/lib/ydb_cli/common/scheme_query_utils_ut.cpp",
+    "build_info_ut.cpp",
+    "markdown_ut.cpp",
     "print_utils_ut.cpp",
+    "tabbed_table_ut.cpp",
+    "tx_mode_utils_ut.cpp",
+    "utf8_utils_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/public/lib/ydb_cli/common" ]

@@ -16,12 +16,14 @@ unittest_executable("inside_ydb_ut") {
     ":inside_ydb_ut_resources",
     "//contrib/restricted/nlohmann_json",
     "//library/cpp/json",
+    "//library/cpp/logger",
     "//library/cpp/string_utils/base64",
     "//library/cpp/string_utils/url",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/base",  # peerdir only
     "//ydb/core/http_proxy",
     "//ydb/core/http_proxy/ut/datastreams_fixture",
+    "//ydb/core/persqueue/public",
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/ymq/actor",
@@ -33,6 +35,9 @@ unittest_executable("inside_ydb_ut") {
     "//ydb/library/persqueue/tests",  # peerdir only
     "//ydb/library/testlib/service_mocks",
     "//ydb/public/sdk/cpp/src/client/discovery",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/scheme",
+    "//ydb/public/sdk/cpp/src/client/topic",
     "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
     "//ydb/services/ydb",  # peerdir only
   ]
@@ -47,6 +52,7 @@ unittest_executable("inside_ydb_ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

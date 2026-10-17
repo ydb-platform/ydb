@@ -1,5 +1,6 @@
 library("common") {
   public_deps = [
+    # "//contrib/libs/protobuf",
     "//ydb/library/yql/providers/solomon/proto",
     "//yql/essentials/providers/common/proto",
   ]

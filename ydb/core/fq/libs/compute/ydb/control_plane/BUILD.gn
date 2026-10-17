@@ -18,7 +18,6 @@ library("control_plane") {
     "//ydb/core/fq/libs/control_plane_storage:util",
     # "//ydb/core/fq/libs/quota_manager/proto",  # peerdir only
     "//ydb/core/fq/libs/ydb",
-    "//ydb/core/kqp/workload_service/common",
     # "//ydb/core/protos",  # peerdir only
     "//ydb/library/actors/http",
     # "//ydb/library/actors/protos",  # peerdir only
@@ -33,6 +32,7 @@ library("control_plane") {
     # "//ydb/public/sdk/cpp/src/client/query",
     # "//ydb/public/sdk/cpp/src/client/resources",
     # "//ydb/public/sdk/cpp/src/library/operation_id/protos",  # peerdir only
+    # "//ydb/services/workload_manager/common",
     # "//yql/essentials/public/issue",
     # "//yql/essentials/utils",
   ]

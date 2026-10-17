@@ -1,0 +1,5 @@
+linked_executable("ydb_bench_process_guard") {
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

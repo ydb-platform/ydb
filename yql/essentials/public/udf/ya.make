@@ -2,7 +2,7 @@ YQL_LIBRARY()
 
 SRCS(
     udf_allocator.cpp
-    udf_allocator.h
+    udf_allocator.h  # gn: slot YqlServicePolicy
     udf_counter.cpp
     udf_counter.h
     udf_data_type.cpp
@@ -19,6 +19,7 @@ SRCS(
     udf_static_registry.h
     udf_string.cpp
     udf_string.h
+    udf_terminator.h  # gn: slot YqlServicePolicy
     udf_type_builder.cpp
     udf_type_builder.h
     udf_type_inspection.cpp

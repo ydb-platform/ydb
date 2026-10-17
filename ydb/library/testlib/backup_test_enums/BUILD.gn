@@ -1,0 +1,7 @@
+library("backup_test_enums") {
+  public_deps = [
+    # "//ydb/core/tx/datashard",
+  ]
+
+  serialize_enum_headers = [ "backup_test_enums.h" ]
+}

@@ -1,10 +1,15 @@
 library("attributes") {
-  public_deps = [ "//ydb/core/protos" ]
+  public_deps = [
+    # "//ydb/core/persqueue/public",
+    "//ydb/core/protos",
+    "//ydb/public/api/protos",
+  ]
 
   deps = [ "//library/cpp/digest/md5" ]
 
   sources = [
     "attribute_name.cpp",
+    "attributes.cpp",
     "attributes_md5.cpp",
   ]
 }

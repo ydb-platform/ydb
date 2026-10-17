@@ -8,7 +8,9 @@ library("interconnect") {
     "//library/cpp/monlib/metrics",
     "//ydb/library/actors/core",
     "//ydb/library/actors/interconnect/address",
+    "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/interconnect/rdma",
+    "//ydb/library/actors/interconnect/retro_tracing",
     "//ydb/library/actors/prof",
     "//ydb/library/actors/protos",
     "//ydb/library/actors/util",
@@ -16,11 +18,10 @@ library("interconnect") {
   ]
 
   deps = [
-    "//contrib/libs/ibdrv",
     # "//contrib/libs/libc_compat",  # peerdir only
     "//contrib/libs/openssl",
     # "//contrib/libs/protobuf",
-    "//contrib/restricted/abseil-cpp-tstring",
+    "//library/cpp/html/pcdata",
     "//library/cpp/json",
     # "//library/cpp/monlib/service/pages",
     "//library/cpp/monlib/service/pages/resources",  # peerdir only
@@ -29,9 +30,10 @@ library("interconnect") {
     # "//library/cpp/packedtypes",  # peerdir only
     # "//ydb/library/actors/dnscachelib",  # peerdir only
     # "//ydb/library/actors/dnsresolver",
-    # "//ydb/library/actors/helpers",  # peerdir only
-    "//ydb/library/actors/interconnect/mock",
+    "//ydb/library/actors/helpers",
+    "//ydb/library/actors/interconnect/rdma/cq_actor",
     "//ydb/library/actors/memory_log",
+    "//ydb/library/uring",
   ]
 
   sources = [
@@ -39,26 +41,31 @@ library("interconnect") {
     "interconnect_common.cpp",
     "interconnect_counters.cpp",
     "interconnect_handshake.cpp",
+    "interconnect_metrics_aggregator.cpp",
     "interconnect_mon.cpp",
     "interconnect_nameserver_dynamic.cpp",
     "interconnect_nameserver_table.cpp",
     "interconnect_proxy_wrapper.cpp",
     "interconnect_resolve.cpp",
+    "interconnect_session_pool_mapping.cpp",
     "interconnect_stream.cpp",
     "interconnect_tcp_input_session.cpp",
     "interconnect_tcp_proxy.cpp",
     "interconnect_tcp_server.cpp",
     "interconnect_tcp_session.cpp",
+    "interconnect_tcp_session_v2.cpp",
+    "interconnect_uring_engine.cpp",
     "interconnect_zc_processor.cpp",
     "load.cpp",
+    "mock/ic_mock.cpp",
+    "mock/ic_mock.h",
     "packet.cpp",
-    "poller/poller_actor.cpp",
-    "poller/poller_tcp.cpp",
-    "poller/poller_tcp_unit.cpp",
-    "poller/poller_tcp_unit_epoll.cpp",
-    "poller/poller_tcp_unit_select.cpp",
-    "rdma/cq_actor/cq_actor.cpp",
+    "rdma_sync_actor.cpp",
+    "subscriber_liveness_checker.cpp",
     "subscription_manager.cpp",
     "types.cpp",
+    "uring_context.cpp",
+    "v2_event_serializer.cpp",
+    "v2_probes.cpp",
   ]
 }

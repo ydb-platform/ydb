@@ -772,7 +772,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         TVector<TExprBase> preJoinConditions = prefixFilters;
         if (!equalLeftKeysConditions.empty() || !preJoinConditions.empty()) {
             for (auto& cond : equalLeftKeysConditions) {
-                cond = TExprBase(ctx.ReplaceNode(std::move(cond.Ptr()), row.Ref(), leftRowArg.Ptr()));
+                cond = TExprBase(ctx.ReplaceNode(cond.Ptr(), row.Ref(), leftRowArg.Ptr()));
                 preJoinConditions.push_back(cond);
             }
 

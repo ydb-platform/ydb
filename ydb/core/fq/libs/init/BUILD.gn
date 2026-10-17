@@ -21,7 +21,6 @@ library("init") {
     "//ydb/core/fq/libs/compute/ydb/control_plane",
     "//ydb/core/fq/libs/control_plane_config",
     "//ydb/core/fq/libs/control_plane_proxy",
-    "//ydb/core/fq/libs/control_plane_proxy/events",  # peerdir only
     "//ydb/core/fq/libs/control_plane_storage",  # peerdir only
     "//ydb/core/fq/libs/control_plane_storage:service_id",
     "//ydb/core/fq/libs/db_id_async_resolver_impl",
@@ -43,10 +42,8 @@ library("init") {
     "//ydb/library/security",
     # "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/input_transforms",
-    "//ydb/library/yql/dq/actors/task_runner",  # peerdir only
     "//ydb/library/yql/dq/comp_nodes",
     "//ydb/library/yql/dq/transform",
-    # "//ydb/library/yql/providers/common/http_gateway",
     # "//ydb/library/yql/providers/dq/actors",  # peerdir only
     # "//ydb/library/yql/providers/dq/api/protos",  # peerdir only
     # "//ydb/library/yql/providers/dq/provider",  # peerdir only

@@ -5,19 +5,19 @@ config("sharding_private_config") {
 library("sharding") {
   public_deps = [
     "//ydb/core/formats/arrow",
-    "//ydb/core/protos",
     # "//ydb/core/scheme_types",
     "//ydb/core/tx/columnshard/common",
+    # "//ydb/core/tx/schemeshard/olap/schema",
     # "//ydb/library/accessor",
     "//ydb/library/formats/arrow/hash",
-    # "//ydb/library/formats/arrow/validation",
-    # "//ydb/services/bg_tasks/abstract",
     "//yql/essentials/public/udf",
   ]
 
   deps = [
     # "//ydb/core/formats",  # peerdir only
+    "//ydb/core/protos",
     "//ydb/core/tx/columnshard/common/protos",
+    "//ydb/core/tx/schemeshard/olap/columns",
     "//yql/essentials/minikql",
     # "//yql/essentials/utils",
   ]

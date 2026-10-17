@@ -1,0 +1,3 @@
+library("object_framework") {
+  sources = [ "object_framework.cpp" ]
+}

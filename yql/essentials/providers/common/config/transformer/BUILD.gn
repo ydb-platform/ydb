@@ -1,0 +1,12 @@
+library("transformer") {
+  public_deps = [
+    "//yql/essentials/core",
+    "//yql/essentials/providers/common/config",
+  ]
+
+  deps = [
+    # "//yql/essentials/core/expr_nodes",
+  ]
+
+  sources = [ "yql_configuration_transformer.cpp" ]
+}

@@ -10,6 +10,8 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
 #include <ydb/library/security/util.h>
@@ -264,7 +266,7 @@ private:
             return;
         }
 
-        auto splitResult = std::move(AsyncSplitResult->GetResult());
+        auto splitResult = AsyncSplitResult->GetResult();
         ReplySplitResult(ctx, std::move(splitResult));
     }
 
@@ -593,7 +595,7 @@ private:
             return;
         }
 
-        auto kqpResult = std::move(AsyncCompileResult->GetResult());
+        auto kqpResult = AsyncCompileResult->GetResult();
         auto status = GetYdbStatus(kqpResult);
         auto meta = CollectMeta();
 

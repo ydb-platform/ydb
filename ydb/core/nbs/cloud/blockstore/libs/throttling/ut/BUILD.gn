@@ -1,0 +1,12 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/nbs/cloud/blockstore/libs/throttling",
+  ]
+
+  sources = [ "//ydb/core/nbs/cloud/blockstore/libs/throttling/simple_leaky_bucket_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/nbs/cloud/blockstore/libs/throttling" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

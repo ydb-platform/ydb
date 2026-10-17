@@ -1,4 +1,6 @@
 #include "kqp_worker_common.h"
+
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include "kqp_query_stats.h"
 
 #include <ydb/core/base/appdata.h>

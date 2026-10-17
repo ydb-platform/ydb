@@ -1,5 +1,7 @@
 PROGRAM(mvp_oidc_proxy)
 
+# gn: move into parent
+
 CFLAGS(
     -DPROFILE_MEMORY_ALLOCATIONS
 )

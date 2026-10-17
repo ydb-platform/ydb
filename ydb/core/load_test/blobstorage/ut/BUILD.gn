@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/protobuf/util",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/pdisk/mock",
+    "//ydb/core/load_test/blobstorage",  # peerdir only
+    "//ydb/core/load_test/common",
+    "//ydb/core/util/actorsys_test",
+  ]
+
+  sources = [ "pdisk_log_ut.cpp" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

@@ -1,19 +1,11 @@
 library("bscontroller") {
   public_deps = [
     ":group_mapper",
-    # "//contrib/libs/protobuf",
-    # "//library/cpp/monlib/service/pages",
     "//ydb/core/base",
-    # "//ydb/core/base/services",
-    # "//ydb/core/blob_depot",
     "//ydb/core/blobstorage/base",
-    # "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/nodewarden",
-    "//ydb/core/driver_lib/version",
-    "//ydb/core/engine/minikql",
     # "//ydb/core/mind",
-    # "//ydb/core/node_whiteboard",
     "//ydb/core/protos",
     # "//ydb/core/scheme",
     # "//ydb/core/sys_view/common",
@@ -22,28 +14,40 @@ library("bscontroller") {
     "//ydb/core/util",
     "//ydb/library/aclib",
     # "//ydb/library/actors/core",
-    # "//ydb/library/actors/interconnect",
-    "//ydb/library/services",
     "//ydb/library/yaml_config",
   ]
 
   deps = [
+    # "//contrib/libs/protobuf",
     # "//contrib/libs/xxhash",
     # "//library/cpp/json",
     # "//library/cpp/streams/zstd",
     "//ydb/core/audit",
+    # "//ydb/core/base/services",  # peerdir only
+    # "//ydb/core/blob_depot",
     # "//ydb/core/blobstorage",  # peerdir only
+    # "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/cms/console",
     # "//ydb/core/debug_tools",
+    "//ydb/core/driver_lib/version",
+    "//ydb/core/engine/minikql",
+    # "//ydb/core/node_whiteboard",
     "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+    "//ydb/library/services",
     # "//ydb/library/yaml_config/public",
     "//ydb/library/yaml_json",
   ]
 
   sources = [
+    "blob_checker.cpp",
+    "blob_checker_actors.cpp",
+    "blob_checker_events.cpp",
+    "blob_checker_planner.cpp",
     "bridge.cpp",
     "bsc.cpp",
     "bsc_audit.cpp",
+    "cleanup_stale_storage_entries.cpp",
     "cluster_balancing.cpp",
     "cmds_box.cpp",
     "cmds_bridge.cpp",
@@ -56,8 +60,11 @@ library("bscontroller") {
     "config_cmd.cpp",
     "config_fit_groups.cpp",
     "config_fit_pdisks.cpp",
+    "config_v2_enable.cpp",
     "console_interaction.cpp",
+    "database_space.cpp",
     "ddisk.cpp",
+    "ddisk_info.cpp",
     "disk_metrics.cpp",
     "drop_donor.cpp",
     "get_group.cpp",
@@ -79,6 +86,7 @@ library("bscontroller") {
     "stat_processor.cpp",
     "storage_stats_calculator.cpp",
     "sys_view.cpp",
+    "types.cpp",
     "update_group_latencies.cpp",
     "update_last_seen_ready.cpp",
     "update_seen_operational.cpp",
@@ -89,17 +97,14 @@ library("bscontroller") {
 
 library("group_mapper") {
   public_deps = [
-    # "//library/cpp/containers/absl_flat_hash",
+    # ":bscontroller",
     # "//library/cpp/containers/stack_vector",
     "//ydb/core/base",
-    # "//ydb/core/blobstorage/base",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/groupinfo",
-    # "//ydb/core/erasure",
     "//ydb/core/protos",
-    # "//ydb/core/scheme",
     # "//ydb/core/tablet_flat",
     # "//ydb/library/actors/core",
-    # "//ydb/library/yverify_stream",
   ]
 
   deps = [

@@ -12,4 +12,6 @@ PEERDIR(
     ydb/library/actors/retro_tracing
 )
 
+PROVIDES(retro_spans)
+
 END()

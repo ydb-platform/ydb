@@ -1,5 +1,4 @@
 #include "yql_transform_pipeline.h"
-#include "yql_eval_expr.h"
 #include "yql_eval_params.h"
 #include "yql_lineage.h"
 
@@ -89,16 +88,6 @@ TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const 
                                                 [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                                                     return EvaluateParameters(input, output, typeCtx, ctx, functionRegistry);
                                                 }), "EvaluateParameters", issueCode));
-
-    return *this;
-}
-
-TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-                                                                          IGraphTransformer* calcTransformer, EYqlIssueCode issueCode) {
-    Transformers_.push_back(TTransformStage(
-        CreateEvaluateExpressionTransformer(*TypeAnnotationContext_, functionRegistry, calcTransformer, TypeAnnCallableFactory_),
-        "EvaluateExpression",
-        issueCode));
 
     return *this;
 }

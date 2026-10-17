@@ -5,6 +5,7 @@ protobuf_library("proto") {
 library("util") {
   public_deps = [
     # "//contrib/libs/protobuf",
+    # "//library/cpp/protobuf/runtime",
   ]
 
   deps = [
@@ -19,6 +20,7 @@ library("util") {
     "path.cpp",
     "pb_io.cpp",
     "simple_reflection.cpp",
+    "stream_adaptors.cpp",
     "walk.cpp",
   ]
 }

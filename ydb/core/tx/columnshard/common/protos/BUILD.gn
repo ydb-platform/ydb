@@ -3,4 +3,6 @@ protobuf_library("protos") {
     "blob_range.proto",
     "snapshot.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

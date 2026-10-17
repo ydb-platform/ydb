@@ -316,11 +316,6 @@ public:
         return result;
     }
 
-    std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
-        const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TIndexInfo& sourceIndexInfo, const ui32 columnId) const {
-        return GetColumnFeaturesVerified(columnId).ActualizeColumnData(source, sourceIndexInfo.GetColumnFeaturesVerified(columnId));
-    }
-
     static std::optional<TIndexInfo> BuildFromProto(const ui64 presetId, const NKikimrSchemeOp::TColumnTableSchema& schema,
         const std::shared_ptr<IStoragesManager>& operators, const std::shared_ptr<TSchemaObjectsCache>& cache);
     static std::optional<TIndexInfo> BuildFromProto(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff, const TIndexInfo& prevSchema,

@@ -8,7 +8,8 @@ library("ttl") {
 
   deps = [
     # "//ydb/core/base",  # peerdir only
-    # "//ydb/core/tx/tiering/tier",  # peerdir only
+    # "//ydb/core/tx/columnshard/blobs_action/common",  # peerdir only
+    # "//ydb/core/tx/tiering/tier",
     # "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/types/credentials",  # peerdir only
   ]

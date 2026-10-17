@@ -1,12 +1,14 @@
 library("client") {
-  public_deps = [ "//ydb/public/sdk/cpp/src/client/types/credentials" ]
+  public_deps = [
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//yql/essentials/providers/common/structured_token",
+  ]
 
   deps = [
     "//library/cpp/threading/future",
     "//ydb/library/yql/providers/common/token_accessor/grpc",
     "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/public/sdk/cpp/src/library/grpc/client",
-    "//yql/essentials/providers/common/structured_token",
   ]
 
   sources = [

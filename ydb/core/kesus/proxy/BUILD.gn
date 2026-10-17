@@ -3,7 +3,6 @@ library("proxy") {
     "//ydb/core/base",
     "//ydb/core/protos",
     # "//ydb/core/scheme",
-    # "//ydb/library/actors/core",
     "//ydb/public/api/protos",
   ]
 
@@ -13,6 +12,7 @@ library("proxy") {
     "//ydb/core/tablet",
     "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
+    # "//ydb/library/actors/core",
     "//ydb/library/services",
   ]
 

@@ -4,8 +4,9 @@ SRCS(
     write.cpp
     write_data.cpp
     manager.cpp
-    events.cpp
+    events.cpp  # gn: events
 )
+# gn: events headers events.h
 
 PEERDIR(
     ydb/core/protos

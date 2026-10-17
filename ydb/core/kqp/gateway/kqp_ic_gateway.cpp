@@ -54,8 +54,6 @@ using namespace NYql::NCommon;
 using namespace NSchemeShard;
 using namespace NKikimrSchemeOp;
 
-constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnapshot = TKqpSnapshot();
-
 #define STATIC_ASSERT_STATE_EQUAL(name) \
     static_assert(static_cast<ui32>(NYql::TIndexDescription::EIndexState::name) \
         == NKikimrSchemeOp::EIndexState::EIndexState##name, \

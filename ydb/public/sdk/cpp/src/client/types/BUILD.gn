@@ -1,5 +1,6 @@
 library("types") {
   public_deps = [
+    "//ydb/public/api/protos",
     # "//ydb/public/sdk/cpp/src/client/types/status",
     "//ydb/public/sdk/cpp/src/library/time",
   ]
@@ -11,7 +12,10 @@ library("types") {
     # "//ydb/public/sdk/cpp/src/library/issue",  # peerdir only
   ]
 
-  sources = [ "ydb.cpp" ]
+  sources = [
+    "virtual_timestamp.cpp",
+    "ydb.cpp",
+  ]
 
   serialize_enum_headers = [
     "//ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h",

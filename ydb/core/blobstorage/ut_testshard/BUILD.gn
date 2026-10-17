@@ -14,7 +14,7 @@ unittest_executable("ut_testshard") {
     "//ydb/core/mind",
     "//ydb/core/mind/bscontroller",
     "//ydb/core/mind/bscontroller:group_mapper",
-    "//ydb/core/mind/hive",
+    "//ydb/core/mind/hive",  # peerdir only
     "//ydb/core/mind:tenant_node_enumeration",
     "//ydb/core/protos",
     "//ydb/core/sys_view/service",
@@ -35,6 +35,7 @@ unittest_executable("ut_testshard") {
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

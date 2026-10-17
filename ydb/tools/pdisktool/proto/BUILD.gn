@@ -1,0 +1,5 @@
+protobuf_library("proto") {
+  sources = [ "pdisktool.proto" ]
+
+  protoc_fatal_warnings = true
+}

@@ -90,7 +90,7 @@ SRCS(
     probes.h
     process_stats.cpp
     process_stats.h
-    scheduler_actor.cpp
+    scheduler_actor.cpp  # gn: into ydb/library/actors/interconnect/poller
     scheduler_actor.h
     scheduler_basic.cpp
     scheduler_basic.h

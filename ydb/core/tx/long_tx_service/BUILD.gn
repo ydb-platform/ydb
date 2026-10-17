@@ -2,17 +2,23 @@ library("long_tx_service") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/base",
+    # "//ydb/core/scheme",
+    # "//ydb/library/actors/core",
   ]
 
   deps = [
     # "//library/cpp/lwtrace",
     "//library/cpp/lwtrace/mon",
+    # "//library/cpp/monlib/service/pages",
+    # "//library/cpp/time_provider",
     "//ydb/core/actorlib_impl",
-    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/mon",
+    "//ydb/core/protos",
+    "//ydb/core/tx/columnshard",
     "//ydb/core/tx/long_tx_service/public",
     "//ydb/core/tx/tx_proxy:public",
     # "//ydb/core/util",
-    # "//ydb/library/actors/core",
+    # "//ydb/library/actors/interconnect",
     "//ydb/library/services",
   ]
 
@@ -22,5 +28,7 @@ library("long_tx_service") {
     "long_tx_service.cpp",
     "long_tx_service_impl.cpp",
     "lwtrace_probes.cpp",
+    "snapshots_exchange.cpp",
+    "snapshots_storage.cpp",
   ]
 }

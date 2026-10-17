@@ -18,6 +18,7 @@ PEERDIR(
     ydb/core/tx/long_tx_service/public
     ydb/library/services
 )
+# gn: peerdir ydb/core/tx/tx_proxy:public
 
 YQL_LAST_ABI_VERSION()
 

@@ -785,7 +785,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         Y_ENSURE(stats->ReaderStats);
         std::unique_ptr<TEvWorker::TEvStatus> ev{TEvWorker::TEvStatus::FromOperation(EWorkerOperation::NONE)};
         ev->DetailedStats->ReaderStats = std::move(stats->ReaderStats);
-        return std::move(ev);
+        return ev;
     }
 
     void MaybeRecreateActor(TEvWorker::TEvGone::TPtr& ev, TActorInfo& info) {

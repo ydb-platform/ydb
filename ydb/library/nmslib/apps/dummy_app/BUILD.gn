@@ -1,0 +1,9 @@
+linked_executable("dummy_app") {
+  deps = [
+    "//ydb/library/nmslib",  # peerdir only
+  ]
+
+  sources = [ "dummy_app.cc" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

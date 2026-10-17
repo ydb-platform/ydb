@@ -1,12 +1,9 @@
 library("dq_task_preprocessor") {
-  public_deps = [
-    # "//ydb/library/yql/providers/dq/interface",
-    # "//yql/essentials/minikql",
-  ]
-
   deps = [
     # "//library/cpp/yson",
     # "//library/cpp/yson/node",
+    # "//ydb/library/yql/providers/dq/interface",
+    # "//yql/essentials/minikql",
     # "//yql/essentials/minikql/computation",
     # "//yql/essentials/minikql:alloc",
     # "//yql/essentials/providers/common/codec",

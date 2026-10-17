@@ -1,0 +1,5 @@
+protobuf_library("protos") {
+  sources = [ "schema_barrier.proto" ]
+
+  protoc_fatal_warnings = true
+}

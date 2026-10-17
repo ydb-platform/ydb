@@ -4,11 +4,15 @@ unittest_executable("ut") {
     "//ydb/core/config/init",
     "//ydb/core/config/validation",
     "//ydb/library/yaml_config",
+    "//ydb/public/lib/ydb_cli/common",
     "//yql/essentials/public/udf/service/stub",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
-  sources = [ "//ydb/core/config/init/init_ut.cpp" ]
+  sources = [
+    "//ydb/core/config/init/init_ut.cpp",
+    "//ydb/core/config/init/yaml_config_helpers_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/config/init" ]
 

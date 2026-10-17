@@ -6,6 +6,8 @@ protobuf_library("protos") {
     "protos/shareplanner_history.proto",
     "protos/shareplanner_sensors.proto",
   ]
+
+  protoc_fatal_warnings = true
 }
 
 library("share") {

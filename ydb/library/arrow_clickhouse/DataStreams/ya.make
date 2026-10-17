@@ -10,9 +10,9 @@ ADDINCL(
 )
 
 SRCS(
-    AggregatingBlockInputStream.cpp
-    IBlockInputStream.cpp
-    MergingAggregatedBlockInputStream.cpp
+    AggregatingBlockInputStream.cpp  # gn: into ydb/library/arrow_clickhouse
+    IBlockInputStream.cpp  # gn: into ydb/library/arrow_clickhouse
+    MergingAggregatedBlockInputStream.cpp  # gn: into ydb/library/arrow_clickhouse
 )
 
 END()

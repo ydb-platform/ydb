@@ -1,13 +1,22 @@
 library("logging") {
   public_deps = [
+    "//library/cpp/yt/assert",
     # "//library/cpp/yt/cpu_clock",
     # "//library/cpp/yt/memory",
     # "//library/cpp/yt/misc",
     # "//library/cpp/yt/string",
+    # "//library/cpp/yt/system",
     "//library/cpp/yt/yson_string",
   ]
 
-  deps = [ "//library/cpp/yt/assert" ]
+  deps = [
+    # "//library/cpp/yt/mpl",  # peerdir only
+  ]
 
-  sources = [ "logger.cpp" ]
+  sources = [
+    "logger.cpp",
+    "structured_payload.cpp",
+    "tag.cpp",
+    "tagged_payload.cpp",
+  ]
 }

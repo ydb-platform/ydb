@@ -1,7 +1,7 @@
 library("core") {
   public_deps = [
     # "//contrib/libs/protobuf",
-    "//library/cpp/containers/absl_flat_hash",
+    "//library/cpp/containers/absl",
     # "//library/cpp/containers/stack_vector",
     "//library/cpp/json",
     "//library/cpp/logger",
@@ -16,7 +16,9 @@ library("core") {
     "//library/cpp/time_provider",
     "//ydb/library/actors/actor_type",
     "//ydb/library/actors/memory_log",
+    "//ydb/library/actors/metrics",
     "//ydb/library/actors/protos",
+    "//ydb/library/actors/struct_log",
     "//ydb/library/actors/util",
     # "//ydb/library/actors/wilson",
     "//ydb/library/services",
@@ -24,11 +26,12 @@ library("core") {
 
   deps = [
     # "//library/cpp/balloc",
-    "//library/cpp/cgiparam",
     # "//library/cpp/execprofile",  # peerdir only
+    "//library/cpp/string_utils/base64",
+    # "//library/cpp/threading/queue",
+    # "//ydb/library/actors/interconnect",
     "//ydb/library/actors/interconnect/rdma",
     # "//ydb/library/actors/prof",
-    # "//ydb/library/actors/scheduler",
   ]
 
   sources = [
@@ -41,6 +44,7 @@ library("core") {
     "ask.cpp",
     "buffer.cpp",
     "callstack.cpp",
+    "coro_stack_pool.cpp",
     "cpu_manager.cpp",
     "event.cpp",
     "event_load.cpp",
@@ -74,6 +78,11 @@ library("core") {
     "process_stats.cpp",
     "scheduler_basic.cpp",
     "scheduler_cookie.cpp",
+    "subsystem.cpp",
+    "subsystems/allocation_cache.cpp",
+    "subsystems/inmemory_metrics.cpp",
+    "subsystems/metric_system.cpp",
+    "subsystems/stats.cpp",
     "thread_context.cpp",
   ]
 

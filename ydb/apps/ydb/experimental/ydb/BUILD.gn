@@ -1,0 +1,13 @@
+linked_executable("ydb") {
+  deps = [
+    "//ydb/apps/ydb/experimental/ydb/commands",
+    "//ydb/public/lib/ydb_cli/commands",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

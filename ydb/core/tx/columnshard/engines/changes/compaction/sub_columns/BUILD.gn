@@ -1,7 +1,10 @@
 library("sub_columns") {
   deps = [
+    # "//contrib/libs/apache/arrow",
+    # "//library/cpp/containers/absl",  # peerdir only
     "//ydb/core/formats/arrow",
     # "//ydb/core/formats/arrow/accessor/common",
+    # "//ydb/core/formats/arrow/accessor/dictionary",
     "//ydb/core/formats/arrow/accessor/sparsed",
     "//ydb/core/formats/arrow/accessor/sub_columns",
     # "//ydb/core/tx/columnshard/engines/changes/compaction/common",  # peerdir only

@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    ic_mock.cpp
-    ic_mock.h
+    ic_mock.cpp  # gn: into ydb/library/actors/interconnect
+    ic_mock.h  # gn: into ydb/library/actors/interconnect
 )
 
 SUPPRESSIONS(tsan.supp)

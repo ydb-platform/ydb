@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/columnshard/engines/storage
+    ydb/core/tx/columnshard/engines/storage  # gn: plugin
 )
 
 END()

@@ -13,6 +13,8 @@ unittest_executable("ut") {
     "//ydb/core/testlib/actors",  # peerdir only
     "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/tx",
+    "//ydb/library/actors/core",
   ]
 
   sources = [ "//ydb/core/client/server/msgbus_server_pq_metarequest_ut.cpp" ]
@@ -23,6 +25,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

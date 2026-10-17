@@ -5,4 +5,6 @@ protobuf_library("proto") {
     "events.proto",
     "records.proto",
   ]
+
+  protoc_fatal_warnings = true
 }

@@ -104,6 +104,7 @@ SRCS(
     schemeshard__conditional_erase.cpp
     schemeshard__delete_tablet_reply.cpp
     schemeshard__describe_scheme.cpp
+    find_subdomain_path_id_actor.cpp  # gn: find_subdomain_path_id
     schemeshard__find_subdomain_path_id.cpp
     schemeshard__fix_bad_paths.cpp
     schemeshard__init.cpp
@@ -419,6 +420,7 @@ PEERDIR(
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
+# gn: peerdir ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:upload_rows
 
 IF (OS_WINDOWS)
     SRCS(

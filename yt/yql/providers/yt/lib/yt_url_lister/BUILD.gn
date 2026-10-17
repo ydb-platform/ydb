@@ -1,6 +1,7 @@
 library("yt_url_lister") {
   public_deps = [
     # "//yql/essentials/core/url_lister/interface",
+    # "//yt/yql/providers/yt/lib/config_clusters",
   ]
 
   deps = [

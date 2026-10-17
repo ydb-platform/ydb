@@ -1,11 +1,11 @@
 LIBRARY()
 
 SRCS(
-    tx_draft.cpp
-    tx_write_index.cpp
-    tx_gc_indexed.cpp
-    tx_remove_blobs.cpp
-    tx_blobs_written.cpp
+    tx_draft.cpp  # gn: into ydb/core/tx/columnshard
+    tx_write_index.cpp  # gn: into ydb/core/tx/columnshard
+    tx_gc_indexed.cpp  # gn: into ydb/core/tx/columnshard
+    tx_remove_blobs.cpp  # gn: into ydb/core/tx/columnshard
+    tx_blobs_written.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

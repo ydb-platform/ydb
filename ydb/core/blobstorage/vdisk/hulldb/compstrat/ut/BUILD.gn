@@ -6,7 +6,9 @@ unittest_executable("ut") {
     "//ydb/core/blobstorage/vdisk/hulldb",  # peerdir only
     "//ydb/core/blobstorage/vdisk/hulldb/base",
     "//ydb/core/blobstorage/vdisk/hulldb/compstrat",
+    "//ydb/core/blobstorage/vdisk/hulldb/generic",
     "//ydb/core/blobstorage/vdisk/hulldb:test",
+    "//ydb/library/actors/testlib",
   ]
 
   sources = [
@@ -16,10 +18,7 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/core/blobstorage/vdisk/hulldb/compstrat" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
     "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
   ]
 }

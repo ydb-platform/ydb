@@ -1,16 +1,26 @@
+library("ut_resources") {
+  resources = [
+    {
+      path = "word_break_test.json"
+      key = "word_break_test.json"
+    },
+  ]
+}
+
 unittest_executable("ut") {
   deps = [
+    ":ut_resources",
     "//library/cpp/getopt",  # peerdir only
+    "//library/cpp/json",
+    "//library/cpp/resource",
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/blobstorage",
     "//ydb/core/blobstorage/base",
-    "//ydb/core/blobstorage/events",
     "//ydb/core/blobstorage/pdisk",
     "//ydb/core/mind",
     "//ydb/core/mind/bscontroller",
-    "//ydb/core/mind/hive",
     "//ydb/core/protos",
     "//ydb/core/scheme",  # peerdir only
     "//ydb/core/testlib",
@@ -18,12 +28,14 @@ unittest_executable("ut") {
     "//ydb/core/tx",
     "//ydb/core/tx/columnshard",
     "//ydb/core/tx/mediator",
+    "//ydb/library/superlemmer_stub",  # peerdir only
     "//ydb/public/api/protos",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]
 
   sources = [
     "//ydb/core/base/blobstorage_grouptype_ut.cpp",
+    "//ydb/core/base/database_kind_ut.cpp",
     "//ydb/core/base/localdb_ut.cpp",
     "//ydb/core/base/logoblob_ut.cpp",
     "//ydb/core/base/statestorage_guardian_impl_ut.cpp",
@@ -31,6 +43,7 @@ unittest_executable("ut") {
     "fulltext_ut.cpp",
     "kmeans_ut.cpp",
     "memory_stats_ut.cpp",
+    "mon_auth_ut.cpp",
     "path_ut.cpp",
     "state_storage_follower_ids_ut.cpp",
     "table_index_ut.cpp",
@@ -42,6 +55,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -1,5 +1,8 @@
 library("l2_distance") {
-  deps = [ "//library/cpp/sse" ]
+  deps = [
+    # "//contrib/libs/cblas",
+    "//library/cpp/sse",
+  ]
 
   sources = [ "l2_distance.cpp" ]
 }

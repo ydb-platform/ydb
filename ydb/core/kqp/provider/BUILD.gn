@@ -17,47 +17,74 @@ library("provider") {
     ]
 
     deps = [
-        ":gen",
         "//ydb/core/docapi",
+        "//ydb/core/external_sources",
         "//ydb/core/fq/libs/result_formatter",
+        "//ydb/core/kqp/common/result_set_format",  # kqp_query_data.cpp
         "//ydb/core/kqp/common/simple",
+        "//ydb/core/kqp/expr_nodes",
+        "//ydb/core/kqp/opt/cbo",
+        "//ydb/core/local_indexes/bloom",
         "//ydb/core/protos",
         "//ydb/core/scheme",
         "//ydb/core/scheme_types",
+        "//ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc",
         "//ydb/core/ydb_convert",
         "//ydb/library/actors/core",
         "//ydb/library/mkql_proto",
+        "//ydb/library/yql/dq/common",
+        "//ydb/library/yql/dq/constraints",
+        "//ydb/library/yql/dq/expr_nodes",
+        "//ydb/library/yql/dq/opt",
         "//ydb/library/yql/dq/tasks",
+        "//ydb/library/yql/dq/type_ann",
+        "//ydb/library/yql/providers/common/db_id_async_resolver",
+        "//ydb/library/yql/providers/dq/common",
         "//ydb/library/yql/providers/dq/provider",
+        "//ydb/library/yql/providers/pq/common",  # kqp_translate.cpp
         "//ydb/public/api/protos",
         "//ydb/services/metadata/abstract",
+        "//yql/essentials/core",
         "//yql/essentials/core/cbo",
         "//yql/essentials/core/peephole_opt",
+        "//yql/essentials/core/pg_settings",  # kqp_translate.h
+        "//yql/essentials/core/type_ann",
         "//yql/essentials/parser/pg_wrapper/interface",
         "//yql/essentials/providers/common/config",
+        "//yql/essentials/providers/common/config/transformer",
+        "//yql/essentials/providers/common/dq",
         "//yql/essentials/providers/common/schema/expr",
+        "//yql/essentials/providers/common/structured_token",
         "//yql/essentials/providers/common/transform",
         "//yql/essentials/providers/result/expr_nodes",
         "//yql/essentials/public/decimal",
         "//yql/essentials/public/result_format",
         "//yql/essentials/sql",
-        "//yql/essentials/sql/v0",
-        "//yql/essentials/sql/v1",
+        "//yql/essentials/sql/settings",
         "//yql/essentials/sql/v1/lexer/antlr4",
         "//yql/essentials/sql/v1/lexer/antlr4_ansi",
         "//yql/essentials/sql/v1/proto_parser/antlr4",
         "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+        "//yql/essentials/sql/v1/translation",
         "//yql/essentials/types/binary_json",
         "//yql/essentials/types/dynumber",
         "//yql/essentials/types/uuid",
         "//yql/essentials/utils/log",
+        ":gen",
     ]
 
     sources = [
-        "kqp_translate.cpp",
+        # `# gn: into` this module (cycles via their includes of it)
+        "//ydb/core/kqp/gateway/utils/scheme_helpers.cpp",
+        "//ydb/core/kqp/host/kqp_translate.cpp",
+        "//ydb/core/kqp/query_data/kqp_query_data.cpp",
+        "//ydb/core/kqp/query_data/kqp_type_mismatch.cpp",
+
+        "generated_column.cpp",
         "read_attributes_utils.cpp",
         "rewrite_io_utils.cpp",
-        "scheme_helpers.cpp",
+        "sql_path_aliases.cpp",
+        "yql_kikimr_constraints.cpp",
         "yql_kikimr_datasink.cpp",
         "yql_kikimr_datasource.cpp",
         "yql_kikimr_exec.cpp",
@@ -73,6 +100,7 @@ library("provider") {
     ]
 
     serialize_enum_headers = [
+        "yql_kikimr_gateway.h",
         "yql_kikimr_provider.h",
     ]
 }

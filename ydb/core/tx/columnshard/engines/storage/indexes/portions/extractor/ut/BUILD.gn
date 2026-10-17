@@ -1,0 +1,22 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/formats/arrow/accessor/sub_columns/ut_common",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
+    "//yql/essentials/public/udf/service/stub",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [ "ut_sub_column.cpp" ]
+
+  include_dirs =
+      [ "//ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor" ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

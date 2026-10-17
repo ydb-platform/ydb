@@ -1,0 +1,13 @@
+linked_executable("disk_obliterator") {
+  deps = [
+    "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/driver_lib/version",  # peerdir only
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

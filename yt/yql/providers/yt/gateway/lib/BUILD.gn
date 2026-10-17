@@ -25,6 +25,7 @@ library("lib") {
     "//yt/yql/providers/yt/lib/config_clusters",
     # "//yt/yql/providers/yt/lib/dump_helpers",
     # "//yt/yql/providers/yt/lib/lambda_builder",
+    # "//yt/yql/providers/yt/lib/row_spec",
     "//yt/yql/providers/yt/lib/schema",
     # "//yt/yql/providers/yt/lib/skiff",
     "//yt/yql/providers/yt/lib/url_mapper",
@@ -37,7 +38,7 @@ library("lib") {
     # "//library/cpp/string_utils/url",
     # "//yql/essentials/core/expr_nodes",
     # "//yql/essentials/core/issue",
-    # "//yql/essentials/minikql:alloc",
+    # "//yql/essentials/minikql/aligned_page_pool",
     "//yql/essentials/providers/common/proto",
     "//yt/cpp/mapreduce/client",  # peerdir only
     "//yt/yql/providers/yt/lib/hash",
@@ -46,11 +47,13 @@ library("lib") {
   ]
 
   sources = [
+    "client_config.cpp",
     "downloader.cpp",
     "exec_ctx.cpp",
     "map_builder.cpp",
     "qb2.cpp",
     "query_cache.cpp",
+    "reduce_builder.cpp",
     "session.cpp",
     "transaction_cache.cpp",
     "transform.cpp",

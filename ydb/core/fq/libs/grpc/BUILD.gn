@@ -8,4 +8,6 @@ protobuf_library("grpc") {
   sources = [ "fq_private_v1.proto" ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

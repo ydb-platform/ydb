@@ -191,7 +191,7 @@ struct TSqsEvents {
         };
 
         TEvGetConfiguration() = default;
-        TEvGetConfiguration(const TEvGetConfiguration& other) = default;
+        TEvGetConfiguration(const TEvGetConfiguration& other) = delete;
         TEvGetConfiguration(TString requestId, const TString& user, const TString& name, ui64 flags = 0)
             : RequestId(std::move(requestId))
             , UserName(user)
@@ -289,7 +289,7 @@ struct TSqsEvents {
 
         TEvExecute() = default;
 
-        TEvExecute(const TEvExecute& other) = default;
+        TEvExecute(const TEvExecute& other) = delete;
 
         TEvExecute(const TActorId& sender, TString requestId, const TQueuePath& path, const EQueryId idx, const ui64 shard = 0)
             : Sender(sender)
@@ -425,7 +425,7 @@ struct TSqsEvents {
         {
         }
 
-        TEvAtomicCounterIncrementResult(const TEvAtomicCounterIncrementResult& other) = default;
+        TEvAtomicCounterIncrementResult(const TEvAtomicCounterIncrementResult& other) = delete;
     };
 
     struct TEvPurgeQueue : public NActors::TEventLocal<TEvPurgeQueue, EvPurgeQueue> {

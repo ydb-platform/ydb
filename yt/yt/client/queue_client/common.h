@@ -39,7 +39,7 @@ struct TProfilingTags
     std::string ObjectType;
 
     bool operator==(const TProfilingTags& other) const = default;
-    bool operator<(const TProfilingTags& other) const = default;
+    bool operator<(const TProfilingTags& other) const = delete;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

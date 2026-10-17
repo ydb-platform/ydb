@@ -27,23 +27,43 @@ unittest_executable("ut") {
 
   deps = [
     ":ut_resources",
+    "//contrib/libs/protobuf",
     "//library/cpp/string_utils/base64",
     "//library/cpp/threading/future",
     "//ydb/core/persqueue/events",
     "//ydb/core/persqueue/ut/common",
     "//ydb/core/persqueue/ut/common:pq_ut_common",
     "//ydb/core/persqueue/writer",
+    "//ydb/library/persqueue",
+    "//ydb/public/api/protos",
+    "//ydb/public/sdk/cpp/src/client/driver",
     "//ydb/public/sdk/cpp/src/client/persqueue_public",
     "//ydb/public/sdk/cpp/src/client/persqueue_public/impl",
     "//ydb/public/sdk/cpp/src/client/topic/common",
     "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+    "//ydb/public/sdk/cpp/src/library/kafka",
   ]
 
   sources = [
     "basic_usage_ut.cpp",
+    "content_based_deduplication_ut.cpp",
+    "deferred_publication_ack_state_ut.cpp",
     "describe_topic_ut.cpp",
     "local_partition_ut.cpp",
+    "producer_deferred_publication_ut.cpp",
+    "read_session_accounting_ut.cpp",
+    "read_session_credentials_ut.cpp",
+    "read_session_kafka_timestamps_ut.cpp",
+    "reset_offset_ut.cpp",
+    "topic_deferred_publish_ut.cpp",
     "topic_to_table_ut.cpp",
+    "topic_tx_skip_conflict_ut.cpp",
+    "write_session_connect_ut.cpp",
+    "write_session_flush_ut.cpp",
+    "write_session_size_ut.cpp",
   ]
 
   include_dirs = [ "//ydb/public/sdk/cpp/src/client/topic" ]
@@ -52,6 +72,7 @@ unittest_executable("ut") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

@@ -5,6 +5,8 @@ protobuf_library("nbs") {
 
   generate_grpc_services = true
 
+  protoc_fatal_warnings = true
+
   extra_plugins = [
     {
       name = "config_proto_plugin"

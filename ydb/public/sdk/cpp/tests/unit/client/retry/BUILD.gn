@@ -1,0 +1,18 @@
+unittest_executable("retry") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/impl/internal/retry",
+    "//ydb/public/sdk/cpp/src/client/impl/observability",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/types/status",  # peerdir only
+    "//ydb/public/sdk/cpp/src/library/time",  # peerdir only
+  ]
+
+  sources = [
+    "retry_async_ut.cpp",
+    "retry_ut.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

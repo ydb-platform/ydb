@@ -1,5 +1,6 @@
 library("bs") {
   public_deps = [
+    "//ydb/core/base",
     "//ydb/core/protos",
     "//ydb/core/tablet_flat",
     # "//ydb/core/tx/columnshard",
@@ -13,13 +14,12 @@ library("bs") {
 
   deps = [
     # "//contrib/libs/apache/arrow",  # peerdir only
-    "//ydb/core/base",
     "//ydb/core/tx/columnshard/blobs_action/counters",
-    # "//ydb/core/tx/columnshard/blobs_action/events",
     # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
     "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/core/tx/tiering",  # peerdir only
     "//ydb/library/actors/core",
+    # "//ydb/library/actors/struct_log",
   ]
 
   sources = [

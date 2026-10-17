@@ -1,0 +1,39 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/basics",
+    "//ydb/core/tx/columnshard",  # peerdir only
+    "//ydb/core/tx/columnshard/common",
+    "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/tiling/tiling_pp",
+    "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/library/actors/core",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "ut_lcbuckets_skip_level.cpp",
+    "ut_tiling.cpp",
+  ]
+
+  include_dirs = [
+    "//ydb/core/tx/columnshard/engines/storage/optimizer",  # peerdir only
+  ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

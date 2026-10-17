@@ -1,0 +1,21 @@
+library("yaml") {
+  public_deps = [
+    # "//library/cpp/yt/memory",
+    # "//yt/yt/core",
+  ]
+
+  deps = [
+    # "//contrib/libs/re2",
+    # "//contrib/libs/yaml",
+    # "//library/cpp/yt/misc",
+    # "//library/cpp/yt/string",
+    # "//library/cpp/yt/yson_string",
+  ]
+
+  sources = [
+    "config.cpp",
+    "helpers.cpp",
+    "parser.cpp",
+    "writer.cpp",
+  ]
+}

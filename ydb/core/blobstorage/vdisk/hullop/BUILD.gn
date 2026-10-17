@@ -16,17 +16,26 @@ library("hullcompdelete") {
 
 library("hullop") {
   public_deps = [
+    # "//library/cpp/random_provider",
+    # "//ydb/core/base",
     # "//ydb/core/blobstorage/base",
+    # "//ydb/core/blobstorage/groupinfo",
     # "//ydb/core/blobstorage/pdisk",
+    # "//ydb/core/blobstorage/vdisk/balance",
     "//ydb/core/blobstorage/vdisk/common",
+    # "//ydb/core/blobstorage/vdisk/huge",
     # "//ydb/core/blobstorage/vdisk/hulldb",
     # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     # "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",
     "//ydb/core/blobstorage/vdisk/hulldb/cache_block",
+    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
+    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
     "//ydb/core/blobstorage/vdisk/hulldb/recovery",
     # "//ydb/core/blobstorage/vdisk/ingress",
+    # "//ydb/core/blobstorage/vdisk/scrub",
     "//ydb/core/blobstorage/vdisk/synclog",
     # "//ydb/core/blobstorage/vdisk:defs",
+    # "//ydb/core/control/lib",
     "//ydb/core/protos",
     "//ydb/library/actors/wilson",
     # "//ydb/library/wilson_ids",
@@ -34,20 +43,17 @@ library("hullop") {
 
   deps = [
     ":hullcompdelete",
-    # "//library/cpp/random_provider",
-    # "//ydb/core/blobstorage/vdisk/balance",
-    # "//ydb/core/blobstorage/vdisk/huge",
+    # "//library/cpp/monlib/dynamic_counters",
+    # "//ydb/core/blobstorage/backpressure",
     # "//ydb/core/blobstorage/vdisk/hulldb/barriers",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/hulldb/base",
     "//ydb/core/blobstorage/vdisk/hulldb/compstrat",
-    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",
-    # "//ydb/core/blobstorage/vdisk/hulldb/generic",
-    # "//ydb/core/blobstorage/vdisk/scrub",
   ]
 
   sources = [
     "blobstorage_hull.cpp",
     "blobstorage_hullactor.cpp",
+    "blobstorage_hullcompactbroker.cpp",
     "blobstorage_hulllog.cpp",
     "blobstorage_hulllogcutternotify.cpp",
     "hullop_compactfreshappendix.cpp",

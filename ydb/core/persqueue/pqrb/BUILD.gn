@@ -1,36 +1,41 @@
 library("pqrb") {
   public_deps = [
+    # "//library/cpp/containers/absl",
+    # "//library/cpp/monlib/dynamic_counters",
     "//ydb/core/base",
+    # "//ydb/core/engine/minikql",
+    "//ydb/core/persqueue/common",
+    # "//ydb/core/persqueue/common/proxy",
     # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/events/internal/protos",
+    "//ydb/core/persqueue/public",
     "//ydb/core/persqueue/public:utils",
     "//ydb/core/protos",
     "//ydb/core/tablet",
+    # "//ydb/core/tablet_flat",
+    # "//ydb/core/tx/scheme_cache",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_proxy:public",
     # "//ydb/core/util",
     # "//ydb/library/actors/core",
+    "//ydb/library/persqueue/topic_parser",
+    # "//ydb/public/lib/base",
+    # "//ydb/public/sdk/cpp/src/client/persqueue_public",
     "//ydb/public/sdk/cpp/src/client/topic",
   ]
 
   deps = [
     "//contrib/libs/fmt",
     # "//contrib/libs/protobuf",
-    # "//library/cpp/monlib/dynamic_counters",
+    # "//contrib/restricted/abseil-cpp",
+    # "//library/cpp/cgiparam",
+    # "//library/cpp/html/pcdata",
     # "//library/cpp/monlib/service/pages",
     # "//library/cpp/random_provider",
     # "//library/cpp/string_utils/base64",
-    # "//ydb/core/engine/minikql",
-    "//ydb/core/persqueue/common",
-    # "//ydb/core/persqueue/common/proxy",
-    "//ydb/core/persqueue/public",
     # "//ydb/core/persqueue/public/partition_key_range",
     "//ydb/core/protos/schemeshard",
-    # "//ydb/core/tablet_flat",
-    # "//ydb/core/tx/scheme_cache",
-    "//ydb/library/persqueue/topic_parser",
     # "//ydb/library/yverify_stream",
-    # "//ydb/public/lib/base",
-    # "//ydb/public/sdk/cpp/src/client/persqueue_public",
   ]
 
   sources = [
@@ -43,7 +48,9 @@ library("pqrb") {
     "read_balancer__balancing_app.cpp",
     "read_balancer__metrics.cpp",
     "read_balancer__mlp_balancing.cpp",
+    "read_balancer__sqs_metrics.cpp",
     "read_balancer_app.cpp",
+    "read_balancer_partition_location.cpp",
   ]
 
   serialize_enum_headers = [ "read_balancer__balancing.h" ]

@@ -5,6 +5,10 @@ library("tx_reader") {
     # "//ydb/library/actors/core",
   ]
 
+  deps = [
+    # "//ydb/library/actors/struct_log",
+  ]
+
   sources = [
     "abstract.cpp",
     "composite.cpp",

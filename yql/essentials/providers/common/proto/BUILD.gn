@@ -1,11 +1,14 @@
 protobuf_library("proto") {
   public_deps = [
+    "//yql/essentials/minikql/runtime_settings/proto",
     "//yql/essentials/protos",
+    "//yql/essentials/providers/common/proto/activation",
     "//yql/essentials/utils/fetch/proto",
   ]
 
   sources = [
     "gateways_config.proto",
+    "static_gateways_config.proto",
     "udf_resolver.proto",
   ]
 }

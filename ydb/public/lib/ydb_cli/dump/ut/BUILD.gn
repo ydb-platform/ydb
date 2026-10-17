@@ -1,0 +1,13 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/public/lib/ydb_cli/dump",
+    "//ydb/public/sdk/cpp/src/client/table",
+  ]
+
+  sources = [ "restore_compat_ut.cpp" ]
+
+  include_dirs = [ "//ydb/public/lib/ydb_cli/dump" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

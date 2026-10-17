@@ -1,0 +1,41 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/grpc",
+    "//library/cpp/monlib/dynamic_counters",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/nbs_frontend",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/session",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/storage/core/protos",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos",
+    "//ydb/core/protos",
+    "//ydb/library/actors/core",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/grpc/server",
+    "//ydb/services/nbs",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "//ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_test.cpp",
+    "//ydb/services/nbs/classic_grpc_service_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/services/nbs" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

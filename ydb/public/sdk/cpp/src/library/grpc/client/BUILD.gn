@@ -4,7 +4,14 @@ library("client") {
     "//ydb/public/sdk/cpp/src/library/time",
   ]
 
-  deps = [ "//library/cpp/containers/stack_vector" ]
+  deps = [
+    "//contrib/libs/openssl",
+    "//library/cpp/containers/stack_vector",
+    # "//library/cpp/openssl/holders",
+  ]
 
-  sources = [ "grpc_client_low.cpp" ]
+  sources = [
+    "grpc_client_low.cpp",
+    "grpc_common.cpp",
+  ]
 }

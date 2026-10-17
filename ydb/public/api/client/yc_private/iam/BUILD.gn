@@ -10,13 +10,17 @@ protobuf_library("iam") {
     "iam_token_service.proto",
     "iam_token_service_subject.proto",
     "oauth_request.proto",
-    "reference.proto",
+    "operation_service.proto",
+    "resource.proto",
     "service_account.proto",
     "service_account_service.proto",
+    "service_control_service.proto",
     "user_account.proto",
     "user_account_service.proto",
     "yandex_passport_cookie.proto",
   ]
 
   generate_grpc_services = true
+
+  protoc_fatal_warnings = true
 }

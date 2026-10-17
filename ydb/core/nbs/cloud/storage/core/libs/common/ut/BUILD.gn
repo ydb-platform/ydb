@@ -7,10 +7,13 @@ unittest_executable("ut") {
   ]
 
   sources = [
+    "//ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/block_buffer_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/block_data_ref_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/context_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/ring_buffer_ut.cpp",
+    "//ydb/core/nbs/cloud/storage/core/libs/common/scheduler_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/sglist_iter_ut.cpp",
     "//ydb/core/nbs/cloud/storage/core/libs/common/sglist_ut.cpp",
   ]

@@ -1,0 +1,6 @@
+library("xxHash") {
+  sources = [
+    "xxh_x86dispatch.c",
+    "xxhash.c",
+  ]
+}

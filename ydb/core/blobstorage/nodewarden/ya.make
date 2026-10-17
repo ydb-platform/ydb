@@ -68,11 +68,13 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/localrecovery
     ydb/core/blobstorage/vdisk
     ydb/core/control/lib
+    ydb/core/tx/scheme_board
     ydb/library/actors/retro_tracing
     ydb/library/pdisk_io
     ydb/library/protobuf_printer
     ydb/library/yaml_config
 )
+# gn: peerdir ydb/core/mind/bscontroller:group_mapper ydb/core/mind:nameserver_table_builder ydb/library/keys
 
 END()
 

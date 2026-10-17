@@ -4,24 +4,23 @@ config("common_private_config") {
 
 library("common") {
   public_deps = [
+    # "//contrib/libs/ftxui",
     # "//contrib/libs/yaml-cpp",
+    "//library/cpp/http/simple",
     # "//library/cpp/json",
-    "//ydb/library/yql/providers/common/http_gateway",
     # "//ydb/public/lib/ydb_cli/commands/interactive/highlight/color",
     "//ydb/public/lib/ydb_cli/common",
-    # "//ydb/public/sdk/cpp/src/client/driver",
   ]
 
   deps = [
-    # "//contrib/libs/ftxui",
     "//contrib/restricted/patched/replxx",
     "//library/cpp/string_utils/url",
     "//library/cpp/yaml/as",
     # "//ydb/library/yverify_stream",
     "//ydb/public/lib/ydb_cli/commands/interactive/complete",
     "//ydb/public/lib/ydb_cli/commands/interactive/highlight",
-    # "//yql/essentials/sql/v1/complete",
-    # "//yql/essentials/sql/v1/complete/text",
+    "//yql/essentials/sql/v1/ide/completion",
+    # "//yql/essentials/sql/v1/ide/completion/text",
   ]
 
   sources = [
@@ -33,7 +32,10 @@ library("common") {
     "line_reader.cpp",
   ]
 
-  serialize_enum_headers = [ "interactive_config.h" ]
+  serialize_enum_headers = [
+    "interactive_config.h",
+    "json_utils.h",
+  ]
 
   configs = [ ":common_private_config" ]
 }

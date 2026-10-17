@@ -1,0 +1,13 @@
+gtest_executable("message_stream") {
+  deps = [
+    "//library/cpp/testing/gtest",
+    "//ydb/library/yql/providers/yt/gateway/clients/message_stream",
+    "//yt/yt/client",
+    "//yt/yt/client/unittests/mock",
+    "//yt/yt/core",
+  ]
+
+  sources = [ "message_stream_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

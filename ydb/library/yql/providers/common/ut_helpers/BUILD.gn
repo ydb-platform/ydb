@@ -4,7 +4,7 @@ library("ut_helpers") {
   public_deps = [
     "//library/cpp/retry",
     # "//library/cpp/testing/unittest",
-    "//ydb/core/testlib/basics",
+    # "//ydb/library/actors/testlib",
     # "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     # "//yql/essentials/minikql",
@@ -13,10 +13,9 @@ library("ut_helpers") {
   ]
 
   deps = [
+    # "//ydb/library/actors/interconnect",
+    "//ydb/library/services",
     "//yql/essentials/minikql/invoke_builtins",
-    # "//yql/essentials/providers/common/comp_nodes",  # peerdir only
-    # "//yql/essentials/public/udf/service/exception_policy",  # link slot
-    # "//yql/essentials/sql",  # peerdir only
   ]
 
   sources = [ "dq_fake_ca.cpp" ]

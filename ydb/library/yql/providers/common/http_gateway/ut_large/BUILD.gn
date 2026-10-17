@@ -1,0 +1,30 @@
+unittest_executable("ut_large") {
+  deps = [
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/hook",
+    "//library/cpp/testing/unittest",
+    "//library/cpp/threading/future",
+    "//ydb/library/aws_init",
+    "//ydb/library/yql/providers/common/http_gateway",
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/utils",
+  ]
+
+  sources = [ "yql_http_gateway_ut.cpp" ]
+
+  include_dirs = [ "//ydb/library/yql/providers/common/http_gateway" ]
+
+  test_depends_unbuilt = [
+    "//library/recipes/docker_compose",
+    "//library/recipes/docker_compose/bin",
+    "//library/recipes/docker_compose/bin",
+  ]
+
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

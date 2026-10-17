@@ -11,7 +11,11 @@ library("common") {
 
   deps = [
     # "//library/cpp/testing/unittest",
+    # "//ydb/core/fq/libs/credentials",
     "//ydb/core/kqp/rm_service",
+    # "//ydb/library/yql/providers/common/token_accessor/client",
+    # "//ydb/library/yql/providers/pq/gateway/dummy",
+    # "//ydb/library/yql/providers/pq/transform",
     # "//ydb/public/sdk/cpp/src/client/types/credentials",
     # "//yql/essentials/utils/log",
   ]

@@ -1,12 +1,16 @@
 library("lib") {
   public_deps = [
     "//library/cpp/threading/future",
-    "//ydb/core/nbs/cloud/blockstore/libs/common",
+    # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
     "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
     "//ydb/core/nbs/cloud/blockstore/libs/service",
     "//ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos",
     "//ydb/core/nbs/cloud/storage/core/libs/common",
     "//ydb/core/nbs/cloud/storage/core/libs/diagnostics",
+  ]
+
+  deps = [
+    "//ydb/core/nbs/cloud/blockstore/libs/common",  # peerdir only
   ]
 
   sources = [

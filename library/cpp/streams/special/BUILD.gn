@@ -1,0 +1,8 @@
+library("special") {
+  sources = [
+    "buffered_throttled_file.cpp",
+    "position.cpp",
+    "throttle.cpp",
+    "throttled.cpp",
+  ]
+}

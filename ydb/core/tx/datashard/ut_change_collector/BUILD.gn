@@ -10,6 +10,7 @@ unittest_executable("ut_change_collector") {
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/datashard/ut_common",
+    "//ydb/library/aclib",
     "//ydb/public/lib/deprecated/kicli",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/result",  # peerdir only
@@ -25,6 +26,7 @@ unittest_executable("ut_change_collector") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

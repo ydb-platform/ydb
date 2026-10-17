@@ -1,6 +1,7 @@
 library("comparator") {
   public_deps = [
     # "//library/cpp/yson",
+    # "//library/cpp/yson/node",
     # "//yt/yql/providers/yt/fmr/utils",
   ]
 
@@ -13,4 +14,6 @@ library("comparator") {
     "yql_yt_binary_yson_comparator.cpp",
     "yql_yt_binary_yson_compare_impl.cpp",
   ]
+
+  serialize_enum_headers = [ "yql_yt_binary_yson_compare_impl.h" ]
 }

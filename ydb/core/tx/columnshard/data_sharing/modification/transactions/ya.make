@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    tx_change_blobs_owning.cpp
+    tx_change_blobs_owning.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

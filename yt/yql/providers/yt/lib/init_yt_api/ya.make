@@ -7,7 +7,7 @@ SRCS(
 PEERDIR(
     yql/essentials/utils/log
     yt/cpp/mapreduce/common
-    yt/cpp/mapreduce/client
+    yt/cpp/mapreduce/client  # gn: public dep
     library/cpp/yson/node
 )
 

@@ -1,0 +1,15 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base/services",
+    "//ydb/core/blobstorage/subsystem/mock",
+    "//ydb/library/actors/core",
+  ]
+
+  sources = [ "subsystem_ut.cpp" ]
+
+  link_select = [
+    "allocator=tcmalloc",
+    "yql_pg_runtime=pg_dummy",
+  ]
+}

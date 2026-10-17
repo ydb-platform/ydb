@@ -1,0 +1,8 @@
+linked_executable("memory_benchmark") {
+  sources = [
+    "main.cpp",
+    "options.cpp",
+  ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

@@ -5,7 +5,9 @@ group("indexes") {
     "//ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm",  # peerdir only
     "//ydb/core/tx/columnshard/engines/storage/indexes/categories_bloom",  # peerdir only
     "//ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch",  # peerdir only
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/helper",  # peerdir only
     "//ydb/core/tx/columnshard/engines/storage/indexes/max",  # peerdir only
+    "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",  # peerdir only
   ]

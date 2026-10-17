@@ -478,7 +478,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                     NKqp::TSnapshotHandle snapshotHandle(snapshotInfo.AliveFlag);
                     LocalSnapshotsStorage->Insert(std::move(snapshotInfo));
 
-                    return std::move(snapshotHandle);
+                    return snapshotHandle;
                 } else {
                     return NKqp::TSnapshotHandle{};
                 }

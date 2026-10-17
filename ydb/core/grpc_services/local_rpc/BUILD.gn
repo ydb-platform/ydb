@@ -1,9 +1,9 @@
-group("local_rpc") {
+library("local_rpc") {
   public_deps = [
     "//library/cpp/threading/future",
     "//ydb/core/base",
-    # "//ydb/core/grpc_services",
     "//ydb/core/grpc_services/base",
+    # "//ydb/core/grpc_services/local_grpc",
     # "//ydb/core/grpc_streaming",
     "//ydb/library/actors/wilson",
     "//ydb/library/wilson_ids",
@@ -12,4 +12,6 @@ group("local_rpc") {
     # "//ydb/public/sdk/cpp/src/client/types/status",
     # "//ydb/public/sdk/cpp/src/library/issue",
   ]
+
+  sources = [ "local_rpc.cpp" ]
 }

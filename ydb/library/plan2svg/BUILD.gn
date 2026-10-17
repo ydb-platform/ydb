@@ -1,8 +1,30 @@
 library("plan2svg") {
-  public_deps = [
-    "//library/cpp/json",
-    # "//library/cpp/json/yson",
+  public_deps = [ "//library/cpp/json" ]
+
+  deps = [
+    # "//library/cpp/resource",
   ]
 
-  sources = [ "plan2svg.cpp" ]
+  sources = [
+    "config.cpp",
+    "format.cpp",
+    "layout.cpp",
+    "loader.cpp",
+    "metrics.cpp",
+    "parse.cpp",
+    "plan2svg.cpp",
+    "render.cpp",
+    "svg.cpp",
+  ]
+
+  resources = [
+    {
+      path = "assets/icons.svg"
+      key = "plan2svg/icons.svg"
+    },
+    {
+      path = "assets/plan2svg.js"
+      key = "plan2svg/plan2svg.js"
+    },
+  ]
 }

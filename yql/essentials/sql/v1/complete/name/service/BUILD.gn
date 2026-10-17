@@ -1,8 +1,0 @@
-library("service") {
-  public_deps = [
-    "//library/cpp/threading/future",
-    "//yql/essentials/sql/v1/complete/core",
-  ]
-
-  sources = [ "name_service.cpp" ]
-}

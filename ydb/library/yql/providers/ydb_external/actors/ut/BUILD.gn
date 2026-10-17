@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/libs/grpc",
+    "//library/cpp/testing/common",
+    "//library/cpp/testing/unittest",
+    "//ydb/library/yql/dq/proto",
+    "//ydb/library/yql/providers/common/ut_helpers",
+    "//ydb/library/yql/providers/ydb_external/actors",
+    "//ydb/public/api/grpc",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+    "//yql/essentials/sql/pg_dummy",  # peerdir only
+  ]
+
+  sources = [
+    "read_stream_grpc_ut.cpp",
+    "read_stream_ut.cpp",
+  ]
+
+  include_dirs = [ "//ydb/library/yql/providers/ydb_external/actors" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+  ]
+}

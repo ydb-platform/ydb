@@ -86,7 +86,7 @@ private:
     friend class TWrittenPortionInfo;
 
     TPortionInfo(const TPortionInfo&) = default;
-    TPortionInfo& operator=(const TPortionInfo&) = default;
+    TPortionInfo& operator=(const TPortionInfo&) = delete;
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId

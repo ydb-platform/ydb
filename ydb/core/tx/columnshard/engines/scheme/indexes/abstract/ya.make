@@ -4,7 +4,8 @@ SRCS(
     constructor.cpp
     collection.cpp
     header.cpp
-    fetcher.cpp
+    fetcher.cpp  # gn: into ydb/core/tx/columnshard/engines/reader/common_reader/iterator
+    fetcher.h  # gn: into ydb/core/tx/columnshard/engines/reader/common_reader/iterator
     abstract.cpp
     meta.cpp
     checker.cpp

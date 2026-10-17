@@ -3,12 +3,16 @@ unittest_executable("ut_blob_depot") {
     "//ydb/core/base",
     "//ydb/core/blob_depot",
     "//ydb/core/blobstorage/ut_blobstorage/lib",
+    "//ydb/core/control/lib",
     "//ydb/core/protos",
+    "//ydb/core/testlib",
+    "//ydb/library/actors/core",
   ]
 
   sources = [
     "//ydb/core/blobstorage/ut_blobstorage/blob_depot.cpp",
     "//ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp",
+    "//ydb/core/blobstorage/ut_blobstorage/blob_depot_move_data.cpp",
     "//ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp",
   ]
 
@@ -18,6 +22,7 @@ unittest_executable("ut_blob_depot") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

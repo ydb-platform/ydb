@@ -1,3 +1,5 @@
 protobuf_library("protos") {
   sources = [ "data.proto" ]
+
+  protoc_fatal_warnings = true
 }

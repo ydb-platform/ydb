@@ -299,7 +299,7 @@ namespace {
                 nodeInfoProto->SetUpdateTime(nodeWithCollectionTime.CollectionTime);
             }
 
-            return std::move(event);
+            return event;
         }
 
         void ReceiveFromChild(TEvLongTxService::TEvCollectSnapshotsResult* ev) override {
@@ -373,7 +373,7 @@ namespace {
         std::unique_ptr<TEvLongTxService::TEvPropagateSnapshots> GetChildEvent() override {
             auto event = std::make_unique<TEvLongTxService::TEvPropagateSnapshots>();
             *event->Record.MutableSnapshots() = Snapshots_;
-            return std::move(event);
+            return event;
         }
 
         std::unique_ptr<TEvLongTxService::TEvPropagateSnapshotsResult> GetParentEvent() override {

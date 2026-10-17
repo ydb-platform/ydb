@@ -1,0 +1,37 @@
+unittest_executable("ut") {
+  deps = [
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/fq/libs/checkpointing/events",
+    "//ydb/core/fq/libs/state",
+    "//ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration",
+    "//ydb/library/actors/testlib",
+    "//ydb/library/services",
+    "//ydb/library/testlib/pq_helpers",
+    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/providers/dq/api/protos",
+    "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/proto",
+    "//ydb/library/yql/providers/pq/task_meta",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/comp_nodes",
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
+  ]
+
+  sources = [ "dq_state_load_plan_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/fq/libs/state" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

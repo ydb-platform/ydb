@@ -1,3 +1,5 @@
 protobuf_library("receipt") {
   sources = [ "receipt.proto" ]
+
+  protoc_fatal_warnings = true
 }

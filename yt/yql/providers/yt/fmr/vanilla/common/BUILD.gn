@@ -1,0 +1,7 @@
+library("common") {
+  public_deps = [
+    # "//yt/cpp/mapreduce/interface",
+  ]
+
+  sources = [ "yql_yt_vanilla_common.cpp" ]
+}

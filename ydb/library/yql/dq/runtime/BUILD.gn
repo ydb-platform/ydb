@@ -3,18 +3,18 @@ library("runtime") {
     # "//contrib/libs/apache/arrow",
     "//library/cpp/monlib/dynamic_counters",
     "//library/cpp/monlib/metrics",
-    # "//ydb/core/base",
-    "//ydb/core/mon",
     "//ydb/library/actors/core",
     # "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     # "//ydb/library/yql/dq/actors/spilling",
     "//ydb/library/yql/dq/common",
     "//ydb/library/yql/dq/proto",
+    "//ydb/library/yql/dq/runtime/streaming",
     # "//yql/essentials/ast",
     # "//yql/essentials/minikql",
     "//yql/essentials/minikql/comp_nodes",
     "//yql/essentials/minikql/computation",
+    # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/minikql:alloc",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/utils",
@@ -22,14 +22,13 @@ library("runtime") {
 
   deps = [
     # "//ydb/library/actors/util",  # peerdir only
-    # "//ydb/library/formats/arrow",  # peerdir only
     "//ydb/library/formats/arrow/hash",
     # "//ydb/library/mkql_proto",
-    "//ydb/library/services",
     "//ydb/library/yql/dq/actors",
+    # "//ydb/library/yql/dq/actors/compute/events",  # peerdir only
+    "//ydb/library/yql/dq/comp_nodes",
     # "//ydb/library/yql/dq/expr_nodes",
     "//ydb/library/yql/dq/type_ann",
-    "//ydb/library/yql/public/ydb_issue",  # peerdir only
     # "//ydb/library/yverify_stream",
     # "//ydb/public/lib/scheme_types",
     # "//yql/essentials/core",
@@ -43,7 +42,6 @@ library("runtime") {
   ]
 
   sources = [
-    "//ydb/library/yql/dq/actors/compute/dq_compute_actor_watermarks.cpp",
     "dq_arrow_helpers.cpp",
     "dq_async_input.cpp",
     "dq_async_output.cpp",
@@ -53,6 +51,7 @@ library("runtime") {
     "dq_compute.cpp",
     "dq_input_channel.cpp",
     "dq_input_producer.cpp",
+    "dq_input_ready.cpp",
     "dq_output_channel.cpp",
     "dq_output_consumer.cpp",
     "dq_tasks_counters.cpp",

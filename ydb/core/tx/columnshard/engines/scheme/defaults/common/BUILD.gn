@@ -10,6 +10,7 @@ library("common") {
   deps = [
     "//ydb/core/formats/arrow",
     "//ydb/library/actors/core",
+    # "//ydb/library/formats/arrow",  # peerdir only
     "//ydb/library/formats/arrow/switch",
   ]
 

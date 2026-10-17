@@ -2,19 +2,24 @@ library("compile_cache") {
   public_deps = [
     "//ydb/core/kqp/runtime",
     "//ydb/core/protos",
+    # "//ydb/library/aclib",
     # "//ydb/library/actors/core",
   ]
 
   deps = [
+    # "//library/cpp/json",
     "//library/cpp/protobuf/interop",
-    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/base",
     # "//ydb/core/kqp/common/events",
     # "//ydb/core/kqp/common/simple",
     # "//ydb/core/node_whiteboard",
     # "//ydb/core/sys_view/auth",
     "//ydb/core/sys_view/common",
     # "//ydb/library/actors/interconnect",
+    # "//ydb/library/ydb_issue",
     # "//ydb/library/yql/dq/actors/compute",
+    # "//ydb/library/yql/public/ydb_issue",
+    # "//yql/essentials/public/issue",
   ]
 
   sources = [ "compile_cache/compile_cache.cpp" ]
@@ -37,24 +42,6 @@ library("nodes") {
   ]
 
   sources = [ "nodes/nodes.cpp" ]
-}
-
-library("pg_tables") {
-  public_deps = [
-    "//ydb/core/kqp/runtime",
-    "//ydb/core/sys_view/common",
-    # "//ydb/library/actors/core",
-  ]
-
-  deps = [
-    # "//ydb/core/base",  # peerdir only
-    # "//ydb/core/tablet",
-    # "//ydb/core/tx/scheme_cache",
-    # "//ydb/core/tx/schemeshard",
-    # "//ydb/library/yql/dq/actors/compute",
-  ]
-
-  sources = [ "pg_tables/pg_tables.cpp" ]
 }
 
 library("query_stats") {
@@ -87,15 +74,14 @@ library("resource_pool_classifiers") {
 
   deps = [
     # "//ydb/core/base",  # peerdir only
-    "//ydb/core/kqp/gateway/behaviour/resource_pool_classifier",
-    # "//ydb/core/kqp/workload_service/actors",
-    "//ydb/core/kqp/workload_service/actors:scheme_actors",  # peerdir only
     # "//ydb/core/node_whiteboard",
     "//ydb/core/sys_view/common",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/yql/dq/actors/compute",
     # "//ydb/services/metadata",
-    # "//ydb/services/metadata/abstract",
+    # "//ydb/services/workload_manager/actors",
+    "//ydb/services/workload_manager/actors:scheme_actors",  # peerdir only
+    # "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
     # "//yql/essentials/types/binary_json",
   ]
 
@@ -155,12 +141,12 @@ library("streaming_queries") {
   deps = [
     "//contrib/libs/fmt",
     "//library/cpp/protobuf/json",
-    "//ydb/core/kqp/common",
     # "//ydb/core/kqp/common/events",
     "//ydb/core/kqp/gateway/behaviour/streaming_query/common",
-    "//ydb/core/kqp/workload_service/actors",
+    # "//ydb/core/kqp/script_executions/common",
     "//ydb/core/sys_view/common",
     "//ydb/library/query_actor",
+    # "//ydb/services/workload_manager/actors",
   ]
 
   sources = [ "streaming_queries/streaming_queries.cpp" ]
@@ -176,7 +162,6 @@ library("sys_view") {
   deps = [
     ":compile_cache",
     ":nodes",
-    ":pg_tables",
     ":query_stats",
     ":resource_pool_classifiers",
     ":resource_pools",
@@ -191,6 +176,7 @@ library("sys_view") {
     # "//ydb/core/sys_view/service",  # peerdir only
     "//ydb/core/sys_view/show_create",
     "//ydb/core/sys_view/storage",
+    # "//ydb/core/sys_view/udf_modules",
     # "//ydb/core/tx/schemeshard",  # peerdir only
     # "//ydb/core/tx/tx_proxy",  # peerdir only
     # "//ydb/core/wrappers",  # peerdir only

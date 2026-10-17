@@ -11,9 +11,11 @@ library("purecalc_no_pg_wrapper") {
     # "//yql/essentials/core/services",  # peerdir only
     "//yql/essentials/core/services/mounts",  # peerdir only
     # "//yql/essentials/core/services:pipeline",
+    # "//yql/essentials/core/sql_types",
     # "//yql/essentials/core/type_ann",
     # "//yql/essentials/core/user_data",  # peerdir only
     # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/aligned_page_pool",
     # "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/minikql/computation",
     # "//yql/essentials/minikql:alloc",
@@ -30,17 +32,18 @@ library("purecalc_no_pg_wrapper") {
     # "//yql/essentials/public/langver",  # peerdir only
     # "//yql/essentials/public/purecalc/common",
     # "//yql/essentials/sql",
-    # "//yql/essentials/sql/v1",
     # "//yql/essentials/sql/v1/lexer/antlr4",
     # "//yql/essentials/sql/v1/lexer/antlr4_ansi",
     # "//yql/essentials/sql/v1/proto_parser/antlr4",
     # "//yql/essentials/sql/v1/proto_parser/antlr4_ansi",
+    # "//yql/essentials/sql/v1/translation",
     # "//yql/essentials/utils/backtrace",  # peerdir only
     # "//yql/essentials/utils/log",
   ]
 
   sources = [
     "//yql/essentials/public/purecalc/common/compile_mkql.cpp",
+    "//yql/essentials/public/purecalc/common/default_runtime_settings.cpp",
     "//yql/essentials/public/purecalc/common/fwd.cpp",
     "//yql/essentials/public/purecalc/common/inspect_input.cpp",
     "//yql/essentials/public/purecalc/common/interface.cpp",

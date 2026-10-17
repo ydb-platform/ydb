@@ -1898,7 +1898,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     std::move(BlobEncoder.DataKeysBody.begin(), BlobEncoder.DataKeysBody.end(),
               std::back_inserter(response->BodyKeys));
     if (!ev->GetSkipSrcIdInfo()) {
-        response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
+        response->SrcIdInfo = SourceIdStorage.ExtractInMemorySourceIds();
         response->SrcIdInfo.erase("");
     }
 
@@ -1907,7 +1907,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     response->BytesWrittenTotal = BytesWrittenTotal.Value();
     response->MessagesWrittenTotal = MsgsWrittenTotal.Value();
     response->MessagesWrittenGrpc = MsgsWrittenGrpc.Value();
-    response->MessagesSizes = std::move(MessageSize.GetValues());
+    response->MessagesSizes = MessageSize.GetValues();
     response->InputLags = std::move(SupportivePartitionTimeLag);
 
     auto amSnapshot = AutopartitioningManager->GetSnapshot();

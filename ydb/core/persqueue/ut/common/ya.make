@@ -5,7 +5,7 @@ ADDINCL(
 )
 
 SRCS(
-    pq_ut_common.cpp
+    pq_ut_common.cpp  # gn: pq_ut_common
     pq_ut_common.h
 
     autoscaling_ut_common.cpp
@@ -14,6 +14,7 @@ SRCS(
     sdk_ut_common.cpp
     sdk_ut_common.h
 )
+# gn: pq_ut_common headers pq_ut_common.h
 
 PEERDIR(
     ydb/core/persqueue

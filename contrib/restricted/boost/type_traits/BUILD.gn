@@ -4,7 +4,8 @@ config("public_config") {
 
 contrib_library("type_traits") {
     public_deps = [
-        "//contrib/restricted/boost/static_assert",
+        "//contrib/restricted/boost/config",
     ]
+
     public_configs = [ ":public_config" ]
 }

@@ -1,7 +1,5 @@
 LIBRARY()
 
-NO_UTIL()
-
 SRCS(
     generated/composition.cpp
     generated/decomposition.cpp

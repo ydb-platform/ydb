@@ -1,6 +1,10 @@
 library("common") {
   public_deps = [
+    # "//contrib/libs/protobuf",
     # "//ydb/library/actors/core",
+    # "//ydb/library/yql/dq/common",
+    # "//ydb/library/yql/dq/runtime/streaming",
+    "//ydb/library/yql/providers/pq/proto",
     # "//ydb/public/sdk/cpp/src/client/topic",
     "//yql/essentials/public/udf",
   ]
@@ -8,11 +12,13 @@ library("common") {
   deps = [
     # "//yql/essentials/minikql",
     # "//yql/essentials/public/types",  # peerdir only
+    "//yql/essentials/utils",
   ]
 
   sources = [
     "pq_meta_fields.cpp",
-    "pq_partition_key.cpp",
+    "pq_partitions.cpp",
+    "pq_shared_reading.cpp",
     "yql_names.cpp",
   ]
 }

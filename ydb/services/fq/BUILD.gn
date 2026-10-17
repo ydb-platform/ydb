@@ -11,6 +11,7 @@ library("fq") {
     # "//library/cpp/retry",  # peerdir only
     "//ydb/core/grpc_services",
     "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/ydb_over_fq",
     "//ydb/library/protobuf_printer",
   ]
 

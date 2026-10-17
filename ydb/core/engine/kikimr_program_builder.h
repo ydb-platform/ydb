@@ -89,7 +89,7 @@ class TUpdateRowBuilder
 public:
     TUpdateRowBuilder(const TTypeEnvironment& env);
     TUpdateRowBuilder(const TUpdateRowBuilder&) = default;
-    TUpdateRowBuilder& operator=(const TUpdateRowBuilder&) = default;
+    TUpdateRowBuilder& operator=(const TUpdateRowBuilder&) = delete;
     // Supports Data or Optional of Data
     void SetColumn(ui32 columnId, NScheme::TTypeInfo expectedType, TRuntimeNode value);
     // Supports Data

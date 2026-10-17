@@ -516,7 +516,7 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             msg->UnpackData(VCtx);
 
             if (msg->Extracted.LogoBlobs && !msg->Extracted.LogoBlobs->Empty()) {
-                auto data = std::move(msg->Extracted.LogoBlobs->Extract());
+                auto data = msg->Extracted.LogoBlobs->Extract();
                 if (sync.FullRecoverInfo->Stage == NKikimrBlobStorage::PhantomFlags) {
                     // TODO: handle PhantomFlags
                     YDB_LOG_DEBUG(VDISKP(VCtx->VDiskLogPrefix, "TIndexMergerActor: TODO: handle PhantomFlags"),
@@ -527,12 +527,12 @@ class TIndexMergerActor : public TActorBootstrapped<TIndexMergerActor> {
             }
 
             if (msg->Extracted.Blocks && !msg->Extracted.Blocks->Empty()) {
-                auto data = std::move(msg->Extracted.Blocks->Extract());
+                auto data = msg->Extracted.Blocks->Extract();
                 BlockMerger.PushData(vDiskId, std::move(data));
             }
 
             if (msg->Extracted.Barriers && !msg->Extracted.Barriers->Empty()) {
-                auto data = std::move(msg->Extracted.Barriers->Extract());
+                auto data = msg->Extracted.Barriers->Extract();
                 BarrierMerger.PushData(vDiskId, std::move(data));
             }
 

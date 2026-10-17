@@ -4,6 +4,7 @@
 
 #include "kqp_query_stats.h"
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include "kqp_session_actor.h"
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

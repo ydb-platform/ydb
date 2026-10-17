@@ -398,11 +398,4 @@ void TSearchEventsProcessor::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, con
     Die(ctx);
 }
 
-void IEventsWriterWrapper::Close() {
-    if (!Closed) {
-        Closed = true;
-        CloseImpl();
-    }
-}
-
 }; // namespace NKikimr::NSQS

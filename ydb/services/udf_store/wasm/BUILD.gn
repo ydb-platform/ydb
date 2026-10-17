@@ -1,0 +1,42 @@
+library("wasm") {
+  public_deps = [
+    "//ydb/library/wasm/api",
+    # "//yql/essentials/minikql:alloc",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    "//contrib/restricted/wavm_llvm16/Lib",  # peerdir only
+    # "//library/cpp/json",
+    "//library/cpp/yt/assert",
+    "//ydb/library/wasm/engine",
+    # "//ydb/library/yql/dq/proto",  # peerdir only
+    "//ydb/public/lib/udf/manifest",
+    # "//ydb/services/udf_store",
+    "//ydb/services/udf_store/metadata_subscription",
+    # "//ydb/services/udf_store/wasm/abi",
+    "//yql/essentials/ast",
+    # "//yql/essentials/minikql",  # peerdir only
+    # "//yql/essentials/minikql:terminator",
+    # "//yql/essentials/public/decimal",
+    # "//yql/essentials/public/issue",
+  ]
+
+  sources = [
+    "//ydb/services/udf_store/cpu_spec.cpp",
+    "bridge_host.cpp",
+    "bridge_node_table.cpp",
+    "bridge_resident.cpp",
+    "call_stack.cpp",
+    "compartment_manager.cpp",
+    "compile.cpp",
+    "host.cpp",
+    "manifest.cpp",
+    "module_catalog.cpp",
+    "registry_helpers.cpp",
+    "single_module_loader.cpp",
+    "system_libraries.cpp",
+    "udf_configured_callable.cpp",
+    "udf_function.cpp",
+  ]
+}

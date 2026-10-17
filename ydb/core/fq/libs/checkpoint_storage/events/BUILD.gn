@@ -6,6 +6,7 @@ library("events") {
     # "//ydb/library/actors/core",
     # "//ydb/library/actors/interconnect",
     "//ydb/library/yql/dq/actors/protos",
+    "//ydb/public/api/protos",
     "//yql/essentials/public/issue",
   ]
 

@@ -36,8 +36,8 @@ library("server") {
     # "//library/cpp/random_provider",
     # "//library/cpp/threading/future",  # peerdir only
     # "//ydb/core/actorlib_impl",  # peerdir only
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    # "//ydb/core/blobstorage/events",
+    # "//ydb/core/base/services",
+    # "//ydb/core/blobstorage/base",
     "//ydb/core/client/metadata",
     # "//ydb/core/client/scheme_cache_lib",  # peerdir only
     # "//ydb/core/cms",
@@ -48,6 +48,7 @@ library("server") {
     # "//ydb/core/jaeger_tracing",
     # "//ydb/core/keyvalue",  # peerdir only
     # "//ydb/core/kqp/common",
+    # "//ydb/core/load_test/common",
     # "//ydb/core/mind",
     # "//ydb/core/node_whiteboard",
     # "//ydb/core/persqueue",  # peerdir only

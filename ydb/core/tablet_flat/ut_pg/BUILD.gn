@@ -2,7 +2,9 @@ unittest_executable("ut_pg") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/scheme",  # peerdir only
-    "//ydb/core/tablet_flat",  # peerdir only
+    "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat/protos",
+    "//ydb/core/tablet_flat/test/libs/rows",
     "//ydb/core/tablet_flat/test/libs/table",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
@@ -11,9 +13,7 @@ unittest_executable("ut_pg") {
 
   sources = [ "flat_database_pg_ut.cpp" ]
 
-  include_dirs = [
-    "//ydb/core/tablet_flat",  # peerdir only
-  ]
+  include_dirs = [ "//ydb/core/tablet_flat" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",

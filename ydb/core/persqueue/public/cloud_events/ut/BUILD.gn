@@ -1,0 +1,32 @@
+unittest_executable("ut") {
+  deps = [
+    "//contrib/libs/protobuf",
+    "//library/cpp/json",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/audit",  # peerdir only
+    "//ydb/core/base",
+    "//ydb/core/persqueue/events",  # peerdir only
+    "//ydb/core/persqueue/public/cloud_events",
+    "//ydb/core/persqueue/public/cloud_events/proto",
+    "//ydb/core/protos",
+    "//ydb/core/protos/schemeshard",
+    "//ydb/library/actors/core",
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/topic/ut/ut_utils:test_setup",
+  ]
+
+  sources = [ "cloud_events_ut.cpp" ]
+
+  include_dirs = [ "//ydb/core/persqueue/public/cloud_events" ]
+
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=llvm16",
+  ]
+}

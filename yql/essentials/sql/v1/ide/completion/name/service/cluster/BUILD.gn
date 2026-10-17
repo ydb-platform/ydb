@@ -1,0 +1,12 @@
+library("cluster") {
+  public_deps = [
+    # "//yql/essentials/sql/v1/ide/completion/name/cluster",
+    # "//yql/essentials/sql/v1/ide/completion/name/service",
+  ]
+
+  deps = [
+    # "//library/cpp/case_insensitive_string",
+  ]
+
+  sources = [ "name_service.cpp" ]
+}

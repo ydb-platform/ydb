@@ -1,0 +1,15 @@
+library("analysis") {
+  public_deps = [
+    "//library/cpp/yson/node",
+    "//yql/essentials/sql/v1/ide/core",
+    "//yql/essentials/sql/v1/ide/pure_ast",
+  ]
+
+  deps = [ "//contrib/libs/re2" ]
+
+  sources = [
+    "evaluate.cpp",
+    "named_node_resolution.cpp",
+    "parse_tree.cpp",
+  ]
+}

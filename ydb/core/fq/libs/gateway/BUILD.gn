@@ -1,6 +1,6 @@
 library("gateway") {
   public_deps = [
-    # "//ydb/library/actors/core",
+    "//ydb/library/actors/core",
     "//ydb/library/yql/providers/dq/provider",
   ]
 

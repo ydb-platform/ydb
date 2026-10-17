@@ -1,8 +1,7 @@
 group("test_util") {
-  testonly = true
-
   public_deps = [
     # ":wilson",
+    # "//library/cpp/threading/future",
     # "//ydb/library/actors/core",
   ]
 }
@@ -10,15 +9,15 @@ group("test_util") {
 library("wilson") {
   public_deps = [
     # "//contrib/libs/grpc",
-    "//contrib/libs/opentelemetry-proto",
+    "//contrib/proto/opentelemetry",
     "//library/cpp/json",
-    "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/string_utils/base64",
     "//ydb/library/actors/core",
   ]
 
   deps = [
     # "//contrib/libs/protobuf",
+    # "//contrib/proto/opentelemetry/opentelemetry/proto/collector/trace/v1",
     "//library/cpp/string_utils/url",
     "//ydb/library/actors/protos",
     # "//ydb/library/actors/wilson/protos",  # peerdir only

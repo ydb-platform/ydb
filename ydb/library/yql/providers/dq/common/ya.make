@@ -15,9 +15,10 @@ PEERDIR(
 GENERATE_ENUM_SERIALIZATION(yql_dq_settings.h)
 
 SRCS(
-    attrs.cpp
+    attrs.cpp               # gn: attrs
     yql_dq_common.cpp
     yql_dq_settings.cpp
 )
+# gn: attrs headers attrs.h
 
 END()

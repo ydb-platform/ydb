@@ -3,12 +3,10 @@ library("issue") {
     "//contrib/libs/protobuf",
     "//library/cpp/resource",
     "//yql/essentials/public/issue/protos",
-  ]
-
-  deps = [
-    "//library/cpp/colorizer",
     "//yql/essentials/utils",
   ]
+
+  deps = [ "//library/cpp/colorizer" ]
 
   sources = [
     "yql_issue.cpp",

@@ -1,12 +1,7 @@
 library("datetime") {
   public_deps = [
     # "//library/cpp/type_info/tz",
-    "//yql/essentials/minikql",
     "//yql/essentials/public/udf",
-  ]
-
-  deps = [
-    # "//yql/essentials/minikql/computation",  # peerdir only
   ]
 
   sources = [ "datetime.cpp" ]

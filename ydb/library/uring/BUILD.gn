@@ -1,0 +1,3 @@
+group("uring") {
+  public_deps = [ "//contrib/libs/liburing" ]
+}

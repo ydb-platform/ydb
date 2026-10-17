@@ -28,7 +28,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString ChoosePartitionKey;
     };
 
-    TString GetSerializedData(const TPutRecordsItem& item) {
+    inline TString GetSerializedData(const TPutRecordsItem& item) {
         NKikimrPQClient::TDataChunk proto;
 
         //TODO: get ip from client, not grpc;
@@ -391,7 +391,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
     }
 
-    TString GetErrorText(const NPersQueue::NErrorCode::EErrorCode errorCode) {
+    inline TString GetErrorText(const NPersQueue::NErrorCode::EErrorCode errorCode) {
         if (errorCode == NPersQueue::NErrorCode::OVERLOAD)
             return "ProvisionedThroughputExceededException";
         return "InternalFailure";
@@ -482,11 +482,11 @@ namespace NKikimr::NDataStreams::V1 {
         void SendResult(const Ydb::DataStreams::V1::PutRecordsResult& result, const TActorContext& ctx);
     };
 
-    const Ydb::DataStreams::V1::PutRecordsRequest& TPutRecordsActor::GetPutRecordsRequest() const {
+    inline const Ydb::DataStreams::V1::PutRecordsRequest& TPutRecordsActor::GetPutRecordsRequest() const {
         return *GetProtoRequest();
     }
 
-    void TPutRecordsActor::SendResult(const Ydb::DataStreams::V1::PutRecordsResult& result, const TActorContext& ctx) {
+    inline void TPutRecordsActor::SendResult(const Ydb::DataStreams::V1::PutRecordsResult& result, const TActorContext& ctx) {
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
 
@@ -514,11 +514,11 @@ namespace NKikimr::NDataStreams::V1 {
         Ydb::DataStreams::V1::PutRecordsRequest PutRecordsRequest;
     };
 
-    const Ydb::DataStreams::V1::PutRecordsRequest& TPutRecordActor::GetPutRecordsRequest() const {
+    inline const Ydb::DataStreams::V1::PutRecordsRequest& TPutRecordActor::GetPutRecordsRequest() const {
         return PutRecordsRequest;
     }
 
-    void TPutRecordActor::SendResult(const Ydb::DataStreams::V1::PutRecordsResult& putRecordsResult, const TActorContext& ctx) {
+    inline void TPutRecordActor::SendResult(const Ydb::DataStreams::V1::PutRecordsResult& putRecordsResult, const TActorContext& ctx) {
         Ydb::DataStreams::V1::PutRecordResult result;
 
         if (putRecordsResult.failed_record_count() == 0) {

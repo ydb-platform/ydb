@@ -3,7 +3,7 @@ unittest_executable("ut_vdisk2") {
     "//contrib/libs/xxhash",
     "//library/cpp/testing/unittest",
     "//ydb/core/blobstorage/backpressure",
-    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/blobstorage/pdisk/mock",
     "//ydb/core/blobstorage/vdisk",
@@ -19,14 +19,18 @@ unittest_executable("ut_vdisk2") {
   ]
 
   sources = [
+    "blob_stat.cpp",
     "compaction.cpp",
     "huge.cpp",
+    "space_report.cpp",
   ]
 
   link_select = [
     "YqlServicePolicy=stub",
     "allocator=tcmalloc",
-    "minikql_codegen=no_llvm",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
   ]

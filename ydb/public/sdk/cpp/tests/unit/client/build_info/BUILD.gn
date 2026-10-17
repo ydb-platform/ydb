@@ -1,0 +1,11 @@
+gtest_executable("build_info") {
+  deps = [
+    "//contrib/restricted/googletest/googletest",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/types/exceptions",
+  ]
+
+  sources = [ "build_info_ut.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

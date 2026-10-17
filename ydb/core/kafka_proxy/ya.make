@@ -70,6 +70,7 @@ PEERDIR(
     ydb/core/raw_socket
     ydb/core/security/sasl
     ydb/services/persqueue_v1
+    ydb/services/metadata/initializer
     ydb/core/persqueue/public
     ydb/core/util
 )

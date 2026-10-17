@@ -1,37 +1,55 @@
 unittest_executable("ut") {
   deps = [
-    "//library/cpp/testing/unittest",  # peerdir only
-    "//ydb/core/protos",  # peerdir only
+    "//library/cpp/testing/unittest",
+    "//ydb/core/base",
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/node_service",
+    "//ydb/core/protos",
+    "//ydb/core/scheme",
+    "//ydb/core/scheme_types",
     "//ydb/core/statistics",
-    "//ydb/core/statistics/aggregator",  # peerdir only
+    "//ydb/core/statistics/aggregator",
     "//ydb/core/statistics/service:service_id",
     "//ydb/core/statistics:ut_common",
     "//ydb/core/testlib",
     "//ydb/core/testlib/actors",
-    "//ydb/core/testlib/default",  # peerdir only
+    "//ydb/core/testlib/pg",  # peerdir only
+    "//ydb/core/tx/conveyor_composite/usage",
     "//ydb/core/tx/datashard",
+    "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/scheme_cache",
     "//ydb/library/actors/testlib",
+    "//ydb/public/api/grpc",
+    "//ydb/public/lib/scheme_types",
+    "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//yql/essentials/core/histogram",
+    "//yql/essentials/parser/pg_wrapper/interface/type_desc",
+    "//yql/essentials/types/dynumber",
   ]
 
   sources = [
-    "ut_analyze_columnshard.cpp",
-    "ut_analyze_datashard.cpp",
-    "ut_traverse_columnshard.cpp",
-    "ut_traverse_datashard.cpp",
+    "ut_analyze.cpp",
+    "ut_analyze_op.cpp",
+    "ut_analyze_sampling.cpp",
+    "ut_key_range_predicate.cpp",
+    "ut_traverse.cpp",
   ]
 
-  include_dirs = [
-    "//ydb/core/statistics/aggregator",  # peerdir only
-  ]
+  include_dirs = [ "//ydb/core/statistics/aggregator" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
-    "yql_pg_runtime=pg_dummy",
-    "yql_pg_sql_translator=pg_dummy",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",
   ]
 }

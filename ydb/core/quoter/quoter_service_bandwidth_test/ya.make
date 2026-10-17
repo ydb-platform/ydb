@@ -1,5 +1,7 @@
 PROGRAM()
 
+# gn: move into parent
+
 PEERDIR(
     library/cpp/colorizer
     library/cpp/getopt

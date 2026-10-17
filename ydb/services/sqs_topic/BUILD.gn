@@ -2,8 +2,13 @@ library("sqs_topic") {
   public_deps = [
     # "//ydb/core/client/server",
     "//ydb/core/grpc_services",
+    # "//ydb/core/metering",
+    # "//ydb/core/persqueue/public/describer",
+    "//ydb/core/persqueue/public/mlp",
+    "//ydb/core/protos",
     # "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
+    "//ydb/library/http_proxy/error",
     "//ydb/public/api/grpc/draft",
   ]
 
@@ -11,6 +16,7 @@ library("sqs_topic") {
     # "//contrib/libs/protobuf",
     "//library/cpp/digest/md5",
     # "//library/cpp/json",
+    # "//library/cpp/openssl/crypto",
     "//library/cpp/string_utils/base64",
     # "//ydb/core/base",
     # "//ydb/core/grpc_services/base",
@@ -18,15 +24,17 @@ library("sqs_topic") {
     # "//ydb/core/mind",  # peerdir only
     # "//ydb/core/persqueue/events",
     # "//ydb/core/persqueue/public",
-    # "//ydb/core/persqueue/public/describer",
     "//ydb/core/persqueue/public/list_topics",
-    "//ydb/core/persqueue/public/mlp",
-    "//ydb/core/persqueue/writer",  # peerdir only
-    "//ydb/core/protos",
+    # "//ydb/core/persqueue/public/ru_quoter",
+    # "//ydb/core/persqueue/public/schema",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/util",
     "//ydb/core/ymq/attributes",
     # "//ydb/core/ymq/base",
     "//ydb/core/ymq/error",
-    "//ydb/library/http_proxy/error",
+    # "//ydb/library/aclib",
+    # "//ydb/library/persqueue/topic_parser",
+    "//ydb/library/services",
     # "//ydb/public/api/grpc",  # peerdir only
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/resources",  # peerdir only
@@ -45,11 +53,15 @@ library("sqs_topic") {
   sources = [
     "actor.cpp",
     "change_message_visibility.cpp",
+    "config.cpp",
     "consumer_attributes.cpp",
     "create_queue.cpp",
     "delete_message.cpp",
+    "delete_queue.cpp",
     "error.cpp",
     "get_queue_attributes.cpp",
+    "get_queue_url.cpp",
+    "limits.cpp",
     "list_queues.cpp",
     "purge_queue.cpp",
     "receipt.cpp",

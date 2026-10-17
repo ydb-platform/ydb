@@ -1,0 +1,23 @@
+library("scheme_secret") {
+  public_deps = [
+    # "//library/cpp/retry",
+    # "//library/cpp/threading/future",
+    "//ydb/core/base",
+    # "//ydb/core/kqp/common/events",
+    "//ydb/core/tx/scheme_board",
+    # "//ydb/core/tx/scheme_cache",
+    # "//ydb/core/tx/schemeshard",
+    "//ydb/core/tx/tx_proxy:public",
+    # "//ydb/library/aclib",
+    "//ydb/library/actors/core",
+  ]
+
+  deps = [
+    # "//ydb/core/protos",  # peerdir only
+    # "//ydb/core/tx/tx_proxy",  # peerdir only
+    # "//ydb/services/metadata",
+    "//ydb/services/metadata/secret",
+  ]
+
+  sources = [ "service.cpp" ]
+}

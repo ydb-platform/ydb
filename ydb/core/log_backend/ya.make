@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/base
     ydb/public/sdk/cpp/src/library/grpc/client
 )
+# gn: peerdir ydb/core/driver_lib/run:config
 
 YQL_LAST_ABI_VERSION()
 

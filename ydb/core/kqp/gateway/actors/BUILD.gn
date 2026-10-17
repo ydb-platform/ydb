@@ -10,13 +10,16 @@ library("actors") {
     # "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_proxy:public",
     # "//ydb/library/actors/core",
+    # "//ydb/library/actors/wilson",
     "//yql/essentials/providers/common/gateway",
   ]
 
   deps = [
+    # "//ydb/core/kqp/tracing",  # peerdir only
     # "//ydb/core/tx/tx_proxy",  # peerdir only
     "//ydb/core/util",
     "//ydb/library/services",
+    # "//yql/essentials/public/issue",
   ]
 
   sources = [

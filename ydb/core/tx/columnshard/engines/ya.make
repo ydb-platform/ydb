@@ -11,10 +11,11 @@ SRCS(
     column_engine_logs.cpp
     column_engine.cpp
     db_wrapper.cpp
-    filter.cpp
+    filter.cpp  # gn: filter
     defs.cpp
     snapshot_holders.cpp
 )
+# gn: filter headers filter.h
 
 GENERATE_ENUM_SERIALIZATION(column_engine_logs.h)
 
@@ -33,14 +34,15 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/portions
     ydb/core/tx/columnshard/engines/predicate
     ydb/core/tx/columnshard/engines/protos
-    ydb/core/tx/columnshard/engines/reader
-    ydb/core/tx/columnshard/engines/storage
+    ydb/core/tx/columnshard/engines/reader  # gn: plugin
+    ydb/core/tx/columnshard/engines/storage  # gn: plugin
     ydb/core/tx/columnshard/tracing
     ydb/core/tx/program
 
     # for NYql::NUdf alloc stuff used in binary_json
     yql/essentials/public/udf/service/exception_policy
 )
+# gn: peerdir ydb/core/tx/columnshard:background_controller
 
 YQL_LAST_ABI_VERSION()
 

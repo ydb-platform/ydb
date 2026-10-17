@@ -7,7 +7,7 @@ unittest_executable("ut_console") {
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
-    "//ydb/core/blobstorage/events",
+    "//ydb/core/blobstorage/base",
     "//ydb/core/cms/console",
     "//ydb/core/cms/console/util",
     "//ydb/core/cms/console/validators",
@@ -40,6 +40,7 @@ unittest_executable("ut_console") {
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

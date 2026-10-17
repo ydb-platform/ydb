@@ -1,0 +1,10 @@
+linked_executable("oidc") {
+  deps = [
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/oidc",
+  ]
+
+  sources = [ "main.cpp" ]
+
+  link_select = [ "allocator=tcmalloc" ]
+}

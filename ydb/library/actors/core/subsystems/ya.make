@@ -14,13 +14,13 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
-    allocation_cache.cpp
+    allocation_cache.cpp  # gn: into ydb/library/actors/core
     allocation_cache.h
     allocation_cache_tls.h
     async_frame_cache.h
-    inmemory_metrics.cpp
-    metric_system.cpp
-    stats.cpp
+    inmemory_metrics.cpp  # gn: into ydb/library/actors/core
+    metric_system.cpp  # gn: into ydb/library/actors/core
+    stats.cpp  # gn: into ydb/library/actors/core
 )
 
 PEERDIR(

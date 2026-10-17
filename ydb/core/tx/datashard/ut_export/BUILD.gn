@@ -1,18 +1,31 @@
 unittest_executable("ut_export") {
   deps = [
+    "//contrib/libs/apache/arrow",
+    "//library/cpp/streams/zstd",
     "//library/cpp/testing/unittest",
+    "//ydb/core/protos",
+    "//ydb/core/testlib/basics",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/tx/datashard",
+    "//ydb/library/actors/core",
+    "//ydb/library/testlib/parquet_helpers",
   ]
 
-  sources = [ "//ydb/core/tx/datashard/export_s3_buffer_ut.cpp" ]
+  sources = [
+    "//ydb/core/tx/datashard/export_s3_buffer_ut.cpp",
+    "backup_restore_traits_ut.cpp",
+    "export_parquet_ut.cpp",
+  ]
 
   include_dirs = [ "//ydb/core/tx/datashard" ]
+
+  serialize_enum_headers = [ "export_parquet_ut_enums.h" ]
 
   link_select = [
     "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
+    "retro_spans=spans",
     "topic_rpc=persqueue_v1",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",

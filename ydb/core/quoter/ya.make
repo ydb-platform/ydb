@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/util
     yql/essentials/public/issue
     ydb/library/time_series_vec
+    ydb/library/yql/public/ydb_issue
 )
 
 END()

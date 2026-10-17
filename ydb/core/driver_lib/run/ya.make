@@ -1,12 +1,14 @@
 LIBRARY(run)
 
+# gn: anti-cycle facade
+
 ADDINCL(
     ydb/public/sdk/cpp
 )
 
 SRCS(
     auto_config_initializer.cpp
-    config.cpp
+    config.cpp  # gn: config
     config.h
     config_helpers.cpp
     config_parser.cpp
@@ -16,13 +18,15 @@ SRCS(
     grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
-    main.cpp
+    main.cpp  # gn: main
     main.h
     run.cpp
     run.h
     service_initializer.cpp
     service_initializer.h
 )
+# gn: config headers config.h
+# gn: main headers main.h
 
 PEERDIR(
     contrib/libs/protobuf
@@ -224,6 +228,7 @@ IF (NOT OS_WINDOWS)
         ydb/library/signal_backtrace
     )
 ENDIF()
+# gn: main peerdir ydb/core/driver_lib/run:config
 
 YQL_LAST_ABI_VERSION()
 

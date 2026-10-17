@@ -6,8 +6,8 @@ contrib_library("graph") {
     public_deps = [
         "//contrib/restricted/boost/core",
         "//contrib/restricted/boost/conversion",
-        "//contrib/restricted/boost/foreach",
         "//contrib/restricted/boost/multi_index",
+        "//contrib/restricted/boost/multiprecision",
         "//contrib/restricted/boost/parameter",
         "//contrib/restricted/boost/property_map",
         "//contrib/restricted/boost/tti",

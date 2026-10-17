@@ -1,8 +1,9 @@
 library("options") {
   public_deps = [
     "//ydb/core/protos",
-    "//ydb/core/tx/columnshard/data_accessor/abstract",
-    # "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
+    "//ydb/core/tx/columnshard/data_accessor/abstract:constructor",
+    # "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/engines/storage/optimizer/abstract",
     # "//ydb/core/tx/schemeshard/olap/common",
     # "//ydb/library/accessor",
   ]

@@ -44,9 +44,6 @@ public:
         return TColumnSaver(Serializer);
     }
 
-    std::vector<std::shared_ptr<IPortionDataChunk>> ActualizeColumnData(
-        const std::vector<std::shared_ptr<IPortionDataChunk>>& source, const TSimpleColumnInfo& sourceColumnFeatures) const;
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << "serializer=" << (Serializer ? Serializer->DebugString() : "NO") << ";";

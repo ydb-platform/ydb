@@ -1,10 +1,44 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# RUN_PYTHON3(feature.gen.py --input ... --output ... IN features.json OUT feature.gen.h)
+action("feature_gen") {
+  script = "feature.gen.py"
+  sources = [ "//yql/essentials/data/language/features.json" ]
+  outputs = [ "$target_gen_dir/feature.gen.h" ]
+  args = [
+    "--input",
+    rebase_path(sources[0], root_build_dir),
+    "--output",
+    rebase_path(outputs[0], root_build_dir),
+  ]
+}
+
+# ADDINCL(GLOBAL ${ARCADIA_BUILD_ROOT}/${MODDIR} GLOBAL ${ARCADIA_ROOT}/${MODDIR}):
+# "feature.gen.h" and the "feature.h" it includes
+config("public_config") {
+  include_dirs = [
+    ".",
+    target_gen_dir,
+  ]
+}
+
 library("langver") {
+  sources = [
+    "feature.cpp",
+    "feature.gen.cpp",
+    "yql_core_langver.cpp",
+  ]
+
+  public_configs = [ ":public_config" ]
+
   public_deps = [
+    ":feature_gen",
     "//yql/essentials/public/issue",
     "//yql/essentials/public/langver",
   ]
 
-  deps = [ "//yql/essentials/core/issue" ]
-
-  sources = [ "yql_core_langver.cpp" ]
+  deps = [
+    "//yql/essentials/core/issue",
+    "//yql/essentials/utils",
+  ]
 }

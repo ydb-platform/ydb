@@ -1,3 +1,8 @@
+config("util_public_config") {
+  # btree_cow.h
+  cflags = [ "-Wno-deprecated-anon-enum-enum-conversion" ]
+}
+
 library("util") {
   public_deps = [
     "//contrib/libs/lz4",
@@ -9,10 +14,12 @@ library("util") {
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/random_provider",
     "//ydb/core/base",
+    # "//ydb/core/mon",
     "//ydb/core/protos",
     # "//ydb/core/tablet_flat",
     "//ydb/library/actors/core",
     # "//ydb/library/actors/interconnect",
+    "//ydb/library/actors/protos",
     # "//ydb/library/actors/util",
     # "//ydb/library/actors/wilson",
     "//ydb/library/services",
@@ -21,20 +28,17 @@ library("util") {
   ]
 
   deps = [
-    "//contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core",
-    "//contrib/libs/curl",
     # "//library/cpp/html/escape",  # peerdir only
     # "//library/cpp/lwtrace",
     # "//library/cpp/monlib/service/pages",
-    # "//ydb/core/mon",  # peerdir only
-    # "//ydb/library/actors/interconnect/mock",  # peerdir only
   ]
 
   sources = [
+    "actor_monotonic_time_provider.cpp",
     "address_classifier.cpp",
-    "aws.cpp",
     "backoff.cpp",
     "cache.cpp",
+    "circular_sparse_queue.cpp",
     "concurrent_rw_hash.cpp",
     "console.cpp",
     "cpuinfo.cpp",
@@ -55,4 +59,6 @@ library("util") {
     "ui64id.cpp",
     "ulid.cpp",
   ]
+
+  public_configs = [ ":util_public_config" ]
 }

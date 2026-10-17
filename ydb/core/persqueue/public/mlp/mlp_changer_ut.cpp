@@ -851,6 +851,8 @@ Y_UNIT_TEST(DeadlineChangerMultiPartitionDifferentDeadlines) {
             write->Messages[1].MessageId->PartitionId);
     }
 
+    // Let both partitions report status to the read balancer (1s heartbeat).
+    Sleep(TDuration::Seconds(2));
     std::vector<TMessageId> lockedIds;
     THashMap<TString, TString> dataById;
     auto messageKey = [](const TMessageId& id) -> TString {

@@ -1,9 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     generated_column.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
+    sql_path_aliases.cpp
     yql_kikimr_constraints.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
@@ -80,8 +81,6 @@ PEERDIR(
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCDIR(yql/essentials/core/expr_nodes_gen)
 

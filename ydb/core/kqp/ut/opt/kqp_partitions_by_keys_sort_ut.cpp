@@ -34,6 +34,8 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
         UNIT_ASSERT_C(ast.Contains("Chopper"), ast);
         UNIT_ASSERT_C(ast.Contains("HashShuffle"), ast);
         UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+        UNIT_ASSERT_C(!ast.Contains("(Sort "), ast);
     } else {
         UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
     }
@@ -70,6 +72,8 @@ void CheckFullFrameSumPlan(const TString& selectBody, bool windowFunctionsV2, bo
 
     if (windowFunctionsV2) {
         UNIT_ASSERT_C(!ast.Contains("WinFramesCollector"), ast);
+        UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
+        UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
         UNIT_ASSERT_C(ast.Contains("WideCondense1") || ast.Contains("Condense1"), ast);
         UNIT_ASSERT_C(ast.Contains("MapJoin") || ast.Contains("EquiJoin")
             || ast.Contains("GraceJoin") || ast.Contains("BlockHashJoin"), ast);
@@ -145,6 +149,30 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
         CheckWindowFunctionAst(
             "SELECT Key, Text, Data,\n"
             "    row_number() OVER (PARTITION BY Text ORDER BY Data, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionExpressionSortKeyAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    row_number() OVER (PARTITION BY Text ORDER BY Key + 1) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionMixedDirectionsAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    row_number() OVER (PARTITION BY Text ORDER BY Data DESC, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionRepeatedKeyAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    row_number() OVER (PARTITION BY Text ORDER BY Text DESC, Key) AS rn\n"
             "FROM `/Root/EightShard`;\n",
             UseSortForPartitionsByKeys);
     }

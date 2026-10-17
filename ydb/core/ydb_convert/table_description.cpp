@@ -2491,7 +2491,15 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
     }
 
     stats->set_rows_estimate(in.GetTableStats().GetRowCount());
-    stats->set_partitions(in.GetTableStats().GetPartCount());
+    if (in.GetTable().HasPartitionCount()) {
+        stats->set_partitions(in.GetTable().GetPartitionCount());
+    } else {
+        // Fallback for an older schemeshard. Semantically PartCount is the
+        // number of LSM parts, but at the table level schemeshard repurposed
+        // the aggregated value to hold the partition (shard) count, so it is
+        // the only compatible source here.
+        stats->set_partitions(in.GetTableStats().GetPartCount());
+    }
 
     stats->set_store_size(in.GetTableStats().GetDataSize() + in.GetTableStats().GetIndexSize());
     for (const auto& index : in.GetTable().GetTableIndexes()) {

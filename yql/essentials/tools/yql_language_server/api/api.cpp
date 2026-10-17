@@ -1,6 +1,7 @@
 #include "api.h"
 
 #include <yql/essentials/tools/yql_language_server/lsp/api/base.h>
+#include <yql/essentials/tools/yql_language_server/core/version.h>
 
 namespace NLsp::NYql {
 
@@ -33,7 +34,7 @@ public:
             },
             .ServerInfo = TServerInfo{
                 .Name = "yql",
-                .Version = "0.0.1",
+                .Version = TString(Version()),
             },
         };
     }

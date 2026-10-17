@@ -259,28 +259,6 @@ public:                                                                         
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
-        // TCostGroup
-        ///////////////////////////////////////////////////////////////////////////////////
-        class TCostGroup : public TBase {
-        public:
-            GROUP_CONSTRUCTOR(TCostGroup)
-            {
-                COUNTER_INIT_IF_EXTENDED(DiskTimeAvailableNs, false);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontUserCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(SkeletonFrontInternalCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(DefragCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(CompactionCostNs, true);
-                COUNTER_INIT_IF_EXTENDED(ScrubCostNs, true);
-            }
-            COUNTER_DEF(DiskTimeAvailableNs);
-            COUNTER_DEF(SkeletonFrontUserCostNs);
-            COUNTER_DEF(SkeletonFrontInternalCostNs);
-            COUNTER_DEF(DefragCostNs);
-            COUNTER_DEF(CompactionCostNs);
-            COUNTER_DEF(ScrubCostNs);
-        };
-
-        ///////////////////////////////////////////////////////////////////////////////////
         // TSyncerGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TSyncerGroup : public TBase {
@@ -492,6 +470,8 @@ public:                                                                         
                     VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
                 }
                 COUNTER_INIT_IF_EXTENDED(VDiskLocalRecoveryState, false);
+                COUNTER_INIT(HeapAllocatorSizeClass, false);
+                COUNTER_INIT(HeapAllocatorStripe, false);
             }
 
             void VDiskState(NKikimrWhiteboard::EVDiskState s) {
@@ -505,6 +485,18 @@ public:                                                                         
             }
 
             COUNTER_DEF(VDiskLocalRecoveryState);
+            COUNTER_DEF(HeapAllocatorSizeClass);
+            COUNTER_DEF(HeapAllocatorStripe);
+
+            void SetHeapAllocatorStripe(bool stripe) {
+                HeapAllocatorSizeClass() = stripe ? 0 : 1;
+                HeapAllocatorStripe() = stripe ? 1 : 0;
+            }
+
+            void ClearHeapAllocatorMode() {
+                HeapAllocatorSizeClass() = 0;
+                HeapAllocatorStripe() = 0;
+            }
         };
 
         ///////////////////////////////////////////////////////////////////////////////////

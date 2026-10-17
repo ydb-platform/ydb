@@ -16,7 +16,9 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/shutdown.h>
 
-#include <library/cpp/yt/threading/spin_lock_count.h>
+#include <library/cpp/yt/system/event_count.h>
+#include <library/cpp/yt/system/fork_aware_spin_lock.h>
+#include <library/cpp/yt/system/spin_lock_count.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
 
@@ -25,9 +27,6 @@
 #include <library/cpp/yt/global/variable.h>
 
 #include <library/cpp/yt/memory/function_view.h>
-
-#include <library/cpp/yt/threading/fork_aware_spin_lock.h>
-#include <library/cpp/yt/threading/event_count.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -689,9 +688,9 @@ private:
     const TFiberId FiberId_;
 
     std::atomic<bool> Canceled_ = false;
-    NThreading::TEvent ErrorSet_;
+    TEvent ErrorSet_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     TError CancelationError_;
     TFuture<void> Future_;
 
@@ -746,7 +745,7 @@ public:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TForkAwareSpinLock, Lock_);
 
     struct TGlobalContextSwitchHandlers
     {
@@ -1161,7 +1160,7 @@ namespace {
 
 void BlockThreadUntilSet(TFuture<void> future, std::optional<TInstant> deadline)
 {
-    auto event = std::make_shared<NThreading::TEvent>();
+    auto event = std::make_shared<TEvent>();
     auto cookie = future.Subscribe(BIND_NO_PROPAGATE([event] (const TError&) {
         event->NotifyOne();
     }));
@@ -1293,7 +1292,7 @@ void WaitUntilSet(TFuture<void> future, TWaitOptions options)
     YT_VERIFY(future);
 
     // NB: These preconditions should be verified before fast-path to prevent unsafe waits.
-    NThreading::VerifyNoSpinLockAffinity();
+    VerifyNoSpinLockAffinity();
     if (options.Strategy == EWaitForStrategy::SuspendFiber) {
         YT_VERIFY(!IsContextSwitchForbidden());
     }

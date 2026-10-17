@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(util.h)
 
@@ -22,8 +22,6 @@ PEERDIR(
     yql/essentials/providers/common/structured_token
     yql/essentials/public/issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

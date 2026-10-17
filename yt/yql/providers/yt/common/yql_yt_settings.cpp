@@ -125,7 +125,6 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
-    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
     REGISTER_SETTING(*this, QueryCacheReportProgress);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
@@ -524,6 +523,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, NetworkProject).IgnoreInFullReplay();
     REGISTER_SETTING(*this, StaticNetworkProject).IgnoreInFullReplay();
     REGISTER_SETTING(*this, FileCacheTtl).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, _EnableFileCacheLock);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
@@ -652,6 +652,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
     REGISTER_SETTING(*this, _ForbidReservedColumns);
     REGISTER_SETTING(*this, _ReplaceEmptyOpWithTouch);
+    REGISTER_SETTING(*this, _PruneSync);
     REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 

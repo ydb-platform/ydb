@@ -197,9 +197,9 @@ public:
 
     THolder<TProposeResponse> Propose(
         const TString& owner,
-        TOperationContext& context) override;
+        TProposeContext& context) override;
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterFileStore");
     }
 
@@ -272,7 +272,7 @@ private:
 
 THolder<TProposeResponse> TAlterFileStore::Propose(
     const TString& owner,
-    TOperationContext& context)
+    TProposeContext& context)
 {
     Y_UNUSED(owner);
 

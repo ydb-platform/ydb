@@ -2372,6 +2372,27 @@ public:
         }
     }
 
+    TFuture<TGenericResult> KillSession(const TString& cluster, const TString& sessionId, bool isParameter) override {
+        CHECK_PREPARED_DDL(KillSession);
+        if (!IsPrepare()) {
+            // Closing a session is a runtime effect, never a compilation side effect.
+            return Gateway->KillSession(cluster, sessionId, isParameter);
+        }
+        if (!Gateway->HasCluster(cluster)) {
+            return InvalidCluster<TGenericResult>(cluster);
+        }
+
+        auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        auto* operation = phyTx.MutableSchemeOperation()->MutableKillSession();
+        if (isParameter) {
+            operation->SetSessionIdParameter(sessionId);
+        } else {
+            operation->SetSessionId(sessionId);
+        }
+        return PrepareSuccess<TGenericResult>();
+    }
+
     TFuture<TGenericResult> CreateGroup(const TString& cluster, const TCreateGroupSettings& settings) override {
         CHECK_PREPARED_DDL(CreateGroup);
 

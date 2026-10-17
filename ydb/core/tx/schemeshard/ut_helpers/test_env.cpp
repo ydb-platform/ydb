@@ -647,6 +647,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnablePqBilling(opts.EnablePqBilling_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
+    if (opts.EnableSplitMergeDemandTracking_) {
+        app.FeatureFlags.SetEnableSplitMergeDemandTracking(*opts.EnableSplitMergeDemandTracking_);
+    }
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableAddUniqueIndex(true);

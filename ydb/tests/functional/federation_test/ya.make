@@ -10,6 +10,12 @@ PEERDIR(
 
 TIMEOUT(350)
 
+# One chunk per test case. A shared chunk dies at TIMEOUT(350) after the
+# mirror tests, which kills DisableWriteOnClusterA. Medium max is 600s,
+# so the cases cannot share one budget. Keep this factor >= the test count.
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
+
 ADDINCL(
     contrib/libs/librdkafka/src-cpp
     contrib/libs/librdkafka/include

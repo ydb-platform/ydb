@@ -1,21 +1,22 @@
 #pragma once
 #include "table_exists.h"
+
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/initializer/accessor_init.h>
 #include <ydb/services/metadata/request/request_actor_cb.h>
-#include <ydb/library/actors/core/hfunc.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
 class TEvRecheckExistence: public NActors::TEventLocal<TEvRecheckExistence, EEvents::EvRecheckExistence> {
 private:
     YDB_READONLY_DEF(TString, Path);
+
 public:
     TEvRecheckExistence(const TString& path)
         : Path(path)
     {
-
     }
 };
 
@@ -26,35 +27,38 @@ public:
 class TEvEnrichSnapshotResult: public NActors::TEventLocal<TEvEnrichSnapshotResult, EEvents::EvEnrichSnapshotResult> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, EnrichedSnapshot);
+
 public:
     TEvEnrichSnapshotResult(NFetcher::ISnapshot::TPtr snapshot)
-        : EnrichedSnapshot(snapshot) {
-
+        : EnrichedSnapshot(snapshot)
+    {
     }
 };
 
 class TEvEnrichSnapshotProblem: public NActors::TEventLocal<TEvEnrichSnapshotProblem, EEvents::EvEnrichSnapshotProblem> {
 private:
     YDB_READONLY_DEF(TString, ErrorText);
+
 public:
     TEvEnrichSnapshotProblem(const TString& errorText)
-        : ErrorText(errorText) {
-
+        : ErrorText(errorText)
+    {
     }
 };
 
 class TRefreshInternalController: public NFetcher::ISnapshotAcceptorController,
-    public NRequest::TNaiveExternalController<NRequest::TDialogYQLRequest>,
-    public TTableExistsActor::TEvController {
+                                  public NRequest::TNaiveExternalController<NRequest::TDialogYQLRequest>,
+                                  public TTableExistsActor::TEvController {
 private:
     using TBaseRequestController = NRequest::TNaiveExternalController<NRequest::TDialogYQLRequest>;
     const TActorIdentity ActorId;
+
 public:
     TRefreshInternalController(const TActorIdentity& actorId)
         : TBaseRequestController(actorId)
         , TTableExistsActor::TEvController(actorId)
-        , ActorId(actorId) {
-
+        , ActorId(actorId)
+    {
     }
 
     virtual void OnSnapshotEnrichError(const TString& errorMessage) override {
@@ -73,10 +77,12 @@ private:
         EXISTS,
         NON_EXISTS
     };
+
     struct TTableInfo {
         EState State = EState::UNKNOWN;
         int64_t RetryCount = 0;
     };
+
     using TBase = NActors::TActorBootstrapped<TDSAccessorBase>;
     YDB_READONLY(TInstant, RequestedActuality, TInstant::Zero());
     const NRequest::TConfig Config;
@@ -92,6 +98,7 @@ protected:
     virtual void OnBootstrap() {
         Become(&TDSAccessorBase::StateMain);
     }
+
     virtual void OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot) = 0;
     virtual void OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& qResult, NFetcher::ISnapshot::TPtr snapshot);
     virtual void OnConstructSnapshotError(const TString& errorMessage);
@@ -129,7 +136,7 @@ public:
             hFunc(TTableExistsActor::TEvController::TEvError, Handle);
             hFunc(TTableExistsActor::TEvController::TEvResult, Handle);
             hFunc(TEvRecheckExistence, Handle);
-            
+
             default:
                 break;
         }
@@ -138,4 +145,4 @@ public:
     TDSAccessorBase(const NRequest::TConfig& config, NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor);
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

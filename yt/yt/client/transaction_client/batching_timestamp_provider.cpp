@@ -70,7 +70,7 @@ private:
         TPromise<TTimestamp> Promise;
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
 
     TDuration BatchPeriod_;
     bool GenerateInProgress_ = false;
@@ -80,7 +80,7 @@ private:
 
     TInstant LastRequestTime_;
 
-    void MaybeScheduleSendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
+    void MaybeScheduleSendGenerateRequest(TGuard<TSpinLock>& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -108,7 +108,7 @@ private:
         }
     }
 
-    void SendGenerateRequest(TGuard<NThreading::TSpinLock>& guard)
+    void SendGenerateRequest(TGuard<TSpinLock>& guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -214,7 +214,7 @@ private:
     const TRequestBatcherPtr NativeRequestBatcher_;
 
     std::atomic<TDuration> BatchPeriod_;
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     THashMap<TCellTag, TRequestBatcherPtr> Batchers_;
 
     TRequestBatcherPtr GetAlienBatcher(TCellTag clockClusterTag)

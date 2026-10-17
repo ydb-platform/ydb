@@ -22,6 +22,13 @@ def add_options(p):
     g.add_argument('--max-scrubbed-disks-at-once', type=int, metavar='N', help='Maximum number of simultaneously scrubbed PDisks')
     choices = disk_color.TPDiskSpaceColor.E.keys()
     g.add_argument('--pdisk-space-color-border', choices=choices, help='PDisk space color border')
+    g.add_argument('--database-space-block-color', choices=choices,
+                   help='Block writes to a database when every group of any of its storage pools reaches this space color '
+                        '(GREEN disables blocking)')
+    p.add_argument('--database-space-unblock-color', choices=choices,
+                   help='Unblock writes when some group of the pool becomes better than this space color; '
+                        'must not be worse than the block color (used only with --database-space-block-color; '
+                        'when omitted, the block color is used)')
     choices = kikimr_bs3.TSerialManagementStage.E.keys()
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
     g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
@@ -33,6 +40,9 @@ def add_options(p):
 def create_request(args):
     if args.dry_run:
         raise Exception('Option --dry-run is not allowed for this command')
+
+    if args.database_space_unblock_color is not None and args.database_space_block_color is None:
+        raise Exception('Option --database-space-unblock-color requires --database-space-block-color')
 
     request = common.create_bsc_request(args)
 
@@ -69,6 +79,18 @@ def create_request(args):
         cmd.MaxScrubbedDisksAtOnce.append(args.max_scrubbed_disks_at_once)
     if args.pdisk_space_color_border is not None:
         cmd.PDiskSpaceColorBorder.append(disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border))
+    if args.database_space_block_color is not None:
+        # both colors are always sent together, as BSC validates them as a pair; GREEN unblock color means
+        # "the same as the block color"
+        block = disk_color.TPDiskSpaceColor.E.Value(args.database_space_block_color)
+        unblock = disk_color.TPDiskSpaceColor.GREEN
+        if args.database_space_unblock_color is not None:
+            unblock = disk_color.TPDiskSpaceColor.E.Value(args.database_space_unblock_color)
+            if unblock > block:
+                raise Exception('Database space unblock color %s must not be worse than block color %s' %
+                                (args.database_space_unblock_color, args.database_space_block_color))
+        cmd.DatabaseSpaceBlockColor.append(block)
+        cmd.DatabaseSpaceUnblockColor.append(unblock)
     if args.self_heal_local_policy is not None:
         cmd.UseSelfHealLocalPolicy.append(args.self_heal_local_policy)
 

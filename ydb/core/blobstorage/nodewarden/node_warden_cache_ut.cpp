@@ -56,6 +56,29 @@ namespace {
             UNIT_ASSERT(cache.GetVDisks(0).GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::RESTART);
         }
 
+        // A pool override pushed to a live node must reach the cache, so that a start from the cache latches it;
+        // a reset arrives as a record without the field and must clear it.
+        Y_UNIT_TEST(IncrementalUpdateReplacesHeapAllocatorOverride) {
+            TServiceSet cache;
+            TServiceSet initial;
+            AddVDisk(initial, 1, 10, 100, "pool").SetVDiskHeapAllocatorNumLeadingDisks(1);
+            UpdateCache(cache, initial, true);
+
+            TServiceSet update;
+            AddVDisk(update, 1, 10, 100, "pool", NKikimrBlobStorage::EEntityStatus::INITIAL)
+                .SetVDiskHeapAllocatorNumLeadingDisks(0);
+            UpdateCache(cache, update, false);
+            UNIT_ASSERT_VALUES_EQUAL(cache.VDisksSize(), 1);
+            UNIT_ASSERT(cache.GetVDisks(0).HasVDiskHeapAllocatorNumLeadingDisks());
+            UNIT_ASSERT_VALUES_EQUAL(cache.GetVDisks(0).GetVDiskHeapAllocatorNumLeadingDisks(), 0u);
+
+            TServiceSet reset;
+            AddVDisk(reset, 1, 10, 100, "pool", NKikimrBlobStorage::EEntityStatus::INITIAL);
+            UpdateCache(cache, reset, false);
+            UNIT_ASSERT_VALUES_EQUAL(cache.VDisksSize(), 1);
+            UNIT_ASSERT(!cache.GetVDisks(0).HasVDiskHeapAllocatorNumLeadingDisks());
+        }
+
         Y_UNIT_TEST(IncrementalUpdateRemovesVDisk) {
             TServiceSet initial;
             AddVDisk(initial, 1, 10, 100, "old-pool");

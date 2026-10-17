@@ -1371,7 +1371,7 @@ namespace {
             , MinHugeBlobInBytes(minHugeBlobInBytes)
             , PeriodSeconds(std::move(periodSeconds))
             , JitterRng(MultiHash(SkeletonId.NodeId(), pdiskId, vdiskSlotId))
-            , Counters(HullCtx->VCtx->VDiskCounters->GetSubgroup("subsystem", "vdisk_space_report"))
+            , Counters(HullCtx->VCtx->VDiskSpaceReportCounters)
             , ChunkSizeBytes(Counters->GetCounter("ChunkSizeBytes"))
             , PDiskAllocatedChunks(Counters->GetCounter("PDiskAllocatedChunks"))
             , PDiskAllocatedBytes(Counters->GetCounter("PDiskAllocatedBytes"))

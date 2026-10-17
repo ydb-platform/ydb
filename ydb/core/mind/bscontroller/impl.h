@@ -13,12 +13,14 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "database_space.h"
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
@@ -146,6 +148,7 @@ public:
         mutable NKikimrBlobStorage::TVDiskMetrics PersistedMetrics;
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
         mutable bool MetricsCommitted = false; // at least once since restart
+        mutable ui64 LastMetricsSequence = 0; // MetricsSequence of the last applied report from the node's warden
         mutable TResourceRawValues DiskResourceValues;
         mutable TResourceRawValues MaximumResourceValues{
             1ULL << 40, // 1 TB
@@ -624,12 +627,26 @@ public:
             return Metrics.HasExpectedSlotSize() ? Metrics.GetExpectedSlotSize() : ExpectedSlotSize;
         }
 
+        ui32 GetEffectiveSlotSizeInUnits() const {
+            // Preserve config-based slot accounting when ExpectedSlotSize is zero.
+            ui32 slotSizeInUnits = SlotSizeInUnits;
+            // When ExpectedSlotSize is nonzero, prefer SlotSizeInUnits reported by PDisk.
+            if (GetEffectiveExpectedSlotSize() != 0 && Metrics.HasSlotSizeInUnits()) {
+                slotSizeInUnits = Metrics.GetSlotSizeInUnits();
+            }
+            return Max(1u, slotSizeInUnits);
+        }
+
         ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
-            // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
-            // (conservative). Switching to the effective value would change legacy accounting
-            // and requires extending the NumActiveDynamicSlots recompute triggers to units changes
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
+            // NOTE: when ExpectedSlotSize is zero, uses the config-side
+            // SlotSizeInUnits, not the effective (metrics-preferred)
+            // one: for unit-size-inferred disks this over-counts
+            // occupancy of multi-unit groups (conservative). Switching
+            // to the effective value would change accounting when
+            // ExpectedSlotSize is zero. When ExpectedSlotSize is
+            // nonzero, use the effective value; NumActiveDynamicSlots
+            // is recomputed on units changes.
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, GetEffectiveSlotSizeInUnits());
         }
 
         // sum of owner weights over the live vslots with the current weight inputs; must be
@@ -1271,6 +1288,7 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+        TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
             return ErasureSpecies == other.ErasureSpecies
@@ -1376,6 +1394,7 @@ public:
                     Table::DefaultGroupSizeInUnits,
                     Table::BridgeMode,
                     Table::DDisk,
+                    Table::VDiskHeapAllocatorNumLeadingDisks,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1405,6 +1424,7 @@ public:
                     &TStoragePoolInfo::DefaultGroupSizeInUnits,
                     &TStoragePoolInfo::BridgeMode,
                     &TStoragePoolInfo::DDisk,
+                    &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );
@@ -1608,6 +1628,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TDatabaseSpaceTracker DatabaseSpace; // also keeps the space color thresholds for blocking writes to databases
+
     TSelfHealSettings SelfHealSettings;
 
     TClusterBalancingSettings ClusterBalancingSettings;
@@ -1690,6 +1712,7 @@ private:
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);
     void CommitStoragePoolStatUpdates(TConfigState& state);
+    void CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db);
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
     void CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc);
@@ -1805,7 +1828,6 @@ private:
 
     //TGroupStatusTracker GroupStatusTracker;
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
-    THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
     void ReadGroups(TSet<TGroupId>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
             TNodeId nodeId);
@@ -2138,6 +2160,23 @@ private:
 
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Database space state
+
+    void Handle(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace::TPtr ev);
+    // To be called after changes to DatabaseSpace: marks changed pools for system views, notifies subscribers and
+    // returns changed pool latches. These must be persisted (PersistDatabaseSpaceLatches) in the same transaction as the
+    // state they follow from (metrics, configuration); otherwise a restart could find a latch next to the state from
+    // before its change, and evaluate it differently.
+    [[nodiscard]] std::map<TBoxStoragePoolId, bool> PublishDatabaseSpaceChanges();
+    // the same inside a transaction that persists the state the changes follow from
+    void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
+    void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
+    void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
+    void UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool);
+    void RenderDatabaseSpace(IOutputStream& out);
+
     void ApplyStaticGroupUpdateForSyncers(std::map<TGroupId, TStaticGroupInfo>& prevStaticGroups);
 
     struct TBridgeSyncState {
@@ -2250,6 +2289,7 @@ public:
             case TEvBlobStorage::EvControllerScrubQuantumFinished:
             case TEvBlobStorage::EvControllerScrubReportQuantumInProgress:
             case TEvBlobStorage::EvControllerUpdateNodeDrives:
+            case TEvBlobStorage::EvControllerSubscribeDatabaseSpace:
             case TEvBlobStorage::EvControllerNodeReport: {
                 if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
                     return makeError("incorrect pipe server");
@@ -2302,6 +2342,7 @@ public:
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
+            hFunc(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
@@ -2708,6 +2749,7 @@ public:
     static void Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id, const THostConfigInfo &hostConfig);
     static void Serialize(NKikimrBlobStorage::TDefineBox *pb, const TBoxId &id, const TBoxInfo &box);
     static void Serialize(NKikimrBlobStorage::TDefineStoragePool *pb, const TBoxStoragePoolId &id, const TStoragePoolInfo &pool);
+    static void Serialize(NKikimrBlobStorage::TStoragePoolSettings *pb, const TStoragePoolInfo &pool);
     static void Serialize(NKikimrBlobStorage::TPDiskFilter *pb, const TStoragePoolInfo::TPDiskFilter &filter);
     static void Serialize(NKikimrBlobStorage::TBaseConfig::TPDisk *pb, const TPDiskId &id, const TPDiskInfo &pdisk);
     static void Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id);

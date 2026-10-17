@@ -1,0 +1,491 @@
+#include "config.h"
+
+#include <ydb/library/actors/core/log.h>
+
+#include <util/generic/hash_set.h>
+#include <util/generic/serialized_enum.h>
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
+#include <cmath>
+#include <set>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
+
+namespace NKikimr::NConveyorComposite::NConfig {
+
+const std::array<TWorkersPool, 2>& GetDefaultWorkersPoolTemplates() {
+    static const std::array<TWorkersPool, 2> templates{
+        TWorkersPool(0, "WP::DEFAULT", TProtoWorkerPool::NonSchedulable, TThreadsCountInfo(), {}),
+        TWorkersPool(1, "WP::DEFAULT_SCHEDULABLE", TProtoWorkerPool::Schedulable, TThreadsCountInfo(std::nullopt, 1), {})};
+    return templates;
+}
+
+TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
+    if (!config.HasEnabled()) {
+        EnabledFlag = true;
+    } else {
+        EnabledFlag = config.GetEnabled();
+    }
+    for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
+        Categories.emplace_back(TCategory(i));
+    }
+    const auto& templates = GetDefaultWorkersPoolTemplates();
+    WorkerPools.reserve(templates.size() + config.GetWorkerPools().size());
+    WorkerPools.assign(templates.begin(), templates.end());
+    TWorkersPool* defWorkersPool = &WorkerPools.front();
+    auto& schedulablePool = WorkerPools.back();
+    std::set<ESpecialTaskCategory> usedCategories;
+    for (auto&& i : config.GetCategories()) {
+        if (i.HasQueueSizeLimit()) {
+            YDB_LOG_WARN("",
+                {"event", "unused_composite_conveyor_queue_size_limit"},
+                {"category", i.GetName()},
+                {"queueSizeLimit", i.GetQueueSizeLimit()});
+        }
+        TCategory cat(ESpecialTaskCategory::Insert);
+        auto conclusion = cat.DeserializeFromProto(i);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (!usedCategories.emplace(cat.GetCategory()).second) {
+            return TConclusionStatus::Fail("category " + ::ToString(cat.GetCategory()) + " duplication");
+        }
+        Categories[(ui64)cat.GetCategory()] = std::move(cat);
+    }
+    THashSet<TString> poolNames;
+    for (const auto& pool : templates) {
+        poolNames.emplace(pool.GetName());
+    }
+    for (auto&& i : config.GetWorkerPools()) {
+        TWorkersPool wp(WorkerPools.size());
+        auto conclusion = wp.DeserializeFromProto(i);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        const TString& poolName = wp.GetName();
+        if (!poolNames.emplace(poolName).second) {
+            return TConclusionStatus::Fail("pool name duplication: '" + poolName + "'");
+        }
+        WorkerPools.emplace_back(std::move(wp));
+        for (auto&& link : WorkerPools.back().GetLinks()) {
+            AFL_VERIFY((ui64)link.GetCategory() < Categories.size());
+            auto& cat = Categories[(ui64)link.GetCategory()];
+            if (!cat.AddWorkerPool(WorkerPools.back().GetWorkersPoolId())) {
+                return TConclusionStatus::Fail("double link for category: " + ::ToString(link.GetCategory()));
+            }
+        }
+    }
+    for (auto&& i : Categories) {
+        bool hasServicePool = false;
+        bool hasManagedPool = false;
+        for (const auto poolId : i.GetWorkerPools()) {
+            const auto mode = WorkerPools[poolId].GetSchedulingMode();
+            hasServicePool |= mode != TProtoWorkerPool::Schedulable;
+            hasManagedPool |= mode != TProtoWorkerPool::NonSchedulable;
+        }
+        if (!hasServicePool) {
+            AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
+            AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
+        }
+        if (!hasManagedPool) {
+            AFL_VERIFY(schedulablePool.AddLink(i.GetCategory()));
+            AFL_VERIFY(i.AddWorkerPool(schedulablePool.GetWorkersPoolId()));
+        }
+    }
+    return TConclusionStatus::Success();
+}
+
+double TWorkersPool::GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const {
+    const double workersCountDouble = WorkersCountInfo.GetCPUUsageDouble(totalThreadsCount);
+    double wholePart;
+    const double fractionalPart = std::modf(workersCountDouble, &wholePart);
+    if (workerIdx + 1 <= wholePart) {
+        return 1;
+    } else {
+        AFL_VERIFY(workerIdx == wholePart);
+        AFL_VERIFY(fractionalPart)("count", workersCountDouble);
+        return fractionalPart;
+    }
+}
+
+const TCategory& TConfig::GetCategoryConfig(const ESpecialTaskCategory cat) const {
+    AFL_VERIFY((ui64)cat < Categories.size());
+    return Categories[(ui64)cat];
+}
+
+TString TConfig::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "{Categories:[";
+    for (auto&& c : Categories) {
+        sb << c.DebugString() << ";";
+    }
+    sb << "]};";
+    sb << "{WorkerPools:[";
+    for (auto&& wp : WorkerPools) {
+        sb << wp.DebugString() << ";";
+    }
+    sb << "]};";
+    sb << "Enabled=" << EnabledFlag << ";";
+    sb << "}";
+    return sb;
+}
+
+NKikimrConfig::TCompositeConveyorConfig TConfig::BuildDefaultProto() {
+    NKikimrConfig::TCompositeConveyorConfig result;
+    for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
+        result.AddCategories()->SetName(::ToString(i));
+        auto* workersPool = result.AddWorkerPools();
+        workersPool->SetDefaultFractionOfThreadsCount(0.33);
+        workersPool->AddLinks()->SetCategory(::ToString(i));
+    }
+    return result;
+}
+
+TConfig TConfig::BuildDefault() {
+    return BuildFromProto(BuildDefaultProto()).DetachResult();
+}
+
+TConclusionStatus THeavyLimit::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::THeavyLimit& proto) {
+    if (!proto.HasCpuLimitUs() || !proto.GetCpuLimitUs()) {
+        return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be greater than 0");
+    }
+    if (!proto.HasThreadLimit() || !proto.GetThreadLimit()) {
+        return TConclusionStatus::Fail("heavy_limits thread_limit must be greater than 0");
+    }
+    CpuLimit = TDuration::MicroSeconds(proto.GetCpuLimitUs());
+    ThreadLimit = proto.GetThreadLimit();
+    return TConclusionStatus::Success();
+}
+
+TString THeavyLimit::DebugString() const {
+    TStringBuilder sb;
+    sb << "{cpu_us=" << CpuLimit.MicroSeconds() << ";threads=" << ThreadLimit << "}";
+    return sb;
+}
+
+namespace {
+// WorkersCount and DefaultFractionOfThreadsCount are any_of. DeserializeFromProto keeps
+// WorkersCount when both are set, so a yaml value must drop the other field inherited from defaults.
+void ApplyPoolSizeAnyOf(TProtoWorkerPool& target, const TProtoWorkerPool& yamlPool) {
+    if (yamlPool.HasWorkersCount()) {
+        target.SetWorkersCount(yamlPool.GetWorkersCount());
+        target.ClearDefaultFractionOfThreadsCount();
+    } else if (yamlPool.HasDefaultFractionOfThreadsCount()) {
+        target.ClearWorkersCount();
+        target.SetDefaultFractionOfThreadsCount(yamlPool.GetDefaultFractionOfThreadsCount());
+    }
+}
+}
+
+TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefaults(
+    const NKikimrConfig::TCompositeConveyorConfig& defaults, const NKikimrConfig::TCompositeConveyorConfig& yaml) {
+    bool allHaveLinks = yaml.GetWorkerPools().size() > 0;
+    for (const auto& pool : yaml.GetWorkerPools()) {
+        if (!pool.GetLinks().size()) {
+            allHaveLinks = false;
+            break;
+        }
+    }
+    if (allHaveLinks) {
+        return yaml;
+    }
+
+    NKikimrConfig::TCompositeConveyorConfig result = defaults;
+    if (yaml.HasEnabled()) {
+        result.SetEnabled(yaml.GetEnabled());
+    }
+    if (yaml.GetCategories().size()) {
+        const ui32 allCategoryCount = GetEnumAllValues<ESpecialTaskCategory>().size();
+        if ((ui32)yaml.GetCategories().size() >= allCategoryCount) {
+            result.ClearCategories();
+            result.MutableCategories()->CopyFrom(yaml.GetCategories());
+        } else {
+            for (const auto& yamlCat : yaml.GetCategories()) {
+                NKikimrConfig::TCompositeConveyorConfig::TCategory* existing = nullptr;
+                for (auto& cat : *result.MutableCategories()) {
+                    if (cat.GetName() == yamlCat.GetName()) {
+                        existing = &cat;
+                        break;
+                    }
+                }
+                if (existing) {
+                    *existing = yamlCat;
+                } else {
+                    *result.AddCategories() = yamlCat;
+                }
+            }
+        }
+    }
+
+    for (const auto& yamlPool : yaml.GetWorkerPools()) {
+        if (!yamlPool.HasName() || yamlPool.GetName().empty()) {
+            return TConclusionStatus::Fail("worker pool overlay requires a name");
+        }
+        TProtoWorkerPool* existing = nullptr;
+        for (auto& pool : *result.MutableWorkerPools()) {
+            if (pool.GetName() == yamlPool.GetName()) {
+                existing = &pool;
+                break;
+            }
+        }
+        if (yamlPool.GetLinks().size()) {
+            if (existing) {
+                auto merged = yamlPool;
+                ApplyPoolSizeAnyOf(merged, yamlPool);
+                if (!yamlPool.HasWorkersCount() && !yamlPool.HasDefaultFractionOfThreadsCount()) {
+                    if (existing->HasWorkersCount()) {
+                        merged.SetWorkersCount(existing->GetWorkersCount());
+                    } else if (existing->HasDefaultFractionOfThreadsCount()) {
+                        merged.SetDefaultFractionOfThreadsCount(existing->GetDefaultFractionOfThreadsCount());
+                    }
+                }
+                if (!merged.HasMaxBatchSize() && existing->HasMaxBatchSize()) {
+                    merged.SetMaxBatchSize(existing->GetMaxBatchSize());
+                }
+                if (!merged.HasSchedulingMode() && existing->HasSchedulingMode()) {
+                    merged.SetSchedulingMode(existing->GetSchedulingMode());
+                }
+                if (!merged.GetHeavyLimits().size() && existing->GetHeavyLimits().size()) {
+                    merged.MutableHeavyLimits()->CopyFrom(existing->GetHeavyLimits());
+                }
+                *existing = merged;
+            } else {
+                *result.AddWorkerPools() = yamlPool;
+            }
+            continue;
+        }
+        if (!existing) {
+            TStringBuilder expected;
+            for (const auto& pool : result.GetWorkerPools()) {
+                if (expected) {
+                    expected << ", ";
+                }
+                expected << "'" << pool.GetName() << "'";
+            }
+            return TConclusionStatus::Fail(
+                "unknown worker pool name for overlay: '" + yamlPool.GetName() + "', expected one of: " + expected);
+        }
+        if (yamlPool.GetHeavyLimits().size()) {
+            existing->MutableHeavyLimits()->CopyFrom(yamlPool.GetHeavyLimits());
+        }
+        ApplyPoolSizeAnyOf(*existing, yamlPool);
+        if (yamlPool.HasSchedulingMode()) {
+            existing->SetSchedulingMode(yamlPool.GetSchedulingMode());
+        }
+        if (yamlPool.HasMaxBatchSize()) {
+            existing->SetMaxBatchSize(yamlPool.GetMaxBatchSize());
+        }
+    }
+    return result;
+}
+
+TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
+    : WorkersPoolId(wpId)
+    , WorkersCountInfo(workersCountDouble, workersFraction) {
+    PoolName = "WP::UNDEFINED:" + ::ToString(wpId);
+}
+
+TWorkersPool::TWorkersPool(const ui32 wpId, TString poolName,
+    TProtoWorkerPool::ESchedulingMode schedulingMode,
+    TThreadsCountInfo workersCountInfo, std::vector<THeavyLimit> heavyLimits)
+    : PoolName(std::move(poolName))
+    , SchedulingMode(schedulingMode)
+    , WorkersPoolId(wpId)
+    , WorkersCountInfo(std::move(workersCountInfo))
+    , HeavyLimits(std::move(heavyLimits)) {
+}
+
+TConclusionStatus TWorkersPool::DeserializeFromProto(const TProtoWorkerPool& proto) {
+    SchedulingMode = proto.GetSchedulingMode();
+    if (!proto.GetLinks().size()) {
+        return TConclusionStatus::Fail("no categories for workers pool");
+    }
+    if (proto.HasName()) {
+        PoolName = proto.GetName();
+    }
+    std::set<TString> categories;
+    for (auto&& c : proto.GetLinks()) {
+        TWorkerPoolCategoryUsage link;
+        auto conclusion = link.DeserializeFromProto(c);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        categories.emplace(::ToString(link.GetCategory()));
+        Links.emplace_back(std::move(link));
+    }
+    if (!PoolName) {
+        PoolName = "WP::" + JoinSeq("-", categories);
+        if (SchedulingMode != TProtoWorkerPool::NonSchedulable) {
+            PoolName += "-" + TProtoWorkerPool::ESchedulingMode_Name(SchedulingMode);
+        }
+    }
+    if (Links.empty()) {
+        return TConclusionStatus::Fail("no links for workers pool");
+    }
+    {
+        auto parseConclusion = WorkersCountInfo.DeserializeFromProto(proto);
+        if (parseConclusion.IsFail()) {
+            return parseConclusion;
+        }
+    }
+    if (proto.HasMaxBatchSize()) {
+        MaxBatchSize = proto.GetMaxBatchSize();
+    }
+    for (const auto& protoLimit : proto.GetHeavyLimits()) {
+        THeavyLimit limit;
+        auto conclusion = limit.DeserializeFromProto(protoLimit);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        if (!HeavyLimits.empty()) {
+            if (limit.GetCpuLimit() <= HeavyLimits.back().GetCpuLimit()) {
+                return TConclusionStatus::Fail("heavy_limits cpu_limit_us must be strictly increasing");
+            }
+            if (limit.GetThreadLimit() >= HeavyLimits.back().GetThreadLimit()) {
+                return TConclusionStatus::Fail("heavy_limits thread_limit must be strictly decreasing");
+            }
+        }
+        // Absolute workers_count is rejected here when thread_limit does not fit.
+        // A pool sized only by default_fraction_of_threads_count is not checked:
+        // the worker count is fraction * GetPossibleMaxLimitThreads() and is unknown at parse time.
+        // An oversized thread_limit on such a pool is a silent no-op and stays the operator's responsibility.
+        if (proto.HasWorkersCount() && limit.GetThreadLimit() >= static_cast<ui32>(std::ceil(proto.GetWorkersCount()))) {
+            return TConclusionStatus::Fail("heavy_limits thread_limit must be less than workers_count");
+        }
+        HeavyLimits.emplace_back(std::move(limit));
+    }
+
+    return TConclusionStatus::Success();
+}
+
+TString TWorkersPool::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "id=" << WorkersPoolId << ";";
+    sb << "scheduling_mode=" << TProtoWorkerPool::ESchedulingMode_Name(SchedulingMode) << ";";
+    sb << "threads=" << WorkersCountInfo.DebugString() << ";";
+    TStringBuilder sbLinks;
+    sbLinks << "[";
+    for (auto&& l : Links) {
+        sbLinks << l.DebugString() << ";";
+    }
+    sbLinks << "]";
+    sb << "links=" << sbLinks << ";";
+    if (HeavyLimits.size()) {
+        TStringBuilder sbLimits;
+        sbLimits << "[";
+        for (auto&& l : HeavyLimits) {
+            sbLimits << l.DebugString() << ";";
+        }
+        sbLimits << "]";
+        sb << "heavy_limits=" << sbLimits << ";";
+    }
+    sb << "}";
+    return sb;
+}
+
+ui64 TWorkersPool::GetWorkersCount(const ui64 totalThreadsCount) const {
+    return WorkersCountInfo.GetThreadsCount(totalThreadsCount);
+}
+
+const TString& TWorkersPool::GetName() const {
+    AFL_VERIFY(!!PoolName);
+    return PoolName;
+}
+
+TString TCategory::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "category=" << Category << ";";
+    sb << "queue_limit=" << QueueSizeLimit << ";";
+    sb << "pools=" << JoinSeq(",", WorkerPools) << ";";
+    sb << "}";
+    return sb;
+}
+
+TString TWorkerPoolCategoryUsage::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    sb << "c=" << Category << ";";
+    sb << "w=" << Weight << ";";
+    sb << "}";
+    return sb;
+}
+
+TThreadsCountInfo::TThreadsCountInfo(const std::optional<double> count, const std::optional<double> fraction)
+    : Count(count)
+    , Fraction(fraction) {
+    AFL_VERIFY(Count || Fraction);
+}
+
+double TThreadsCountInfo::GetCPUUsageDouble(const ui64 totalThreadsCount) const {
+    if (Count) {
+        return *Count;
+    }
+    AFL_VERIFY(Fraction);
+    const double result = *Fraction * totalThreadsCount;
+    if (!result) {
+        return 1;
+    }
+    return result;
+}
+
+NKikimr::TConclusionStatus TThreadsCountInfo::DeserializeFromProto(const TProtoWorkerPool& poolInfo) {
+    if (poolInfo.HasWorkersCount()) {
+        Count = poolInfo.GetWorkersCount();
+        if (!std::isfinite(*Count) || *Count <= 0) {
+            return TConclusionStatus::Fail("incorrect threads count: " + ::ToString(*Count));
+        }
+        Fraction.reset();
+    } else if (poolInfo.HasDefaultFractionOfThreadsCount()) {
+        Fraction = poolInfo.GetDefaultFractionOfThreadsCount();
+        if (!std::isfinite(*Fraction) || *Fraction <= 0 || 1 < *Fraction) {
+            return TConclusionStatus::Fail("incorrect threads count fraction: " + ::ToString(*Fraction));
+        }
+        Count.reset();
+    }
+    return TConclusionStatus::Success();
+}
+
+TString TThreadsCountInfo::DebugString() const {
+    TStringBuilder sb;
+    sb << "{";
+    if (Count) {
+        sb << "c=" << *Count << ";";
+    }
+    if (Fraction) {
+        sb << "f=" << *Fraction << ";";
+    }
+    sb << "}";
+    return sb;
+}
+
+}   // namespace NKikimr::NConveyorComposite::NConfig
+
+namespace NKikimr::NConveyorComposite {
+TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const double weight)
+    : CPUGroupThreadsLimit(cpuGroupThreadsLimit)
+    , Weight(weight) {
+}
+
+TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
+    if (config.HasCpuGroupThreadsLimit()) {
+        CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
+    }
+    return TConclusionStatus::Success();
+}
+
+TString TCPULimitsConfig::DebugString() const {
+    TStringBuilder sb;
+    if (CPUGroupThreadsLimit) {
+        sb << "CPUGroupThreadsLimit=" << *CPUGroupThreadsLimit << ";";
+    } else {
+        sb << "Disabled;";
+    }
+    return sb;
+}
+
+}   // namespace NKikimr::NConveyorComposite

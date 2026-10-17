@@ -1,6 +1,7 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 
+#include <yql/essentials/core/sql_types/spark_functions.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NSQLTranslationV1 {
@@ -275,6 +276,10 @@ void TSqlCallExpr::InitName(const TString& name) {
 
 void TSqlCallExpr::InitExpr(const TNodePtr& expr) {
     Node_ = expr;
+    if (Node_ && Node_->ModuleName() && to_lower(*Node_->ModuleName()) == "spark" && Node_->FuncName()) {
+        const auto* function = NYql::NSpark::FindFunction(to_lower(*Node_->FuncName()));
+        DistinctAllowed_ = function && function->IsAggregate;
+    }
 }
 
 TSQLStatus TSqlCallExpr::FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node) {

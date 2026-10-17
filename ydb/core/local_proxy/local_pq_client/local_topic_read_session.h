@@ -6,6 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-std::shared_ptr<NYdb::NTopic::IReadSession> CreateLocalTopicReadSession(const TLocalTopicSessionSettings& localSettings, const NYdb::NTopic::TReadSessionSettings& sessionSettings);
+std::shared_ptr<NYdb::NTopic::IReadSession> CreateLocalTopicReadSession(
+    const TLocalTopicSessionSettings& localSettings, const NYdb::NTopic::TReadSessionSettings& sessionSettings);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

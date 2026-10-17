@@ -3087,17 +3087,17 @@ void TPersQueue::BeginDeleteTransaction(const TActorContext& ctx,
     CheckTxState(ctx, tx);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
+void TPersQueue::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx)
 {
     if (!InitCompleted) {
         AddPendingEvent(ev.Release());
         return;
     }
 
-    NKikimrPQ::TEvCancelTransactionProposal& event = ev->Get()->Record;
+    NKikimrTxDataShard::TEvCancelTransactionProposal& event = ev->Get()->Record;
     PQ_ENSURE(event.HasTxId());
 
-    LOG_W("Handle TEvPersQueue::TEvCancelTransactionProposal for TxId",
+    LOG_W("Handle TEvDataShard::TEvCancelTransactionProposal for TxId",
         {"txId", event.GetTxId()});
 
     if (auto tx = GetTransaction(ctx, event.GetTxId()); tx) {
@@ -3911,7 +3911,7 @@ void TPersQueue::ProcessPlanStep(const TActorId& sender, std::unique_ptr<TEvTxPr
     const ui64 step = event.GetStep();
     // последняя транзакция шага, которая есть в Txs. шаг без таких транзакций PlanStep не двигает:
     // MinStep новых пропоузов равен max(PlanStep + 1, часы timecast), и шаг из будущего навсегда
-    // поднял бы этот пол
+    // поднял бы эту нижнюю границу
     TMaybe<ui64> lastKnownTxId;
 
     TVector<ui64> txIds;
@@ -5900,7 +5900,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvSubDomainStatus, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionAttach, Handle);
         HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-        HFuncTraced(TEvPersQueue::TEvCancelTransactionProposal, Handle);
+        HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
         HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFuncTraced(TEvPQ::TEvCheckPartitionStatusRequest, Handle);
         HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);

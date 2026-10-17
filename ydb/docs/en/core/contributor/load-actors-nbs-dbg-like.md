@@ -12,7 +12,7 @@ Open `http://<node>:8765/actors/load?mode=tablet` on a node in the intended data
 
 {% note warning %}
 
-Run one workload at a time per load tablet, and finish it before deleting the tablet. The tablet stays in its `Ready` phase during a run and does not enforce exclusive access. A later run reconfigures the same per-DBG actors.
+Run one workload at a time per load tablet, and finish it before deleting the tablet. The tablet stays in its `Ready` phase during a run and does not enforce exclusive access. A later run closes I/O admission, drains accepted work, and reconfigures the same per-DBG actors before starting its load workers.
 
 {% endnote %}
 
@@ -225,9 +225,7 @@ The tablet page pre-fills `MaxInFlight: 2048` and `MaxInflightLsns: 65536` for a
 
 Warm-up and drain completions remain in lifetime counters but are excluded from measured throughput and latency. Random reads can access unwritten addresses, and the generator does not verify returned data against an expected block image. Use the integration tests for correctness checks.
 
-When DBGs of one load tablet share a data DDisk, their DBG-local vChunk indexes
-can refer to the same underlying blocks. Do not assume that distinct logical
-DBG address ranges isolate stored data; see the [workload implementation notes](https://github.com/ydb-platform/ydb/blob/main/ydb/core/load_test/rfc/nbs_dbg_like/workload.md).
+PB and DDisk requests use unique 64-bit vChunk IDs: `ui64(DbgIndex) * TargetNumVChunks + localVChunkIndex`. Distinct DBGs therefore keep separate data even when they share a DDisk and use equal local offsets. The flat client address space is unchanged, and allocation dimensions remain fixed across runs. Create fresh load-tablet allocations when moving from the earlier DBG-local mapping: existing data is not migrated. See the [workload implementation notes](https://github.com/ydb-platform/ydb/blob/main/ydb/core/load_test/rfc/nbs_dbg_like/workload.md).
 
 ### Tablet Parameters {#tablet-parameters}
 
@@ -236,16 +234,16 @@ These fields belong to `WorkloadConfig.TabletConfig`.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `MaxInflightLsns` | `4096` | Budget for tracked log sequence numbers (LSNs). Each DBG actor independently enforces `max(1, budget / allocated_DBG_count)`. The divisor includes inactive DBGs. Zero rejects writes; this is not a single shared global counter. |
-| `FlushBatchSize` | `10000` | Maximum LSNs scheduled per destination in one flush batch; normalized to at least one. |
+| `FlushBatchSize` | `10000` | Maximum LSNs scheduled per destination in one flush pass, across batches grouped by vChunk; normalized to at least one. |
 | `EraseBatchSize` | `10000` | Maximum LSNs scheduled per destination in one erase batch; normalized to at least one. |
-| `SyncRequestsBatchSize` | `10` | Per-DBG threshold of ready LSNs before scheduling flush or erase. Set to `1` to process tails promptly. The gate remains enabled after load generation stops. |
+| `SyncRequestsBatchSize` | `10` | Per-DBG threshold of the current unadmitted flush-ready or erase-ready cohort. Exactly those members are admitted. A later completion, including a lower LSN, waits for a new cohort or idle cleanup, and already admitted records are not counted toward the next gate. Normalized to at least one. Set to `1` to process tails promptly. A coalesced one-second cleanup admits ready records in idle vChunks below the gate, including after load generation stops. Reconfiguration, deletion, and poison immediately admit every already ready record regardless of count and leave incomplete PB writes unadmitted. |
 | `PBufferReplyTimeoutMicroseconds` | `50000` | Timeout passed to the PB plural-write coordinator. |
 | `DisableReplication` | `false` | Write only to the coordinator PB, acknowledge its confirmation, and erase without copying to DDisk. Requires `ReadRatio: 0`. |
 | `EnableChecksums` | `true` | Calculate one checksum per 4 KiB payload block in the load worker and forward the checksums through the load tablet to PersistentBuffer. Set this to the DDisk/PersistentBuffer checksum mode. |
 
 The proxy sets `TabletConfig.IoSizeBytes` from `ReadWriteSizeKiB` and `TabletConfig.NumDirectBlockGroupsToUse` from the selected DBG count. Configure those through the workload fields, not the internal tablet fields.
 
-Keep the per-DBG LSN budget comfortably above the sync threshold: LSNs remain tracked through write, flush, and erase, and both queues need enough work to pass their gates.
+Keep the per-DBG LSN budget comfortably above the sync threshold: LSNs remain tracked through write, flush, and erase, so normal cohorts need enough capacity to pass their gate without waiting for idle cleanup.
 
 ## Run Against Multiple Tablets {#multiple-tablets}
 
@@ -270,13 +268,25 @@ Submit it using the same `mode=start` workflow. A nonempty `Targets` list select
 
 `NodeId` selects the node on which to start that tablet's load proxy. Zero or an omitted value uses the coordinator's node; the actor does not look up or continuously track placement in Hive. Use the current hosting node to keep load generation colocated. The target load service must be available. Include each tablet only once and start this coordinator on one node.
 
+## I/O Ordering {#io-ordering}
+
+Normal writes use `TEvWritePersistentBuffers` to all three primary PB peers. They are acknowledged after three confirmations, before background Sync copies data to DDisk. They do not use DDisk `TEvWrite`; PB writes and PB reads continue during Sync. An incomplete overwrite does not hide the previous acknowledged version, and reordered confirmations cannot move read visibility backwards.
+
+Overlapping Sync operations run in write acceptance order: a newer version waits until all destinations of the older version complete. Normal flush and erase admission takes exactly the current unadmitted ready cohort. Sync batches group its records by destination and vChunk, with one vChunk per request and the total per-destination limit preserved across batches. A later completion, including one with a lower LSN than records already admitted, waits for a new cohort or idle cleanup. PB reads continue to use the acknowledged PB version until Sync completes, then new reads use DDisk. An outstanding PB read holds that version against Erase, without blocking the next otherwise eligible Sync. An outstanding DDisk read holds its range against overlapping Sync, without blocking a PB write. Overlapping PB records erase oldest first; independent ranges can progress concurrently.
+
+Each per-DBG worker coalesces ready-work and PB/Sync-completion cleanup requests into one timer due one second after the first request. At firing, ready flush and erase records from idle local vChunks are admitted below the normal threshold. Idle means no incomplete PB writes and no outstanding Sync destination segments; reads and erases do not disqualify a vChunk. Both admission passes use the same activity snapshot before either queue runs. Ordering and read pins still apply. Busy or pinned work alone does not trigger repeated timer passes; later PB/Sync completions request another pass, and the last reader wakes only its admitted slot. A vChunk becoming ready shortly before a pending timer fires can join that pass; one continuous second of idleness is not required.
+
+The load retains outstanding request state until matching replies arrive. Failed writes remain invisible and confirmed PB copies are cleaned up after their outstanding responses finish. Missing or ambiguous replies cannot authorize cleanup or lifecycle drain completion. This models normal partition ordering and orderly shutdown; it does not implement full NBS crash recovery, recovery markers/fences, repair, or handoff policy.
+
 ## Results and Cleanup {#results}
 
 Results include write/read requests per second, p50/p95/p99 completion latencies in microseconds, configured `max_in_flight`, combined successful request count (`txs`), throughput (`rps`), and errors per second (`errors`). Multi-tablet results also include a `tablets` array. The coordinator merges latency histograms; it does not average per-tablet percentiles.
 
-Write completion measures PB confirmation, before the background copy to DDisk and PB erase. Read results aggregate both PB and DDisk routes. The last HTML report contains counts, byte totals, measurement duration, and latency percentiles. Tablet and per-DBG counters expose write, flush, erase, and read activity through the `load_actor` counter service.
+Write completion measures PB confirmation, before the background copy to DDisk and PB erase. Read results aggregate both PB and DDisk routes. The last HTML report contains counts, byte totals, measurement duration, and latency percentiles. Tablet and per-DBG counters expose write, flush, erase, and read activity through the `load_actor` counter service. The lifecycle gauge `DbgsAllocated` updates with phase transitions to the allocated count after allocation and to zero after deletion.
 
-A duration limit, count target, or [{#T}](load-actors-stop.md) stops new requests and allows up to 30 seconds for outstanding client replies. This drain does not wait for all background flushes or erases. In particular, a sync threshold greater than one can leave a short tail queued until more work arrives.
+A duration limit, count target, or [{#T}](load-actors-stop.md) stops new requests and allows up to 30 seconds for outstanding client replies. This drain does not force background flush or erase. The one-second idle cleanup lets short tails finish naturally after a run, including erase with replication disabled, but client completion does not wait for background maintenance. Records already admitted keep that admission and are not counted toward the next cohort.
+
+The next configuration closes admission and drains accepted writes through Sync, waits for accepted reads, and erases PB copies before installing settings. The proxy starts workers only after configuration is acknowledged by all per-DBG actors. Reconfiguration keeps peer sessions. Drain and poison invalidate ordinary cleanup timers using an internal generation independent of user configuration IDs, so stale events cannot affect a new configuration or clear its timer flag. Forced lifecycle and idle cleanup do not increment the normal gate-blocked counters. Deletion and worker poison also drain accepted work, then wait for peer disconnect acknowledgements. There is no normal worker-drain deadline: an unresolved result can keep these operations pending indefinitely; a client timeout is not evidence that cleanup finished.
 
 After the run finishes, delete each tablet with the owner index used to create it:
 
@@ -287,7 +297,7 @@ curl --fail-with-body 'http://<node>:8765/actors/load' \
   --data-urlencode 'owner_idx=1'
 ```
 
-The helper requests DBG deallocation from the tablet and then deletion from Hive. This is allocation cleanup, not a data sanitization operation. If allocation or deletion fails, inspect the BSC and tablet logs before retrying; the current implementation has incomplete recovery for interrupted allocation and can clear local state after a BSC deallocation error.
+The helper asks the tablet to drain and deallocate DBGs, then asks Hive to delete it. The tablet sends BSC deallocation only after every per-DBG worker has completed its I/O drain and disconnect barrier. This load-generator deletion flushes acknowledged writes before cleaning PB copies, a stronger guarantee than the production partition's destructive deletion path. It releases allocation, not secure erasure of stored data. If allocation or deletion fails, inspect BSC and tablet logs before retrying: the current implementation does not fully recover interrupted allocation and may clear local state after a BSC deallocation error.
 
 ## Source and Implementation Notes {#source}
 

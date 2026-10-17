@@ -13,6 +13,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_operation_tracking.cpp
     ut_streaming_query.cpp
 )
 

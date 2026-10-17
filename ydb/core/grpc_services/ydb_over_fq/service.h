@@ -2,6 +2,7 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_fq.h>
+
 #include <memory>
 
 namespace NKikimr::NGRpcService {
@@ -23,6 +24,6 @@ std::function<void(std::unique_ptr<IRequestNoOpCtx>, const IFacilityProvider&)> 
 
 std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> GetListDirectoryExecutor(NActors::TActorId grpcProxyId);
 
-} // namespace NYdbOverFq
+}   // namespace NYdbOverFq
 
-} // namespace NKikimr::NGRpcService
+}   // namespace NKikimr::NGRpcService

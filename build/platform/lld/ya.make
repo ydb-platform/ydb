@@ -38,6 +38,9 @@ IF (OS_ANDROID)
         # See: https://developer.android.com/guide/practices/page-sizes
         LDFLAGS(-Wl,-z,max-page-size=16384)
     ENDIF()
+ELSEIF (OS_ZEPHYR)
+    DISABLE(PROVIDE_LLD_FROM_RESOURCE)  # Use LLD shipped with Zephyr SDK.
+    LDFLAGS(-fuse-ld=lld)
 ELSEIF (OS_LINUX)
     ENABLE(PROVIDE_LLD_FROM_RESOURCE)
     LDFLAGS(

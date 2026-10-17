@@ -20,10 +20,13 @@
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/conclusion/status.h>
 
 #include <library/cpp/time_provider/time_provider.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
 
@@ -688,7 +691,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
     }
 
     if (ActualizationStarted) {
-        TLogContextGuard lGuard(TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size()));
+        NActors::TLogContextGuard logGuard = TLogContextBuilder::Build()("queue", "ttl")("external_count", pathEviction.size());
         for (auto&& i : GranulesStorage->GetTables()) {
             if (pathEviction.contains(i.first)) {
                 continue;
@@ -767,7 +770,9 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     auto p = spg.GetPortionOptional(portion);
 
     if (!p) {
-        LOG_S_WARN("Portion erased already " << portionInfo << " at tablet " << TabletId);
+        YDB_LOG_WARN("Portion erased already at tablet",
+            {"portionInfo", portionInfo},
+            {"tabletId", TabletId});
         return false;
     } else {
         if (updateStats) {

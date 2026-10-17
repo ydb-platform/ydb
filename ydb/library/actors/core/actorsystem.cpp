@@ -1,4 +1,6 @@
 #include "defs.h"
+#include "subsystems/allocation_cache.h"
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -26,6 +28,7 @@
 #include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
+
 
     namespace {
         template<class TCallback>
@@ -162,7 +165,6 @@ namespace NActors {
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
-        , AsyncFrameCacheSizeBytes(setup->AsyncFrameCacheSizeBytes)
         , CpuManager(new TCpuManager(setup))
         , ExecutorPoolCount(CpuManager->GetExecutorsCount())
         , Scheduler(setup->Scheduler)
@@ -178,6 +180,12 @@ namespace NActors {
     {
         ServiceMap.Reset(new TServiceMap());
         SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TAllocationCacheSubSystem>()) {
+            RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
+        }
+        if (!GetSubSystem<TAsyncFrameCache>()) {
+            RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
+        }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
         }
@@ -558,6 +566,7 @@ namespace NActors {
         }
 
         Scheduler->PrepareStart();
+        ExecutorThreadsPrepared = true;
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
@@ -618,8 +627,23 @@ namespace NActors {
         return CpuManager->GetBasicExecutorPools();
     }
 
-    TAsyncFrameCache::TProcessStats TActorSystem::GetAsyncFrameCacheStats() const {
-        return CpuManager->GetAsyncFrameCacheStats();
+    void TActorSystem::PrepareExecutorThread(TThreadContext* context) {
+        Y_ABORT_UNLESS(!ExecutorThreadsPrepared, "executor contexts must be prepared before threads start");
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadPrepare(context);
+        });
+    }
+
+    void TActorSystem::InitializeExecutorThread(TThreadContext* context) {
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStart(context);
+        });
+    }
+
+    void TActorSystem::CleanupExecutorThread(TThreadContext* context) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStop(context);
+        });
     }
 
 }

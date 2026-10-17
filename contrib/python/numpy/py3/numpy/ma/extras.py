@@ -5,7 +5,6 @@ A collection of utilities for `numpy.ma`.
 
 :author: Pierre Gerard-Marchant
 :contact: pierregm_at_uga_dot_edu
-:version: $Id: extras.py 3473 2007-10-29 15:18:13Z jarrod.millman $
 
 """
 __all__ = [
@@ -23,18 +22,37 @@ __all__ = [
 import itertools
 import warnings
 
-from . import core as ma
-from .core import (
-    MaskedArray, MAError, add, array, asarray, concatenate, filled, count,
-    getmask, getmaskarray, make_mask_descr, masked, masked_array, mask_or,
-    nomask, ones, sort, zeros, getdata, get_masked_subclass, dot
-    )
-
 import numpy as np
-from numpy import ndarray, array as nxarray
-from numpy.lib.array_utils import normalize_axis_index, normalize_axis_tuple
+from numpy import array as nxarray
+from numpy import ndarray
 from numpy.lib._function_base_impl import _ureduce
 from numpy.lib._index_tricks_impl import AxisConcatenator
+from numpy.lib.array_utils import normalize_axis_index, normalize_axis_tuple
+
+from . import core as ma
+from .core import (  # noqa: F401
+    MAError,
+    MaskedArray,
+    add,
+    array,
+    asarray,
+    concatenate,
+    count,
+    dot,
+    filled,
+    get_masked_subclass,
+    getdata,
+    getmask,
+    getmaskarray,
+    make_mask_descr,
+    mask_or,
+    masked,
+    masked_array,
+    nomask,
+    ones,
+    sort,
+    zeros,
+)
 
 
 def issequence(seq):
@@ -306,8 +324,8 @@ class _fromnxfunction_seq(_fromnxfunction):
     """
     def __call__(self, x, *args, **params):
         func = getattr(np, self.__name__)
-        _d = func(tuple([np.asarray(a) for a in x]), *args, **params)
-        _m = func(tuple([getmaskarray(a) for a in x]), *args, **params)
+        _d = func(tuple(np.asarray(a) for a in x), *args, **params)
+        _m = func(tuple(getmaskarray(a) for a in x), *args, **params)
         return masked_array(_d, mask=_m)
 
 
@@ -467,6 +485,8 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
         result = asarray(outarr, dtype=max_dtypes)
         result.fill_value = ma.default_fill_value(result)
     return result
+
+
 apply_along_axis.__doc__ = np.apply_along_axis.__doc__
 
 
@@ -698,7 +718,7 @@ def average(a, axis=None, weights=None, returned=False, *,
                                     for ax, s in enumerate(a.shape)))
 
         if m is not nomask:
-            wgt = wgt*(~a.mask)
+            wgt = wgt * (~a.mask)
             wgt.mask |= a.mask
 
         scl = wgt.sum(axis=axis, dtype=result_dtype, **keepdims_kw)
@@ -845,9 +865,9 @@ def _median(a, axis=None, out=None, overwrite_input=False):
 
     # duplicate high if odd number of elements so mean does nothing
     odd = counts % 2 == 1
-    l = np.where(odd, h, h-1)
+    l = np.where(odd, h, h - 1)
 
-    lh = np.concatenate([l,h], axis=axis)
+    lh = np.concatenate([l, h], axis=axis)
 
     # get low and high median
     low_high = np.take_along_axis(asorted, lh, axis=axis)
@@ -930,7 +950,7 @@ def compress_nd(x, axis=None):
     data = x._data
     for ax in axis:
         axes = tuple(list(range(ax)) + list(range(ax + 1, x.ndim)))
-        data = data[(slice(None),)*ax + (~m.any(axis=axes),)]
+        data = data[(slice(None),) * ax + (~m.any(axis=axes),)]
     return data
 
 
@@ -1847,6 +1867,7 @@ class mr_class(MAxisConcatenator):
     def __init__(self):
         MAxisConcatenator.__init__(self, 0)
 
+
 mr_ = mr_class()
 
 
@@ -2027,8 +2048,8 @@ def notmasked_edges(a, axis=None):
         return flatnotmasked_edges(a)
     m = getmaskarray(a)
     idx = array(np.indices(a.shape), mask=np.asarray([m] * a.ndim))
-    return [tuple([idx[i].min(axis).compressed() for i in range(a.ndim)]),
-            tuple([idx[i].max(axis).compressed() for i in range(a.ndim)]), ]
+    return [tuple(idx[i].min(axis).compressed() for i in range(a.ndim)),
+            tuple(idx[i].max(axis).compressed() for i in range(a.ndim)), ]
 
 
 def flatnotmasked_contiguous(a):
@@ -2144,7 +2165,7 @@ def notmasked_contiguous(a, axis=None):
     >>> np.ma.notmasked_contiguous(ma, axis=1)
     [[slice(0, 1, None), slice(2, 4, None)], [slice(3, 4, None)], [slice(0, 1, None), slice(3, 4, None)]]
 
-    """
+    """  # noqa: E501
     a = asarray(a)
     nd = a.ndim
     if nd > 2:
@@ -2281,6 +2302,7 @@ def vander(x, n=None):
         _vander[m] = 0
     return _vander
 
+
 vander.__doc__ = ma.doc_note(np.vander.__doc__, vander.__doc__)
 
 
@@ -2317,5 +2339,6 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
         return np.polyfit(x[not_m], y[not_m], deg, rcond, full, w, cov)
     else:
         return np.polyfit(x, y, deg, rcond, full, w, cov)
+
 
 polyfit.__doc__ = ma.doc_note(np.polyfit.__doc__, polyfit.__doc__)

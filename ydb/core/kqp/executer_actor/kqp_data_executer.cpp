@@ -8,17 +8,17 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
-#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
-#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
+#include <ydb/core/kqp/federated_query/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
+#include <ydb/core/kqp/script_executions/common/kqp_script_executions.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/data_events/common/error_codes.h>
@@ -26,7 +26,6 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -34,6 +33,8 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <library/cpp/protobuf/interop/cast.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
@@ -662,7 +663,7 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
-        const bool graphRestored = RestoreTasksGraph();
+        const bool graphRestored = RestoreTasksGraph(RescalingChangedTaskCount);
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -1263,6 +1264,18 @@ private:
                 requestContext["UserGroupSIDs"] = SequenceToJsonString(UserToken ? UserToken->GetGroupSIDs() : TVector<NACLib::TSID>{});
 
                 const auto& stageInfo = TasksGraph.GetStageInfo(TasksGraph.GetTask(checkpointTask.GetId()).StageId);
+                const auto& program = stageInfo.Meta.GetStage(stageInfo.Id).GetProgram();
+                graphParams.MutableStageProgram()->try_emplace(checkpointTask.GetStageId(), program.GetRaw());
+                checkpointTask.MutableProgram()->SetRuntimeVersion(program.GetRuntimeVersion());
+
+                for (const auto& input : stageInfo.Meta.GetStage(stageInfo.Id).GetSources()) {
+                    const auto& externalSource = input.GetExternalSource();
+                    NYql::NPq::NProto::TDqPqTopicSource source;
+                    if (externalSource.GetType() == "PqSource" && externalSource.GetSettings().UnpackTo(&source)) {
+                        (*checkpointTask.MutableSecureParams())[source.GetToken().GetName()] = CreateStructuredTokenParser(externalSource.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
+                    }
+                }
+
                 for (const auto& output : stageInfo.Meta.GetStage(stageInfo.Id).GetSinks()) {
                     const auto& externalSink = output.GetExternalSink();
                     NYql::NPq::NProto::TDqPqTopicSink sink;
@@ -1305,8 +1318,13 @@ private:
             return;
         }
 
+        NFq::TCheckpointCoordinatorSettings setting;
         FederatedQuery::StreamingDisposition streamingDisposition;
         if (const auto disposition = context->StreamingDisposition) {
+            if (disposition->has_output_start_time()) {
+                setting.OutputStartTime = NProtoInterop::CastFromProto(disposition->output_start_time());
+            }
+
             switch (disposition->GetDispositionCase()) {
                 case NYql::NPq::NProto::StreamingDisposition::kOldest:
                     *streamingDisposition.mutable_oldest() = disposition->oldest();
@@ -1333,6 +1351,9 @@ private:
         const auto stateLoadMode = Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetZeroCheckpointSaved()
             ? FederatedQuery::FROM_LAST_CHECKPOINT
             : FederatedQuery::EMPTY;
+        const bool restoreOffsetsFromForeignCheckpoint =
+            (stateLoadMode == FederatedQuery::StateLoadMode::EMPTY && streamingDisposition.has_from_last_checkpoint())
+            || RescalingChangedTaskCount;
 
         auto counters = Counters->Counters->GetKqpCounters();
         if (AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() && !context->StreamingQueryPath.empty()) {
@@ -1340,7 +1361,10 @@ private:
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
 
-        NFq::TCheckpointCoordinatorSettings setting;
+        if (FederatedQuerySetup) {
+            setting.ProviderIntegrations = FederatedQuerySetup->CheckpointProviderIntegrations;
+        }
+
         if (const auto& checkpointInterval = context->CheckpointInterval) {
             setting.SetCheckpointingPeriod(*checkpointInterval);
         }
@@ -1358,7 +1382,8 @@ private:
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition
+            streamingDisposition,
+            restoreOffsetsFromForeignCheckpoint
         ).Release());
 
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
@@ -1516,6 +1541,8 @@ private:
     const TDuration WaitCAStatsTimeout;
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+
+    bool RescalingChangedTaskCount = false;
 };
 
 } // namespace

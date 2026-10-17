@@ -109,8 +109,9 @@ message TDiskSpaceUsage {
 }
 
 message TDomainState {
-    optional bool DiskQuotaExceeded = 1;
+    optional bool DiskQuotaExceeded = 1; // also set when StorageSpaceExhausted is set
     optional bool SmallBlobsQuotaExceeded = 2;
+    optional bool StorageSpaceExhausted = 3; // storage pools of the database are running out of space (reported by BS_CONTROLLER)
 }
 
 message TAuditSettings {

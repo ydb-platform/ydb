@@ -134,8 +134,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
-        DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -189,7 +191,7 @@ protected:
                 defaultLatePolicy,
                 KqpCtx.Config->FeatureFlags.GetEnableHoppingWindowStartCheck()
             );
-        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && KqpCtx.Config->EnableStreamingAggregation.Get().GetOrElse(false)) {
+        } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && aggregate.Ref().GetConstraint<TStreamingConstraintNode>()) {
             output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);
         } else {
             if (node.Ref().GetConstraint<TStreamingConstraintNode>() && Config->OptValidateStreamingConstraints.Get().GetOrElse(true)) {
@@ -333,6 +335,7 @@ protected:
             return {};
         }
         auto ranges = maybeRanges.Cast();
+        YQL_ENSURE(!TKqpReadTableSettings::Parse(ranges).Sampling, "Sampling is not supported for lookups");
         if (!ranges.Ranges().Maybe<TCoVoid>()) {
             ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Right-side predicate pushdown blocks mandatory streamlookup rewrite"));
             return {};

@@ -98,7 +98,7 @@ struct TPendingPartSwitch {
             : PartComponents(std::move(pc))
         {
             for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].PageCollection) {
+                if (!PartComponents.PageCollectionComponents[idx].RawMeta) {
                     Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
                 }
             }
@@ -110,7 +110,7 @@ struct TPendingPartSwitch {
 
         bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
             if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].ParsePageCollection(it->Finish());
+                PartComponents.PageCollectionComponents[it->Index].RawMeta = it->Finish();
                 Loaders.erase(it);
                 return !Loaders;
             }
@@ -124,7 +124,7 @@ struct TPendingPartSwitch {
         const NPageCollection::IPageCollection* Fetching = nullptr;
 
         explicit TLoaderStage(NTable::TPartComponents&& pc)
-            : Loader(std::move(pc))
+            : Loader(std::move(pc))  // constructs PageCollections in StageParseMeta from components
         { }
     };
 
@@ -328,6 +328,7 @@ class TExecutor
             EvLeaseExtend,
             EvActivateLowExecution,
             EvRetryGcRequest,
+            EvVacuumProgress,
 
             EvEnd
         };
@@ -342,6 +343,7 @@ class TExecutor
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+        struct TEvVacuumProgress : public TEventLocal<TEvVacuumProgress, EvVacuumProgress> {};
 
         struct TEvRetryGcRequest : public TEventLocal<TEvRetryGcRequest, EvRetryGcRequest> {
             const ui32 Channel;
@@ -453,6 +455,7 @@ class TExecutor
     ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
+
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;
@@ -488,6 +491,7 @@ class TExecutor
 
     bool LogBatchFlushScheduled = false;
     bool NeedLogSnapshot = false;
+    bool VacuumProgressScheduled = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -531,6 +535,8 @@ class TExecutor
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
+    void ScheduleVacuumProgress();
+    void DriveVacuumProgress();
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);
@@ -561,8 +567,11 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TPageCollection* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
-    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
+    void AddPartStorePageCollections(const NTable::TPartView& partView,
+        const THashMap<NTable::TTag, ECacheMode>& cacheModes, const THashSet<NTable::TTag>& stickyColumns,
+        bool replayStickyWalks = false);
+    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection>& pageCollection,
+        TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds = {}, bool replayStickyWalk = false);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();
@@ -571,9 +580,11 @@ class TExecutor
 
     NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const;
 
-    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
+        const THashSet<NTable::TTag>& stickyColumns);
     void UpdateCachePagesForDatabase(bool pendingOnly = false);
     void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
+
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
     ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
@@ -606,6 +617,7 @@ class TExecutor
     void Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(NSharedCache::TEvResult::TPtr &ev);
     void Handle(NSharedCache::TEvUpdated::TPtr &ev);
+    void Handle(NSharedCache::TEvStickyCollectionPages::TPtr &ev);
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);

@@ -6,6 +6,8 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <utility>
+
 namespace NKikimr::NPathAliasing {
     namespace {
 
@@ -111,20 +113,14 @@ namespace NKikimr::NPathAliasing {
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/tenant.aab"), "/tenant.aab");
         }
 
-        Y_UNIT_TEST(FirstMatchWinsIncludingIdentityAndResultsAreNotChained) {
+        Y_UNIT_TEST(OverlappingSourcesPreserveFirstMatchPrecedence) {
             NKikimrConfig::TPathRewriteConfig config;
-            AddRule(config, "/identity", "/identity");
-            AddRule(config, "/identity", "/wrong");
-            AddRule(config, "/first", "/second");
+            AddRule(config, "/first", "/target");
             AddRule(config, "/first/nested", "/more-specific");
-            AddRule(config, "/second", "/third");
             const TPathNormalizer normalizer(config);
 
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/identity/Table"), "/identity/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/identity//Table/"), "/identity/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/first/Table"), "/second/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/first/nested/Table"), "/second/nested/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/second/Table"), "/third/Table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/first/Table"), "/target/Table");
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/first/nested/Table"), "/target/nested/Table");
         }
 
         Y_UNIT_TEST(RulesRemainOrderedWithoutAnArtificialCountLimit) {
@@ -139,40 +135,63 @@ namespace NKikimr::NPathAliasing {
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/alias127/Table"), "/target127/end/Table");
         }
 
-        Y_UNIT_TEST(RootSourceMatchesOnlyAbsolutePaths) {
-            NKikimrConfig::TPathRewriteConfig config;
-            AddRule(config, "///", "/backup/");
-            const TPathNormalizer normalizer(config);
-
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/"), "/backup");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/mydb"), "/backup/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/mydb/Table"), "/backup/mydb/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("mydb/Table"), "mydb/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath(""), "");
+        Y_UNIT_TEST(OverlappingSourceAndDestinationAreRejected) {
+            for (const auto& [src, dst] : {
+                     std::pair{TString("/alias"), TString("/alias")},
+                     std::pair{TString("/alias"), TString("/alias/nested")},
+                     std::pair{TString("/alias/nested"), TString("/alias")},
+                     std::pair{TString("///"), TString("/backup/")},
+                     std::pair{TString("/alias"), TString("/")},
+                     std::pair{TString("/"), TString("/")},
+                 }) {
+                NKikimrConfig::TPathRewriteConfig config;
+                AddRule(config, src, dst);
+                UNIT_ASSERT_EXCEPTION(TPathNormalizer{config}, yexception);
+            }
         }
 
-        Y_UNIT_TEST(RootDestinationJoinsWithoutRepeatedSlashes) {
-            NKikimrConfig::TPathRewriteConfig config;
-            AddRule(config, "/ru", "/");
-            const TPathNormalizer normalizer(config);
-
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb/Table"), "/mydb/Table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru//mydb"), "/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/russian"), "/russian");
+        Y_UNIT_TEST(ChainsThroughDestinationOrSuffixAreRejectedInEitherOrder) {
+            for (const TString& src : {TString("/local"), TString("/local/nested"), TString("//local//nested/")}) {
+                for (const TString& dst : {TString("/local"), TString("/local/nested"), TString("//local//nested/")}) {
+                    for (const bool reverse : {false, true}) {
+                        NKikimrConfig::TPathRewriteConfig config;
+                        if (reverse) {
+                            AddRule(config, src, "/other");
+                            AddRule(config, "/alias", dst);
+                        } else {
+                            AddRule(config, "/alias", dst);
+                            AddRule(config, src, "/other");
+                        }
+                        UNIT_ASSERT_EXCEPTION(TPathNormalizer{config}, yexception);
+                    }
+                }
+            }
         }
 
-        Y_UNIT_TEST(RootIdentityStopsBeforeFollowingRules) {
+        Y_UNIT_TEST(CyclesAreRejected) {
             NKikimrConfig::TPathRewriteConfig config;
-            AddRule(config, "/", "/");
-            AddRule(config, "/ru", "/wrong");
+            AddRule(config, "/first", "/second");
+            AddRule(config, "/second", "/third");
+            AddRule(config, "/third", "/first");
+            UNIT_ASSERT_EXCEPTION(TPathNormalizer{config}, yexception);
+        }
+
+        Y_UNIT_TEST(AcceptedRulesAreIdempotent) {
+            NKikimrConfig::TPathRewriteConfig config;
+            AddRule(config, "/alias", "/local/");
+            AddRule(config, "/alias/nested", "/target");
+            AddRule(config, "/locality", "/other");
             const TPathNormalizer normalizer(config);
 
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/ru/mydb"), "/ru/mydb");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("//ru//mydb///"), "/ru/mydb");
+            for (const TString& path : {
+                     TString("/alias"), TString("/alias/table"), TString("//alias//nested/table/"),
+                     TString("/locality/table"), TString("/local/table"), TString("/other//table/"),
+                     TString("/alias/./table"), TString("/alias/../table"), TString("relative/path"), TString("/"),
+                 }) {
+                const auto normalized = normalizer.NormalizePath(path);
+                UNIT_ASSERT_VALUES_EQUAL_C(normalizer.NormalizePath(normalized), normalized, path);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/locality/table"), "/other/table");
         }
 
         Y_UNIT_TEST(DotComponentsRemainAfterMatchedSlashNormalization) {

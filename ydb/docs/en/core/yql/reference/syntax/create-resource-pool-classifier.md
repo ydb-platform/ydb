@@ -91,14 +91,14 @@ The `HAS_APP_NAME` value is set by the client and is not authenticated by the se
 
 Setting the application identifier on the client:
 
-- **{{ ydb-short-name }} Embedded UI** — fixed value `ydb-ui`, set by the viewer and not user-configurable.
+- **{{ ydb-ui-name }}** — fixed value `ydb-ui`, set by {{ ydb-ui-name }} and not user-configurable.
 - **YDB CLI** — not supported: the client application identifier is not sent in requests.
 - **YDB C++ SDK** — per request via the `Header` parameter of [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, where the [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) constant equals `x-ydb-application-name`.
 - **YDB Go SDK** — at the driver level via the [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) option in the `ydb.Open` call.
 - **YDB Java SDK** — at the transport level via the [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280) method.
 - **YDB Python SDK** — no dedicated parameter; the value is set per request via a generic header: `settings.with_header("x-ydb-application-name", "my-app")` (the [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66) method).
 
-**Example.** Direct requests from the Embedded UI to the `pool_adhoc` pool:
+**Example.** Direct requests from {{ ydb-ui-name }} to the `pool_adhoc` pool:
 
 ```yql
 CREATE RESOURCE POOL CLASSIFIER cl_adhoc_ui WITH (
@@ -178,7 +178,7 @@ GRANT 'USE' ON `/my_db` TO `user1@domain`;
 
 ## Examples {#examples}
 
-Below is a combined example that composes several classifiers and predicates: rejecting full scans of archive tables, isolating streaming requests, and dedicating a pool for interactive admin queries from the Embedded UI.
+Below is a combined example that composes several classifiers and predicates: rejecting full scans of archive tables, isolating streaming requests, and dedicating a pool for interactive admin queries from {{ ydb-ui-name }}.
 
 Creating resource pools:
 
@@ -209,7 +209,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_stream WITH (
     HAS_STREAM=true
 );
 
--- Admin requests from the Embedded UI — into the interactive-queries pool.
+-- Admin requests from YDB UI — into the interactive-queries pool.
 -- AND condition: both MEMBER_NAME and HAS_APP_NAME must match.
 CREATE RESOURCE POOL CLASSIFIER cl_adhoc_admin WITH (
     RANK=300,

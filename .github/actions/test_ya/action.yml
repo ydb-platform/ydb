@@ -170,7 +170,7 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        python3 -m pip install ydb ydb[yc] codeowners humanize plotly pyyaml
         analytics end init --conclusion success
 
     - name: Clean ya cache
@@ -278,6 +278,7 @@ runs:
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
+        DASHBOARD_SANITIZER=""
 
         case "$BUILD_PRESET" in
           debug)
@@ -293,11 +294,13 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
+            DASHBOARD_SANITIZER="address"
             ;;
           release-tsan)
             params+=(
               --build "release" --sanitize="thread"
             )
+            DASHBOARD_SANITIZER="thread"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -307,6 +310,7 @@ runs:
             params+=(
               --build "release" --sanitize="memory"
             )
+            DASHBOARD_SANITIZER="memory"
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1
             fi
@@ -495,6 +499,14 @@ runs:
 
           monitor_memory &
           MONITOR_PID=$!
+
+          RESOURCES_JSONL="$CURRENT_PUBLIC_DIR/resources_monitor.jsonl"
+          rm -f "$RESOURCES_JSONL"
+          python3 .github/scripts/utils/metrics/monitor_resources.py \
+            --output "$RESOURCES_JSONL" \
+            --interval 3 &
+          MONITOR_RESOURCES_PID=$!
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
             GRAPH_OPTS="--build-custom-json=$GRAPH_PATH --custom-context=$CONTEXT_PATH"
           else
@@ -571,7 +583,9 @@ runs:
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi
 
-          kill $MONITOR_PID
+          for p in "$MONITOR_PID" "$MONITOR_RESOURCES_PID"; do
+            { [ -n "$p" ] && kill "$p" 2>/dev/null && wait "$p" 2>/dev/null; } || true
+          done
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
@@ -588,7 +602,12 @@ runs:
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
           ya_dir=$(pwd)
-          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
+          (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
+
+          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" \
+          RETRY="$RETRY" DASHBOARD_SANITIZER="$DASHBOARD_SANITIZER" \
+          BRANCH_NAME="$BRANCH_NAME" ORIGINAL_HEAD="$ORIGINAL_HEAD" \
+          bash .github/scripts/utils/dashboard/build_tests_dashboard.sh || true
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?

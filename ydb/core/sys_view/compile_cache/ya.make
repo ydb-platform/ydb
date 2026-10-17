@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     compile_cache.h
@@ -13,7 +13,5 @@ PEERDIR(
     ydb/core/sys_view/common
     ydb/library/ydb_issue
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

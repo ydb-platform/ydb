@@ -15,7 +15,7 @@
 
 #include <yt/yt/core/misc/backoff_strategy.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NApi::NRpcProxy {
 
@@ -82,7 +82,7 @@ private:
     const NServiceDiscovery::IServiceDiscoveryPtr ServiceDiscovery_;
 
     // TODO(prime@): Create HTTP endpoint for discovery that works without authentication.
-    NThreading::TAtomicObject<std::string> DiscoveryToken_;
+    TAtomicObject<std::string> DiscoveryToken_;
 
     std::vector<std::string> DiscoverProxiesViaHttp();
     std::vector<std::string> DiscoverProxiesViaServiceDiscovery();

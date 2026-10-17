@@ -21,7 +21,6 @@
 namespace NActors {
 
     class TExecutorPoolJail;
-    class TSharedExecutorPoolSanitizer;
 
     class TBasicExecutorPool;
 
@@ -66,13 +65,11 @@ namespace NActors {
 
     class TSharedExecutorPool: public TExecutorPoolBaseMailboxed, public ISharedPool {
         friend class TBasicExecutorPool;
-        friend class TSharedExecutorPoolSanitizer;
 
         ui64 PoolId;
         i16 PoolThreads;
         TPoolManager PoolManager;
         TStackVec<TBasicExecutorPool*> Pools;
-        std::unique_ptr<TSharedExecutorPoolSanitizer> Sanitizer;
 
 
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
@@ -161,7 +158,6 @@ namespace NActors {
         void GetSharedStatsForHarmonizer(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetSharedStats(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
 
-        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;

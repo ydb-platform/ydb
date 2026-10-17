@@ -13,7 +13,7 @@ using namespace NNodes;
 
 namespace {
 
-class TPqDataSourceConstraintTransformer : public TVisitorTransformerBase {
+class TPqDataSourceConstraintTransformer: public TVisitorTransformerBase {
     using TBase = TVisitorTransformerBase;
 
 public:
@@ -21,16 +21,14 @@ public:
         : TBase(/* failOnUnknown */ true)
         , State_(std::move(state))
     {
-        AddHandler({TPqReadTopic::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandlePqReadTopic));
-        AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleDqPqTopicSource));
-        AddHandler({TPqParsingWrap::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
-        AddHandler({TDqPqPhyParsingWrap::CallableName()}, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
-        AddHandler({
-            TCoConfigure::CallableName(),
-            TPqTopic::CallableName(),
-            TCoSystemMetadata::CallableName(),
-            TDqPqFederatedCluster::CallableName(),
-        }, Hndl(&TPqDataSourceConstraintTransformer::HandleDefault));
+        AddHandler({ TPqReadTopic::CallableName() }, Hndl(&TPqDataSourceConstraintTransformer::HandlePqReadTopic));
+        AddHandler({ TDqPqTopicSource::CallableName() }, Hndl(&TPqDataSourceConstraintTransformer::HandleDqPqTopicSource));
+        AddHandler({ TPqParsingWrap::CallableName() }, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
+        AddHandler({ TDqPqPhyParsingWrap::CallableName() }, Hndl(&TPqDataSourceConstraintTransformer::HandleParsingWrap));
+        AddHandler(
+            {
+                TCoConfigure::CallableName(), TPqTopic::CallableName(), TCoSystemMetadata::CallableName(), TDqPqFederatedCluster::CallableName(),
+            }, Hndl(&TPqDataSourceConstraintTransformer::HandleDefault));
     }
 
     TStatus HandleDefault(TExprBase node, TExprContext&) {
@@ -77,7 +75,7 @@ private:
     TPqState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreatePqDataSourceConstraintTransformer(TPqState::TPtr state) {
     if (!state->EnablePqConstraintsTransformer) {
@@ -86,4 +84,4 @@ TAutoPtr<IGraphTransformer> CreatePqDataSourceConstraintTransformer(TPqState::TP
     return new TPqDataSourceConstraintTransformer(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

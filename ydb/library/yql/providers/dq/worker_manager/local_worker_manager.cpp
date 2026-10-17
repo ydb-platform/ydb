@@ -223,11 +223,11 @@ private:
     }
 
     void DoPassAway() override {
-        for (const auto& [resourceId, _] : AllocatedWorkers) {
-            FreeGroup(resourceId);
+        for (const auto& [resourceId, info] : AllocatedWorkers) {
+            YQL_CLOG(DEBUG, ProviderDq) << "Free Group " << resourceId;
+            FreeGroupResources(resourceId, info);
         }
 
-        AllocatedWorkers.clear();
         _exit(0);
     }
 
@@ -445,31 +445,35 @@ private:
         }
     }
 
+    void FreeGroupResources(ui64 id, const auto& info, NActors::TActorId sender = NActors::TActorId()) {
+        for (const auto& actorId : info.WorkerActors.ActorIds) {
+            UnregisterChild(actorId);
+        }
+
+        if (sender && info.Sender != sender) {
+            Options.Counters.FreeGroupError->Inc();
+            YQL_CLOG(ERROR, ProviderDq) << "Free Group " << id << " mismatched alloc-free senders: " << info.Sender << " and " << sender << " TxId: " << info.TxId;
+        }
+
+        if (Options.DropTaskCountersOnFinish) {
+            DropTaskCounters(info);
+        }
+
+        Options.Counters.ActiveWorkers->Sub(info.WorkerActors.ActorIds.size());
+    }
+
     void FreeGroup(ui64 id, NActors::TActorId sender = NActors::TActorId()) {
         YQL_CLOG(DEBUG, ProviderDq) << "Free Group " << id;
         auto it = AllocatedWorkers.find(id);
         if (it != AllocatedWorkers.end()) {
-            for (const auto& actorId : it->second.WorkerActors.ActorIds) {
-                UnregisterChild(actorId);
-            }
-
-            if (sender && it->second.Sender != sender) {
-                Options.Counters.FreeGroupError->Inc();
-                YQL_CLOG(ERROR, ProviderDq) << "Free Group " << id << " mismatched alloc-free senders: " << it->second.Sender << " and " << sender << " TxId: " << it->second.TxId;
-            }
-
-            if (Options.DropTaskCountersOnFinish) {
-                DropTaskCounters(it->second);
-            }
-
-            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.ActorIds.size());
+            FreeGroupResources(id, it->second, sender);
             AllocatedWorkers.erase(it);
         }
     }
 
     void FreeOnDeadline() {
         auto now = TInstant::Now();
-        THashSet<ui32> todelete;
+        THashSet<ui64> todelete;
         for (const auto& [id, info] : AllocatedWorkers) {
             if (info.Deadline && info.Deadline < now) {
                 todelete.insert(id);

@@ -853,6 +853,10 @@ namespace NActors {
                 if (!tryIt(sqThreadIdleMs) && !tryIt(std::nullopt)) {
                     Y_ABORT("failed to initialize ring");
                 }
+                // liburing maps the rings with raw syscalls, so MSan never sees the mapping and may keep stale
+                // poisoned shadow from earlier use of these addresses; kernel-written CQEs would then look uninitialized
+                NSan::Unpoison(slot.Ring.sq.ring_ptr, slot.Ring.sq.ring_sz);
+                NSan::Unpoison(slot.Ring.cq.ring_ptr, slot.Ring.cq.ring_sz);
             }
 
             // Reserve a sparse fixed-file table on the ring before the worker starts. Prefer the 5.19+
@@ -1959,6 +1963,12 @@ namespace NActors {
                     *BytesReceived += res;
                     session.BytesReceivedXdc += res;
                     session.LastInputActivityTimestamp = LastActivitySwitchTimestamp;
+                    // the kernel filled the iovecs behind MSan's back, mark received bytes as initialized
+                    for (size_t i = 0, remain = res; remain; ++i) {
+                        const size_t n = Min(remain, session.XdcReadIov[i].iov_len);
+                        NSan::Unpoison(session.XdcReadIov[i].iov_base, n);
+                        remain -= n;
+                    }
                     session.Deserializer.CommitXdcBytes(res, &session, session.SessionId);
                 }
 

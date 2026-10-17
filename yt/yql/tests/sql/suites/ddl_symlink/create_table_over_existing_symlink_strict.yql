@@ -1,0 +1,10 @@
+/* custom error: Symlink Link already exists */
+USE plato;
+
+CREATE SYMLINK Link TO Input;
+
+COMMIT;
+
+CREATE TABLE Link (
+    a String NOT NULL
+);

@@ -7,10 +7,6 @@
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxAssignTxId: public TTxBase {
-    // TODO(ilnaz): configurable
-    static constexpr ui64 MaxOpenTxIds = 5;
-    static constexpr ui64 MinAllocatedTxIds = 3;
-
     THashMap<ui32, THolder<TEvService::TEvTxIdResult>> Result;
     bool TxIdsExhausted = false;
 
@@ -81,7 +77,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
-            auto it = Self->AssignedTxIds.find(version);
+            auto it = Self->IndexBuilds.empty()
+                ? Self->AssignedTxIds.find(version) : Self->AssignedTxIds.lower_bound(version);
             if (it != Self->AssignedTxIds.end()) {
                 return it->second;
             }
@@ -117,14 +114,38 @@ public:
             Y_ABORT_UNLESS(std::holds_alternative<EError>(result));
             Y_ABORT_UNLESS(std::get<EError>(result) == EError::TooManyOpenTxIds);
 
-            auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
-            db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
+            const auto previousEnd = Self->AssignedTxIds.rbegin()->first;
+            bool crossesJoin = false;
+            for (const auto& [_, build] : Self->IndexBuilds) {
+                if (build.HasJoinVersion()) {
+                    const auto join = TRowVersion::FromProto(build.GetJoinVersion());
+                    crossesJoin |= previousEnd <= join && join < it->first;
+                }
+            }
+            if (crossesJoin) {
+                // C is a fixed boundary. At the open-transaction limit a
+                // separate suffix is necessary instead of extending across C.
+                if (Self->AllocatedTxIds.empty()) {
+                    TxIdsExhausted = true;
+                    return true;
+                }
 
-            nh.key() = it->first;
-            db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
-                NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
-            );
-            Self->AssignedTxIds.insert(std::move(nh));
+                const auto txId = Self->AllocatedTxIds.front();
+                Self->AllocatedTxIds.pop_front();
+                Self->AssignedTxIds.emplace(it->first, txId);
+                db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Update(
+                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(txId)
+                );
+            } else {
+                auto nh = Self->AssignedTxIds.extract(Self->AssignedTxIds.rbegin()->first);
+                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Delete();
+
+                nh.key() = it->first;
+                db.Table<Schema::TxIds>().Key(nh.key().Step, nh.key().TxId).Update(
+                    NIceDb::TUpdate<Schema::TxIds::WriteTxId>(nh.mapped())
+                );
+                Self->AssignedTxIds.insert(std::move(nh));
+            }
         }
 
         result = Process([&](const TRowVersion& version) -> TAssignResult {
@@ -153,10 +174,7 @@ public:
             ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
         }
 
-        if (!Self->AllocateTxIdInFlight && Self->AllocatedTxIds.size() < MinAllocatedTxIds) {
-            Self->AllocateTxIdInFlight = true;
-            ctx.Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
-        }
+        Self->AllocateTxIds(ctx);
 
         if (!TxIdsExhausted && Self->PendingTxId) {
             Self->Execute(new TTxAssignTxId(Self), ctx);
@@ -166,6 +184,15 @@ public:
     }
 
 }; // TTxAssignTxId
+
+void TController::AllocateTxIds(const TActorContext& ctx) {
+    if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
+        return;
+    }
+
+    AllocateTxIdInFlight = true;
+    ctx.Send(TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(MaxOpenTxIds));
+}
 
 void TController::RunTxAssignTxId(const TActorContext& ctx) {
     if (!AssignTxIdInFlight) {
@@ -183,6 +210,7 @@ void TController::Handle(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev, cons
 
     TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = AllocatedTxIds.size();
     RunTxAssignTxId(ctx);
+    RunTxIndexBuild(ctx);
 }
 
 }

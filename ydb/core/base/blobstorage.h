@@ -579,6 +579,7 @@ struct TEvBlobStorage {
         EvControllerDDiskInfoGetTablet              = 0x10031634,
         EvControllerDDiskInfoGetTabletResult        = 0x10031635,
         EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
+        EvControllerSubscribeDatabaseSpace          = 0x10031637,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -588,6 +589,7 @@ struct TEvBlobStorage {
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
+        EvControllerDatabaseSpaceState              = 0x10031816,
 
         // BlobCheckerOrchestrator <-> BSC interface
         EvBlobCheckerUpdateSettings                 = 0x10031820,
@@ -2745,6 +2747,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerSubscribeDatabaseSpace;
+    struct TEvControllerDatabaseSpaceState;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

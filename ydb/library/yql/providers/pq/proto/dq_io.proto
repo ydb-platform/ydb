@@ -35,6 +35,9 @@ message TDqPqFederatedCluster {
 
 // For streaming queries only
 message StreamingDisposition {
+    // Inclusive output start time. Initialize from this graph, without an old checkpoint.
+    google.protobuf.Timestamp output_start_time = 8;
+
     message FromTime {
         google.protobuf.Timestamp timestamp = 1;
     }

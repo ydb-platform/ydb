@@ -26,11 +26,17 @@ public:
             {"nodeId", nodeId});
         TEvLocal::TEvStatus::EStatus status = (TEvLocal::TEvStatus::EStatus)Record.GetStatus();
         TNodeInfo& node = Self->GetNode(nodeId);
+        // Local resends StatusOk on resource limit changes, BecomeConnected() returns true for an already connected node too
+        const bool wasConnected = node.GetVolatileState() == TNodeInfo::EVolatileState::Connected;
         if (status == TEvLocal::TEvStatus::StatusOk && node.BecomeConnected()) {
             node.Local = Local;
             node.UpdateResourceMaximum(Record.GetResourceMaximum());
             if (Record.HasStartTime()) {
                 node.StartTime = TInstant::MicroSeconds(Record.GetStartTime());
+            }
+            if (!wasConnected) {
+                Self->RecordNodeEvent(node, EHiveEventType::Connected, EHiveEventReason::StatusOk,
+                    TStringBuilder() << "resourceMaximum={" << Record.GetResourceMaximum().ShortDebugString() << "}");
             }
             if (!node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].empty()) {
                 Self->WarmUp = false;
@@ -56,6 +62,9 @@ public:
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", nodeId});
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
+                // the drain was persisted before a Hive or node restart and continues here
+                Self->RecordNodeEvent(node, EHiveEventType::DrainStarted, EHiveEventReason::DrainResumed,
+                    TStringBuilder() << "seqNo=" << node.DrainSeqNo << " tabletsRunning=" << node.GetTabletsRunning());
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
             Self->ObjectDistributions.AddNode(node);
@@ -65,7 +74,7 @@ public:
                 {"status", static_cast<int>(status)},
                 {"nodeState", TNodeInfo::EVolatileStateName(node.GetVolatileState())},
                 {"nodeId", node.Id});
-            Self->KillNode(node.Id, Local);
+            Self->KillNode(node.Id, Local, EHiveEventReason::BadStatus, TStringBuilder() << "status=" << static_cast<int>(status));
         }
         return true;
     }

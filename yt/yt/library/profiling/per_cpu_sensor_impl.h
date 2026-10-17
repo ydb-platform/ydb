@@ -3,9 +3,8 @@
 #include "impl.h"
 #include "summary.h"
 
+#include <library/cpp/yt/system/spin_lock.h>
 #include <library/cpp/yt/system/tscp.h>
-
-#include <library/cpp/yt/threading/spin_lock.h>
 
 namespace NYT::NProfiling {
 
@@ -111,7 +110,7 @@ public:
 private:
     struct alignas(CacheLineSize) TShard
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         TSummarySnapshot<T> Value;
         // Lock-free fast path for the collect sweep: skip the lock for shards with no samples.
         std::atomic<bool> Empty = true;

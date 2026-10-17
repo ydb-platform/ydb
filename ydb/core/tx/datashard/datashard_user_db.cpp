@@ -346,7 +346,13 @@ void TDataShardUserDb::EraseRow(
     Counters.EraseRowBytes += keyBytes + 8;
 
     if (CollectAffectedRows && rowExists) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
+    }
+    if (rowExists) {
+        // rowExists can only be true when RowExists() was actually executed
+        // (see the CollectAffectedRows / OptimisticSnapshotIsolation gate
+        // above); that existence check is a real read, account it.
+        IncreaseSelectCounters(key);
     }
 }
 
@@ -371,7 +377,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 
     if (CollectAffectedRows) {
-        Counters.NAffectedRows++;
+        Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
     }
 }
 

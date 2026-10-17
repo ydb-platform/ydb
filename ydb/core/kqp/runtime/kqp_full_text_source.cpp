@@ -153,6 +153,10 @@ class TTableReader : public TAtomicRefCount<T> {
     TTableId TableId;
     TString TablePath;
     IKqpGateway::TKqpSnapshot Snapshot;
+    ui64 LockTxId = 0;
+    ui32 LockNodeId = 0;
+    NKikimrDataEvents::ELockMode LockMode = NKikimrDataEvents::ELockMode::OPTIMISTIC;
+    ui64 QuerySpanId = 0;
     TString LogPrefix;
     TString Database;
     TString PoolId;
@@ -219,6 +223,16 @@ public:
         UseArrowFormat = useArrowFormat;
     }
 
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId, NKikimrDataEvents::ELockMode lockMode) {
+        LockTxId = lockTxId;
+        LockNodeId = lockNodeId;
+        LockMode = lockMode;
+    }
+
+    void SetQuerySpanId(ui64 spanId) {
+        QuerySpanId = spanId;
+    }
+
     const TConstArrayRef<NScheme::TTypeInfo> GetKeyColumnTypes() const {
         return KeyColumnTypes;
     }
@@ -275,6 +289,19 @@ public:
         if (Snapshot.IsValid()) {
             record.MutableSnapshot()->SetStep(Snapshot.Step);
             record.MutableSnapshot()->SetTxId(Snapshot.TxId);
+        }
+
+        if (LockTxId) {
+            record.SetLockTxId(LockTxId);
+        }
+        if (LockNodeId) {
+            record.SetLockNodeId(LockNodeId);
+        }
+        if (LockMode) {
+            record.SetLockMode(LockMode);
+        }
+        if (QuerySpanId) {
+            record.SetQuerySpanId(QuerySpanId);
         }
 
         auto defaultSettings = GetDefaultReadSettings()->Record;
@@ -2486,6 +2513,7 @@ private:
     TIntrusivePtr<TDocsTableReader> DocsTableReader;
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
+    TReadLockInfo LockInfo;
 
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
@@ -2523,14 +2551,15 @@ private:
     // Parse the search query string and tokenize it using the analyzer
     // configured on the fulltext index (same analyzer used at index build time).
     // Each resulting token becomes a TWordReadState entry in Words[].
-    // Returns false if no tokens were extracted (reports BAD_REQUEST error).
+    // Returns false if no tokens were extracted. JSON sources finish with an empty
+    // result; full-text sources report a BAD_REQUEST error.
     bool ExtractAndTokenizeExpression() {
         YQL_ENSURE(Settings->GetQuerySettings().GetColumns().size() == 1);
+        const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
+            || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
 
-        if (Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson ||
-            Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
+        if (isJsonIndex) {
             // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(Settings->GetQuerySettings().TokensSize() > 0, "Expected non-empty tokens");
             YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
 
             size_t wordIndex = 0;
@@ -2569,7 +2598,11 @@ private:
         }
 
         if (Words.empty()) {
-            RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            if (isJsonIndex) {
+                NotifyCA();
+            } else {
+                RuntimeError("No search terms were extracted from the query", NYql::NDqProto::StatusIds::BAD_REQUEST);
+            }
             return false;
         }
 
@@ -2908,6 +2941,46 @@ public:
                 Settings->GetSnapshot().GetStep(),
                 Settings->GetSnapshot().GetTxId());
         }
+
+        if (Settings->HasLockTxId()) {
+            const ui64 lockTxId = Settings->GetLockTxId();
+            const ui32 lockNodeId = Settings->GetLockNodeId();
+            const auto lockMode = Settings->GetLockMode();
+            if (MainTableReader) {
+                MainTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetLockTxId(lockTxId, lockNodeId, lockMode);
+            }
+        }
+
+        if (Settings->GetQuerySpanId()) {
+            const ui64 spanId = Settings->GetQuerySpanId();
+            if (MainTableReader) {
+                MainTableReader->SetQuerySpanId(spanId);
+            }
+            if (IndexTableReader) {
+                IndexTableReader->SetQuerySpanId(spanId);
+            }
+            if (DocsTableReader) {
+                DocsTableReader->SetQuerySpanId(spanId);
+            }
+            if (StatsTableReader) {
+                StatsTableReader->SetQuerySpanId(spanId);
+            }
+            if (UniqueIndexReader) {
+                UniqueIndexReader->SetQuerySpanId(spanId);
+            }
+        }
     }
 
     void Bootstrap() {
@@ -2963,6 +3036,12 @@ public:
 
         finished = IsFinished();
         return computeBytes;
+    }
+
+    TMaybe<google::protobuf::Any> ExtraData() override {
+        google::protobuf::Any result;
+        result.PackFrom(LockInfo.GetExtraData());
+        return result;
     }
 
     void SaveState(const NDqProto::TCheckpoint&, TSourceState&) override {}
@@ -3492,6 +3571,8 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
+
+            LockInfo.FillExtraStats(stats);
         }
     }
 
@@ -3608,14 +3689,16 @@ public:
 
         auto& readInfo = *it;
 
+        LockInfo.Add(record);
+
         TStringBuilder txLocks;
         for (const auto& lock : record.GetTxLocks()) {
             txLocks << lock.ShortDebugString();
         }
 
-        TStringBuilder borkenTxlocks;
+        TStringBuilder brokenTxLocks;
         for (const auto& lock : record.GetBrokenTxLocks()) {
-            borkenTxlocks << lock.ShortDebugString();
+            brokenTxLocks << lock.ShortDebugString();
         }
 
         YDB_LOG_DEBUG("Received TEvReadResult from full text source",
@@ -3630,7 +3713,7 @@ public:
             {"rowCount", record.GetRowCount()},
             {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
             {"txLocks", txLocks},
-            {"brokenTxLocks", borkenTxlocks});
+            {"brokenTxLocks", brokenTxLocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);
@@ -3739,4 +3822,3 @@ void RegisterKqpFullTextSource(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusive
 }
 
 }
-

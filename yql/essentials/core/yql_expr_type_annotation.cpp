@@ -2911,6 +2911,7 @@ IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& 
             return IGraphTransformer::TStatus::Repeat;
         }
 
+        isUniversal = node->GetTypeAnn() && node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal;
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -5872,7 +5873,7 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
         if (lambdaBody.IsCallable("WithWorld")) {
             syncList->emplace(lambdaBody.ChildPtr(1), syncList->size());
-            return true;
+            return IsPureIsolatedLambdaImpl(lambdaBody.Head(), visited, syncList);
         }
     }
 

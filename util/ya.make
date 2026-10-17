@@ -119,6 +119,7 @@ JOIN_SRCS(
     generic/overloaded.cpp
     generic/ptr.cpp
     generic/queue.cpp
+    generic/ranges.cpp
     generic/refcount.cpp
     generic/scope.cpp
     generic/serialized_enum.cpp

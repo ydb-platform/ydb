@@ -561,6 +561,11 @@ void TProgram::SetUseTableMetaFromGraph(bool use) {
     UseTableMetaFromGraph_ = use;
 }
 
+void TProgram::SetStrictConfigValidation(bool strict) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    StrictConfigValidation_ = strict;
+}
+
 void TProgram::SetOperationTitle(const TString& title) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     if (title.Contains("YQL")) {
@@ -2187,6 +2192,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->SqlFlags = SqlFlags_;
     typeAnnotationContext->FuzzUntypedLambda = FuzzUntypedLambda_;
     typeAnnotationContext->FuzzUniversal = FuzzUniversal_;
+    typeAnnotationContext->StrictConfigValidation = StrictConfigValidation_;
     for (auto& [alias, provider] : RemoteLayersProviders_) {
         typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
     }

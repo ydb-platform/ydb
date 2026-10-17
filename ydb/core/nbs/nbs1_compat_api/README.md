@@ -20,3 +20,9 @@ the renamed package would change the RPC paths.
 
 Keep protobuf field numbers, field encodings and enum values compatible with
 NBS1. An original NBS1 client must work without knowing the internal package.
+
+`cloud/blockstore/libs/storage/api` declares the NBS1 tablet-pipe events that
+the NBS2 volume tablet answers (`TEvService::StatVolume`,
+`TEvVolume::WaitReady`) with the NBS1 numeric event ids, and
+`cloud/blockstore/libs/storage/protos` holds the messages they carry, copied
+with the NBS1 field numbers.

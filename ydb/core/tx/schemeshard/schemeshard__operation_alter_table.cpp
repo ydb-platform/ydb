@@ -264,7 +264,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
         table, copyAlter, *appData->TypeRegistry, limits, subDomain,
-        featureFlags, errStr, localSequences);
+        featureFlags, errStr, localSequences, isInternal);
     if (!alterData) {
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
@@ -462,9 +462,7 @@ public:
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->FinishAlter();
 
-        if (!table->IsAsyncReplica()) {
-            path->SetAsyncReplica(false);
-        }
+        path->SetAsyncReplica(table->IsAsyncReplica());
 
         auto ttlIt = context.SS->TTLEnabledTables.find(pathId);
         if (table->IsTTLEnabled() && ttlIt == context.SS->TTLEnabledTables.end()) {
@@ -578,7 +576,7 @@ public:
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterTable();
@@ -802,7 +800,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterTable");
     }
 

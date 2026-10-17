@@ -20,6 +20,7 @@ SRCS(
     nbs_dbg_like_alloc_helper_ut.cpp
     util_ut.cpp
     nbs_dbg_like_load_registry_ut.cpp
+    nbs_dbg_like_range_coordinator_ut.cpp
 )
 
 END()

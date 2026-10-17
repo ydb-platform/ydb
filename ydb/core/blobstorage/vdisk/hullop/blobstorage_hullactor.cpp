@@ -416,7 +416,7 @@ namespace NKikimr {
             // A planned compaction writes exclusive chunks only.
             if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
                 if (Config->HeapAllocatorMaxSstInBytes > 0 &&
-                        AppData()->FeatureFlags.GetEnableVDiskHeapAllocator() && !InPlannedMode() && !Planned.Leased) {
+                        Config->UseHeapAllocator && !InPlannedMode() && !Planned.Leased) {
                     params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
                 }
             }
@@ -646,7 +646,7 @@ namespace NKikimr {
 
                             Y_VERIFY_S(wId, HullDs->HullCtx->VCtx->VDiskLogPrefix);
                             YDB_LOG_DEBUG_CTX(ctx, "Got PreCompactResult for ActDeleteSsts,",
-                                {"#_HullDs->HullCtx->VCtx->VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
+                                {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
                                 {"wId", wId});
                             AccountSelectedStrategy();
                             ApplyCompactionResult(ctx, {}, {}, wId);

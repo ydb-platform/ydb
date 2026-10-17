@@ -398,7 +398,7 @@ PyArray_PutTo(PyArrayObject *self, PyObject* values0, PyObject *indices0,
     }
     ni = PyArray_SIZE(indices);
     if ((ni > 0) && (PyArray_Size((PyObject *)self) == 0)) {
-        PyErr_SetString(PyExc_IndexError, 
+        PyErr_SetString(PyExc_IndexError,
                         "cannot replace elements of an empty array");
         goto fail;
     }
@@ -1028,6 +1028,7 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
     }
     dtype = PyArray_DESCR(mps[0]);
 
+    int copy_existing_out = 0;
     /* Set-up return array */
     if (out == NULL) {
         Py_INCREF(dtype);
@@ -1039,10 +1040,6 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
                                                     (PyObject *)ap);
     }
     else {
-        int flags = NPY_ARRAY_CARRAY |
-                    NPY_ARRAY_WRITEBACKIFCOPY |
-                    NPY_ARRAY_FORCECAST;
-
         if ((PyArray_NDIM(out) != multi->nd)
                     || !PyArray_CompareLists(PyArray_DIMS(out),
                                              multi->dimensions,
@@ -1052,9 +1049,13 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
             goto fail;
         }
 
+        if (PyArray_FailUnlessWriteable(out, "output array") < 0) {
+            goto fail;
+        }
+
         for (i = 0; i < n; i++) {
             if (arrays_overlap(out, mps[i])) {
-                flags |= NPY_ARRAY_ENSURECOPY;
+                copy_existing_out = 1;
             }
         }
 
@@ -1064,10 +1065,25 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
              * so the input array is not changed
              * before the error is called
              */
-            flags |= NPY_ARRAY_ENSURECOPY;
+            copy_existing_out = 1;
         }
-        Py_INCREF(dtype);
-        obj = (PyArrayObject *)PyArray_FromArray(out, dtype, flags);
+
+        if (!PyArray_EquivTypes(dtype, PyArray_DESCR(out))) {
+            copy_existing_out = 1;
+        }
+
+        if (copy_existing_out) {
+            Py_INCREF(dtype);
+            obj = (PyArrayObject *)PyArray_NewFromDescr(&PyArray_Type,
+                                                        dtype,
+                                                        multi->nd,
+                                                        multi->dimensions,
+                                                        NULL, NULL, 0,
+                                                        (PyObject *)out);
+        }
+        else {
+            obj = (PyArrayObject *)Py_NewRef(out);
+        }
     }
 
     if (obj == NULL) {
@@ -1080,12 +1096,13 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
     NPY_ARRAYMETHOD_FLAGS transfer_flags = 0;
     if (PyDataType_REFCHK(dtype)) {
         int is_aligned = IsUintAligned(obj);
+        PyArray_Descr *obj_dtype = PyArray_DESCR(obj);
         PyArray_GetDTypeTransferFunction(
                     is_aligned,
                     dtype->elsize,
-                    dtype->elsize,
+                    obj_dtype->elsize,
                     dtype,
-                    dtype, 0, &cast_info,
+                    obj_dtype, 0, &cast_info,
                     &transfer_flags);
     }
 
@@ -1142,11 +1159,13 @@ PyArray_Choose(PyArrayObject *ip, PyObject *op, PyArrayObject *out,
     }
     Py_DECREF(ap);
     PyDataMem_FREE(mps);
-    if (out != NULL && out != obj) {
-        Py_INCREF(out);
-        PyArray_ResolveWritebackIfCopy(obj);
+    if (copy_existing_out) {
+        int res = PyArray_CopyInto(out, obj);
         Py_DECREF(obj);
-        obj = out;
+        if (res < 0) {
+            return NULL;
+        }
+        return Py_NewRef(out);
     }
     return (PyObject *)obj;
 
@@ -1465,7 +1484,7 @@ _new_argsortlike(PyArrayObject *op, int axis, PyArray_ArgSortFunc *argsort,
 
         if (argpart == NULL) {
             ret = argsort(valptr, idxptr, N, op);
-            /* Object comparisons may raise an exception in Python 3 */
+            /* Object comparisons may raise an exception */
             if (needs_api && PyErr_Occurred()) {
                 ret = -1;
             }
@@ -1479,7 +1498,7 @@ _new_argsortlike(PyArrayObject *op, int axis, PyArray_ArgSortFunc *argsort,
 
             for (i = 0; i < nkth; ++i) {
                 ret = argpart(valptr, idxptr, N, kth[i], pivots, &npiv, nkth, op);
-                /* Object comparisons may raise an exception in Python 3 */
+                /* Object comparisons may raise an exception */
                 if (needs_api && PyErr_Occurred()) {
                     ret = -1;
                 }
@@ -1593,12 +1612,9 @@ partition_prep_kth_array(PyArrayObject * ktharray,
     npy_intp nkth, i;
 
     if (PyArray_ISBOOL(ktharray)) {
-        /* 2021-09-29, NumPy 1.22 */
-        if (DEPRECATE(
-                "Passing booleans as partition index is deprecated"
-                " (warning added in NumPy 1.22)") < 0) {
-            return NULL;
-        }
+        PyErr_SetString(PyExc_ValueError,
+                "Booleans unacceptable as partition index");
+        return NULL;
     }
     else if (!PyArray_ISINTEGER(ktharray)) {
         PyErr_Format(PyExc_TypeError, "Partition index must be integer");
@@ -2509,7 +2525,7 @@ count_nonzero_u8(const char *data, npy_intp bstride, npy_uintp len)
         len  -= len_m;
         count = len_m - zcount;
     #else
-        if (!NPY_ALIGNMENT_REQUIRED || npy_is_aligned(data, sizeof(npy_uint64))) {
+        if (npy_is_aligned(data, sizeof(npy_uint64))) {
             int step = 6 * sizeof(npy_uint64);
             int left_bytes = len % step;
             for (const char *end = data + len; data < end - left_bytes; data += step) {
@@ -2613,7 +2629,7 @@ count_nonzero_u64(const char *data, npy_intp bstride, npy_uintp len)
     return count;
 }
 /*
- * Counts the number of True values in a raw boolean array. This
+ * Counts the number of non-zero values in a raw int array. This
  * is a low-overhead function which does no heap allocations.
  *
  * Returns -1 on error.
@@ -2723,6 +2739,15 @@ PyArray_CountNonzero(PyArrayObject *self)
             }
         }
         else {
+            /* Special low-overhead version specific to the float types (and some others) */
+            if (PyArray_ISNOTSWAPPED(self) && PyArray_ISALIGNED(self)) {
+                npy_intp dispatched_nonzero_count = count_nonzero_trivial_dispatcher(count,
+                                                        data, stride, dtype->type_num);
+                if (dispatched_nonzero_count >= 0) {
+                    return dispatched_nonzero_count;
+                }
+            }
+
             NPY_BEGIN_THREADS_THRESHOLDED(count);
             while (count--) {
                 if (nonzero(data, self)) {
@@ -2755,6 +2780,7 @@ PyArray_CountNonzero(PyArrayObject *self)
     if (iter == NULL) {
         return -1;
     }
+    /* IterationNeedsAPI also checks dtype for whether `nonzero` may need it */
     needs_api = NpyIter_IterationNeedsAPI(iter);
 
     /* Get the pointers for inner loop iteration */
@@ -2764,7 +2790,9 @@ PyArray_CountNonzero(PyArrayObject *self)
         return -1;
     }
 
-    NPY_BEGIN_THREADS_NDITER(iter);
+    if (!needs_api) {
+        NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
+    }
 
     dataptr = NpyIter_GetDataPtrArray(iter);
     strideptr = NpyIter_GetInnerStrideArray(iter);
@@ -2985,9 +3013,12 @@ PyArray_Nonzero(PyArrayObject *self)
             return NULL;
         }
 
+        /* IterationNeedsAPI also checks dtype for whether `nonzero` may need it */
         needs_api = NpyIter_IterationNeedsAPI(iter);
 
-        NPY_BEGIN_THREADS_NDITER(iter);
+        if (!needs_api) {
+            NPY_BEGIN_THREADS_THRESHOLDED(NpyIter_GetIterSize(iter));
+        }
 
         dataptr = NpyIter_GetDataPtrArray(iter);
 

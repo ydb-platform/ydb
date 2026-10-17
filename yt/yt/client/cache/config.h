@@ -37,7 +37,7 @@ struct TClientsCacheAuthenticationOptions final
     static TClientsCacheAuthenticationOptionsPtr GetFromEnvStatic();
 
     NApi::TClientOptions DefaultOptions;
-    THashMap<std::string, NApi::TClientOptions, THash<std::string>, TEqualTo<>> ClusterOptions;
+    THashMap<std::string, NApi::TClientOptions> ClusterOptions;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientsCacheAuthenticationOptions)

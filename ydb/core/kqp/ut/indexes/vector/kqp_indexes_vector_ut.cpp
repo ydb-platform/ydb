@@ -10,6 +10,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -834,6 +835,49 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
                 UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK, ctx);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OrderByCosineExpressionLimit) {
+        // A LIMIT (top-K) that is an arbitrary expression rather than a bare literal or
+        // parameter must be honored by both the legacy StreamLookup lowering and the new
+        // vector search actor. Regression guard: the actor path only knew how to encode a
+        // literal or a query parameter in the physical TopK value, so any other expression
+        // (e.g. `$topK + 1`) failed to compile.
+        for (bool enableVectorSearchActor : {false, true}) {
+            NKikimrConfig::TFeatureFlags featureFlags;
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetFeatureFlags(featureFlags)
+                .SetKqpSettings({setting});
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+            TKikimrRunner kikimr(serverSettings);
+            auto db = kikimr.GetTableClient();
+            auto session = DoCreateTableAndVectorIndex(db);
+
+            const TString query(Q1_(R"(
+                pragma ydb.KMeansTreeSearchTopSize = "1";
+                DECLARE $topK AS Uint64;
+                $target = "\x67\x71\x02";
+                SELECT pk FROM `/Root/TestTable` VIEW index1
+                ORDER BY Knn::CosineDistance(emb, $target)
+                LIMIT ($topK + 1);
+            )"));
+
+            for (ui64 topK : {ui64(2), ui64(0)}) {
+                auto params = TParamsBuilder()
+                    .AddParam("$topK").Uint64(topK).Build()
+                    .Build();
+
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+                const TString ctx = TStringBuilder()
+                    << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
+                UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK + 1, ctx);
             }
         }
     }
@@ -2309,6 +2353,68 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
         TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), VectorTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST_TWIN(RoundingNoEmptyClusters, Partitioned) {
+        NSchemeShard::gVectorIndexSeed = 1337;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetTableClient();
+        auto session = DoOnlyCreateTableForVectorIndex(db, Partitioned ? 0 : F_NON_PARTITIONED);
+        {
+            const TString query1 = TStringBuilder()
+                << "UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES "
+                   "(6,  Untag(Knn::ToBinaryStringFloat([10000000.f, 10000001.f]), \"FloatVector\"), \"6\"),"
+                   "(7,  Untag(Knn::ToBinaryStringFloat([10000000.f, 10000000.f]), \"FloatVector\"), \"7\"),"
+                   "(8,  Untag(Knn::ToBinaryStringFloat([10000000.f,  9999999.f]), \"FloatVector\"), \"8\"),"
+                   "(9,  Untag(Knn::ToBinaryStringFloat([10000000.f, 10000001.f]), \"FloatVector\"), \"9\"),"
+                   "(10, Untag(Knn::ToBinaryStringFloat([10000000.f, 10000002.f]), \"FloatVector\"), \"10\"),"
+                   "(11, Untag(Knn::ToBinaryStringFloat([10000000.f, 10000002.f]), \"FloatVector\"), \"11\");";
+            auto result = session.ExecuteDataQuery(Q_(query1), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString createIndex(Q_(R"(
+                ALTER TABLE `/Root/TestTable`
+                    ADD INDEX index1
+                    GLOBAL USING vector_kmeans_tree
+                    ON (emb)
+                    WITH (similarity=cosine, vector_type="float", vector_dimension=2, levels=1, clusters=2);
+                )"));
+            auto result = session.ExecuteSchemeQuery(createIndex).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query1(Q_(R"(
+                SELECT l.* FROM `/Root/TestTable/index1/indexImplLevelTable` AS l
+                LEFT JOIN `/Root/TestTable/index1/indexImplPostingTable` AS p ON p.__ydb_parent=l.__ydb_id
+                WHERE p.__ydb_parent IS NULL
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
+        }
+
+        // Everything should collapse into the same cluster.
+        {
+            const TString query1(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TestTable/index1/indexImplLevelTable`
+                UNION ALL
+                SELECT COUNT(DISTINCT __ydb_parent) FROM `/Root/TestTable/index1/indexImplPostingTable`
+            )"));
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[1u];[1u]]");
+        }
     }
 }
 

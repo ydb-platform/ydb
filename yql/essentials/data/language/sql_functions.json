@@ -1,7 +1,8 @@
 [
   {
     "name": "Abs",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "AdaptiveDistanceHistogram",
@@ -45,15 +46,18 @@
   },
   {
     "name": "AggregateFlatten",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "AggregateTransformInput",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "AggregateTransformOutput",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "AsAtom",
@@ -74,6 +78,7 @@
   {
     "name": "AsErased",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2026.02"
   },
   {
@@ -87,11 +92,13 @@
   {
     "name": "AsOptional",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2026.01"
   },
   {
     "name": "AsOptionalType",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2026.01"
   },
   {
@@ -116,15 +123,18 @@
   },
   {
     "name": "AssumeNonStrict",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "AssumeStrict",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "AtomCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Avg",
@@ -148,7 +158,8 @@
   },
   {
     "name": "Block",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "BlockWardHistogram",
@@ -188,15 +199,19 @@
   },
   {
     "name": "ByteAt",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "Callable",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "CallableArgument",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 2
   },
   {
     "name": "CallableArgumentType",
@@ -204,7 +219,8 @@
   },
   {
     "name": "CallableResultType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "CallableType",
@@ -212,19 +228,24 @@
   },
   {
     "name": "CallableTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "CallableTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 4,
+    "optionalArgCount": 2
   },
   {
     "name": "ChooseMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ClearBit",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "Coalesce",
@@ -293,23 +314,28 @@
   },
   {
     "name": "CumeDist",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 0
   },
   {
     "name": "CurrentAuthenticatedUser",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "CurrentLanguageVersion",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "CurrentOperationId",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "CurrentOperationSharedId",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "CurrentTzDate",
@@ -341,23 +367,29 @@
   },
   {
     "name": "DataTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DataTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DenseRank",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 1,
+    "optionalArgCount": 1
   },
   {
     "name": "DictAggregate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "DictContains",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "DictCreate",
@@ -365,113 +397,140 @@
   },
   {
     "name": "DictHasItems",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictInsert",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "DictItems",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictKeyType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictKeys",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictLength",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictLookup",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "DictPayloadType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictPayloads",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictRemove",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
     "name": "DictType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "DictTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "DictTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "DictUpdate",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "DictUpsert",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "DynamicLinearType",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "DynamicLinearTypeHandle",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "DynamicVariant",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "EmptyDict",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EmptyDictType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EmptyDictTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EmptyList",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EmptyListType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EmptyListTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "EndsWith",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "Ensure",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "EnsureConvertibleTo",
@@ -487,19 +546,23 @@
   },
   {
     "name": "EvaluateAtom",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "EvaluateCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "EvaluateExpr",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "EvaluateType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "FileContent",
@@ -531,7 +594,8 @@
   },
   {
     "name": "FlipBit",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "FolderPath",
@@ -543,23 +607,28 @@
   },
   {
     "name": "ForceRemoveMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ForceRenameMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ForceSpreadMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "FormatCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "FormatType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "FormatTypeDiff",
@@ -576,20 +645,24 @@
   {
     "name": "FromDynamicLinear",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "FromMutDict",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "FromPg",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "FromYsonSimpleType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "FuncCode",
@@ -597,11 +670,13 @@
   },
   {
     "name": "GatherMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "GenericType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "Grouping",
@@ -641,11 +716,13 @@
   },
   {
     "name": "IndexOf",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "InstanceOf",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "JoinTableRow",
@@ -653,23 +730,30 @@
   },
   {
     "name": "Just",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Lag",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "LambdaArgumentsCount",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "LambdaCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "LambdaOptionalArgumentsCount",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Last",
@@ -681,11 +765,14 @@
   },
   {
     "name": "Lead",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "Length",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Likely",
@@ -707,33 +794,40 @@
   {
     "name": "LinearItemType",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "LinearType",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "LinearTypeHandle",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "ListAggregate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListAll",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListAny",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListAvg",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListCode",
@@ -741,11 +835,14 @@
   },
   {
     "name": "ListCollect",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListConcat",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "ListCreate",
@@ -753,7 +850,9 @@
   },
   {
     "name": "ListEnumerate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 2
   },
   {
     "name": "ListExtend",
@@ -777,55 +876,69 @@
   },
   {
     "name": "ListFlatten",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListFold",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "ListFold1",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "ListFold1Map",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "ListFoldMap",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "ListFromRange",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListFromTuple",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListHas",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListHasItems",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListHead",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListItemType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListLast",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListLength",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListMap",
@@ -833,39 +946,51 @@
   },
   {
     "name": "ListMax",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListMin",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListNotNull",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListReplicate",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListReverse",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListSample",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListSampleN",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListShuffle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "ListSkip",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListSkipWhile",
@@ -889,11 +1014,13 @@
   },
   {
     "name": "ListSum",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListTake",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListTakeWhile",
@@ -905,39 +1032,54 @@
   },
   {
     "name": "ListToTuple",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ListTop",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListTopAsc",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListTopDesc",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListTopSort",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListTopSortAsc",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListTopSortDesc",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "ListType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListUnionAll",
@@ -945,11 +1087,13 @@
   },
   {
     "name": "ListUniq",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListUniqStable",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ListZip",
@@ -1010,6 +1154,7 @@
   {
     "name": "MutDictContains",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
@@ -1020,69 +1165,83 @@
   {
     "name": "MutDictHasItems",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictInsert",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictItems",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictKeys",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictLength",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictLookup",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictPayloads",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictPop",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictRemove",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictUpdate",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "MutDictUpsert",
     "kind": "Normal",
+    "argCount": 3,
     "minLangVer": "2025.04"
   },
   {
     "name": "NTile",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 1
   },
   {
     "name": "Nanvl",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "Nothing",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "NthValue",
@@ -1091,15 +1250,18 @@
   {
     "name": "NullIf",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2025.04"
   },
   {
     "name": "NullType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "NullTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "Nvl",
@@ -1107,19 +1269,23 @@
   },
   {
     "name": "Opaque",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "OptionalItemType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "OptionalType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "OptionalTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ParseFile",
@@ -1131,16 +1297,20 @@
   },
   {
     "name": "ParseTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "PeekErased",
     "kind": "Normal",
+    "argCount": 2,
     "minLangVer": "2026.02"
   },
   {
     "name": "PercentRank",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 1,
+    "optionalArgCount": 1
   },
   {
     "name": "Percentile",
@@ -1148,7 +1318,8 @@
   },
   {
     "name": "PgAnd",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "PgArray",
@@ -1168,7 +1339,8 @@
   },
   {
     "name": "PgNot",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "PgOp",
@@ -1176,7 +1348,8 @@
   },
   {
     "name": "PgOr",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "PgRangeCall",
@@ -1188,15 +1361,18 @@
   },
   {
     "name": "PgTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "PgTypeName",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Pickle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "PopulationStdDev",
@@ -1209,11 +1385,13 @@
   {
     "name": "PositionOf",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2026.01"
   },
   {
     "name": "QuoteCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "RFind",
@@ -1243,7 +1421,9 @@
   },
   {
     "name": "Rank",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 1,
+    "optionalArgCount": 1
   },
   {
     "name": "RemoveMember",
@@ -1251,15 +1431,18 @@
   },
   {
     "name": "RemoveMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "RemoveTimezone",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "RenameMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ReplaceMember",
@@ -1267,7 +1450,8 @@
   },
   {
     "name": "ReprCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ResourceType",
@@ -1275,15 +1459,18 @@
   },
   {
     "name": "ResourceTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ResourceTypeTag",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "RowNumber",
-    "kind": "Window"
+    "kind": "Window",
+    "argCount": 0
   },
   {
     "name": "SecureParam",
@@ -1303,7 +1490,8 @@
   },
   {
     "name": "SetBit",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "SetCreate",
@@ -1311,27 +1499,36 @@
   },
   {
     "name": "SetDifference",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "SetIncludes",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "SetIntersection",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "SetIsDisjoint",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "SetSymmetricDifference",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "SetUnion",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "SimplePg::ceil",
@@ -1851,27 +2048,33 @@
   },
   {
     "name": "SpreadMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "StablePickle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StartsWith",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "StaticFold",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "StaticFold1",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3
   },
   {
     "name": "StaticMap",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "StaticZip",
@@ -1907,19 +2110,24 @@
   },
   {
     "name": "StreamType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StreamTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StructDifference",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "StructIntersection",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "StructMemberType",
@@ -1927,23 +2135,29 @@
   },
   {
     "name": "StructMembers",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StructSymmetricDifference",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "StructTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StructTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "StructUnion",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 3,
+    "optionalArgCount": 1
   },
   {
     "name": "SubqueryAssumeOrderBy",
@@ -2023,19 +2237,23 @@
   },
   {
     "name": "TaggedTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "TaggedTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "TestBit",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "ToBytes",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ToDict",
@@ -2044,6 +2262,7 @@
   {
     "name": "ToDynamicLinear",
     "kind": "Normal",
+    "argCount": 1,
     "minLangVer": "2025.04"
   },
   {
@@ -2065,11 +2284,13 @@
   },
   {
     "name": "ToPg",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ToSet",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "ToSortedDict",
@@ -2105,23 +2326,28 @@
   },
   {
     "name": "TupleTypeComponents",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "TupleTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "TypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "TypeKind",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "TypeOf",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "UDAF",
@@ -2129,11 +2355,13 @@
   },
   {
     "name": "UnitType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "Unpickle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2
   },
   {
     "name": "Untag",
@@ -2141,7 +2369,9 @@
   },
   {
     "name": "Unwrap",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 2,
+    "optionalArgCount": 1
   },
   {
     "name": "VarP",
@@ -2177,39 +2407,48 @@
   },
   {
     "name": "VariantItem",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "VariantType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "VariantTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "VariantUnderlyingType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "Version",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "Void",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "VoidType",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "VoidTypeHandle",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   },
   {
     "name": "Way",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 1
   },
   {
     "name": "WeakField",
@@ -2232,6 +2471,7 @@
   },
   {
     "name": "WorldCode",
-    "kind": "Normal"
+    "kind": "Normal",
+    "argCount": 0
   }
 ]

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_key_filter.cpp
@@ -10,7 +10,5 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/ast
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

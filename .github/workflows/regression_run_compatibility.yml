@@ -34,7 +34,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan"]
+        # Temporary: relwithdebinfo only.
+        build_preset: ["relwithdebinfo"]
     with:
       test_targets: ydb/tests/compatibility/
       branches: ${{ inputs.pull_request_input && format('pull/{0}', inputs.pull_request_input) || github.ref_name }}

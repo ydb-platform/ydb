@@ -51,7 +51,6 @@ ISyncPoint::ESourceAction TSyncPointResult::OnSourceReady(const NCommon::TDataSo
             YDB_LOG_DEBUG("",
                 {"event", "has_result"},
                 {"sourceIdx", source.GetSourceIdx()},
-                {"#_dup_source_idx", source.GetSourceIdx()},
                 {"table", resultChunk->GetTable()->num_rows()},
                 {"isFinished", isFinished});
             auto cursor = Collection->BuildCursor(source, resultChunk->GetStartIndex() + resultChunk->GetRecordsCount(),

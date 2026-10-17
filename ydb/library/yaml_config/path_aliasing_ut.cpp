@@ -57,18 +57,14 @@ resource_path_prefix_mapping:
             UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/literal.x/table"), "/literal.x/table");
         }
 
-        Y_UNIT_TEST(RootDestinationReplacesThePrefix) {
+        Y_UNIT_TEST(RootDestinationIsRejected) {
             const auto config = Parse(R"(
 resource_path_prefix_mapping:
   rules:
     - src: '/prefix'
       dst: '/'
 )", false);
-            const NPathAliasing::TPathNormalizer normalizer(config.GetResourcePathPrefixMapping());
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/"), "/");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix/table"), "/table");
-            UNIT_ASSERT_VALUES_EQUAL(normalizer.NormalizePath("/prefix//table///"), "/table");
+            UNIT_ASSERT_EXCEPTION(NPathAliasing::TPathNormalizer(config.GetResourcePathPrefixMapping()), yexception);
         }
 
         Y_UNIT_TEST(RejectsMissingEmptyAndRelativePrefixes) {

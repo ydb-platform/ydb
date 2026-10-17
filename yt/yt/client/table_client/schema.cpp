@@ -60,6 +60,15 @@ int GetLockPriority(ELockType lockType)
     }
 }
 
+i64 GetHashMapMemoryUsage(const THashMap<TStringBuf, int>& map)
+{
+    // Bucket array plus per-node overhead. Keys are TStringBuf views into
+    // column names that are already accounted for by TColumnSchema.
+    return
+        map.bucket_count() * sizeof(void*) +
+        map.size() * (sizeof(void*) + sizeof(std::pair<const TStringBuf, int>));
+}
+
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1499,6 +1508,9 @@ i64 TTableSchema::GetMemoryUsage() const
     for (const auto& column : Columns()) {
         usage += column.GetMemoryUsage();
     }
+    usage += GetHashMapMemoryUsage(StableNameToColumnIndex_);
+    usage += GetHashMapMemoryUsage(NameToColumnIndex_);
+    usage += GetHashMapMemoryUsage(StableNameToDeletedColumnIndex_);
     return usage;
 }
 
@@ -1514,6 +1526,9 @@ i64 TTableSchema::GetMemoryUsage(i64 threshold) const
 
         usage += column.GetMemoryUsage(threshold - usage);
     }
+    usage += GetHashMapMemoryUsage(StableNameToColumnIndex_);
+    usage += GetHashMapMemoryUsage(NameToColumnIndex_);
+    usage += GetHashMapMemoryUsage(StableNameToDeletedColumnIndex_);
     return usage;
 }
 

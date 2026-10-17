@@ -1,5 +1,6 @@
 #include "path_normalizer.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <util/generic/yexception.h>
@@ -39,6 +40,25 @@ namespace NKikimr::NPathAliasing {
                 src.pop_back();
             }
             impl->Rules.push_back({std::move(src), TString(dst)});
+        }
+
+        std::vector<TImpl::TRule> prefixes;
+        prefixes.reserve(impl->Rules.size());
+        for (const auto& rule : impl->Rules) {
+            prefixes.push_back({CanonizePath(rule.Src), CanonizePath(rule.Dst)});
+        }
+        const auto isPrefix = [](TStringBuf prefix, TStringBuf path) {
+            return path.StartsWith(prefix)
+                && (path.size() == prefix.size() || path[prefix.size()] == '/');
+        };
+        for (size_t i = 0; i < prefixes.size(); ++i) {
+            for (size_t j = 0; j < prefixes.size(); ++j) {
+                Y_ENSURE(!isPrefix(prefixes[j].Src, prefixes[i].Dst)
+                    && !isPrefix(prefixes[i].Dst, prefixes[j].Src),
+                    "resource_path_prefix_mapping rule " << i + 1 << ": dst '" << impl->Rules[i].Dst
+                    << "' overlaps src '" << impl->Rules[j].Src << "' of rule " << j + 1
+                    << "; alias chains and cycles are not allowed");
+            }
         }
 
         Impl = std::move(impl);

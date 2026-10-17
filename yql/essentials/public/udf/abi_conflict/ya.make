@@ -1,0 +1,5 @@
+LIBRARY()
+
+MESSAGE(FATAL_ERROR A module states its UDF ABI once: YQL_CURRENT_ABI_VERSION cannot be combined with YQL_STABLE_ABI_VERSION or YQL_ABI_VERSION)
+
+END()

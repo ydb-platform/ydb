@@ -22,7 +22,6 @@
 namespace NActors {
 
     class TExecutorPoolJail;
-    class TBasicExecutorPoolSanitizer;
     class TSharedExecutorPool;
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
@@ -128,7 +127,6 @@ namespace NActors {
     };
 
     class TBasicExecutorPool: public TExecutorPoolBase {
-        friend class TBasicExecutorPoolSanitizer;
         friend class TSharedExecutorPool;
 
         NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
@@ -179,7 +177,6 @@ namespace NActors {
         TExecutorPoolJail *Jail = nullptr;
         TSharedExecutorPool *SharedPool = nullptr;
         class TWaker;
-        std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
         std::unique_ptr<TWaker> Waker;
 
         static constexpr i16 InvalidWakerWorkerId = -1;
@@ -262,7 +259,6 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
-        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;

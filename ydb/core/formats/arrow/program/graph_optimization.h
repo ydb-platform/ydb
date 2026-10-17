@@ -2,6 +2,8 @@
 #include "abstract.h"
 #include "graph_execute.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/sub_column_name.h>
+
 #include <library/cpp/json/writer/json_value.h>
 #include <util/digest/fnv.h>
 #include <util/digest/numeric.h>
@@ -20,10 +22,14 @@ namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
 class TResourceAddress {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY_DEF(TString, SubColumnName);
+    NAccessor::NSubColumns::TCanonicalSubColumnName SubColumnName;
 
 public:
-    TResourceAddress(const ui32 columnId, const TString& subColumnName = "")
+    const NAccessor::NSubColumns::TCanonicalSubColumnName& GetSubColumnName() const {
+        return SubColumnName;
+    }
+
+    TResourceAddress(const ui32 columnId, const NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName = {})
         : ColumnId(columnId)
         , SubColumnName(subColumnName) {
     }
@@ -38,7 +44,7 @@ public:
 
     explicit operator size_t() const {
         if (SubColumnName) {
-            return CombineHashes<ui64>(ColumnId, FnvHash<ui64>(SubColumnName.data(), SubColumnName.size()));
+            return CombineHashes<ui64>(ColumnId, SubColumnName.GetHash());
         } else {
             return ColumnId;
         }

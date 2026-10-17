@@ -92,6 +92,18 @@ public:
         return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
+    NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+    {
+        Y_ENSURE(groupId.Index < PageCollections.size());
+        return PageCollections[groupId.Index]->PageCollection->GetLocation(pageId);
+    }
+
+    const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const override
+    {
+        Y_ENSURE(room < PageCollections.size());
+        return PageCollections[room]->PageCollection.Get();
+    }
+
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
         Y_ENSURE(groupId.Index < PageCollections.size());
@@ -134,29 +146,27 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TVector<TPageId> GetPages(ui32 room) const
+    TVector<TPageLocation> GetPages(ui32 room) const
     {
         Y_ENSURE(room < PageCollections.size());
 
-        auto total = PageCollections[room]->PageCollection->Total();
-
-        TVector<TPageId> pages(total);
-        for (size_t i : xrange(total)) {
-            pages[i] = i;
+        auto& pageCollection = *PageCollections[room]->PageCollection;
+        auto meta =
+            room < IndexPages.BTreeGroups.size() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
+        bool supersededByV2Tree = meta && meta->HasRootV2();
+        auto total = pageCollection.MetaPages();
+        TVector<TPageLocation> pages(Reserve(supersededByV2Tree ? 8 : total));
+        for (ui32 i = 0; i < total; ++i) {
+            auto type = pageCollection.Page(i).Type;
+            if (type == ui32(EPage::Skip) ||
+                (supersededByV2Tree && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
+                               type == ui32(EPage::DataPage)))) {
+                continue;
+            }
+            pages.push_back(pageCollection.GetLocation(i));
         }
 
         return pages;
-    }
-
-    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
-    {
-        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
-
-        for (auto &one: components) {
-            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
-        }
-
-        return pageCollections;
     }
 
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)

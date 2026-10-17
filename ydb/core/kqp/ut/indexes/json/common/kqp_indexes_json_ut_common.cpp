@@ -214,6 +214,52 @@ void ValidatePredicate(TQueryClient& db, const std::string& predicate, TParams p
     CompareYson(FormatResultSetYson(mainResult.GetResultSet(0)), FormatResultSetYson(indexResult.GetResultSet(0)));
 }
 
+void ValidatePredicateKeys(TQueryClient& db, const std::string& predicate, const std::string& expected, TParams params) {
+    auto query = [&](const std::string& indexPart) {
+        return std::format(R"(
+            SELECT Key FROM TestTable VIEW {} WHERE {} ORDER BY Key;
+        )", indexPart, predicate);
+    };
+
+    auto mainResult = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_C(mainResult.IsSuccess(),
+        "PRIMARY KEY query failed for predicate: " << predicate << ", issues: " << mainResult.GetIssues().ToString());
+
+    auto indexResult = db.ExecuteQuery(query("json_idx"), TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_C(indexResult.IsSuccess(),
+        "json_idx query failed for predicate: " << predicate << ", issues: " << indexResult.GetIssues().ToString());
+
+    CompareYson(TString(expected), FormatResultSetYson(mainResult.GetResultSet(0)));
+    CompareYson(TString(expected), FormatResultSetYson(indexResult.GetResultSet(0)));
+}
+
+void ValidatePredicateError(TQueryClient& db, const std::string& predicate, TParams params,
+    const std::string& errorMessage)
+{
+    static constexpr const char* table = "TestTable";
+    static constexpr const char* indexTable = "json_idx";
+
+    auto query = [&](const std::string& indexPart) {
+        return std::format(R"(
+            SELECT * FROM {} VIEW {} WHERE {} ORDER BY Key;
+        )", table, indexPart, predicate);
+    };
+
+    auto mainResult = db.ExecuteQuery(query("PRIMARY KEY"), TTxControl::NoTx(), params).ExtractValueSync();
+    auto indexResult = db.ExecuteQuery(query(indexTable), TTxControl::NoTx(), params).ExtractValueSync();
+
+    UNIT_ASSERT_C(!mainResult.IsSuccess(), "PRIMARY KEY query unexpectedly succeeded for predicate: " << predicate);
+    UNIT_ASSERT_C(!indexResult.IsSuccess(), "json_idx query unexpectedly succeeded for predicate: " << predicate);
+    UNIT_ASSERT_VALUES_EQUAL_C(mainResult.GetStatus(), indexResult.GetStatus(), "Different statuses for predicate: " << predicate
+        << ", primary issues: " << mainResult.GetIssues().ToString()
+        << ", index issues: " << indexResult.GetIssues().ToString());
+
+    if (!errorMessage.empty()) {
+        UNIT_ASSERT_STRING_CONTAINS_C(mainResult.GetIssues().ToString(), errorMessage, "PRIMARY KEY query, predicate = " << predicate);
+        UNIT_ASSERT_STRING_CONTAINS_C(indexResult.GetIssues().ToString(), errorMessage, "json_idx query, predicate = " << predicate);
+    }
+}
+
 void ValidateError(TQueryClient& db, const std::string& predicate, const std::string& errorMessage,
     const std::string& unexpectedErrorMessage)
 {
@@ -555,16 +601,52 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
 
     size_t okCount = 0;
     size_t errCount = 0;
+    std::array<bool, kJsonCorpusNumShapes> jsonExistsParameterShapes = {};
+    std::array<bool, kJsonCorpusNumShapes> jsonValueParameterShapes = {};
+    size_t jsonParameterCompositionCount = 0;
 
     auto predicates = TPredicateBuilder().BuildBatch(corpus, tOpts.IsStrict, tOpts.MaxPredicates, tOpts.Seed, pOpts);
     for (const auto& p : predicates) {
+        if (p.JsonParameterShape) {
+            const size_t shape = static_cast<size_t>(*p.JsonParameterShape);
+            UNIT_ASSERT_C(shape < kJsonCorpusNumShapes, "Invalid Json parameter shape metadata");
+            if (p.JsonParameterFunction == EJsonParameterFunction::JsonExists) {
+                jsonExistsParameterShapes[shape] = true;
+            } else if (p.JsonParameterFunction == EJsonParameterFunction::JsonValue) {
+                jsonValueParameterShapes[shape] = true;
+            } else {
+                UNIT_FAIL("Json parameter shape has no function-family metadata");
+            }
+        }
+        jsonParameterCompositionCount += p.IsJsonParameterComposition;
+
         const auto sqlMain = std::format("SELECT Key FROM TestTable VIEW PRIMARY KEY WHERE {} ORDER BY Key", p.Sql);
         const auto sqlIndex = std::format("SELECT Key FROM TestTable VIEW json_idx WHERE {} ORDER BY Key", p.Sql);
 
         auto idxResult = execQ(sqlIndex, p.Params);
         auto mainResult = execQ(sqlMain, p.Params);
 
-        if (!idxResult.IsSuccess() && idxResult.GetIssues().ToString().contains(
+        if (p.ExpectBothPathError) {
+            UNIT_ASSERT_C(!idxResult.IsSuccess(), "Expected INDEX query error for predicate: " << p.Sql);
+            UNIT_ASSERT_C(!mainResult.IsSuccess(), "Expected MAIN query error for predicate: " << p.Sql);
+            if (p.ExpectedIndexErrorSubstr.empty()) {
+                UNIT_ASSERT_VALUES_EQUAL_C(idxResult.GetStatus(), mainResult.GetStatus(), "Different error statuses for predicate: " << p.Sql
+                    << ", index err: " << idxResult.GetIssues().ToString()
+                    << ", main err: " << mainResult.GetIssues().ToString());
+            }
+            if (!p.ExpectedBothPathErrorSubstr.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS_C(mainResult.GetIssues().ToString(), p.ExpectedBothPathErrorSubstr, "MAIN query, predicate: " << p.Sql);
+            }
+            const auto& expectedIndexError = p.ExpectedIndexErrorSubstr.empty()
+                ? p.ExpectedBothPathErrorSubstr
+                : p.ExpectedIndexErrorSubstr;
+            if (!expectedIndexError.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS_C(idxResult.GetIssues().ToString(), expectedIndexError, "INDEX query, predicate: " << p.Sql);
+            }
+            ++errCount;
+
+            Cerr << p.Sql << ", both err" << Endl;
+        } else if (!idxResult.IsSuccess() && idxResult.GetIssues().ToString().contains(
             "JSON index cannot be used: full-range search cannot be performed using full-text search"))
         {
             UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
@@ -586,6 +668,25 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
 
             Cerr << p.Sql << ", size: " << idxResult.GetResultSet(0).RowsCount() << Endl;
         }
+    }
+
+    if (pOpts.EnableJsonParameters) {
+        const size_t sqlNullShape = static_cast<size_t>(EJsonShape::SqlNull);
+        for (size_t shape = 0; shape < sqlNullShape; ++shape) {
+            if (pOpts.EnableJsonExists) {
+                UNIT_ASSERT_C(jsonExistsParameterShapes[shape], "Missing JSON_EXISTS Json parameter predicate for shape " << shape);
+            }
+            if (pOpts.EnableJsonValue) {
+                UNIT_ASSERT_C(jsonValueParameterShapes[shape], "Missing JSON_VALUE Json parameter predicate for shape " << shape);
+            }
+        }
+
+        const size_t expectedCompositions = static_cast<size_t>(pOpts.EnableAndCombinations)
+            + static_cast<size_t>(pOpts.EnableOrCombinations)
+            + static_cast<size_t>(pOpts.EnableAndCombinations && pOpts.EnableOrCombinations);
+        UNIT_ASSERT_C(jsonParameterCompositionCount >= expectedCompositions,
+            "Missing Json parameter compositions: expected at least " << expectedCompositions
+            << ", got " << jsonParameterCompositionCount);
     }
 
     Cerr << "JsonIndexCorpus: ok=" << okCount << " err=" << errCount << " total=" << predicates.size() << Endl;

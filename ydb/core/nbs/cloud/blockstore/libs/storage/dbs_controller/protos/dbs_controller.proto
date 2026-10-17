@@ -90,7 +90,11 @@ enum EDecision {
 
 
 // Запрос на разрешение Maintenance хостов.
-// Принимает список ID storage нод.
+// Принимает список ID storage нод,
+// для которых запрашивается разрешение,
+// и список нод, уже имеющих Lock
+// (будут рассмотрены как потенциально недоступные
+// при вычислении модели отказа).
 // Возвращает EDecision::ALLOW,
 // если все DBG, зависящие от NodeIds,
 // имеют на момент вызова полный набор нод
@@ -100,6 +104,7 @@ enum EDecision {
 // которые блокируют разрешение (пустой при EDecision::ALLOW).
 message TNodeMaintenancePermissionRequest {
   repeated uint32 NodeIds = 1;
+  repeated uint32 LockedNodes = 2;
 }
 
 message TNodeMaintenancePermissionResponse {

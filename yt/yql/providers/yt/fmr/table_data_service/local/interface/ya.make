@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_table_data_service_local_interface.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yt/yql/providers/yt/fmr/table_data_service/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

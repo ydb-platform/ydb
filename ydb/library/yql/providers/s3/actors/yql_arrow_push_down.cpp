@@ -1,15 +1,18 @@
 #include "yql_arrow_push_down.h"
 
-#include <util/generic/vector.h>
 #include <ydb/library/yql/providers/generic/pushdown/yql_generic_match_predicate.h>
+
 #include <parquet/statistics.h>
+#include <util/generic/vector.h>
 
 namespace {
 
-TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
+TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(
+    parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
     switch (physicalType) {
         case parquet::Type::type::INT32: {
-            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics =
+                static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -18,7 +21,8 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parq
             return stats;
         }
         case parquet::Type::type::INT64: {
-            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics =
+                static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -33,11 +37,12 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetDateStatistics(parq
         case parquet::Type::type::BYTE_ARRAY:
         case parquet::Type::type::FIXED_LEN_BYTE_ARRAY:
         case parquet::Type::type::UNDEFINED:
-        return {};
+            return {};
     }
 }
 
-TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::TimestampLogicalType* typestampLogicalType, parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
+TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics(const parquet::TimestampLogicalType* typestampLogicalType,
+    parquet::Type::type physicalType, std::shared_ptr<parquet::Statistics> statistics) {
     int64_t multiplier = 1;
     switch (typestampLogicalType->time_unit()) {
         case parquet::LogicalType::TimeUnit::unit::UNKNOWN:
@@ -45,13 +50,14 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics
             return {};
         case parquet::LogicalType::TimeUnit::unit::MILLIS:
             multiplier *= 1000;
-        break;
+            break;
         case parquet::LogicalType::TimeUnit::unit::MICROS:
-        break;
+            break;
     }
     switch (physicalType) {
         case parquet::Type::type::INT32: {
-            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow::Int32Type>* typedStatistics =
+                static_cast<const parquet::TypedStatistics<arrow::Int32Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -60,7 +66,8 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics
             return stats;
         }
         case parquet::Type::type::INT64: {
-            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics = static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
+            const parquet::TypedStatistics<arrow::Int64Type>* typedStatistics =
+                static_cast<const parquet::TypedStatistics<arrow::Int64Type>*>(statistics.get());
             int64_t minValue = typedStatistics->min();
             int64_t maxValue = typedStatistics->max();
             NYql::NGenericPushDown::TTimestampColumnStatsData stats;
@@ -75,11 +82,12 @@ TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData> GetTimestampStatistics
         case parquet::Type::type::BYTE_ARRAY:
         case parquet::Type::type::FIXED_LEN_BYTE_ARRAY:
         case parquet::Type::type::UNDEFINED:
-        return {};
+            return {};
     }
 }
 
-NYql::NGenericPushDown::TColumnStatistics MakeTimestampStatistics(const TString& name, ::Ydb::Type::PrimitiveTypeId type, const TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData>& statistics) {
+NYql::NGenericPushDown::TColumnStatistics MakeTimestampStatistics(
+    const TString& name, ::Ydb::Type::PrimitiveTypeId type, const TMaybe<NYql::NGenericPushDown::TTimestampColumnStatsData>& statistics) {
     NYql::NGenericPushDown::TColumnStatistics columnStatistics;
     columnStatistics.ColumnName = name;
     columnStatistics.ColumnType.set_type_id(type);
@@ -91,30 +99,42 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
     TMap<TString, NYql::NGenericPushDown::TColumnStatistics> columns;
     for (int i = 0; i < rowGroupMetadata->schema()->num_columns(); i++) {
         auto columnChunkMetadata = rowGroupMetadata->ColumnChunk(i);
-        if (!columnChunkMetadata->is_stats_set()) {
+        if (!columnChunkMetadata->is_stats_set() || !columnChunkMetadata->statistics()->HasMinMax()) {
             continue;
         }
         auto column = rowGroupMetadata->schema()->Column(i);
         std::shared_ptr<const parquet::LogicalType> logicalType = column->logical_type();
         parquet::Type::type physicalType = column->physical_type();
         switch (logicalType->type()) {
+            case parquet::LogicalType::Type::type::UUID: {
+                if (physicalType != parquet::Type::type::FIXED_LEN_BYTE_ARRAY || column->type_length() != 16) {
+                    break;
+                }
+                const auto* typedStatistics = static_cast<const parquet::FLBAStatistics*>(columnChunkMetadata->statistics().get());
+                const TString columnName{ column->name() };
+                NYql::NGenericPushDown::TColumnStatistics columnStatistics;
+                columnStatistics.ColumnName = columnName;
+                columnStatistics.ColumnType.set_type_id(::Ydb::Type::UUID);
+                columnStatistics.UuidStats.ConstructInPlace();
+                columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
+                columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+                columns[columnName] = columnStatistics;
+            } break;
             case parquet::LogicalType::Type::type::DATE: {
                 auto statistics = GetDateStatistics(physicalType, columnChunkMetadata->statistics());
                 if (statistics) {
-                    const TString columnName{column->name()};
+                    const TString columnName{ column->name() };
                     columns[columnName] = MakeTimestampStatistics(columnName, ::Ydb::Type::DATE, statistics);
                 }
-            }
-            break;
+            } break;
             case parquet::LogicalType::Type::type::TIMESTAMP: {
                 const parquet::TimestampLogicalType* typestampLogicalType = static_cast<const parquet::TimestampLogicalType*>(logicalType.get());
                 auto statistics = GetTimestampStatistics(typestampLogicalType, physicalType, columnChunkMetadata->statistics());
                 if (statistics) {
-                    const TString columnName{column->name()};
+                    const TString columnName{ column->name() };
                     columns[columnName] = MakeTimestampStatistics(columnName, ::Ydb::Type::TIMESTAMP, statistics);
                 }
-            }
-            break;
+            } break;
             case parquet::LogicalType::Type::type::UNDEFINED:
             case parquet::LogicalType::Type::type::STRING:
             case parquet::LogicalType::Type::type::MAP:
@@ -127,9 +147,22 @@ bool MatchRowGroup(std::unique_ptr<parquet::RowGroupMetaData> rowGroupMetadata, 
             case parquet::LogicalType::Type::type::NIL:
             case parquet::LogicalType::Type::type::JSON:
             case parquet::LogicalType::Type::type::BSON:
-            case parquet::LogicalType::Type::type::UUID:
             case parquet::LogicalType::Type::type::NONE:
-            break;
+                break;
+        }
+        // FLBA(16) without UUID logical type: treat as UUID (pyarrow 5 compatibility).
+        // FLBA has SortOrder::UNSIGNED by default, so this check is independent of sort_order.
+        if (physicalType == parquet::Type::type::FIXED_LEN_BYTE_ARRAY && column->type_length() == 16 &&
+            logicalType->type() == parquet::LogicalType::Type::type::NONE) {
+            const auto* typedStatistics = static_cast<const parquet::FLBAStatistics*>(columnChunkMetadata->statistics().get());
+            const TString columnName{ column->name() };
+            NYql::NGenericPushDown::TColumnStatistics columnStatistics;
+            columnStatistics.ColumnName = columnName;
+            columnStatistics.ColumnType.set_type_id(::Ydb::Type::UUID);
+            columnStatistics.UuidStats.ConstructInPlace();
+            columnStatistics.UuidStats->lowValue = TString(reinterpret_cast<const char*>(typedStatistics->min().ptr), 16);
+            columnStatistics.UuidStats->highValue = TString(reinterpret_cast<const char*>(typedStatistics->max().ptr), 16);
+            columns[columnName] = columnStatistics;
         }
     }
     return NYql::NGenericPushDown::MatchPredicate(columns, predicate);
@@ -146,7 +179,7 @@ TVector<ui64> MatchedRowGroupsImpl(parquet::FileMetaData* fileMetadata, const NY
     return matchedRowGroups;
 }
 
-}
+}   // namespace
 
 namespace NYql::NDq {
 
@@ -158,6 +191,4 @@ TVector<ui64> MatchedRowGroups(const std::unique_ptr<parquet::FileMetaData>& fil
     return MatchedRowGroupsImpl(fileMetadata.get(), predicate);
 }
 
-
-
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

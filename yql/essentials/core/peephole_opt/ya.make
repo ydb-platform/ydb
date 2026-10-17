@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -18,7 +18,5 @@ PEERDIR(
     yql/essentials/core/type_ann
     library/cpp/svnversion
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

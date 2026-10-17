@@ -867,6 +867,13 @@ std::shared_ptr<TTreeNode> TPredicateSelectivityComputer::ConvertEqualityToRange
 
     // the case when both are attributes
     if (leftAttr.Defined() && rightAttr.Defined()) {
+        if (collectMembers && CollectMemberEqualities) {
+            const auto leftMember = IsMember(left);
+            const auto rightMember = IsMember(right);
+            if (leftMember && rightMember) {
+                MemberEqualities.emplace_back(leftMember.GetRef(), rightMember.GetRef());
+            }
+        }
         std::shared_ptr<TTreeNode> node = CreateLeafNode(leftAttr);
         node->Selectivity = TWO_COLUMNS_DEFAULT_SELECTIVITY;
         return node;

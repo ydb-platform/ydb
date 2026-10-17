@@ -116,18 +116,19 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         UNIT_ASSERT(resendCookie != firstCookie);
         Controller->OnMessageSent(TestShardId, resendCookie);
 
-        // Only the result echoing the last minted cookie acknowledges the round.
-        // Note: a zero cookie can never acknowledge the round - callers never
-        // pass such a cookie here (see the AFL_ENSURE in OnMessageAcknowledged).
-        UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
-
+        // Only the result echoing the last minted cookie may acknowledge the
+        // round: a stale cookie (e.g. the result of the original attempt after
+        // a resend) is a superseded result - the write actor filters it out
+        // with IsSupersededWriteResult before it ever reaches the controller,
+        // and OnMessageAcknowledged treats it as a bug.
         const auto acknowledged = Controller->OnMessageAcknowledged(TestShardId, resendCookie);
-        UNIT_ASSERT(acknowledged);
-        UNIT_ASSERT(acknowledged->IsShardEmpty);
+        UNIT_ASSERT(acknowledged.IsShardEmpty);
         UNIT_ASSERT(!Controller->GetMessageMetadata(TestShardId));
 
-        // A second round mints a fresh cookie again; belated duplicates of the first
-        // round's messages are both filtered out and ignored by OnMessageAcknowledged.
+        // A second round mints a fresh cookie again; belated duplicates of the
+        // first round's messages carry stale cookies and are filtered out by
+        // the write actor with IsSupersededWriteResult before they reach the
+        // controller.
         WriteRound(2, 22, 1);
         const auto secondMetadata = Controller->PrepareMessageMetadata(TestShardId);
         const ui64 secondCookie = Controller->AllocateMessageCookie(TestShardId);
@@ -136,8 +137,6 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
 
         UNIT_ASSERT(IsSupersededWriteResult(firstCookie, secondMetadata));
         UNIT_ASSERT(IsSupersededWriteResult(resendCookie, Controller->GetMessageMetadata(TestShardId)));
-        UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
-        UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, resendCookie));
 
         const auto currentMetadata = Controller->GetMessageMetadata(TestShardId);
         UNIT_ASSERT(currentMetadata);
@@ -145,8 +144,7 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
 
         // The result of the second round is acknowledged.
         const auto secondAck = Controller->OnMessageAcknowledged(TestShardId, secondCookie);
-        UNIT_ASSERT(secondAck);
-        UNIT_ASSERT(secondAck->IsShardEmpty);
+        UNIT_ASSERT(secondAck.IsShardEmpty);
         UNIT_ASSERT(!Controller->GetMessageMetadata(TestShardId));
     }
 
@@ -162,8 +160,7 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         // external-prepare exclusion) but is empty, and a read-only metadata
         // lookup for it returns nothing without removing or altering the entry.
         const auto acknowledged = Controller->OnMessageAcknowledged(TestShardId, cookie);
-        UNIT_ASSERT(acknowledged);
-        UNIT_ASSERT(acknowledged->IsShardEmpty);
+        UNIT_ASSERT(acknowledged.IsShardEmpty);
         UNIT_ASSERT(!Controller->GetMessageMetadata(TestShardId));
 
         // Lookups for shards unknown to the controller must not create entries

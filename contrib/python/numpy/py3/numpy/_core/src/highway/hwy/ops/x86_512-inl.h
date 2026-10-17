@@ -1478,7 +1478,11 @@ HWY_API Vec512<T> Ror(Vec512<T> a, Vec512<T> b) {
 // ------------------------------ ShiftLeftSame
 
 // GCC <14 and Clang <11 do not follow the Intel documentation for AVX-512
-// shift-with-immediate: the counts should all be unsigned int.
+// shift-with-immediate: the counts should all be unsigned int. Despite casting,
+// we still see warnings in GCC debug builds, hence disable.
+HWY_DIAGNOSTICS(push)
+HWY_DIAGNOSTICS_OFF(disable : 4245 4365, ignored "-Wsign-conversion")
+
 #if HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1100
 using Shift16Count = int;
 using Shift3264Count = int;
@@ -1642,6 +1646,8 @@ HWY_API Vec512<int8_t> ShiftRightSame(Vec512<int8_t> v, const int bits) {
   return (shifted ^ shifted_sign) - shifted_sign;
 }
 
+HWY_DIAGNOSTICS(pop)
+
 // ------------------------------ Minimum
 
 // Unsigned
@@ -1727,6 +1733,68 @@ HWY_API Vec512<float> Max(Vec512<float> a, Vec512<float> b) {
 HWY_API Vec512<double> Max(Vec512<double> a, Vec512<double> b) {
   return Vec512<double>{_mm512_max_pd(a.raw, b.raw)};
 }
+
+// ------------------------------ MinNumber and MaxNumber
+
+#if HWY_X86_HAVE_AVX10_2_OPS
+
+#if HWY_HAVE_FLOAT16
+HWY_API Vec512<float16_t> MinNumber(Vec512<float16_t> a, Vec512<float16_t> b) {
+  return Vec512<float16_t>{_mm512_minmax_ph(a.raw, b.raw, 0x14)};
+}
+#endif
+HWY_API Vec512<float> MinNumber(Vec512<float> a, Vec512<float> b) {
+  return Vec512<float>{_mm512_minmax_ps(a.raw, b.raw, 0x14)};
+}
+HWY_API Vec512<double> MinNumber(Vec512<double> a, Vec512<double> b) {
+  return Vec512<double>{_mm512_minmax_pd(a.raw, b.raw, 0x14)};
+}
+
+#if HWY_HAVE_FLOAT16
+HWY_API Vec512<float16_t> MaxNumber(Vec512<float16_t> a, Vec512<float16_t> b) {
+  return Vec512<float16_t>{_mm512_minmax_ph(a.raw, b.raw, 0x15)};
+}
+#endif
+HWY_API Vec512<float> MaxNumber(Vec512<float> a, Vec512<float> b) {
+  return Vec512<float>{_mm512_minmax_ps(a.raw, b.raw, 0x15)};
+}
+HWY_API Vec512<double> MaxNumber(Vec512<double> a, Vec512<double> b) {
+  return Vec512<double>{_mm512_minmax_pd(a.raw, b.raw, 0x15)};
+}
+
+#endif
+
+// ------------------------------ MinMagnitude and MaxMagnitude
+
+#if HWY_X86_HAVE_AVX10_2_OPS
+
+#if HWY_HAVE_FLOAT16
+HWY_API Vec512<float16_t> MinMagnitude(Vec512<float16_t> a,
+                                       Vec512<float16_t> b) {
+  return Vec512<float16_t>{_mm512_minmax_ph(a.raw, b.raw, 0x16)};
+}
+#endif
+HWY_API Vec512<float> MinMagnitude(Vec512<float> a, Vec512<float> b) {
+  return Vec512<float>{_mm512_minmax_ps(a.raw, b.raw, 0x16)};
+}
+HWY_API Vec512<double> MinMagnitude(Vec512<double> a, Vec512<double> b) {
+  return Vec512<double>{_mm512_minmax_pd(a.raw, b.raw, 0x16)};
+}
+
+#if HWY_HAVE_FLOAT16
+HWY_API Vec512<float16_t> MaxMagnitude(Vec512<float16_t> a,
+                                       Vec512<float16_t> b) {
+  return Vec512<float16_t>{_mm512_minmax_ph(a.raw, b.raw, 0x17)};
+}
+#endif
+HWY_API Vec512<float> MaxMagnitude(Vec512<float> a, Vec512<float> b) {
+  return Vec512<float>{_mm512_minmax_ps(a.raw, b.raw, 0x17)};
+}
+HWY_API Vec512<double> MaxMagnitude(Vec512<double> a, Vec512<double> b) {
+  return Vec512<double>{_mm512_minmax_pd(a.raw, b.raw, 0x17)};
+}
+
+#endif
 
 // ------------------------------ Integer multiplication
 
@@ -1840,6 +1908,31 @@ HWY_API Vec512<float> ApproximateReciprocal(const Vec512<float> v) {
 
 HWY_API Vec512<double> ApproximateReciprocal(Vec512<double> v) {
   return Vec512<double>{_mm512_rcp14_pd(v.raw)};
+}
+
+// ------------------------------ GetExponent
+
+#if HWY_HAVE_FLOAT16
+template <class V, HWY_IF_F16(TFromV<V>), HWY_IF_V_SIZE_V(V, 64)>
+HWY_API V GetExponent(V v) {
+  return V{_mm512_getexp_ph(v.raw)};
+}
+#endif
+template <class V, HWY_IF_F32(TFromV<V>), HWY_IF_V_SIZE_V(V, 64)>
+HWY_API V GetExponent(V v) {
+  // Work around warnings in the intrinsic definitions (passing -1 as a mask).
+  HWY_DIAGNOSTICS(push)
+  HWY_DIAGNOSTICS_OFF(disable : 4245 4365, ignored "-Wsign-conversion")
+  return V{_mm512_getexp_ps(v.raw)};
+  HWY_DIAGNOSTICS(pop)
+}
+template <class V, HWY_IF_F64(TFromV<V>), HWY_IF_V_SIZE_V(V, 64)>
+HWY_API V GetExponent(V v) {
+  // Work around warnings in the intrinsic definitions (passing -1 as a mask).
+  HWY_DIAGNOSTICS(push)
+  HWY_DIAGNOSTICS_OFF(disable : 4245 4365, ignored "-Wsign-conversion")
+  return V{_mm512_getexp_pd(v.raw)};
+  HWY_DIAGNOSTICS(pop)
 }
 
 // ------------------------------ MaskedMinOr
@@ -2931,9 +3024,26 @@ HWY_API Vec512<int64_t> BroadcastSignBit(Vec512<int64_t> v) {
 
 #if HWY_HAVE_FLOAT16 || HWY_IDE
 
+namespace detail {
+
+template <int kCategories>
+__mmask32 Fix_mm512_fpclass_ph_mask(__m512h v) {
+#if HWY_COMPILER_GCC_ACTUAL && HWY_COMPILER_GCC_ACTUAL < 1500
+  // GCC's _mm512_cmp_ph_mask uses `__mmask8` instead of `__mmask32`, hence only
+  // the first 8 lanes are set.
+  return static_cast<__mmask32>(__builtin_ia32_fpclassph512_mask(
+      static_cast<__v32hf>(v), kCategories, static_cast<__mmask32>(-1)));
+#else
+  return _mm512_fpclass_ph_mask(v, kCategories);
+#endif
+}
+
+}  // namespace detail
+
 HWY_API Mask512<float16_t> IsNaN(Vec512<float16_t> v) {
-  return Mask512<float16_t>{_mm512_fpclass_ph_mask(
-      v.raw, HWY_X86_FPCLASS_SNAN | HWY_X86_FPCLASS_QNAN)};
+  constexpr int kCategories = HWY_X86_FPCLASS_SNAN | HWY_X86_FPCLASS_QNAN;
+  return Mask512<float16_t>{
+      detail::Fix_mm512_fpclass_ph_mask<kCategories>(v.raw)};
 }
 
 HWY_API Mask512<float16_t> IsEitherNaN(Vec512<float16_t> a,
@@ -2946,15 +3056,18 @@ HWY_API Mask512<float16_t> IsEitherNaN(Vec512<float16_t> a,
 }
 
 HWY_API Mask512<float16_t> IsInf(Vec512<float16_t> v) {
-  return Mask512<float16_t>{_mm512_fpclass_ph_mask(v.raw, 0x18)};
+  constexpr int kCategories = HWY_X86_FPCLASS_POS_INF | HWY_X86_FPCLASS_NEG_INF;
+  return Mask512<float16_t>{
+      detail::Fix_mm512_fpclass_ph_mask<kCategories>(v.raw)};
 }
 
 // Returns whether normal/subnormal/zero. fpclass doesn't have a flag for
 // positive, so we have to check for inf/NaN and negate.
 HWY_API Mask512<float16_t> IsFinite(Vec512<float16_t> v) {
-  return Not(Mask512<float16_t>{_mm512_fpclass_ph_mask(
-      v.raw, HWY_X86_FPCLASS_SNAN | HWY_X86_FPCLASS_QNAN |
-                 HWY_X86_FPCLASS_NEG_INF | HWY_X86_FPCLASS_POS_INF)});
+  constexpr int kCategories = HWY_X86_FPCLASS_SNAN | HWY_X86_FPCLASS_QNAN |
+                              HWY_X86_FPCLASS_NEG_INF | HWY_X86_FPCLASS_POS_INF;
+  return Not(Mask512<float16_t>{
+      detail::Fix_mm512_fpclass_ph_mask<kCategories>(v.raw)});
 }
 
 #endif  // HWY_HAVE_FLOAT16
@@ -3490,7 +3603,7 @@ HWY_API T ExtractLane(const Vec512<T> v, size_t i) {
   }
 #endif
 
-  alignas(64) T lanes[Lanes(d)];
+  alignas(64) T lanes[MaxLanes(d)];
   Store(v, d, lanes);
   return lanes[i];
 }
@@ -4731,6 +4844,18 @@ HWY_API Vec512<double> SwapAdjacentBlocks(Vec512<double> v) {
   return Vec512<double>{_mm512_shuffle_f64x2(v.raw, v.raw, _MM_PERM_CDAB)};
 }
 
+// ------------------------------ InterleaveEvenBlocks
+template <typename T>
+HWY_API Vec512<T> InterleaveEvenBlocks(Full512<T> d, Vec512<T> a, Vec512<T> b) {
+  return OddEvenBlocks(SlideUpBlocks<1>(d, b), a);
+}
+
+// ------------------------------ InterleaveOddBlocks (ConcatUpperUpper)
+template <typename T>
+HWY_API Vec512<T> InterleaveOddBlocks(Full512<T> d, Vec512<T> a, Vec512<T> b) {
+  return OddEvenBlocks(b, SlideDownBlocks<1>(d, a));
+}
+
 // ------------------------------ ReverseBlocks
 
 template <class D, HWY_IF_V_SIZE_D(D, 64), HWY_IF_NOT_FLOAT3264_D(D)>
@@ -5448,7 +5573,9 @@ HWY_API VFromD<D> PromoteTo(D /* tag */, Vec256<uint32_t> v) {
 
 template <class D, HWY_IF_V_SIZE_D(D, 64), HWY_IF_I64_D(D)>
 HWY_API VFromD<D> PromoteInRangeTo(D /*di64*/, VFromD<Rebind<float, D>> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_ps_epi64(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior with GCC if any values of v[i] are not
   // within the range of an int64_t
 
@@ -5480,7 +5607,9 @@ HWY_API VFromD<D> PromoteInRangeTo(D /*di64*/, VFromD<Rebind<float, D>> v) {
 }
 template <class D, HWY_IF_V_SIZE_D(D, 64), HWY_IF_U64_D(D)>
 HWY_API VFromD<D> PromoteInRangeTo(D /* tag */, VFromD<Rebind<float, D>> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_ps_epu64(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior with GCC if any values of v[i] are not
   // within the range of an uint64_t
 
@@ -5768,7 +5897,9 @@ HWY_API VFromD<D> DemoteTo(D /* tag */, Vec512<double> v) {
 
 template <class D, HWY_IF_V_SIZE_D(D, 32), HWY_IF_I32_D(D)>
 HWY_API VFromD<D> DemoteInRangeTo(D /* tag */, Vec512<double> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_pd_epi32(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttpd_epi32 with GCC if any
   // values of v[i] are not within the range of an int32_t
 
@@ -5776,7 +5907,8 @@ HWY_API VFromD<D> DemoteInRangeTo(D /* tag */, Vec512<double> v) {
   if (detail::IsConstantX86VecForF2IConv<int32_t>(v)) {
     typedef double GccF64RawVectType __attribute__((__vector_size__(64)));
     const auto raw_v = reinterpret_cast<GccF64RawVectType>(v.raw);
-    return VFromD<D>{_mm256_setr_epi32(
+    return VFromD<D>{
+        _mm256_setr_epi32(
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[0]),
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[1]),
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[2]),
@@ -5784,7 +5916,8 @@ HWY_API VFromD<D> DemoteInRangeTo(D /* tag */, Vec512<double> v) {
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[4]),
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[5]),
         detail::X86ConvertScalarFromFloat<int32_t>(raw_v[6]),
-        detail::X86ConvertScalarFromFloat<int32_t>(raw_v[7]))};
+        detail::X86ConvertScalarFromFloat<int32_t>(raw_v[7]))
+        };
   }
 #endif
 
@@ -5801,7 +5934,9 @@ HWY_API VFromD<D> DemoteInRangeTo(D /* tag */, Vec512<double> v) {
 
 template <class D, HWY_IF_V_SIZE_D(D, 32), HWY_IF_U32_D(D)>
 HWY_API VFromD<D> DemoteInRangeTo(D /* tag */, Vec512<double> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_pd_epu32(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttpd_epu32 with GCC if any
   // values of v[i] are not within the range of an uint32_t
 
@@ -6147,7 +6282,9 @@ HWY_API VFromD<D> ConvertInRangeTo(D /* tag */, VFromD<RebindToFloat<D>> v) {
 #endif  // HWY_HAVE_FLOAT16
 template <class D, HWY_IF_V_SIZE_D(D, 64), HWY_IF_I32_D(D)>
 HWY_API VFromD<D> ConvertInRangeTo(D /*d*/, Vec512<float> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_ps_epi32(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttps_epi32 with GCC if any
   // values of v[i] are not within the range of an int32_t
 
@@ -6187,7 +6324,9 @@ HWY_API VFromD<D> ConvertInRangeTo(D /*d*/, Vec512<float> v) {
 }
 template <class D, HWY_IF_V_SIZE_D(D, 64), HWY_IF_I64_D(D)>
 HWY_API VFromD<D> ConvertInRangeTo(D /*di*/, Vec512<double> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<D>{_mm512_cvtts_pd_epi64(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttpd_epi64 with GCC if any
   // values of v[i] are not within the range of an int64_t
 
@@ -6219,7 +6358,9 @@ HWY_API VFromD<D> ConvertInRangeTo(D /*di*/, Vec512<double> v) {
 }
 template <class DU, HWY_IF_V_SIZE_D(DU, 64), HWY_IF_U32_D(DU)>
 HWY_API VFromD<DU> ConvertInRangeTo(DU /*du*/, VFromD<RebindToFloat<DU>> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<DU>{_mm512_cvtts_ps_epu32(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttps_epu32 with GCC if any
   // values of v[i] are not within the range of an uint32_t
 
@@ -6275,7 +6416,9 @@ HWY_API VFromD<DU> ConvertInRangeTo(DU /*du*/, VFromD<RebindToFloat<DU>> v) {
 }
 template <class DU, HWY_IF_V_SIZE_D(DU, 64), HWY_IF_U64_D(DU)>
 HWY_API VFromD<DU> ConvertInRangeTo(DU /*du*/, VFromD<RebindToFloat<DU>> v) {
-#if HWY_COMPILER_GCC_ACTUAL
+#if HWY_X86_HAVE_AVX10_2_OPS
+  return VFromD<DU>{_mm512_cvtts_pd_epu64(v.raw)};
+#elif HWY_COMPILER_GCC_ACTUAL
   // Workaround for undefined behavior in _mm512_cvttpd_epu64 with GCC if any
   // values of v[i] are not within the range of an uint64_t
 
@@ -6939,7 +7082,7 @@ HWY_API Vec512<T> Expand(Vec512<T> v, const Mask512<T> mask) {
   // LUTs are infeasible for 2^64 possible masks, so splice together two
   // half-vector Expand.
   const Full256<T> dh;
-  constexpr size_t N = Lanes(d);
+  constexpr size_t N = MaxLanes(d);
   // We have to shift the input by a variable number of u8. Shuffling requires
   // VBMI2, in which case we would already have NativeExpand. We instead
   // load at an offset, which may incur a store to load forwarding stall.
@@ -6967,10 +7110,10 @@ HWY_API Vec512<T> Expand(Vec512<T> v, const Mask512<T> mask) {
   // LUTs are infeasible for 2^32 possible masks, so splice together two
   // half-vector Expand.
   const Full256<T> dh;
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   using Bits = typename Mask256<T>::Raw;
   const Mask256<T> maskL{
-      static_cast<Bits>(mask.raw & Bits{(1ULL << (N / 2)) - 1})};
+      static_cast<Bits>(mask.raw & static_cast<Bits>((1ULL << (N / 2)) - 1))};
   const Mask256<T> maskH{static_cast<Bits>(mask.raw >> (N / 2))};
   // In AVX3 we can permutevar, which avoids a potential store to load
   // forwarding stall vs. reloading the input.
@@ -7137,7 +7280,7 @@ Vec512<double> Shuffle128(const Vec512<double> lo, const Vec512<double> hi) {
 template <class D, HWY_IF_V_SIZE_D(D, 64)>
 HWY_API void LoadTransposedBlocks3(D d, const TFromD<D>* HWY_RESTRICT unaligned,
                                    VFromD<D>& A, VFromD<D>& B, VFromD<D>& C) {
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   const VFromD<D> v3210 = LoadU(d, unaligned + 0 * N);
   const VFromD<D> v7654 = LoadU(d, unaligned + 1 * N);
   const VFromD<D> vba98 = LoadU(d, unaligned + 2 * N);
@@ -7164,7 +7307,7 @@ template <class D, HWY_IF_V_SIZE_D(D, 64)>
 HWY_API void LoadTransposedBlocks4(D d, const TFromD<D>* HWY_RESTRICT unaligned,
                                    VFromD<D>& vA, VFromD<D>& vB, VFromD<D>& vC,
                                    VFromD<D>& vD) {
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   const VFromD<D> v3210 = LoadU(d, unaligned + 0 * N);
   const VFromD<D> v7654 = LoadU(d, unaligned + 1 * N);
   const VFromD<D> vba98 = LoadU(d, unaligned + 2 * N);
@@ -7197,7 +7340,7 @@ namespace detail {
 template <class D, HWY_IF_V_SIZE_D(D, 64)>
 HWY_API void StoreTransposedBlocks2(const VFromD<D> i, const VFromD<D> j, D d,
                                     TFromD<D>* HWY_RESTRICT unaligned) {
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   const auto j1_j0_i1_i0 = detail::Shuffle128<_MM_PERM_BABA>(i, j);
   const auto j3_j2_i3_i2 = detail::Shuffle128<_MM_PERM_DCDC>(i, j);
   const auto j1_i1_j0_i0 =
@@ -7220,7 +7363,7 @@ template <class D, HWY_IF_V_SIZE_D(D, 64)>
 HWY_API void StoreTransposedBlocks3(const VFromD<D> i, const VFromD<D> j,
                                     const VFromD<D> k, D d,
                                     TFromD<D>* HWY_RESTRICT unaligned) {
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   const VFromD<D> j2_j0_i2_i0 = detail::Shuffle128<_MM_PERM_CACA>(i, j);
   const VFromD<D> i3_i1_k2_k0 = detail::Shuffle128<_MM_PERM_DBCA>(k, i);
   const VFromD<D> j3_j1_k3_k1 = detail::Shuffle128<_MM_PERM_DBDB>(k, j);
@@ -7251,7 +7394,7 @@ template <class D, HWY_IF_V_SIZE_D(D, 64)>
 HWY_API void StoreTransposedBlocks4(const VFromD<D> i, const VFromD<D> j,
                                     const VFromD<D> k, const VFromD<D> l, D d,
                                     TFromD<D>* HWY_RESTRICT unaligned) {
-  constexpr size_t N = Lanes(d);
+  HWY_LANES_CONSTEXPR size_t N = Lanes(d);
   const VFromD<D> j1_j0_i1_i0 = detail::Shuffle128<_MM_PERM_BABA>(i, j);
   const VFromD<D> l1_l0_k1_k0 = detail::Shuffle128<_MM_PERM_BABA>(k, l);
   const VFromD<D> j3_j2_i3_i2 = detail::Shuffle128<_MM_PERM_DCDC>(i, j);
@@ -7538,6 +7681,24 @@ HWY_API V BitShuffle(V v, VI idx) {
   return BitCast(d64, PromoteTo(du64, vu8_bit_shuf_result));
 }
 #endif  // HWY_TARGET <= HWY_AVX3_DL
+
+// ------------------------------ MultiRotateRight
+
+#if HWY_TARGET <= HWY_AVX3_DL
+
+#ifdef HWY_NATIVE_MULTIROTATERIGHT
+#undef HWY_NATIVE_MULTIROTATERIGHT
+#else
+#define HWY_NATIVE_MULTIROTATERIGHT
+#endif
+
+template <class V, class VI, HWY_IF_UI64(TFromV<V>), HWY_IF_UI8(TFromV<VI>),
+          HWY_IF_V_SIZE_V(V, 64), HWY_IF_V_SIZE_V(VI, HWY_MAX_LANES_V(V) * 8)>
+HWY_API V MultiRotateRight(V v, VI idx) {
+  return V{_mm512_multishift_epi64_epi8(idx.raw, v.raw)};
+}
+
+#endif
 
 // -------------------- LeadingZeroCount
 

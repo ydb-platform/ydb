@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.31.5)
+VERSION(3.33.1)
 
 LICENSE(Apache-2.0)
 
@@ -138,6 +138,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/ydb/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    ydb/py.typed
 )
 
 END()

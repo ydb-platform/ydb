@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_config_provider.cpp
@@ -18,8 +18,6 @@ PEERDIR(
     yql/essentials/providers/common/activation
     yql/essentials/minikql/runtime_settings
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

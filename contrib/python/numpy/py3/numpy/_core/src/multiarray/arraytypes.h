@@ -279,135 +279,133 @@ CLONGDOUBLE_setitem(PyObject *obj, void *data_ptr, void *arr);
 
 
 
-#ifndef NPY_DISABLE_OPTIMIZATION
-    #include "argfunc.dispatch.h"
-#endif
-#line 59
-#line 62
+#include "argfunc.dispatch.h"
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BYTE_argmax,
     (npy_byte *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BYTE_argmin,
     (npy_byte *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int UBYTE_argmax,
     (npy_ubyte *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int UBYTE_argmin,
     (npy_ubyte *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int SHORT_argmax,
     (npy_short *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int SHORT_argmin,
     (npy_short *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int USHORT_argmax,
     (npy_ushort *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int USHORT_argmin,
     (npy_ushort *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int INT_argmax,
     (npy_int *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int INT_argmin,
     (npy_int *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int UINT_argmax,
     (npy_uint *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int UINT_argmin,
     (npy_uint *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONG_argmax,
     (npy_long *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONG_argmin,
     (npy_long *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int ULONG_argmax,
     (npy_ulong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int ULONG_argmin,
     (npy_ulong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONGLONG_argmax,
     (npy_longlong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONGLONG_argmin,
     (npy_longlong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int ULONGLONG_argmax,
     (npy_ulonglong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int ULONGLONG_argmin,
     (npy_ulonglong *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int FLOAT_argmax,
     (npy_float *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int FLOAT_argmin,
     (npy_float *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int DOUBLE_argmax,
     (npy_double *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int DOUBLE_argmin,
     (npy_double *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
 
-#line 59
-#line 62
+#line 57
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONGDOUBLE_argmax,
     (npy_longdouble *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
-#line 62
+#line 60
 NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int LONGDOUBLE_argmin,
     (npy_longdouble *ip, npy_intp n, npy_intp *max_ind, PyArrayObject *aip))
 
@@ -420,72 +418,72 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
  * Define DType and scalar type names and aliases as used in Python.
  */
 
-#line 91
+#line 89
 #define NPY_BOOL_name "bool"
 #define NPY_BOOL_Name "Bool"
 
 
-#line 91
+#line 89
 #define NPY_HALF_name "float16"
 #define NPY_HALF_Name "Float16"
 
 
-#line 91
+#line 89
 #define NPY_FLOAT_name "float32"
 #define NPY_FLOAT_Name "Float32"
 
 
-#line 91
+#line 89
 #define NPY_DOUBLE_name "float64"
 #define NPY_DOUBLE_Name "Float64"
 
 
-#line 91
+#line 89
 #define NPY_LONGDOUBLE_name "longdouble"
 #define NPY_LONGDOUBLE_Name "LongDouble"
 
 
-#line 91
+#line 89
 #define NPY_CFLOAT_name "complex64"
 #define NPY_CFLOAT_Name "Complex64"
 
 
-#line 91
+#line 89
 #define NPY_CDOUBLE_name "complex128"
 #define NPY_CDOUBLE_Name "Complex128"
 
 
-#line 91
+#line 89
 #define NPY_CLONGDOUBLE_name "clongdouble"
 #define NPY_CLONGDOUBLE_Name "CLongDouble"
 
 
-#line 91
+#line 89
 #define NPY_STRING_name "bytes_"
 #define NPY_STRING_Name "Bytes"
 
 
-#line 91
+#line 89
 #define NPY_UNICODE_name "str_"
 #define NPY_UNICODE_Name "Str"
 
 
-#line 91
+#line 89
 #define NPY_VOID_name "void"
 #define NPY_VOID_Name "Void"
 
 
-#line 91
+#line 89
 #define NPY_OBJECT_name "object_"
 #define NPY_OBJECT_Name "Object"
 
 
-#line 91
+#line 89
 #define NPY_DATETIME_name "datetime64"
 #define NPY_DATETIME_Name "DateTime64"
 
 
-#line 91
+#line 89
 #define NPY_TIMEDELTA_name "timedelta64"
 #define NPY_TIMEDELTA_Name "TimeDelta64"
 
@@ -517,7 +515,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef BYTE_not_size_named
     #define NPY_BYTE_name "byte"
@@ -546,7 +544,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef SHORT_not_size_named
     #define NPY_SHORT_name "short"
@@ -575,7 +573,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef INT_not_size_named
     #define NPY_INT_name "intc"
@@ -604,7 +602,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef LONG_not_size_named
     #define NPY_LONG_name "long"
@@ -633,7 +631,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef LONGLONG_not_size_named
     #define NPY_LONGLONG_name "longlong"
@@ -662,7 +660,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef BYTE_not_size_named
     #define NPY_UBYTE_name "ubyte"
@@ -691,7 +689,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef SHORT_not_size_named
     #define NPY_USHORT_name "ushort"
@@ -720,7 +718,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef INT_not_size_named
     #define NPY_UINT_name "uintc"
@@ -749,7 +747,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef LONG_not_size_named
     #define NPY_ULONG_name "ulong"
@@ -778,7 +776,7 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #endif
 
 
-#line 133
+#line 131
 
 #ifdef LONGLONG_not_size_named
     #define NPY_ULONGLONG_name "ulonglong"
@@ -812,6 +810,9 @@ NPY_CPU_DISPATCH_DECLARE(NPY_NO_EXPORT int BOOL_argmax,
 #undef SHORT_not_size_named
 #undef INT_not_size_named
 #undef LONGLONG_not_size_named
+
+NPY_NO_EXPORT npy_intp
+count_nonzero_trivial_dispatcher(npy_intp count, const char* data, npy_intp stride, int dtype_num);
 
 #endif  /* NUMPY_CORE_SRC_MULTIARRAY_ARRAYTYPES_H_ */
 

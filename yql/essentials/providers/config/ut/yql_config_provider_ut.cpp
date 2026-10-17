@@ -59,6 +59,31 @@ Y_UNIT_TEST(UnknownPragmaIsRejected) {
     UNIT_ASSERT(ApplyPragma(*provider, ctx, "UnknownCoreFlag") == IGraphTransformer::TStatus::Error);
     UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "Unsupported command: UnknownCoreFlag");
 }
+
+Y_UNIT_TEST(StrictConfigValidationRejectsUnknownFlagOnInit) {
+    TTypeAnnotationContext types;
+    types.StrictConfigValidation = true;
+    TExprContext ctx;
+    TGatewaysConfig config;
+    AddCoreFlag(config, "UnknownCoreFlag");
+    auto provider = CreateConfigProvider(types, &config, "testuser", {});
+
+    UNIT_ASSERT(!provider->Initialize(ctx));
+    UNIT_ASSERT_STRING_CONTAINS(ctx.IssueManager.GetIssues().ToString(), "Unsupported command: UnknownCoreFlag");
+}
+
+Y_UNIT_TEST(StrictConfigValidationAcceptsKnownFlagOnInit) {
+    TTypeAnnotationContext types;
+    types.StrictConfigValidation = true;
+    TExprContext ctx;
+    TGatewaysConfig config;
+    AddCoreFlag(config, "NodesAllocationLimit", {"12345"});
+    auto provider = CreateConfigProvider(types, &config, "testuser", {});
+
+    UNIT_ASSERT_C(provider->Initialize(ctx), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(ctx.IssueManager.GetIssues().Empty());
+    UNIT_ASSERT_VALUES_EQUAL(ctx.NodesAllocationLimit, 12345);
+}
 } // Y_UNIT_TEST_SUITE(TConfigProviderFlagsTest)
 
 } // namespace NYql

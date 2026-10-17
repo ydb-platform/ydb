@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/state
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto

@@ -91,14 +91,14 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 Установка идентификатора приложения в клиенте:
 
-- **{{ ydb-short-name }} Embedded UI** — фиксированное значение `ydb-ui`, задаётся Embedded UI и не настраивается пользователем.
+- **{{ ydb-ui-name }}** — фиксированное значение `ydb-ui`, задаётся {{ ydb-ui-name }} и не настраивается пользователем.
 - **YDB CLI** — не поддерживается: идентификатор клиентского приложения в запросе не отправляется.
 - **YDB C++ SDK** — на каждом запросе через параметр `Header` настроек [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, где константа [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) равна `x-ydb-application-name`.
 - **YDB Go SDK** — на драйвере через опцию [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) в вызове `ydb.Open`.
 - **YDB Java SDK** — на транспорте через метод [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280).
 - **YDB Python SDK** — отдельного параметра нет; значение задаётся на каждом запросе через дополнительный заголовок: `settings.with_header("x-ydb-application-name", "my-app")` (метод [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66)).
 
-**Пример.** Направить запросы от Embedded UI в пул `pool_adhoc`:
+**Пример.** Направить запросы от {{ ydb-ui-name }} в пул `pool_adhoc`:
 
 ```yql
 CREATE RESOURCE POOL CLASSIFIER cl_adhoc_ui WITH (
@@ -178,7 +178,7 @@ GRANT 'USE' ON `/my_db` TO `user1@domain`;
 
 ## Примеры {#examples}
 
-Ниже — сводный пример, комбинирующий несколько классификаторов и предикатов: отклонение полных сканов архивных таблиц, изоляция стриминговых запросов и выделение пула под интерактивные запросы админа из Embedded UI.
+Ниже — сводный пример, комбинирующий несколько классификаторов и предикатов: отклонение полных сканов архивных таблиц, изоляция стриминговых запросов и выделение пула под интерактивные запросы админа из {{ ydb-ui-name }}.
 
 Создание ресурсных пулов:
 
@@ -209,7 +209,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_stream WITH (
     HAS_STREAM=true
 );
 
--- Запросы админа из Embedded UI — в пул интерактивных запросов.
+-- Запросы админа из YDB UI — в пул интерактивных запросов.
 -- Условие AND: и MEMBER_NAME, и HAS_APP_NAME должны совпасть.
 CREATE RESOURCE POOL CLASSIFIER cl_adhoc_admin WITH (
     RANK=300,

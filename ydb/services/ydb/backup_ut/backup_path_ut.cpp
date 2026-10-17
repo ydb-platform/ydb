@@ -21,12 +21,10 @@ class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
 public:
     TPathAliasExplicitExportFixture() {
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
+        Table0Path = "/export-alias";
         auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
-        alias->SetSrc("/export-alias");
+        alias->SetSrc(Table0Path);
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
-        auto* decoy = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
-        decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");
-        decoy->SetDst("/Root/DoesNotExist");
     }
 };
 
@@ -65,7 +63,12 @@ struct TBackupTraits<NExport::TExportToS3Settings> {
         return f.YdbImportClient().ImportFromS3(settings).GetValueSync();
     }
 
-    void ValidateFileList(TS3BackupTestFixture& f, const TSet<TString>& paths) {
+    void ValidateFileList(
+        TS3BackupTestFixture& f,
+        TSet<TString> paths,
+        const TSet<TString>& completionMarkers)
+    {
+        paths.insert(completionMarkers.begin(), completionMarkers.end());
         f.ValidateS3FileList(paths);
     }
 
@@ -168,7 +171,11 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
         return f.YdbImportClient().ImportFromFs(settings).GetValueSync();
     }
 
-    void ValidateFileList(TFsBackupTestFixture& f, const TSet<TString>& paths) {
+    void ValidateFileList(
+        TFsBackupTestFixture& f,
+        const TSet<TString>& paths,
+        const TSet<TString>& /*completionMarkers*/)
+    {
         f.ValidateFileList(paths);
     }
 
@@ -313,6 +320,11 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2_Prefix/scheme.pb.sha256",
             prefix + "Table2_Prefix/permissions.pb.sha256",
             prefix + "Table2_Prefix/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0_Prefix/data_complete.json",
+            prefix + "Table1_Prefix/data_complete.json",
+            prefix + "Table2_Prefix/data_complete.json",
         });
     }
 
@@ -441,6 +453,11 @@ void ExportWholeDatabaseImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -502,6 +519,11 @@ void ExportWholeDatabaseByExplicitRootItemImpl(TBackupTestFixture& f, bool isOla
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -574,6 +596,11 @@ void ExportParquetWholeDatabaseImpl(TBackupTestFixture &f, bool isOlap) {
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.parquet.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/Table1/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -665,6 +692,9 @@ void ExportParquetTableWithCompressionImpl(TBackupTestFixture &f, bool isOlap) {
             prefix + "Table0/scheme.pb.sha256",
             prefix + "Table0/permissions.pb.sha256",
             prefix + "Table0/data_00.parquet.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
         });
     }
 
@@ -716,6 +746,10 @@ void ExportWithCommonSourcePathImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir2/Table2/scheme.pb.sha256",
             prefix + "dir2/Table2/permissions.pb.sha256",
             prefix + "dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table1/data_complete.json",
+            prefix + "dir2/Table2/data_complete.json",
         });
     }
 
@@ -784,6 +818,10 @@ void ExportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -840,6 +878,10 @@ void ExportFilteringWithoutEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -900,6 +942,10 @@ void ExportWithCommonSourcePathAndExplicitTableInsideImpl(TBackupTestFixture& f,
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "ExplicitTable1Prefix/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -953,6 +999,10 @@ void RecursiveDirectoryPlusExplicitTableImpl(TBackupTestFixture& f, bool isOlap)
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "RecursiveFolderProcessing/Table0/data_complete.json",
+            prefix + "RecursiveFolderProcessing/dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -998,6 +1048,9 @@ void EmptyDirectoryIsOkImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2/scheme.pb.sha256",
             prefix + "Table2/permissions.pb.sha256",
             prefix + "Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table2/data_complete.json",
         });
     }
 
@@ -1055,6 +1108,11 @@ void ImportWithExcludeRegexpsImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/Table1/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1149,6 +1207,11 @@ void ImportFilterByPrefixImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "Table2_Prefix/scheme.pb.sha256",
             prefix + "Table2_Prefix/permissions.pb.sha256",
             prefix + "Table2_Prefix/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0_Prefix/data_complete.json",
+            prefix + "Table1_Prefix/data_complete.json",
+            prefix + "Table2_Prefix/data_complete.json",
         });
     }
 
@@ -1196,6 +1259,9 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
             prefixRaw + "Prefix/t1/scheme.pb.sha256",
             prefixRaw + "Prefix/t1/permissions.pb.sha256",
             prefixRaw + "Prefix/t1/data_00.csv.sha256",
+        }, {
+            prefixRaw + "Prefix/t1/export_complete.json",
+            prefixRaw + "Prefix/t1/data_complete.json",
         });
     }
 
@@ -1262,6 +1328,10 @@ void CommonPrefixButExplicitImportItemsImpl(TBackupTestFixture& f, bool isOlap) 
             prefix + "dir2/Table2/scheme.pb.sha256",
             prefix + "dir2/Table2/permissions.pb.sha256",
             prefix + "dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table1/data_complete.json",
+            prefix + "dir2/Table2/data_complete.json",
         });
     }
 
@@ -1325,6 +1395,11 @@ void ExportCommonSourcePathImportExplicitlyImpl(TBackupTestFixture& f, bool isOl
             prefix + "dir1/dir2/Table2/scheme.pb.sha256",
             prefix + "dir1/dir2/Table2/permissions.pb.sha256",
             prefix + "dir1/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table0/data_complete.json",
+            prefix + "dir1/Table1/data_complete.json",
+            prefix + "dir1/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1382,6 +1457,10 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
             prefixRaw + "Prefix/dir2/Table2/scheme.pb.sha256",
             prefixRaw + "Prefix/dir2/Table2/permissions.pb.sha256",
             prefixRaw + "Prefix/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefixRaw + "Prefix/export_complete.json",
+            prefixRaw + "Prefix/Table1/data_complete.json",
+            prefixRaw + "Prefix/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1447,6 +1526,10 @@ void ExportDirectoryWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "002/scheme.pb.sha256",
             prefix + "002/permissions.pb.sha256",
             prefix + "002/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
         });
     }
 
@@ -1508,6 +1591,11 @@ void ExportWholeDatabaseWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1573,6 +1661,11 @@ void EncryptedExportWithExplicitDestinationPathImpl(TBackupTestFixture& f, bool 
             prefix + "Dir1Prefix/dir2/Table2/scheme.pb.sha256",
             prefix + "Dir1Prefix/dir2/Table2/permissions.pb.sha256",
             prefix + "Dir1Prefix/dir2/Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "UnsafeTableNameShownInEncryptedBackup/data_complete.json",
+            prefix + "Dir1Prefix/Table1/data_complete.json",
+            prefix + "Dir1Prefix/dir2/Table2/data_complete.json",
         });
     }
 
@@ -1655,6 +1748,11 @@ void EncryptedExportWithExplicitObjectListImpl(TBackupTestFixture& f, bool isOla
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1718,6 +1816,11 @@ void EncryptedImportWithoutCommonPrefixImpl(TBackupTestFixture& f, bool /*isOlap
             prefix + "003/scheme.pb.sha256",
             prefix + "003/permissions.pb.sha256",
             prefix + "003/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "001/data_complete.json",
+            prefix + "002/data_complete.json",
+            prefix + "003/data_complete.json",
         });
     }
 
@@ -1893,6 +1996,9 @@ void ChecksumsForSchemaMappingFilesImpl(TBackupTestFixture& f, bool /*isOlap*/) 
             prefix + "Table2/permissions.pb.sha256",
             prefix + "Table2/data_00.csv.zst",
             prefix + "Table2/data_00.csv.sha256",
+        }, {
+            prefix + "export_complete.json",
+            prefix + "Table2/data_complete.json",
         });
     }
 
@@ -1992,7 +2098,7 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
-    Y_UNIT_TEST(ExplicitItemSourceIsRewrittenOnce) {
+    Y_UNIT_TEST(ExplicitItemSourceAliasIsRewritten) {
         auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
         settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
         auto future = YdbExportClient().ExportToFs(settings);

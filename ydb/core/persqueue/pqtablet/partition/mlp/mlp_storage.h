@@ -116,6 +116,7 @@ public:
         explicit TMessage(const TMessageData& data)
             : TMessageData(data)
             , NextMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
+            , PrevMessageGroupIdOffset_(LastMessageGroupIdOffsetSentinel)
         {
         }
 
@@ -134,8 +135,24 @@ public:
             NextMessageGroupIdOffset_ = offset;
         }
 
+        TMaybe<ui64> PrevMessageGroupIdOffset() const {
+            if (!HasMessageGroupId || PrevMessageGroupIdOffset_ == LastMessageGroupIdOffsetSentinel) {
+                return Nothing();
+            }
+            return PrevMessageGroupIdOffset_;
+        }
+
+        void RelinkNextMessageGroupIdOffset(TMaybe<ui64> offset) {
+            NextMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
+        void RelinkPrevMessageGroupIdOffset(TMaybe<ui64> offset) {
+            PrevMessageGroupIdOffset_ = offset.GetOrElse(LastMessageGroupIdOffsetSentinel);
+        }
+
     private:
         ui64 NextMessageGroupIdOffset_; // not serialized
+        ui64 PrevMessageGroupIdOffset_; // not serialized, STD only
         static constexpr ui64 LastMessageGroupIdOffsetSentinel = Max<ui64>();
     };
 
@@ -265,6 +282,8 @@ public:
     // deadline - time for processing visibility
     // fromOffset indicates from which offset it is necessary to continue searching for the next free message.
     //            it is an optimization for the case when the method is called several times in a row.
+    // When no inflight message belongs to a group, the oldest available offset is returned.
+    // Otherwise a group that has waited longest is chosen
     std::optional<TReadMessage> Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups = {});
     // Read up to maxCount messages. When receiveAttemptId is set, repeated reads with the same
     // attempt id within ReceiveAttemptIdPeriod replay the same message set (SQS FIFO semantics).
@@ -400,6 +419,8 @@ private:
     ui64 FirstOffset = 0;
     ui64 FirstUncommittedOffset = 0;
     ui64 FirstUnlockedOffset = 0;
+    // Incremented on each fairness Next. IntHash of this value chooses which class is tried first.
+    ui32 FairnessClassTurn = 0;
 
     TInstant BaseDeadline;
     TInstant BaseWriteTimestamp;
@@ -430,10 +451,16 @@ private:
     };
     struct TSingleMessageGroupIdInfo {
         ui32 Size = 0;
+        ui32 UnprocessedCount = 0; // Messages in the group whose status is Unprocessed. STD keeps the group eligible for Next while this is > 0.
         TLockedGroup Locked;
         ui64 FirstOffset; // exclude DLQ
         ui64 LastOffset;
     };
+
+    void PushBackToMessageGroupList(ui64 offset, TMessage& message, TSingleMessageGroupIdInfo& group, bool firstMessageInGroup);
+    void UnlinkFromMessageGroupList(ui64 offset, const TMessage& message, TSingleMessageGroupIdInfo& group);
+    // STD: move the prefix through the message just returned to the tail, so the next search starts at its successor.
+    void RotateStdMessageGroupPastReturned(ui64 offset, TMessage& returned);
 
     class TMessageGroups {
     public:
@@ -441,8 +468,11 @@ private:
         size_t UnlockedMessageGroupsIdSize() const;
         bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
         void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        void SetUnlockedEligibility(ui32 messageGroupIdHash, bool eligible);
         const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
         TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
+        // Move groups from the front to the back of the fairness order.
+        void RotateGroupsOrder(TIntrusiveList<TOrderedMessageGroupIdHash>::iterator cutAfter);
         void Clear();
         ~TMessageGroups();
 

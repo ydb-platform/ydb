@@ -3561,6 +3561,57 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10));
     }
 
+    // KIKIMR-25849: PartitionCount must be filled even when the
+    // TablePartitions list is not requested
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "Value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 3
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Without partitioning info: PartitionCount must still be filled
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", false), {
+            NLs::Finished,
+            NLs::TablePartitionCount(3),
+        });
+
+        // With partitioning info: PartitionCount must match the list
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {
+            NLs::Finished,
+            NLs::PartitionCount(3),
+            NLs::TablePartitionCount(3),
+        });
+
+        // Split one shard and check that PartitionCount follows the actual shard count
+        auto describe = DescribePath(runtime, "/MyRoot/Table", true);
+        const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3u);
+
+        AsyncSplitTable(runtime, ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %lu
+            SplitBoundary {
+                KeyPrefix {
+                    Tuple { Optional { Uint32: 1000000000 } }
+                }
+            })",
+            partitions[0].GetDatashardId()).c_str()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", false), {
+            NLs::Finished,
+            NLs::TablePartitionCount(4),
+        });
+    }
+
     // TDropForceUnsafe on a table with an in-progress split must abort the split
     // via AbortUnsafe() and delete all shards. Three variants cover the three
     // distinct dst-tablet states at the time of the drop:

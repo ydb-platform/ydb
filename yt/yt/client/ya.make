@@ -206,6 +206,7 @@ SRCS(
 
     query_client/query_builder.cpp
     query_client/query_statistics.cpp
+    query_client/table_hint.cpp
 
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp

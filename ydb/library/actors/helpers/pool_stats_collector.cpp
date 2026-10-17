@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache.h>
 #include <util/generic/vector.h>
 
 namespace NActors {
@@ -17,6 +18,7 @@ private:
 
     TVector<TExecutorPoolCounters> PoolCounters;
     TActorSystemCounters ActorSystemCounters;
+    std::vector<TAllocationCacheFamilyStats> AllocationCacheStats;
 
 public:
     TImpl(ui32 intervalSec, const TActorSystemSetup& setup, NMonitoring::TDynamicCounterPtr counters)
@@ -53,7 +55,12 @@ public:
         }
         THarmonizerStats harmonizerStats;
         statsSubSystem.GetHarmonizerStats(harmonizerStats);
-        ActorSystemCounters.Set(harmonizerStats, ctx.ActorSystem()->GetAsyncFrameCacheStats());
+        AllocationCacheStats.clear();
+        if (const auto* cacheSystem = ctx.ActorSystem()->GetSubSystem<TAllocationCacheSubSystem>()) {
+            cacheSystem->GetFamilyStats(&AllocationCacheStats);
+        }
+        ActorSystemCounters.Set(harmonizerStats);
+        ActorSystemCounters.SetAllocationCacheStats(AllocationCacheStats);
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }

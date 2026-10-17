@@ -177,9 +177,12 @@ private:
     void OnEraseBelatedResponse(
         const TEraseRequestExecutor::TResponse& response);
 
-    void StartPersist();
+    void MaybeStartPersist();
     void DoPersistDirtyMap();
-    void OnDirtyMapPersisted(ui32 stateGeneration, THostMask freshDDisks);
+    void OnDirtyMapPersisted(
+        ui32 stateGeneration,
+        THostMask freshDDisks,
+        TPBufferKey restoreBarrier);
 
     // VDisk touch state.
     void Touch();
@@ -199,7 +202,8 @@ private:
         const TVChunkConfig& config,
         const TString& message,
         ui32 stateGeneration,
-        THostMask freshDDisks);
+        THostMask freshDDisks,
+        TPBufferKey restoreBarrier);
     void ApplyConfig(const TVChunkConfig& newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(

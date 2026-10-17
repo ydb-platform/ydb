@@ -2,7 +2,6 @@
 #include "yql_generic_credentials_provider.h"
 #include "yql_generic_read_actor.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -14,6 +13,8 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
 #include <ydb/library/yql/providers/generic/proto/partition.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -23,47 +24,38 @@
 
 namespace NYql::NDq {
 
-    using namespace NActors;
+using namespace NActors;
 
-    class TGenericReadActor: public TGenericBaseActor<TGenericReadActor>, public IDqComputeActorAsyncInput {
-    public:
-        TGenericReadActor(
-            ui64 inputIndex,
-            TCollectStatsLevel statsLevel,
-            NConnector::IClient::TPtr client,
-            TGenericCredentialsProvider::TPtr tokenProvider,
-            Generic::TSource&& source,
-            const NActors::TActorId& computeActorId,
-            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            TVector<Generic::TPartition>&& partitions)
-            : InputIndex_(inputIndex)
-            , ComputeActorId_(computeActorId)
-            , Client_(std::move(client))
-            , TokenProvider_(std::move(tokenProvider))
-            , Partitions_(std::move(partitions))
-            , HolderFactory_(holderFactory)
-            , Alloc_(std::move(alloc))
-            , Source_(std::move(source))
-        {
-            IngressStats_.Level = statsLevel;
+class TGenericReadActor: public TGenericBaseActor<TGenericReadActor>, public IDqComputeActorAsyncInput {
+public:
+    TGenericReadActor(ui64 inputIndex, TCollectStatsLevel statsLevel, NConnector::IClient::TPtr client,
+        TGenericCredentialsProvider::TPtr tokenProvider, Generic::TSource&& source, const NActors::TActorId& computeActorId,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        TVector<Generic::TPartition>&& partitions)
+        : InputIndex_(inputIndex)
+        , ComputeActorId_(computeActorId)
+        , Client_(std::move(client))
+        , TokenProvider_(std::move(tokenProvider))
+        , Partitions_(std::move(partitions))
+        , HolderFactory_(holderFactory)
+        , Alloc_(std::move(alloc))
+        , Source_(std::move(source))
+    {
+        IngressStats_.Level = statsLevel;
+    }
+
+    ~TGenericReadActor() {
+        if (Alloc_) {
+            TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc_);
+            ClearMkqlData();
         }
+    }
 
-        ~TGenericReadActor() {
-            if (Alloc_) {
-                TGuard<NKikimr::NMiniKQL::TScopedAlloc> allocGuard(*Alloc_);
-                ClearMkqlData();
-            }
-        }
-
-        void Bootstrap() {
-            Become(&TGenericReadActor::StateFunc);
-            TokenProvider_->AsyncCredentials().Subscribe([
-                computeActorId = ComputeActorId_,
-                inputIndex = InputIndex_,
-                actorSystem = TActivationContext::ActorSystem(),
-                selfId = SelfId()
-            ](const NThreading::TFuture<TGenericCredentials>& future) {
+    void Bootstrap() {
+        Become(&TGenericReadActor::StateFunc);
+        TokenProvider_->AsyncCredentials().Subscribe(
+            [computeActorId = ComputeActorId_, inputIndex = InputIndex_, actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](
+                const NThreading::TFuture<TGenericCredentials>& future) {
                 try {
                     actorSystem->Send(selfId, new TEvGotCredentials(ExtractFromConstFuture(future)));
                 } catch (std::exception& ex) {
@@ -74,12 +66,12 @@ namespace NYql::NDq {
                     NotifyComputeActorWithError(actorSystem, computeActorId, inputIndex, error);
                 }
             });
-        }
+    }
 
-        static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
+    static constexpr char ActorName[] = "GENERIC_READ_ACTOR";
 
-    private:
-        // clang-format off
+private:
+    // clang-format off
         STRICT_STFUNC_EXC(StateFunc,
                       hFunc(TEvReadSplitsIterator, Handle);
                       hFunc(TEvReadSplitsPart, Handle);
@@ -87,398 +79,333 @@ namespace NYql::NDq {
                       hFunc(TEvGotCredentials, Handle);
                       , ExceptionFunc(std::exception, HandleException)
         )
-        // clang-format on
+    // clang-format on
 
-        void Handle(TEvGotCredentials::TPtr& ev) {
-            const auto& credentials = ev->Get()->Credentials;
+    void Handle(TEvGotCredentials::TPtr& ev) {
+        const auto& credentials = ev->Get()->Credentials;
 
-            YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
+        YQL_CLOG(DEBUG, ProviderGeneric) << "Start splits reading";
 
-            if (Partitions_.empty()) {
-                YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
-                ReadSplitsFinished_ = true;
-                NotifyComputeActorWithData();
-                return;
-            }
-
-            // Prepare ReadSplits request. For the sake of simplicity,
-            // all the splits from all partitions will be packed into a single ReadSplits call.
-            // There's a lot of space for the optimizations here.
-            NConnector::NApi::TReadSplitsRequest request;
-            request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
-            request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
-
-            for (const auto& partition : Partitions_) {
-                request.mutable_splits()->Reserve(request.splits().size() + partition.splits().size());
-
-                for (const auto& srcSplit : partition.splits()) {
-                    auto dstSplit = request.add_splits();
-
-                    // Take actual SQL request from the source, because it contains predicates
-                    *dstSplit->mutable_select() = Source_.select();
-
-                    // Take split description from task params
-                    dstSplit->set_description(srcSplit.description());
-
-                    // Assign actual IAM token to a split
-                    *dstSplit->mutable_select()->mutable_data_source_instance()->mutable_credentials() = credentials;
-                }
-            }
-
-            // Start streaming
-            Client_->ReadSplits(request).Subscribe(
-                [actorSystem = TActivationContext::ActorSystem(),
-                 selfId = SelfId(),
-                 computeActorId = ComputeActorId_,
-                 inputIndex = InputIndex_](
-                    const NConnector::TReadSplitsStreamIteratorAsyncResult& future) {
-                    AwaitIterator<
-                        NConnector::TReadSplitsStreamIteratorAsyncResult,
-                        TEvReadSplitsIterator>(
-                        actorSystem, selfId, computeActorId, inputIndex, future);
-                });
-        }
-
-        void Handle(TEvReadSplitsIterator::TPtr& ev) {
-            ReadSplitsIterator_ = std::move(ev->Get()->Iterator);
-
-            AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
-                                TEvReadSplitsPart,
-                                TEvReadSplitsFinished>(ReadSplitsIterator_);
-        }
-
-        void Handle(TEvReadSplitsPart::TPtr& ev) {
-            auto& response = ev->Get()->Response;
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
-                                             << ": part_size=" << response.arrow_ipc_streaming().size();
-
-            if (!NConnector::IsSuccess(response)) {
-                return NotifyComputeActorWithError(
-                    TActivationContext::ActorSystem(),
-                    ComputeActorId_,
-                    InputIndex_,
-                    response.error());
-            }
-
-            YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data from connector");
-
-            // Preserve stream message to return it to ComputeActor later
-            LastReadSplitsResponse_ = std::move(ev->Get()->Response);
-            UpdateIngressStats();
+        if (Partitions_.empty()) {
+            YQL_CLOG(WARN, ProviderGeneric) << "Got empty list of partitions";
+            ReadSplitsFinished_ = true;
             NotifyComputeActorWithData();
-
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
-        }
-
-        void Handle(TEvReadSplitsFinished::TPtr& ev) {
-            const auto& status = ev->Get()->Status;
-
-            YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString();
-
-            // Server sent EOF, no more data is expected, so ask compute actor to come for the last time
-            if (NConnector::GrpcStatusEndOfStream(status)) {
-                YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: last message was reached, finish data reading";
-                ReadSplitsFinished_ = true;
-                return NotifyComputeActorWithData();
-            }
-
-            // Server temporary failure
-            if (NConnector::GrpcStatusNeedsRetry(status)) {
-                YQL_CLOG(WARN, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: you should retry your operation due to '"
-                                                << status.ToDebugString() << "' error";
-                // TODO: retry
-            }
-
-            return NotifyComputeActorWithError(
-                TActivationContext::ActorSystem(),
-                ComputeActorId_,
-                InputIndex_,
-                NConnector::ErrorFromGRPCStatus(status));
-        }
-
-        template <typename TIterator, typename TEventPart, typename TEventFinished>
-        void AwaitNextStreamItem(const typename TIterator::TPtr& iterator) {
-            YQL_ENSURE(iterator, "iterator was not initialized");
-
-            iterator->ReadNext().Subscribe(
-                [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const typename TIterator::TResult& asyncResult) {
-                    auto result = ExtractFromConstFuture(asyncResult);
-                    if (result.Status.Ok()) {
-                        YQL_ENSURE(result.Response, "empty response");
-                        auto ev = new TEventPart(std::move(*result.Response));
-                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                    } else {
-                        auto ev = new TEventFinished(std::move(result.Status));
-                        actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
-                    }
-                });
-        }
-
-        template <typename TAsyncResult, typename TIteratorEvent>
-        static void AwaitIterator(TActorSystem* actorSystem, TActorId selfId, TActorId computeActorId, ui64 inputIndex, const TAsyncResult& asyncResult) {
-            auto result = ExtractFromConstFuture(asyncResult);
-            if (result.Status.Ok()) {
-                YQL_ENSURE(result.Iterator, "uninitialized iterator");
-                auto ev = new TIteratorEvent(std::move(result.Iterator));
-                actorSystem->Send(new NActors::IEventHandle(selfId, {}, ev));
-            } else {
-                NotifyComputeActorWithError(
-                    actorSystem,
-                    computeActorId,
-                    inputIndex,
-                    NConnector::ErrorFromGRPCStatus(result.Status));
-            }
-        }
-
-        void UpdateIngressStats() {
-            if (LastReadSplitsResponse_->has_stats()) {
-                IngressStats_.Bytes += LastReadSplitsResponse_->stats().bytes();
-                IngressStats_.Rows += LastReadSplitsResponse_->stats().rows();
-            } else {
-                // Delete this branch with fallback behavior after YQ-2347 is deployed
-                IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
-            }
-            IngressStats_.Chunks++;
-            IngressStats_.Resume();
-        }
-
-        void HandleException(const std::exception& e) {
-            YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
-
-            NotifyComputeActorWithIssue(
-                TActivationContext::ActorSystem(),
-                ComputeActorId_,
-                InputIndex_,
-                TIssue(TStringBuilder() << "Internal error. Got unexpected exception: " << e.what()));
-        }
-
-        void NotifyComputeActorWithData() {
-            Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
-        }
-
-        static void NotifyComputeActorWithError(
-            TActorSystem* actorSystem,
-            NActors::TActorId computeActorId,
-            ui64 inputIndex,
-            const NConnector::NApi::TError& error) {
-            actorSystem->Send(computeActorId,
-                              new TEvAsyncInputError(
-                                  inputIndex,
-                                  NConnector::ErrorToIssues(error),
-                                  NConnector::ErrorToDqStatus(error)));
             return;
         }
 
-        static void NotifyComputeActorWithIssue(
-            TActorSystem* actorSystem,
-            NActors::TActorId computeActorId,
-            ui64 inputIndex,
-            TIssue issue) {
-            actorSystem->Send(computeActorId,
-                              new TEvAsyncInputError(
-                                  inputIndex,
-                                  TIssues{std::move(issue)},
-                                  NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR));
-            return;
+        // Prepare ReadSplits request. For the sake of simplicity,
+        // all the splits from all partitions will be packed into a single ReadSplits call.
+        // There's a lot of space for the optimizations here.
+        NConnector::NApi::TReadSplitsRequest request;
+        request.set_format(NConnector::NApi::TReadSplitsRequest::ARROW_IPC_STREAMING);
+        request.set_filtering(NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL);
+
+        for (const auto& partition : Partitions_) {
+            request.mutable_splits()->Reserve(request.splits().size() + partition.splits().size());
+
+            for (const auto& srcSplit : partition.splits()) {
+                auto dstSplit = request.add_splits();
+
+                // Take actual SQL request from the source, because it contains predicates
+                *dstSplit->mutable_select() = Source_.select();
+
+                // Take split description from task params
+                dstSplit->set_description(srcSplit.description());
+
+                // Assign actual IAM token to a split
+                *dstSplit->mutable_select()->mutable_data_source_instance()->mutable_credentials() = credentials;
+            }
         }
 
-        i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer,
-                              TMaybe<TInstant>&,
-                              bool& finished,
-                              i64 /*freeSpace*/) final {
-            YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
+        // Start streaming
+        Client_->ReadSplits(request).Subscribe(
+            [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), computeActorId = ComputeActorId_, inputIndex = InputIndex_](
+                const NConnector::TReadSplitsStreamIteratorAsyncResult& future) {
+                AwaitIterator<NConnector::TReadSplitsStreamIteratorAsyncResult, TEvReadSplitsIterator>(
+                    actorSystem, selfId, computeActorId, inputIndex, future);
+            });
+    }
 
-            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: start";
+    void Handle(TEvReadSplitsIterator::TPtr& ev) {
+        ReadSplitsIterator_ = std::move(ev->Get()->Iterator);
 
-            // Stream is finished
-            if (!LastReadSplitsResponse_) {
-                finished = ReadSplitsFinished_;
+        AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator, TEvReadSplitsPart, TEvReadSplitsFinished>(ReadSplitsIterator_);
+    }
 
-                if (finished) {
-                    YQL_CLOG(INFO, ProviderGeneric) << "GetAsyncInputData :: data reading finished";
+    void Handle(TEvReadSplitsPart::TPtr& ev) {
+        auto& response = ev->Get()->Response;
+        YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling started"
+                                         << ": part_size=" << response.arrow_ipc_streaming().size();
+
+        if (!NConnector::IsSuccess(response)) {
+            return NotifyComputeActorWithError(TActivationContext::ActorSystem(), ComputeActorId_, InputIndex_, response.error());
+        }
+
+        YQL_ENSURE(response.arrow_ipc_streaming().size(), "empty data from connector");
+
+        // Preserve stream message to return it to ComputeActor later
+        LastReadSplitsResponse_ = std::move(ev->Get()->Response);
+        UpdateIngressStats();
+        NotifyComputeActorWithData();
+
+        YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsPart :: event handling finished";
+    }
+
+    void Handle(TEvReadSplitsFinished::TPtr& ev) {
+        const auto& status = ev->Get()->Status;
+
+        YQL_CLOG(TRACE, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: event handling started: " << status.ToDebugString();
+
+        // Server sent EOF, no more data is expected, so ask compute actor to come for the last time
+        if (NConnector::GrpcStatusEndOfStream(status)) {
+            YQL_CLOG(DEBUG, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: last message was reached, finish data reading";
+            ReadSplitsFinished_ = true;
+            return NotifyComputeActorWithData();
+        }
+
+        // Server temporary failure
+        if (NConnector::GrpcStatusNeedsRetry(status)) {
+            YQL_CLOG(WARN, ProviderGeneric) << "Handle :: EvReadSplitsFinished :: you should retry your operation due to '"
+                                            << status.ToDebugString() << "' error";
+            // TODO: retry
+        }
+
+        return NotifyComputeActorWithError(
+            TActivationContext::ActorSystem(), ComputeActorId_, InputIndex_, NConnector::ErrorFromGRPCStatus(status));
+    }
+
+    template <typename TIterator, typename TEventPart, typename TEventFinished>
+    void AwaitNextStreamItem(const typename TIterator::TPtr& iterator) {
+        YQL_ENSURE(iterator, "iterator was not initialized");
+
+        iterator->ReadNext().Subscribe(
+            [actorSystem = TActivationContext::ActorSystem(), selfId = SelfId()](const typename TIterator::TResult& asyncResult) {
+                auto result = ExtractFromConstFuture(asyncResult);
+                if (result.Status.Ok()) {
+                    YQL_ENSURE(result.Response, "empty response");
+                    auto ev = new TEventPart(std::move(*result.Response));
+                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
+                } else {
+                    auto ev = new TEventFinished(std::move(result.Status));
+                    actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev));
                 }
+            });
+    }
 
-                IngressStats_.TryPause();
-                return 0;
-            }
-
-            // Stream is not finished, process next message
-            NUdf::TUnboxedValue value;
-            ui64 total = 0;
-
-            // It's very important to fill UV columns in the alphabet order,
-            // paying attention to the scalar field containing block length.
-            TVector<TString> fieldNames;
-            std::transform(Source_.select().what().items().cbegin(),
-                           Source_.select().what().items().cend(),
-                           std::back_inserter(fieldNames),
-                           [](const auto& item) { return item.column().name(); });
-
-            fieldNames.push_back(std::string(BlockLengthColumnName));
-            std::sort(fieldNames.begin(), fieldNames.end());
-            std::map<TStringBuf, std::size_t> fieldNameOrder;
-            for (std::size_t i = 0; i < fieldNames.size(); i++) {
-                fieldNameOrder[fieldNames[i]] = i;
-            }
-
-            // TODO: avoid copying from Protobuf to Arrow
-            auto batch = NConnector::ReadSplitsResponseToArrowRecordBatch(*LastReadSplitsResponse_);
-
-            total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
-
-            NUdf::TUnboxedValue* structItems = nullptr;
-            auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, fieldNames.size(), structItems);
-            for (int i = 0; i < batch->num_columns(); ++i) {
-                const auto& columnName = batch->schema()->field(i)->name();
-                const auto ix = fieldNameOrder[columnName];
-                structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)), NYql::DefaultDatumValidationMode);
-            }
-
-            structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
-                arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())), NYql::DefaultDatumValidationMode);
-            value = structObj;
-
-            buffer.emplace_back(std::move(value));
-
-            // freeSpace -= size;
-            LastReadSplitsResponse_ = std::nullopt;
-
-            // Request server for the next data block
-            AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator,
-                                TEvReadSplitsPart,
-                                TEvReadSplitsFinished>(ReadSplitsIterator_);
-            finished = false;
-
-            YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: bytes obtained = " << total;
-
-            return total;
-        }
-
-        // IActor & IDqComputeActorAsyncInput
-        void PassAway() override { // Is called from Compute Actor
-            YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
-                                            << ": bytes " << IngressStats_.Bytes
-                                            << ", rows " << IngressStats_.Rows
-                                            << ", chunks " << IngressStats_.Chunks;
-            ClearMkqlData();
-            TActorBootstrapped<TGenericReadActor>::PassAway();
-        }
-
-        void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {
-        }
-
-        void LoadState(const TSourceState&) final {
-        }
-
-        void CommitState(const NDqProto::TCheckpoint&) final {
-        }
-
-        ui64 GetInputIndex() const final {
-            return InputIndex_;
-        }
-
-        const TDqAsyncStats& GetIngressStats() const override {
-            return IngressStats_;
-        }
-
-        // Should be called with bound MKQL alloc
-        void ClearMkqlData() {
-            ArrowRowContainerCache_.Clear();
-        }
-
-    private:
-        const ui64 InputIndex_;
-        TDqAsyncStats IngressStats_;
-        const NActors::TActorId ComputeActorId_;
-
-        NConnector::IClient::TPtr Client_;
-        TGenericCredentialsProvider::TPtr TokenProvider_;
-
-        TVector<Generic::TPartition> Partitions_;
-
-        NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
-        std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
-        bool ReadSplitsFinished_ = false;
-
-        NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-        const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc_;
-        Generic::TSource Source_;
-    };
-
-    void ExtractPartitionsFromParams(
-        TVector<Generic::TPartition>& partitions,
-        const THashMap<TString, TString>& taskParams, // partitions are here in v1
-        const TVector<TString>& readRanges            // partitions are here in v2
-    ) {
-        if (!readRanges.empty()) {
-            for (const auto& readRange : readRanges) {
-                Generic::TPartition partition;
-                YQL_ENSURE(
-                    partition.ParseFromString(readRange), 
-                    "Failed to parse partition from read ranges: " << partition.InitializationErrorString()
-                );
-                partitions.emplace_back(std::move(partition));
-            }
+    template <typename TAsyncResult, typename TIteratorEvent>
+    static void AwaitIterator(
+        TActorSystem* actorSystem, TActorId selfId, TActorId computeActorId, ui64 inputIndex, const TAsyncResult& asyncResult) {
+        auto result = ExtractFromConstFuture(asyncResult);
+        if (result.Status.Ok()) {
+            YQL_ENSURE(result.Iterator, "uninitialized iterator");
+            auto ev = new TIteratorEvent(std::move(result.Iterator));
+            actorSystem->Send(new NActors::IEventHandle(selfId, {}, ev));
         } else {
-            const auto& iter = taskParams.find(GenericProviderName);
-            if (iter != taskParams.end()) {
-                Generic::TPartition partition;
-                TStringInput input(iter->first);
-                YQL_ENSURE(
-                    partition.ParseFromString(iter->second), 
-                    "Failed to parse partition from task params: " << partition.InitializationErrorString()
-                );
-                partitions.emplace_back(std::move(partition));
+            NotifyComputeActorWithError(actorSystem, computeActorId, inputIndex, NConnector::ErrorFromGRPCStatus(result.Status));
+        }
+    }
+
+    void UpdateIngressStats() {
+        if (LastReadSplitsResponse_->has_stats()) {
+            IngressStats_.Bytes += LastReadSplitsResponse_->stats().bytes();
+            IngressStats_.Rows += LastReadSplitsResponse_->stats().rows();
+        } else {
+            // Delete this branch with fallback behavior after YQ-2347 is deployed
+            IngressStats_.Bytes += LastReadSplitsResponse_->ByteSizeLong();
+        }
+        IngressStats_.Chunks++;
+        IngressStats_.Resume();
+    }
+
+    void HandleException(const std::exception& e) {
+        YQL_CLOG(ERROR, ProviderGeneric) << "ActorId=" << SelfId() << " Got unexpected exception: " << e.what();
+
+        NotifyComputeActorWithIssue(TActivationContext::ActorSystem(), ComputeActorId_, InputIndex_,
+            TIssue(TStringBuilder() << "Internal error. Got unexpected exception: " << e.what()));
+    }
+
+    void NotifyComputeActorWithData() {
+        Send(ComputeActorId_, new TEvNewAsyncInputDataArrived(InputIndex_));
+    }
+
+    static void NotifyComputeActorWithError(
+        TActorSystem* actorSystem, NActors::TActorId computeActorId, ui64 inputIndex, const NConnector::NApi::TError& error) {
+        actorSystem->Send(
+            computeActorId, new TEvAsyncInputError(inputIndex, NConnector::ErrorToIssues(error), NConnector::ErrorToDqStatus(error)));
+        return;
+    }
+
+    static void NotifyComputeActorWithIssue(TActorSystem* actorSystem, NActors::TActorId computeActorId, ui64 inputIndex, TIssue issue) {
+        actorSystem->Send(computeActorId, new TEvAsyncInputError(inputIndex, TIssues{ std::move(issue) },
+                                              NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR));
+        return;
+    }
+
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>&, bool& finished, i64 /*freeSpace*/) final {
+        YQL_ENSURE(!buffer.IsWide(), "Wide stream is not supported");
+
+        YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: start";
+
+        // Stream is finished
+        if (!LastReadSplitsResponse_) {
+            finished = ReadSplitsFinished_;
+
+            if (finished) {
+                YQL_CLOG(INFO, ProviderGeneric) << "GetAsyncInputData :: data reading finished";
             }
+
+            IngressStats_.TryPause();
+            return 0;
         }
 
-        Y_ENSURE(!partitions.empty(), "partitions must not be empty");
+        // Stream is not finished, process next message
+        NUdf::TUnboxedValue value;
+        ui64 total = 0;
+
+        // It's very important to fill UV columns in the alphabet order,
+        // paying attention to the scalar field containing block length.
+        TVector<TString> fieldNames;
+        std::transform(Source_.select().what().items().cbegin(), Source_.select().what().items().cend(), std::back_inserter(fieldNames),
+            [](const auto& item) {
+                return item.column().name();
+            });
+
+        fieldNames.push_back(std::string(BlockLengthColumnName));
+        std::sort(fieldNames.begin(), fieldNames.end());
+        std::map<TStringBuf, std::size_t> fieldNameOrder;
+        for (std::size_t i = 0; i < fieldNames.size(); i++) {
+            fieldNameOrder[fieldNames[i]] = i;
+        }
+
+        // TODO: avoid copying from Protobuf to Arrow
+        auto batch = NConnector::ReadSplitsResponseToArrowRecordBatch(*LastReadSplitsResponse_);
+
+        total += NUdf::GetSizeOfArrowBatchInBytes(*batch);
+
+        NUdf::TUnboxedValue* structItems = nullptr;
+        auto structObj = ArrowRowContainerCache_.NewArray(HolderFactory_, fieldNames.size(), structItems);
+        for (int i = 0; i < batch->num_columns(); ++i) {
+            const auto& columnName = batch->schema()->field(i)->name();
+            const auto ix = fieldNameOrder[columnName];
+            structItems[ix] = HolderFactory_.CreateArrowBlock(arrow::Datum(batch->column(i)), NYql::DefaultDatumValidationMode);
+        }
+
+        structItems[fieldNameOrder[BlockLengthColumnName]] = HolderFactory_.CreateArrowBlock(
+            arrow::Datum(std::make_shared<arrow::UInt64Scalar>(batch->num_rows())), NYql::DefaultDatumValidationMode);
+        value = structObj;
+
+        buffer.emplace_back(std::move(value));
+
+        // freeSpace -= size;
+        LastReadSplitsResponse_ = std::nullopt;
+
+        // Request server for the next data block
+        AwaitNextStreamItem<NConnector::IReadSplitsStreamIterator, TEvReadSplitsPart, TEvReadSplitsFinished>(ReadSplitsIterator_);
+        finished = false;
+
+        YQL_CLOG(TRACE, ProviderGeneric) << "GetAsyncInputData :: bytes obtained = " << total;
+
+        return total;
     }
 
-    std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>
-    CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
-                           Generic::TSource&& source,
-                           ui64 inputIndex,
-                           TCollectStatsLevel statsLevel,
-                           const THashMap<TString, TString>& secureParams,
-                           ui64 taskId,
-                           const THashMap<TString, TString>& taskParams,
-                           const TVector<TString>& readRanges,
-                           const NActors::TActorId& computeActorId,
-                           IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-                           const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-                           std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
-    {
-        TVector<Generic::TPartition> partitions;
-        ExtractPartitionsFromParams(partitions, taskParams, readRanges);
-
-        const auto dsi = source.select().data_source_instance();
-        YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
-                                        << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
-                                        << ", endpoint=" << dsi.endpoint().ShortDebugString()
-                                        << ", database=" << dsi.database()
-                                        << ", use_tls=" << ToString(dsi.use_tls())
-                                        << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
-                                        << ", task_id=" << taskId
-                                        << ", partitions_count=" << partitions.size();
-
-        auto tokenProvider = CreateGenericCredentialsProvider(
-            secureParams.Value(source.GetTokenName(), ""),
-            credentialsFactory);
-
-        const auto actor = new TGenericReadActor(
-            inputIndex,
-            statsLevel,
-            genericClient,
-            std::move(tokenProvider),
-            std::move(source),
-            computeActorId,
-            holderFactory,
-            std::move(alloc),
-            std::move(partitions));
-
-        return {actor, actor};
+    // IActor & IDqComputeActorAsyncInput
+    void PassAway() override {   // Is called from Compute Actor
+        YQL_CLOG(INFO, ProviderGeneric) << "PassAway :: final ingress stats"
+                                        << ": bytes " << IngressStats_.Bytes << ", rows " << IngressStats_.Rows << ", chunks "
+                                        << IngressStats_.Chunks;
+        ClearMkqlData();
+        TActorBootstrapped<TGenericReadActor>::PassAway();
     }
 
-} // namespace NYql::NDq
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState&) final {
+    }
+
+    void LoadState(const TSourceState&) final {
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) final {
+    }
+
+    ui64 GetInputIndex() const final {
+        return InputIndex_;
+    }
+
+    const TDqAsyncStats& GetIngressStats() const override {
+        return IngressStats_;
+    }
+
+    // Should be called with bound MKQL alloc
+    void ClearMkqlData() {
+        ArrowRowContainerCache_.Clear();
+    }
+
+private:
+    const ui64 InputIndex_;
+    TDqAsyncStats IngressStats_;
+    const NActors::TActorId ComputeActorId_;
+
+    NConnector::IClient::TPtr Client_;
+    TGenericCredentialsProvider::TPtr TokenProvider_;
+
+    TVector<Generic::TPartition> Partitions_;
+
+    NConnector::IReadSplitsStreamIterator::TPtr ReadSplitsIterator_;
+    std::optional<NConnector::NApi::TReadSplitsResponse> LastReadSplitsResponse_;
+    bool ReadSplitsFinished_ = false;
+
+    NKikimr::NMiniKQL::TPlainContainerCache ArrowRowContainerCache_;
+    const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
+    const std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc_;
+    Generic::TSource Source_;
+};
+
+void ExtractPartitionsFromParams(
+    TVector<Generic::TPartition>& partitions, const THashMap<TString, TString>& taskParams,   // partitions are here in v1
+    const TVector<TString>& readRanges   // partitions are here in v2
+) {
+    if (!readRanges.empty()) {
+        for (const auto& readRange : readRanges) {
+            Generic::TPartition partition;
+            YQL_ENSURE(
+                partition.ParseFromString(readRange), "Failed to parse partition from read ranges: " << partition.InitializationErrorString());
+            partitions.emplace_back(std::move(partition));
+        }
+    } else {
+        const auto& iter = taskParams.find(GenericProviderName);
+        if (iter != taskParams.end()) {
+            Generic::TPartition partition;
+            TStringInput input(iter->first);
+            YQL_ENSURE(partition.ParseFromString(iter->second),
+                "Failed to parse partition from task params: " << partition.InitializationErrorString());
+            partitions.emplace_back(std::move(partition));
+        }
+    }
+
+    Y_ENSURE(!partitions.empty(), "partitions must not be empty");
+}
+
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateGenericReadActor(NConnector::IClient::TPtr genericClient,
+    Generic::TSource&& source, ui64 inputIndex, TCollectStatsLevel statsLevel, const THashMap<TString, TString>& secureParams, ui64 taskId,
+    const THashMap<TString, TString>& taskParams, const TVector<TString>& readRanges, const NActors::TActorId& computeActorId,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+{
+    TVector<Generic::TPartition> partitions;
+    ExtractPartitionsFromParams(partitions, taskParams, readRanges);
+
+    const auto dsi = source.select().data_source_instance();
+    YQL_CLOG(INFO, ProviderGeneric) << "Creating read actor with params:"
+                                    << " kind=" << NYql::EGenericDataSourceKind_Name(dsi.kind())
+                                    << ", endpoint=" << dsi.endpoint().ShortDebugString() << ", database=" << dsi.database()
+                                    << ", use_tls=" << ToString(dsi.use_tls()) << ", protocol=" << NYql::EGenericProtocol_Name(dsi.protocol())
+                                    << ", task_id=" << taskId << ", partitions_count=" << partitions.size();
+
+    auto tokenProvider = CreateGenericCredentialsProvider(secureParams.Value(source.GetTokenName(), ""), credentialsFactory);
+
+    const auto actor = new TGenericReadActor(inputIndex, statsLevel, genericClient, std::move(tokenProvider), std::move(source), computeActorId,
+        holderFactory, std::move(alloc), std::move(partitions));
+
+    return { actor, actor };
+}
+
+}   // namespace NYql::NDq

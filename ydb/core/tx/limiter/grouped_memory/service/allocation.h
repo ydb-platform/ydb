@@ -27,6 +27,10 @@ public:
     ~TAllocationInfo();
 
     bool IsAllocatable(const ui64 additional) const;
+    bool IsAllocatableUnrestricted(const ui64 additional) const;
+    bool NeverFitsUnrestricted() const;
+    // Waiting allocation that can never be granted. Reports the error to the client.
+    void Fail(const TString& errorMessage);
 
     void SetAllocatedVolume(const ui64 value);
 

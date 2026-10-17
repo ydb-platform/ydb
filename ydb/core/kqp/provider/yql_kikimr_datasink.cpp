@@ -282,6 +282,11 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        Y_UNUSED(node, ctx);
+        return TStatus::Ok;
+    }
+
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         Y_UNUSED(ctx, node);
         return TStatus::Ok;
@@ -705,7 +710,8 @@ public:
             || node.IsCallable(TKiUpsertObject::CallableName())
             || node.IsCallable(TKiCreateObject::CallableName())
             || node.IsCallable(TKiAlterObject::CallableName())
-            || node.IsCallable(TKiDropObject::CallableName()))
+            || node.IsCallable(TKiDropObject::CallableName())
+            || node.IsCallable(TKiKillSession::CallableName()))
         {
             return true;
         }
@@ -1056,10 +1062,11 @@ public:
 
         YQL_ENSURE(ExternalSourceFactory);
         if (metadata.IsExternalDataSource()) {
-            const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+            const auto& dataSource = metadata.ExternalDataSource();
+            const TString providerName = dataSource.GetProviderName(ExternalSourceFactory);
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
-                            .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
+                            .Category(ctx.NewAtom(node->Pos(), providerName))
                             .FreeArgs()
                                 .Add(writeArgs[1]->ChildrenList()[1])
                             .Build()
@@ -1069,7 +1076,13 @@ public:
         }
 
         const auto& externalTable = metadata.ExternalTable();
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+        const auto& databaseType = metadata.GetExternalSourceDatabaseType();
+        if (!databaseType) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "Unknown source type for external table \"" << key.GetTablePath() << "\""));
+            return false;
+        }
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(*databaseType);
         TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalTable.GetLocation()) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
@@ -2168,6 +2181,10 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleDropObject(node.Cast(), ctx);
     }
 
+    if (auto node = TMaybeNode<TKiKillSession>(input)) {
+        return HandleKillSession(node.Cast(), ctx);
+    }
+
     if (auto node = TMaybeNode<TKiModifyPermissions>(input)) {
         return HandleModifyPermissions(node.Cast(), ctx);
     }
@@ -2307,7 +2324,7 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx)
 {
-    return new TKiSinkIntentDeterminationTransformer(sessionCtx);
+    return CreateSqlPathAliasesTransformer(sessionCtx, new TKiSinkIntentDeterminationTransformer(sessionCtx));
 }
 
 } // namespace NYql

@@ -1320,9 +1320,18 @@ private:
         if (node->GetSource()) {
             return Unsupported("bind parameter referencing a legacy source");
         }
-        if (alt.HasBlock2() && alt.HasBlock3()) {
-            Ctx_.Error() << "View is not supported for subqueries";
-            return std::unexpected(ESQLError::Basic);
+        if (alt.HasBlock2()) {
+            if (alt.HasBlock3()) {
+                Ctx_.Error() << "View is not supported for subqueries";
+                return std::unexpected(ESQLError::Basic);
+            }
+
+            const bool hasArguments = alt.GetBlock2().HasBlock2();
+            // Subqueries are lambdas; optional arguments add a WithOptionalArgs wrapper.
+            const bool isSubquery = node->GetLambdaNode() || node->GetOpName() == "WithOptionalArgs";
+            if (isSubquery || hasArguments) {
+                return UnsupportedBindParameterCall(hasArguments);
+            }
         }
         return BuildNamedTablePath(
             rule,
@@ -1343,7 +1352,7 @@ private:
                 Ctx_.Error() << "View is not supported for subqueries";
                 return std::unexpected(ESQLError::Basic);
             }
-            return Unsupported("bind_parameter call");
+            return UnsupportedBindParameterCall(alt.GetBlock2().HasBlock2());
         }
         if (alt.HasBlock3()) {
             return Unsupported("VIEW for bind_parameter");
@@ -1370,18 +1379,12 @@ private:
             return std::unexpected(ESQLError::Basic);
         }
         if (cluster.Empty()) {
-            Ctx_.Error(position) << "No cluster name given and no default cluster is selected";
-            return std::unexpected(ESQLError::Basic);
+            return Unsupported("No cluster name given and no default cluster is selected");
         }
 
         TViewDescription view;
         if (alt.HasBlock3()) {
             view = Id(alt.GetBlock3().GetRule_view_name2(), *this);
-        }
-
-        if (cluster.Empty()) {
-            Ctx_.Error() << "No cluster name given and no default cluster is selected";
-            return std::unexpected(ESQLError::Basic);
         }
 
         TYqlTableRefArgs args = {
@@ -1855,6 +1858,13 @@ private:
 
     std::unexpected<ESQLError> Unsupported(TStringBuf message) {
         return UnsupportedYqlSelect(Ctx_, message);
+    }
+
+    std::unexpected<ESQLError> UnsupportedBindParameterCall(bool hasArguments) {
+        return Unsupported(
+            hasArguments
+                ? "bind_parameter call with arguments as a table source"
+                : "bind_parameter call with an empty argument list as a table source");
     }
 
     auto WithForkedNamespace(std::invocable<TYqlSelect&> auto&& f) -> decltype(f(std::declval<TYqlSelect&>())) {

@@ -24,6 +24,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_tasks_graph.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/physical_graph_rescaling.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -133,6 +134,7 @@ public:
         bool useKqpTasksGraphV2 = false)
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
+        , StatsReportingSettings(MakeStatsReportingSettings(*userRequestContext, Request.ProgressStatsPeriod))
         , AsyncIoFactory(std::move(asyncIoFactory))
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
@@ -179,7 +181,8 @@ public:
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs(),
+            StatsReportingSettings.CollectCurrentQueryStats);
 
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -564,7 +567,7 @@ protected:
             YQL_ENSURE(false, "Unexpected schema inclusion mode");
         }
 
-        TKqpProtoBuilder protoBuilder{*AppData()->FunctionRegistry};
+        TKqpProtoBuilder protoBuilder;
         protoBuilder.BuildYdbResultSet(
             *streamEv->Record.MutableResultSet(), std::move(batches),
             txResult.MkqlItemType, FormatsSettings, fillSchema,
@@ -954,6 +957,13 @@ protected:
                 );
                 StatCollectInflightBytes = collectBytes;
                 Counters->Counters->QueryStatCpuCollectUs->Add(deltaCpuTime * 1'000'000);
+            }
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
+                const auto now = TActivationContext::Monotonic();
+                if (!LastCurrentQueryStatsReport || *LastCurrentQueryStatsReport + GetUserRequestContext()->CurrentQueryStatsInterval <= now) {
+                    LastCurrentQueryStatsReport = now;
+                    this->Send(Target, new TEvKqpExecuter::TEvCurrentExecutionStats(Stats->TakeCurrentStats()));
+                }
             }
             ProcessStreamingQueryCounters();
         }
@@ -1630,7 +1640,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
-            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
+            .StatsReportingSettings = StatsReportingSettings,
             .RlPath = Request.RlPath,
             .ExecuterSpan = tasksSpan,
             .Trace = TraceStats ? &*TraceStats : nullptr,
@@ -1938,6 +1948,9 @@ protected:
             ReportEventElapsedTime();
 
             Stats->FinishTs = TInstant::Now();
+            if (StatsReportingSettings.CollectCurrentQueryStats) {
+                ResponseEv->CurrentExecutionStats = Stats->TakeCurrentStats(true);
+            }
 
             {
                 ui64 cycleCount = GetCycleCountFast();
@@ -2146,8 +2159,24 @@ protected:
         return TasksGraph.GetMeta().UserRequestContext;
     }
 
-    bool RestoreTasksGraph() {
+    bool RestoreTasksGraph(bool& rescalingChangedTaskCount) {
         if (Request.QueryPhysicalGraph) {
+            bool hasPqSources = false;
+            for (const auto& transaction : Request.Transactions) {
+                if (transaction.Body->GetHasPqSources()) {
+                    hasPqSources = true;
+                    break;
+                }
+            }
+
+            if (hasPqSources && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
+                auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+                    Request.QueryPhysicalGraph);
+                const auto taskCount = mutableGraph->TasksSize();
+                PatchQueryPhysicalGraphForRescaling(*mutableGraph, ResourcesSnapshot);
+                rescalingChangedTaskCount = mutableGraph->TasksSize() != taskCount;
+            }
+
             TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
         }
 
@@ -2162,7 +2191,7 @@ protected:
 
     void ProcessStreamingQueryCounters() {
         const auto context = TasksGraph.GetMeta().UserRequestContext;
-        if (!CheckpointCoordinatorId || !AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
+        if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters() || !context || context->StreamingQueryPath.empty()) {
             return;
         }
         if (!StreamingQueryCounters) {
@@ -2182,6 +2211,7 @@ protected:
 
 protected:
     IKqpGateway::TExecPhysicalRequest Request;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
@@ -2194,6 +2224,7 @@ protected:
     TKqpRequestCounters::TPtr Counters;
     std::unique_ptr<TQueryExecutionStats> Stats;
     TInstant LastProgressStats;
+    std::optional<TMonotonic> LastCurrentQueryStatsReport;
     TInstant LastStreamingQueryUpdateCounters;
     TInstant StartTime;
     TMaybe<TInstant> Deadline;

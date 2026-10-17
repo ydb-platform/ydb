@@ -76,6 +76,7 @@ namespace NKikimr::NStorage {
         YDB_LOG_DEBUG("StartLocalVDiskActor",
             {"marker", "NW23"},
             {"slayInFlight", SlayInFlight.contains(vslotId)},
+            {"doWipe", vdisk.Config.GetDoWipe()},
             {"VDiskId", vdisk.GetVDiskId()},
             {"VSlotId", vslotId},
             {"PDiskGuid", pdiskGuid},
@@ -84,6 +85,13 @@ namespace NKikimr::NStorage {
             {"PDisksWaitingToStart", PDisksWaitingToStart.contains(vslotId.PDiskId)});
 
         if (SlayInFlight.contains(vslotId)) {
+            return;
+        }
+
+        // A record that asks for a wipe is a command, not a configuration to run with: it carries the settings of the
+        // moment the wipe was requested. BS_CONTROLLER answers the WIPED report with a fresh record, and the VDisk
+        // starts from that one, so settings changed during the wipe (e.g. the heap allocator one) are not lost.
+        if (vdisk.Config.GetDoWipe()) {
             return;
         }
 
@@ -437,6 +445,16 @@ namespace NKikimr::NStorage {
                 Cfg->VDiskConfigPreprocessor(*vdiskConfig);
             }
 
+            // Latched for this start from the record held right now. A pool value, including 0, replaces the global
+            // one. A record that arrives later, even the BS_CONTROLLER one replacing a record read from the cache, does
+            // not restart the VDisk: a new N is picked up by the next start (node or PDisk restart, TEvAskRestartVDisk).
+            const ui32 numLeadingDisks = vdisk.Config.HasVDiskHeapAllocatorNumLeadingDisks()
+                ? vdisk.Config.GetVDiskHeapAllocatorNumLeadingDisks()
+                : VDiskHeapAllocatorNumLeadingDisks;
+            const ui32 heapOrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId));
+            vdiskConfig->UseHeapAllocator = Cfg->FeatureFlags->GetEnableVDiskHeapAllocator()
+                && heapOrderNumber < numLeadingDisks;
+
             // issue initial report to whiteboard before creating actor to avoid races
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
                 vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors), vdiskConfig->GroupSizeInUnits));
@@ -540,7 +558,8 @@ namespace NKikimr::NStorage {
         //
         // The main idea of this command is when VDisk is created, it does not change its configuration. It may be
         // wiped out several times, it may become a donor or read-only and then it may be destroyed. That is a possible life cycle
-        // of a VDisk in the occupied slot.
+        // of a VDisk in the occupied slot. The heap-allocator knob is the exception: it is stored on the record and
+        // latched the next time this VDisk starts, without restarting a running disk.
 
         if (!vdisk.HasVDiskID() || !vdisk.HasVDiskLocation()) {
             YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "weird VDisk configuration",

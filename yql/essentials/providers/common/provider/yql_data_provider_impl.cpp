@@ -399,6 +399,8 @@ bool TDataProviderBase::IsFullCaptureReady() {
 
 TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto root = node;
+    TOptimizeExprSettings settings(nullptr);
+    settings.VisitChanges = true;
     auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         Y_UNUSED(ctx);
         if (auto right = TMaybeNode<TCoRight>(node)) {
@@ -424,7 +426,7 @@ TExprNode::TPtr DefaultCleanupWorld(const TExprNode::TPtr& node, TExprContext& c
         }
 
         return node;
-    }, ctx, TOptimizeExprSettings(nullptr));
+    }, ctx, settings);
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
     return root;
 }

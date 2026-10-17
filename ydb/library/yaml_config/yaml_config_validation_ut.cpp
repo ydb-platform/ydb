@@ -301,6 +301,25 @@ selector_config:
         CheckValidation(doc, true, validator.get());
     }
 
+    Y_UNIT_TEST(PathAliasChainsInSelectorsAreRejected) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+config:
+  resource_path_prefix_mapping:
+    rules: [{src: /alias, dst: /local}]
+allowed_labels:
+  deployment: {type: string}
+selector_config:
+- description: alias chain
+  selector: {deployment: selected}
+  config:
+    resource_path_prefix_mapping:
+      rules: [{src: /alias, dst: /local}, {src: /local/nested, dst: /other}]
+)");
+        const auto validator = CreateDefaultConfigSwissKnife();
+        const auto error = CheckValidation(doc, true, validator.get());
+        UNIT_ASSERT_STRING_CONTAINS(error, "alias chains and cycles are not allowed");
+    }
+
     Y_UNIT_TEST(ClientCertificateAndGrpcAreCheckedJointly) {
         auto doc = NFyaml::TDocument::Parse(R"(
 config:

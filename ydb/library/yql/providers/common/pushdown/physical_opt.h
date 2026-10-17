@@ -9,7 +9,9 @@
 
 namespace NYql::NPushdown {
 
-NPushdown::TPredicateNode MakePushdownNode(const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings);
-NNodes::TMaybeNode<NNodes::TCoLambda> MakePushdownPredicate(const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings);
+NPushdown::TPredicateNode MakePushdownNode(
+    const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings);
+NNodes::TMaybeNode<NNodes::TCoLambda> MakePushdownPredicate(
+    const NNodes::TCoLambda& lambda, TExprContext& ctx, const TPositionHandle& pos, const TSettings& settings);
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

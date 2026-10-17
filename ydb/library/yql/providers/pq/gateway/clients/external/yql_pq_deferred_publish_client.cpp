@@ -7,11 +7,12 @@ namespace {
 using namespace NYdb;
 using namespace NYdb::NTopic;
 
-class TNativeDeferredPublishClient final : public IDeferredPublishClient {
+class TNativeDeferredPublishClient final: public IDeferredPublishClient {
 public:
     TNativeDeferredPublishClient(const TDriver& driver, const TCommonClientSettings& settings)
         : Client(driver, settings)
-    {}
+    {
+    }
 
     TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const TBeginPublicationSettings& settings) final {
         return Client.BeginPublication(extPublicationId, settings);
@@ -33,10 +34,10 @@ private:
     TDeferredPublishClient Client;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 IDeferredPublishClient::TPtr CreateExternalDeferredPublishClient(const TDriver& driver, const TCommonClientSettings& settings) {
     return MakeIntrusive<TNativeDeferredPublishClient>(driver, settings);
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -3985,6 +3985,24 @@ public:
             return TDropObjectTransformer("DROP OBJECT", Gateway, SessionCtx).Execute(kiObject.Cast(), input, ctx);
         }
 
+        if (auto killSession = TMaybeNode<TKiKillSession>(input)) {
+            auto requireStatus = RequireChild(*input, TKiKillSession::idx_World);
+            if (requireStatus.Level != TStatus::Ok) {
+                return SyncStatus(requireStatus);
+            }
+
+            const auto node = killSession.Cast();
+            const auto parameter = node.SessionId().Maybe<TCoParameter>();
+            const TString target = parameter
+                ? parameter.Cast().Name().StringValue()
+                : node.SessionId().Cast<TCoUtf8>().Literal().StringValue();
+            auto future = Gateway->KillSession(TString(node.DataSink().Cluster()), target, bool(parameter));
+            return WrapFuture(future,
+                [](const IKikimrGateway::TGenericResult&, const TExprNode::TPtr& input, TExprContext& ctx) {
+                    return ctx.NewWorld(input->Pos());
+                }, "Preparing KILL SESSION");
+        }
+
         if (auto maybeCreateGroup = TMaybeNode<TKiCreateGroup>(input)) {
             auto requireStatus = RequireChild(*input, 0);
             if (requireStatus.Level != TStatus::Ok) {

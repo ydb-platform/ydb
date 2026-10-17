@@ -220,6 +220,25 @@ TEST_F(TDictionaryCompressionTest, TestCompressionRatio)
     EXPECT_LT(compressedSize, 0.8 * decompressedSize);
 }
 
+TEST_F(TDictionaryCompressionTest, DigestedDecompressionDictionaryMemoryUsage)
+{
+    EXPECT_TRUE(GetCompressionDictionary().IsOK());
+
+    auto dictionary = GetCompressionDictionary().Value();
+    auto storageSize = GetDictionaryCompressionCodec()->EstimateDigestedDecompressionDictionarySize(
+        dictionary.Size());
+    auto storage = TSharedMutableRef::Allocate(
+        storageSize,
+        { .InitializeStorage = false });
+
+    auto digestedDictionary = GetDictionaryCompressionCodec()->ConstructDigestedDecompressionDictionary(
+        dictionary,
+        storage);
+
+    EXPECT_EQ(std::ssize(storage), digestedDictionary->GetMemoryUsage());
+    EXPECT_GT(digestedDictionary->GetMemoryUsage(), std::ssize(dictionary));
+}
+
 TEST_F(TDictionaryCompressionTest, ModifiedFrameHeader)
 {
     EXPECT_TRUE(GetCompressionDictionary().IsOK());

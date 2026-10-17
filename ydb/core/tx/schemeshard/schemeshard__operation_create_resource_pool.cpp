@@ -129,7 +129,7 @@ public:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& resourcePoolDescription = Transaction.GetCreateResourcePool();
         const TString& name = resourcePoolDescription.GetName();
@@ -160,6 +160,7 @@ public:
         const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::CreateResourcePool(resourcePoolDescription, 1);
         Y_ABORT_UNLESS(resourcePoolInfo);
         RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+        RETURN_RESULT_UNLESS(NResourcePool::IsCpuGuaranteeValid(result, parentPath, InvalidPathId, resourcePoolInfo, context));
 
         const auto newPathId = context.SS->AllocatePathId();
 
@@ -205,7 +206,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

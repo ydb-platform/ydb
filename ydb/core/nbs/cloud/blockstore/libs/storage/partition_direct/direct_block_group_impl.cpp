@@ -593,6 +593,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
     THostIndex hostIndex,
     TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -623,6 +624,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                             nodeId = GetNodeId(hostIndex),
                             range,
                             guardedSglist = guardedSglist,
+                            checksums,
                             childSpan = std::move(childSpan)]   //
             (const TFuture<NProto::TError>& f) mutable
         {
@@ -643,6 +645,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                         hostIndex,
                         range,
                         guardedSglist,
+                        checksums,
                         traceId)
                     .Subscribe([promise = std::move(promise)]   //
                                (const TDBGWriteBlocksResponseFuture& f) mutable
@@ -668,6 +671,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
             range.Size() * BlockSize),
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
+        checksums,
         childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -721,6 +725,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
     TPBufferKey pBufferKey,
     TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId)
 {
     // INVARIANT: PBuffer does NOT require a session/lock
@@ -747,6 +752,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
         pBufferKey.Lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
+        checksums,
         childSpan.get());
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -798,6 +804,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
+    const TBlockChecksums& checksums,
     const NWilson::TTraceId& traceId,
     TWriteBlocksToManyPBuffersCallback callback)
 {
@@ -891,6 +898,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
         std::move(disksIds),
         replyTimeout,
         guardedSglist,
+        checksums,
         CreateChildSpan(traceId, "NbsPartition.WriteBlocksToManyPBuffers"),
         std::move(writeToManyPBuffersCB));
 }

@@ -85,6 +85,13 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
     return ctx.MakeType<TFlowExprType>(itemType);
 }
 
+TStringBuf GetExistingObjectKind(const TYtTableMetaInfo& meta) {
+    if (meta.IsLink) {
+        return "Symlink";
+    }
+    return meta.SqlView.empty() ? "Table" : "View";
+}
+
 using namespace NNodes;
 
 class TYtDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
@@ -939,7 +946,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1149,7 +1156,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1221,7 +1228,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1303,7 +1310,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1419,7 +1426,7 @@ private:
         }
 
         const bool hasMapLambda = !TCoVoid::Match(input->Child(TYtMapReduce::idx_Mapper));
-        EYtSettingTypes sectionSettings = EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample;
+        EYtSettingTypes sectionSettings = EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::NonUnique;
         if (hasMapLambda) {
             sectionSettings |= EYtSettingType::SysColumns;
         }
@@ -1889,7 +1896,8 @@ private:
         YQL_ENSURE(targetInfo.Meta);
 
         const bool initial = NYql::HasSetting(create.Settings().Ref(), EYtSettingType::Initial);
-        if (linkInfo.Meta->DoesExist || linkInfo.Meta->IsLink || !initial) {
+        const bool objectExists = linkInfo.Meta->DoesExist || linkInfo.Meta->IsLink;
+        if (objectExists || !initial) {
             if (const auto mode = NYql::GetSetting(*settings, EYtSettingType::Mode);
                 mode && EYtWriteMode::CreateSymlinkIfNotExists == FromString<EYtWriteMode>(mode->Tail().Content())) {
                 YQL_CLOG(INFO, ProviderYt) << linkInfo.Name
@@ -1898,8 +1906,13 @@ private:
                 return TStatus::Repeat;
             }
 
-            ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder()
-                << linkInfo.Name.Quote() << " already exists."));
+            TStringBuilder message;
+            if (objectExists) {
+                message << GetExistingObjectKind(*linkInfo.Meta) << ' ' << linkInfo.Name.Quote() << " already exists.";
+            } else {
+                message << "Cannot create symlink " << linkInfo.Name.Quote() << " after another modification of the same path in this epoch.";
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), message));
             return TStatus::Error;
         }
 
@@ -2012,8 +2025,13 @@ private:
                     }
                 }
 
-                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
-                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                TStringBuilder message;
+                if (tableInfo.Meta->DoesExist) {
+                    message << GetExistingObjectKind(*tableInfo.Meta) << ' ' << tableInfo.Name << " already exists.";
+                } else {
+                    message << "Cannot create table " << tableInfo.Name << " after another modification of the same path in this epoch.";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), message));
                 return TStatus::Error;
             }
 
@@ -2333,7 +2351,7 @@ private:
                 }
 
                 ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
-                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                    GetExistingObjectKind(*tableInfo.Meta) << ' ' << tableInfo.Name << " already exists."));
                 return TStatus::Error;
             }
 
@@ -2502,7 +2520,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::JoinLabel | EYtSettingType::StatColumns | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::JoinLabel | EYtSettingType::StatColumns | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }

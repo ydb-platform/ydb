@@ -500,8 +500,7 @@ public:
             TString lambda;
             if (filter) {
                 YQL_ENSURE(exprCtx);
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    Services_.FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
                 TProgramBuilder pgmBuilder(typeEnv, *Services_.FunctionRegistry);
@@ -817,8 +816,7 @@ public:
             TExpressionResorceUsage extraUsage;
             TString lambda;
             {
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    Services_.FunctionRegistry->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
                 TVector<TRuntimeNode> tupleNodes;
@@ -2455,8 +2453,7 @@ private:
             if (filterLambda && !names.empty()) {
                 YQL_CLOG(DEBUG, ProviderYt) << "Executing range filter";
                 {
-                    TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                        execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                    TScopedAlloc alloc(__LOCATION__);
                     alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                     TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -2713,8 +2710,6 @@ private:
         const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *execCtx->Options_.Config());
         const bool rowSpecCompactForm = execCtx->Options_.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
         rowSpec->FillAttrNode(rowSpecNode, rowSpecCompactForm);
-
-        const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
 
         auto commitCheckpoint = [entry, dstPath, mode] (const TFuture<void>& f) {
             f.GetValue();
@@ -2981,42 +2976,20 @@ private:
             res = MakeFuture();
         }
 
-        std::function<void(const TFuture<void>&)> setAttrs = [logCtx = execCtx->LogCtx_, entry, publishTx, dstPath, mode, yqlAttrs, multiSet] (const TFuture<void>& f) {
+        std::function<void(const TFuture<void>&)> setAttrs = [logCtx = execCtx->LogCtx_, entry, publishTx, dstPath, mode, yqlAttrs] (const TFuture<void>& f) {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             f.GetValue();
             if (yqlAttrs.IsUndefined()) {
                 return;
             }
             YQL_CLOG(INFO, ProviderYt) << "Setting attrs for " << dstPath << ": " << NYT::NodeToYsonString(yqlAttrs);
-            if (multiSet) {
-                try {
-                    publishTx->MultisetAttributes(dstPath + "/@", yqlAttrs.AsMap(), NYT::TMultisetAttributesOptions());
+            try {
+                publishTx->MultisetAttributes(dstPath + "/@", yqlAttrs.AsMap(), NYT::TMultisetAttributesOptions());
+            }
+            catch (const TErrorResponse& e) {
+                if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
+                    throw;
                 }
-                catch (const TErrorResponse& e) {
-                    if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
-                        throw;
-                    }
-                }
-            } else {
-                auto batch = publishTx->CreateBatchRequest();
-
-                TVector<TFuture<void>> batchRes;
-
-                for (auto& attr: yqlAttrs.AsMap()) {
-                    batchRes.push_back(batch->Set(TStringBuilder() << dstPath << "/@" << attr.first, attr.second));
-                }
-
-                batch->ExecuteBatch();
-                ForEach(batchRes.begin(), batchRes.end(), [mode] (const TFuture<void>& f) {
-                    try {
-                        f.GetValue();
-                    }
-                    catch (const TErrorResponse& e) {
-                        if (EYtWriteMode::Append != mode || !e.IsConcurrentTransactionLockConflict()) {
-                            throw;
-                        }
-                    }
-                });
             }
         };
         return res.Apply(setAttrs).Apply(commitCheckpoint);
@@ -3697,8 +3670,7 @@ private:
         const NYT::TNode& rowSpec,
         const TVector<TString>& columns)
     {
-        TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-            execCtx->FunctionRegistry_->SupportsSizedAllocators());
+        TScopedAlloc alloc(__LOCATION__);
         alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
         TMemoryUsageInfo memInfo("Pull");
         TTypeEnvironment env(alloc);
@@ -3850,8 +3822,7 @@ private:
         TString lambda;
         bool hasListResult = false;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                Services_.FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *session, options.LangVer(), options.RuntimeSettings(), options.BridgeMode(), options.BridgeBinaryPath());
             auto rootNode = builder.BuildLambda(*MkqlCompiler_, result.Input().Ptr(), ctx);
@@ -4294,8 +4265,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4498,8 +4468,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4740,8 +4709,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec mapUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4773,8 +4741,7 @@ private:
 
             {
                 TUserJobSpec reduceUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -4936,8 +4903,7 @@ private:
             auto tmpFiles = MakeIntrusive<TTempFiles>(execCtx->FileStorage_->GetTemp());
             {
                 TUserJobSpec reduceUserJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5079,8 +5045,7 @@ private:
             }
             mapExtraUsage = execCtx->ScanExtraResourceUsage(mapReduce.Mapper().Cast<TCoLambda>().Body().Ref(), true);
 
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             mapLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Mapper().Cast<TCoLambda>(), ctx);
@@ -5098,8 +5063,7 @@ private:
         }
         TString reduceLambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             reduceLambda = builder.BuildLambdaWithIO(*MkqlCompiler_, mapReduce.Reducer(), ctx);
@@ -5254,8 +5218,7 @@ private:
             }
             {
                 TUserJobSpec userJobSpec;
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, nullptr, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
                 TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *execCtx->FunctionRegistry_);
@@ -5368,8 +5331,7 @@ private:
     TFuture<void> DoFill(TYtFill fill, const TExecContext<TRunOptions>::TPtr& execCtx, TExprContext& ctx) {
         TString lambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                Services_.FunctionRegistry->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TNativeYtLambdaBuilder builder(alloc, Services_, *execCtx->Session_, execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
             lambda = builder.BuildLambdaWithIO(*MkqlCompiler_, fill.Content(), ctx);
@@ -5984,8 +5946,7 @@ private:
         {
             execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(execCtx->Options_.SecureParams());
             TNativeYtLambdaBuilder builder(alloc, execCtx->FunctionRegistry_, *execCtx->Session_, secureParamsProvider.get(), execCtx->Options_.LangVer(), execCtx->Options_.RuntimeSettings(), execCtx->Options_.BridgeMode(), execCtx->Options_.BridgeBinaryPath());
@@ -6130,8 +6091,7 @@ private:
 
                 auto reader = entry->Tx->CreateTableReader<NYT::TNode>(tmpTable);
 
-                TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                    execCtx->FunctionRegistry_->SupportsSizedAllocators());
+                TScopedAlloc alloc(__LOCATION__);
                 alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
                 TMemoryUsageInfo memInfo("Calc");
                 TTypeEnvironment env(alloc);
@@ -6275,30 +6235,11 @@ private:
         }
         else {
             // set attributes in transactions
-            const auto multiSet = execCtx->Options_.Config()->_UseMultisetAttributes.Get().GetOrElse(DEFAULT_USE_MULTISET_ATTRS);
-            if (multiSet) {
-                for (auto& out: outTables) {
-                    NYT::TNode attrs = NYT::TNode::CreateMap();
-                    PrepareAttributes(attrs, out, execCtx, cluster, false);
-                    YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
-                    entry->Tx->MultisetAttributes(out.Path + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
-                }
-            } else {
-                auto batchSet = entry->Tx->CreateBatchRequest();
-                TVector<TFuture<void>> batchSetRes;
-
-                for (auto& out: outTables) {
-                    NYT::TNode attrs = NYT::TNode::CreateMap();
-
-                    PrepareAttributes(attrs, out, execCtx, cluster, false);
-                    YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
-                    for (auto& attr: attrs.AsMap()) {
-                        batchSetRes.push_back(batchSet->Set(TStringBuilder() << out.Path << "/@" << attr.first, attr.second));
-                    }
-                }
-
-                batchSet->ExecuteBatch();
-                WaitExceptionOrAll(batchSetRes).GetValue();
+            for (auto& out: outTables) {
+                NYT::TNode attrs = NYT::TNode::CreateMap();
+                PrepareAttributes(attrs, out, execCtx, cluster, false);
+                YQL_CLOG(INFO, ProviderYt) << "Update tmp table " << out.Path << ", attrs: " << NYT::NodeToYsonString(attrs);
+                entry->Tx->MultisetAttributes(out.Path + "/@", attrs.AsMap(), NYT::TMultisetAttributesOptions());
             }
         }
 

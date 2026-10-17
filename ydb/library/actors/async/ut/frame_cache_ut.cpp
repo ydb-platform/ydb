@@ -1,3 +1,4 @@
+#include <ydb/library/actors/testlib/scoped_allocation_cache.h>
 #include "common.h"
 
 #include <ydb/library/actors/async/wait_for_event.h>
@@ -98,8 +99,8 @@ namespace {
     };
 
     struct TFixture {
-        TAsyncFrameCache Cache;
-        TScopedAsyncFrameCache Binding;
+        TAllocationCache<TAsyncFrameCacheTag> Cache;
+        TScopedAllocationCache<TAsyncFrameCacheTag> Binding;
         TAsyncTestActor::TState State;
         TCacheActorState Counts;
         TAsyncTestActorRuntime Runtime;
@@ -108,7 +109,7 @@ namespace {
 
         explicit TFixture(bool enabled = true)
             : Cache(enabled ? TAsyncFrameCache::DefaultSizeBytes : 0)
-            , Binding(Cache)
+            , Binding(&Cache)
             , Self(new TCacheActor(State, Counts))
             , Actor(Runtime, Runtime.Register(Self))
         {
@@ -140,7 +141,7 @@ namespace {
 
         void Bootstrap() {
             Become(&TWorkerCacheActor::StateWork);
-            auto* cache = TAsyncFrameCache::GetCurrent();
+            auto* cache = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent();
             UNIT_ASSERT(cache);
             State.Budget = cache->GetSizeBytes();
             State.Shared = TlsThreadContext->IsShared();
@@ -166,7 +167,7 @@ namespace {
 
     void CheckRealWorker(size_t budget, bool io, bool shared) {
         THolder<TActorSystemSetup> setup(new TActorSystemSetup);
-        setup->AsyncFrameCacheSizeBytes = budget;
+        setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
         setup->Scheduler = new TBasicSchedulerThread;
         if (io) {
             setup->CpuManager.IO.push_back(TIOExecutorPoolConfig{});
@@ -180,7 +181,6 @@ namespace {
         }
         TWorkerState a, b;
         TActorSystem system(setup);
-        UNIT_ASSERT_VALUES_EQUAL(system.GetAsyncFrameCacheSizeBytes(), budget);
         system.Start();
         Y_DEFER { system.Stop(); system.Cleanup(); };
         system.Register(new TWorkerCacheActor(a));
@@ -196,10 +196,10 @@ namespace {
         }
         // The actor system sums the idle frames retained by its own workers.
         // The suspended roots are live, so only the released lazy frames count.
-        const auto cached = system.GetAsyncFrameCacheStats();
+        const auto cached = system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCache::FamilyId());
         if (budget) {
             UNIT_ASSERT(cached.CachedFrames >= 1);
-            UNIT_ASSERT(cached.CachedBytes >= cached.CachedFrames * TAsyncFrameCache::MinCachedFrameSize);
+            UNIT_ASSERT(cached.CachedBytes >= cached.CachedFrames * TAsyncFrameCacheTag::MinAllocationSize);
         } else {
             UNIT_ASSERT_VALUES_EQUAL(cached.CachedFrames, 0);
             UNIT_ASSERT_VALUES_EQUAL(cached.CachedBytes, 0);
@@ -221,13 +221,13 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     Y_UNIT_TEST(DisabledWorkerShutdown) { CheckRealWorker(0, false, false); }
 
     Y_UNIT_TEST(DefaultCustomAndZeroBudgets) {
-        UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache().GetSizeBytes(), 4194304);
-        UNIT_ASSERT_VALUES_EQUAL(TActorSystemSetup().AsyncFrameCacheSizeBytes, 4194304);
+        UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>(TAsyncFrameCache::DefaultSizeBytes).GetSizeBytes(), 4194304);
+        UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::DefaultSizeBytes, 4194304);
         for (size_t budget : {size_t(0), size_t(1023), size_t(1024), size_t(2047), size_t(2048)}) {
-            TAsyncFrameCache cache(budget);
-            TScopedAsyncFrameCache binding(cache);
-            auto* a = TAsyncFrameCache::AllocateCurrent(100);
-            auto* b = TAsyncFrameCache::AllocateCurrent(100);
+            TAllocationCache<TAsyncFrameCacheTag> cache(budget);
+            TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
+            auto* a = TAsyncFrameCache::Allocate(100);
+            auto* b = TAsyncFrameCache::Allocate(100);
             TAsyncFrameCache::Free(a, 100);
             TAsyncFrameCache::Free(b, 100);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().CachedBytes, std::min(budget / 1024, size_t(2)) * 1024);
@@ -238,8 +238,8 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(BinBoundariesAndLifo) {
-        TAsyncFrameCache cache;
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         for (size_t capacity = 1024; capacity <= 65536; capacity *= 2) {
             const auto retainedBefore = cache.GetStats().CachedBytes;
             const auto lower = capacity == 1024 ? size_t(1) : capacity / 2 + 1;
@@ -261,8 +261,8 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(Over64KiBAlwaysBypassesCache) {
-        TAsyncFrameCache cache;
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         for (size_t size : {size_t(65537), size_t(131072)}) {
             auto* frame = cache.Allocate(size);
             TAsyncFrameCache::Free(frame, size);
@@ -273,8 +273,8 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(RoundedCapacityFillsDefaultBudget) {
-        TAsyncFrameCache cache;
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         std::array<void*, 65> frames;
         for (auto& frame : frames) {
             frame = cache.Allocate(32769);
@@ -288,8 +288,8 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(AlignmentAndSmallFrames) {
-        TAsyncFrameCache cache;
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         for (size_t size : {size_t(0), size_t(1), size_t(7), size_t(8), size_t(1023), size_t(1024)}) {
             auto* frame = cache.Allocate(size);
             UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(frame) % __STDCPP_DEFAULT_NEW_ALIGNMENT__, 0);
@@ -300,18 +300,18 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(UncachedAllocationsCanEnterWorkerBins) {
-        UNIT_ASSERT(!TAsyncFrameCache::GetCurrent());
-        auto* outside = TAsyncFrameCache::AllocateCurrent(1025);
+        UNIT_ASSERT(!TAllocationCache<TAsyncFrameCacheTag>::GetCurrent());
+        auto* outside = TAsyncFrameCache::Allocate(1025);
         void* disabled;
         {
-            TAsyncFrameCache cache(0);
-            TScopedAsyncFrameCache binding(cache);
-            disabled = TAsyncFrameCache::AllocateCurrent(1);
+            TAllocationCache<TAsyncFrameCacheTag> cache(0);
+            TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
+            disabled = TAsyncFrameCache::Allocate(1);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().HeapAllocations, 1);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().CachedBytes, 0);
         }
-        TAsyncFrameCache cache(3072);
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(3072);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         TAsyncFrameCache::Free(outside, 1025);
         TAsyncFrameCache::Free(disabled, 1);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().CachedBytes, 3072);
@@ -330,30 +330,30 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     Y_UNIT_TEST(FreeingThreadOwnsRetentionAfterOriginExits) {
         void* frame = nullptr;
         std::thread([&] {
-            TAsyncFrameCache cache(1024);
-            TScopedAsyncFrameCache binding(cache);
-            frame = TAsyncFrameCache::AllocateCurrent(100);
+            TAllocationCache<TAsyncFrameCacheTag> cache(1024);
+            TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
+            frame = TAsyncFrameCache::Allocate(100);
         }).join();
         std::thread([&] {
-            TAsyncFrameCache cache(1024);
-            TScopedAsyncFrameCache binding(cache);
+            TAllocationCache<TAsyncFrameCacheTag> cache(1024);
+            TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
             TAsyncFrameCache::Free(frame, 100);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().CachedBytes, 1024);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().HeapAllocations, 0);
             UNIT_ASSERT_VALUES_EQUAL(cache.Allocate(100), frame);
         }).join();
         // No worker binding: direct heap deletion, even after both caches exit.
-        UNIT_ASSERT(!TAsyncFrameCache::GetCurrent());
+        UNIT_ASSERT(!TAllocationCache<TAsyncFrameCacheTag>::GetCurrent());
         TAsyncFrameCache::Free(frame, 100);
     }
 
     Y_UNIT_TEST(ReturnToAnotherThreadWhileOriginLives) {
-        TAsyncFrameCache origin(1024);
-        TScopedAsyncFrameCache binding(origin);
-        void* frame = TAsyncFrameCache::AllocateCurrent(100);
+        TAllocationCache<TAsyncFrameCacheTag> origin(1024);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&origin);
+        void* frame = TAsyncFrameCache::Allocate(100);
         std::thread([&] {
-            TAsyncFrameCache destination(1024);
-            TScopedAsyncFrameCache destinationBinding(destination);
+            TAllocationCache<TAsyncFrameCacheTag> destination(1024);
+            TScopedAllocationCache<TAsyncFrameCacheTag> destinationBinding(&destination);
             TAsyncFrameCache::Free(frame, 100);
             UNIT_ASSERT_VALUES_EQUAL(destination.GetStats().CachedBytes, 1024);
             UNIT_ASSERT_VALUES_EQUAL(destination.GetStats().HeapAllocations, 0);
@@ -363,30 +363,30 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
     }
 
     Y_UNIT_TEST(IndependentThreadBudgetsAndScopedRestoration) {
-        TAsyncFrameCache cache(1024);
-        TScopedAsyncFrameCache binding(cache);
+        TAllocationCache<TAsyncFrameCacheTag> cache(1024);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
         TAsyncFrameCache::Free(cache.Allocate(100), 100);
         std::thread([&] {
-            UNIT_ASSERT(!TAsyncFrameCache::GetCurrent());
-            TAsyncFrameCache other(2048);
+            UNIT_ASSERT(!TAllocationCache<TAsyncFrameCacheTag>::GetCurrent());
+            TAllocationCache<TAsyncFrameCacheTag> other(2048);
             {
-                TScopedAsyncFrameCache otherBinding(other);
+                TScopedAllocationCache<TAsyncFrameCacheTag> otherBinding(&other);
                 TAsyncFrameCache::Free(other.Allocate(200), 200);
                 UNIT_ASSERT_VALUES_EQUAL(other.GetStats().CachedBytes, 1024);
             }
-            UNIT_ASSERT(!TAsyncFrameCache::GetCurrent());
+            UNIT_ASSERT(!TAllocationCache<TAsyncFrameCacheTag>::GetCurrent());
         }).join();
         UNIT_ASSERT_VALUES_EQUAL(cache.GetStats().CachedBytes, 1024);
         {
-            TAsyncFrameCache other(0);
-            TScopedAsyncFrameCache nested(other);
-            UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::GetCurrent(), &other);
+            TAllocationCache<TAsyncFrameCacheTag> other(0);
+            TScopedAllocationCache<TAsyncFrameCacheTag> nested(&other);
+            UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>::GetCurrent(), &other);
         }
-        UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::GetCurrent(), &cache);
+        UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>::GetCurrent(), &cache);
     }
 
     Y_UNIT_TEST(CachedStatsFollowIdleBlocksAndBudget) {
-        TAsyncFrameCache cache(1024);
+        TAllocationCache<TAsyncFrameCacheTag> cache(1024);
         auto* first = cache.Allocate(1);
         auto* overflow = cache.Allocate(1);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCachedStats().CachedFrames, 0);
@@ -403,13 +403,13 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCachedStats().CachedBytes, 0);
         cache.Release(reused, 1000);
 
-        TAsyncFrameCache disabled(0);
+        TAllocationCache<TAsyncFrameCacheTag> disabled(0);
         disabled.Release(disabled.Allocate(1), 1);
         UNIT_ASSERT_VALUES_EQUAL(disabled.GetCachedStats().CachedFrames, 0);
 
-        TAsyncFrameCache large(2048);
+        TAllocationCache<TAsyncFrameCacheTag> large(2048);
         large.Release(large.Allocate(1025), 1025);
-        TAsyncFrameCache::TProcessStats total;
+        TAllocationCacheProcessStats total;
         total.Add(cache.GetCachedStats());
         total.Add(disabled.GetCachedStats());
         total.Add(large.GetCachedStats());
@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
 
     Y_UNIT_TEST(CachedStatsSampledWhileOwnerChurns) {
         // Only the owner thread allocates and releases; other threads may sample.
-        TAsyncFrameCache cache(3072);
+        TAllocationCache<TAsyncFrameCacheTag> cache(3072);
         TManualEvent start;
         std::thread owner([&] {
             start.WaitI();
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
 
 #if defined(_asan_enabled_)
     Y_UNIT_TEST(AsanIdleFramesAndRequestedBoundaries) {
-        UNIT_ASSERT(!TAsyncFrameCache::GetCurrent());
+        UNIT_ASSERT(!TAllocationCache<TAsyncFrameCacheTag>::GetCurrent());
         for (const auto& [size, capacity] : {std::pair<size_t, size_t>{0, 1024},
                 {1, 1024}, {7, 1024}, {8, 1024}, {9, 1024}, {1023, 1024}, {1024, 1024},
                 {1025, 2048}, {2047, 2048}, {2048, 2048}, {32769, 65536}, {65535, 65536}, {65536, 65536}}) {
@@ -456,10 +456,10 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
                     UNIT_ASSERT(__asan_address_is_poisoned(bytes + capacity - 1));
                 }
             };
-            auto* frame = TAsyncFrameCache::AllocateCurrent(size);
+            auto* frame = TAsyncFrameCache::Allocate(size);
             checkLive(frame, size);
-            TAsyncFrameCache cache;
-            TScopedAsyncFrameCache binding(cache);
+            TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+            TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
             TAsyncFrameCache::Free(frame, size);
             for (size_t offset = 0; offset < capacity; ++offset) {
                 UNIT_ASSERT(__asan_address_is_poisoned(static_cast<char*>(frame) + offset));
@@ -473,9 +473,9 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
             checkLive(frame, smaller);
             cache.Release(frame, smaller);
         }
-        TAsyncFrameCache disabled(0);
-        TScopedAsyncFrameCache binding(disabled);
-        auto* frame = TAsyncFrameCache::AllocateCurrent(1);
+        TAllocationCache<TAsyncFrameCacheTag> disabled(0);
+        TScopedAllocationCache<TAsyncFrameCacheTag> binding(&disabled);
+        auto* frame = TAsyncFrameCache::Allocate(1);
         UNIT_ASSERT(!__asan_address_is_poisoned(frame));
         UNIT_ASSERT(__asan_address_is_poisoned(static_cast<char*>(frame) + 1));
         TAsyncFrameCache::Free(frame, 1);
@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
 
 #if defined(_msan_enabled_)
     Y_UNIT_TEST(MsanReusedFramesAreUninitialized) {
-        TAsyncFrameCache cache;
+        TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
         for (size_t size : {size_t(1), size_t(7), size_t(8), size_t(1024), size_t(1025), size_t(65536)}) {
             auto* frame = cache.Allocate(size);
             UNIT_ASSERT_VALUES_EQUAL(__msan_test_shadow(frame, size), 0);
@@ -624,8 +624,8 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
         {
             TAsyncTestActorRuntime runtime;
             {
-                TAsyncFrameCache cache;
-                TScopedAsyncFrameCache binding(cache);
+                TAllocationCache<TAsyncFrameCacheTag> cache(TAsyncFrameCache::DefaultSizeBytes);
+                TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);
                 auto* self = new TCacheActor(state, counts);
                 TAsyncTestActorRuntime::TAsyncActorOperations actor(runtime, runtime.Register(self));
                 actor.Step();

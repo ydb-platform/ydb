@@ -385,7 +385,7 @@ void MakeDirRecursive(const std::string& path, int mode)
     }
 
     // TODO(dann239): migrate to std::string.
-    if (!NFs::MakeDirectory(TString(path), NFs::EFilePermission(mode))) {
+    if (!NFs::MakeDirectory(TString(path), static_cast<NFs::EFilePermission>(mode))) {
         auto error = TError::FromSystem();
 
         // The directory could have been created concurrently.

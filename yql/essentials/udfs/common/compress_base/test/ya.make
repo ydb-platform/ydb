@@ -1,6 +1,8 @@
 YQL_UDF_TEST()
 
-DEPENDS(yql/essentials/udfs/common/compress_base)
+DEPENDS(
+    yql/essentials/udfs/common/compress_base/impl
+)
 
 SIZE(MEDIUM)
 

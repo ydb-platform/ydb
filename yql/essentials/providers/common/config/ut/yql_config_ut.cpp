@@ -7,12 +7,26 @@ namespace NYql::NCommon {
 
 namespace {
 
+class TTestSettings {
+public:
+    TConfSetting<TString, EConfSettingType::Dynamic> MySetting;
+    TConfSetting<TString, EConfSettingType::Static> StaticString;
+    TConfSetting<i64, EConfSettingType::Dynamic> Integer;
+    TConfSetting<TString, EConfSettingType::StaticPerCluster> PerClusterString;
+    TConfSetting<TString, EConfSettingType::Dynamic> OtherString;
+    TConfSetting<TString, EConfSettingType::Dynamic> ThirdString;
+    TConfSetting<i64, EConfSettingType::Static> StaticInteger;
+    TConfSetting<bool, EConfSettingType::Static> StaticBoolean;
+    TConfSetting<TString, EConfSettingType::Static> OtherStaticString;
+    TConfSetting<TString, EConfSettingType::Static> ThirdStaticString;
+};
+
 struct TTestErrorCollector {
     TString LastMessage;
     bool LastIsError = false;
     bool ShouldContinue = true;
 
-    TSettingDispatcher::TErrorCallback MakeCallback() {
+    ISettingDispatcher::TErrorCallback MakeCallback() {
         return [this](const TString& msg, bool isError) -> bool {
             LastMessage = msg;
             LastIsError = isError;
@@ -154,127 +168,122 @@ Y_UNIT_TEST(StaticPerClusterSettingBasic) {
 Y_UNIT_TEST_SUITE(TSettingDispatcherTest) {
 
 Y_UNIT_TEST(AddAndDispatchConfig) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.MySetting;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
 
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("hello"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("hello"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL("hello", *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(AddDuplicateThrows) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
-    UNIT_ASSERT_EXCEPTION(dispatcher.AddSetting("MySetting", setting), yexception);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
+    UNIT_ASSERT_EXCEPTION(dispatcher.AddSetting("MySetting", &TTestSettings::MySetting), yexception);
 }
 
 Y_UNIT_TEST(UnknownSettingAtConfigIgnored) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT(errors.LastMessage.empty());
 }
 
 Y_UNIT_TEST(UnknownSettingAtStaticErrors) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("Unknown setting name"));
 }
 
 Y_UNIT_TEST(UnknownSettingAtRuntimeErrors) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), ISettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("Unknown setting name"));
 }
 
 Y_UNIT_TEST(StaticSettingWithSpecificClusterErrors) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("StaticSetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("StaticSetting", &TTestSettings::StaticString);
     dispatcher.AddValidCluster("cluster1");
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch("cluster1", "StaticSetting", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch("cluster1", "StaticSetting", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("cannot be set for specific cluster"));
 }
 
 Y_UNIT_TEST(InvalidClusterErrors) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
     dispatcher.AddValidCluster("cluster1");
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch("invalid_cluster", "MySetting", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch("invalid_cluster", "MySetting", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("Unknown cluster name"));
 }
 
 Y_UNIT_TEST(NullValueForStaticSettingErrors) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("StaticSetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("StaticSetting", &TTestSettings::StaticString);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "StaticSetting", Nothing(), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "StaticSetting", Nothing(), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("cannot be reset to default"));
 }
 
 Y_UNIT_TEST(NullValueForDynamicSettingWithoutFreezeErrors) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", Nothing(), TSettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", Nothing(), ISettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("Cannot restore"));
 }
 
 Y_UNIT_TEST(NullValueForDynamicSettingRestoresDefault) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.MySetting;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
 
     setting[ALL_CLUSTERS] = "original";
     dispatcher.FreezeDefaults();
 
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("changed"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("changed"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("changed", *setting.Get(ALL_CLUSTERS));
 
-    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", Nothing(), TSettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", Nothing(), ISettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("original", *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(FreezeAndRestore) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> s1;
-    TConfSetting<i64> s2;
-    dispatcher.AddSetting("S1", s1);
-    dispatcher.AddSetting("S2", s2);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& s1 = dispatcher.MySetting;
+    auto& s2 = dispatcher.Integer;
+    dispatcher.AddSetting("S1", &TTestSettings::MySetting);
+    dispatcher.AddSetting("S2", &TTestSettings::Integer);
 
     s1[ALL_CLUSTERS] = "initial";
     s2[ALL_CLUSTERS] = 42;
@@ -291,13 +300,10 @@ Y_UNIT_TEST(FreezeAndRestore) {
 }
 
 Y_UNIT_TEST(IsRuntime) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> dynamicSetting;
-    TConfSetting<TString, EConfSettingType::Static> staticSetting;
-    TConfSetting<TString, EConfSettingType::StaticPerCluster> staticPerClusterSetting;
-    dispatcher.AddSetting("Dynamic", dynamicSetting);
-    dispatcher.AddSetting("Static", staticSetting);
-    dispatcher.AddSetting("StaticPerCluster", staticPerClusterSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("Dynamic", &TTestSettings::MySetting);
+    dispatcher.AddSetting("Static", &TTestSettings::StaticString);
+    dispatcher.AddSetting("StaticPerCluster", &TTestSettings::PerClusterString);
 
     UNIT_ASSERT(dispatcher.IsRuntime("Dynamic"));
     UNIT_ASSERT(!dispatcher.IsRuntime("Static"));
@@ -306,180 +312,175 @@ Y_UNIT_TEST(IsRuntime) {
 }
 
 Y_UNIT_TEST(StageStaticAppliesOnlyNonRuntime) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> dynamicSetting;
-    TConfSetting<TString, EConfSettingType::Static> staticSetting;
-    dispatcher.AddSetting("Dynamic", dynamicSetting);
-    dispatcher.AddSetting("Static", staticSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& dynamicSetting = dispatcher.MySetting;
+    auto& staticSetting = dispatcher.StaticString;
+    dispatcher.AddSetting("Dynamic", &TTestSettings::MySetting);
+    dispatcher.AddSetting("Static", &TTestSettings::StaticString);
 
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(!dynamicSetting.Get(ALL_CLUSTERS));
 
-    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("val", *staticSetting.Get());
 }
 
 Y_UNIT_TEST(StageRuntimeAppliesOnlyRuntime) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> dynamicSetting;
-    TConfSetting<TString, EConfSettingType::Static> staticSetting;
-    dispatcher.AddSetting("Dynamic", dynamicSetting);
-    dispatcher.AddSetting("Static", staticSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& dynamicSetting = dispatcher.MySetting;
+    auto& staticSetting = dispatcher.StaticString;
+    dispatcher.AddSetting("Dynamic", &TTestSettings::MySetting);
+    dispatcher.AddSetting("Static", &TTestSettings::StaticString);
 
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("dyn_val"), TSettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("dyn_val"), ISettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("dyn_val", *dynamicSetting.Get(ALL_CLUSTERS));
 
-    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("sta_val"), TSettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("sta_val"), ISettingDispatcher::EStage::RUNTIME, errors.MakeCallback());
     UNIT_ASSERT(!staticSetting.Get());
 }
 
 Y_UNIT_TEST(StageConfigAlwaysAppliesBoth) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> dynamicSetting;
-    TConfSetting<TString, EConfSettingType::Static> staticSetting;
-    dispatcher.AddSetting("Dynamic", dynamicSetting);
-    dispatcher.AddSetting("Static", staticSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& dynamicSetting = dispatcher.MySetting;
+    auto& staticSetting = dispatcher.StaticString;
+    dispatcher.AddSetting("Dynamic", &TTestSettings::MySetting);
+    dispatcher.AddSetting("Static", &TTestSettings::StaticString);
 
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("dyn"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
-    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("sta"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Dynamic", TString("dyn"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "Static", TString("sta"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("dyn", *dynamicSetting.Get(ALL_CLUSTERS));
     UNIT_ASSERT_VALUES_EQUAL("sta", *staticSetting.Get());
 }
 
 Y_UNIT_TEST(CaseInsensitiveSettingNames) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.MySetting;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
 
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "mysetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "mysetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL("val", *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(ValidatorLower) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<i64> setting;
-    dispatcher.AddSetting("MySetting", setting).Lower(0LL);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.Integer;
+    dispatcher.AddSetting("MySetting", &TTestSettings::Integer).Lower(0LL);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("-1"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("-1"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("less than"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("0"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("0"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL(0L, *setting.Get(ALL_CLUSTERS));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("5"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("5"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL(5L, *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(ValidatorUpper) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<i64> setting;
-    dispatcher.AddSetting("MySetting", setting).Upper(100LL);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.Integer;
+    dispatcher.AddSetting("MySetting", &TTestSettings::Integer).Upper(100LL);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("200"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("200"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("greater than"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("100"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("100"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL(100L, *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(ValidatorLowerAndUpperBothApply) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<i64> setting;
-    dispatcher.AddSetting("MySetting", setting).Lower(0LL).Upper(10LL);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::Integer).Lower(0LL).Upper(10LL);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("-1"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
-    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("11"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
-    UNIT_ASSERT(dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("5"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
+    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("-1"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
+    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("11"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
+    UNIT_ASSERT(dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("5"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
 }
 
 Y_UNIT_TEST(ValidatorEnumInitializerList) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).Enum({"a", "b", "c"});
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.MySetting;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Enum({"a", "b", "c"});
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("d"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("d"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastMessage.Contains("not in set of allowed values"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("b"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("b"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL("b", *setting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(ValidatorEnumContainer) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     TVector<TString> allowed = {"x", "y"};
-    dispatcher.AddSetting("MySetting", setting).Enum(allowed);
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Enum(allowed);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("z"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
-    UNIT_ASSERT(dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("x"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
+    UNIT_ASSERT(!dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("z"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
+    UNIT_ASSERT(dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("x"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback()));
 }
 
 Y_UNIT_TEST(ValidatorNonEmpty) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).NonEmpty();
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).NonEmpty();
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString(""), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString(""), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastMessage.Contains("empty"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("nonempty"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("nonempty"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
 }
 
 Y_UNIT_TEST(ValidatorGlobalOnly) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).GlobalOnly();
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).GlobalOnly();
     dispatcher.AddValidCluster("cluster1");
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch("cluster1", "MySetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch("cluster1", "MySetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastMessage.Contains("cannot be used with specific cluster"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
 }
 
 Y_UNIT_TEST(ValidatorCustom) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).Validator([](const TString&, const TString& val) {
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Validator([](const TTestSettings&, const TString&, const TString& val) {
         if (val == "forbidden") {
             throw yexception() << "Value is forbidden";
         }
@@ -488,21 +489,21 @@ Y_UNIT_TEST(ValidatorCustom) {
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
 
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("forbidden"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("forbidden"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastMessage.Contains("forbidden"));
 
-    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("allowed"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("allowed"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
 }
 
 Y_UNIT_TEST(WarningCallback) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).Warning("Use new setting instead");
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.MySetting;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Warning("Use new setting instead");
 
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT(!errors.LastIsError);
     UNIT_ASSERT_VALUES_EQUAL("Use new setting instead", errors.LastMessage);
@@ -510,35 +511,30 @@ Y_UNIT_TEST(WarningCallback) {
 }
 
 Y_UNIT_TEST(DeprecatedSettingProducesWarning) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).Deprecated();
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Deprecated();
 
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT(!errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("deprecated"));
 }
 
 Y_UNIT_TEST(DeprecatedSettingCustomMessage) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting).Deprecated("Please use NewSetting instead");
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).Deprecated("Please use NewSetting instead");
 
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT_VALUES_EQUAL("Please use NewSetting instead", errors.LastMessage);
 }
 
 Y_UNIT_TEST(EnumerateSkipsDeprecatedAndUnderscoreNames) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> s1;
-    TConfSetting<TString> s2;
-    TConfSetting<TString> s3;
-    dispatcher.AddSetting("Normal", s1);
-    dispatcher.AddSetting("DeprecatedOne", s2).Deprecated();
-    dispatcher.AddSetting("_HiddenInternal", s3);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("Normal", &TTestSettings::MySetting);
+    dispatcher.AddSetting("DeprecatedOne", &TTestSettings::OtherString).Deprecated();
+    dispatcher.AddSetting("_HiddenInternal", &TTestSettings::ThirdString);
 
     TVector<TString> names;
     dispatcher.Enumerate([&](std::string_view name) { names.emplace_back(name); });
@@ -550,7 +546,7 @@ Y_UNIT_TEST(EnumerateSkipsDeprecatedAndUnderscoreNames) {
 }
 
 Y_UNIT_TEST(ValidClustersManagement) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     UNIT_ASSERT(!dispatcher.IsValidCluster("cluster1"));
 
     dispatcher.AddValidCluster("cluster1");
@@ -562,7 +558,7 @@ Y_UNIT_TEST(ValidClustersManagement) {
 }
 
 Y_UNIT_TEST(SetValidClusters) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     dispatcher.AddValidCluster("old_cluster");
     UNIT_ASSERT(dispatcher.IsValidCluster("old_cluster"));
 
@@ -575,76 +571,81 @@ Y_UNIT_TEST(SetValidClusters) {
 
 Y_UNIT_TEST(ConstructorWithValidClusters) {
     TVector<TString> clusters = {"c1", "c2", "c3"};
-    TSettingDispatcher dispatcher(clusters);
+    TDispatcherAndSettings<TTestSettings> dispatcher(clusters);
     UNIT_ASSERT(dispatcher.IsValidCluster("c1"));
     UNIT_ASSERT(dispatcher.IsValidCluster("c2"));
     UNIT_ASSERT(!dispatcher.IsValidCluster("c4"));
 }
 
 Y_UNIT_TEST(LevenshteinSuggestionForCluster) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
     dispatcher.AddValidCluster("cluster1");
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    dispatcher.Dispatch("clusteR1", "MySetting", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    dispatcher.Dispatch("clusteR1", "MySetting", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(errors.LastMessage.Contains("did you mean"));
     UNIT_ASSERT(errors.LastMessage.Contains("cluster1"));
 }
 
 Y_UNIT_TEST(LevenshteinSuggestionForSettingName) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting);
 
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    dispatcher.Dispatch(ALL_CLUSTERS, "MySettnig", TString("val"), TSettingDispatcher::EStage::STATIC, errors.MakeCallback());
+    dispatcher.Dispatch(ALL_CLUSTERS, "MySettnig", TString("val"), ISettingDispatcher::EStage::STATIC, errors.MakeCallback());
     UNIT_ASSERT(errors.LastMessage.Contains("did you mean"));
     UNIT_ASSERT(errors.LastMessage.Contains("MySetting"));
 }
 
 Y_UNIT_TEST(CustomValueSetter) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> setting;
+    TDispatcher<TTestSettings> dispatcher;
     TString captured;
-    dispatcher.AddSetting("MySetting", setting).ValueSetter([&](const TString&, TString val) {
+    dispatcher.AddSetting("MySetting", &TTestSettings::MySetting).ValueSetter([&captured](TTestSettings& settings, const TString&, TString val) {
         captured = "custom_" + val;
-        setting[ALL_CLUSTERS] = captured;
+        settings.MySetting[ALL_CLUSTERS] = captured;
     });
 
+    TTestSettings firstSettings;
+    TTestSettings secondSettings;
+    const auto& configuredDispatcher = dispatcher;
     TTestErrorCollector errors;
-    dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("hello"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
-    UNIT_ASSERT_VALUES_EQUAL("custom_hello", *setting.Get(ALL_CLUSTERS));
+    UNIT_ASSERT(configuredDispatcher.Dispatch(firstSettings, ALL_CLUSTERS, "MySetting", TString("hello"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback(), {}));
+    UNIT_ASSERT_VALUES_EQUAL("custom_hello", *firstSettings.MySetting.Get(ALL_CLUSTERS));
+    UNIT_ASSERT(!secondSettings.MySetting.Get(ALL_CLUSTERS));
+
+    UNIT_ASSERT(configuredDispatcher.Dispatch(secondSettings, ALL_CLUSTERS, "MySetting", TString(), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback(), {}));
+    UNIT_ASSERT_VALUES_EQUAL("custom_", *secondSettings.MySetting.Get(ALL_CLUSTERS));
+    UNIT_ASSERT_VALUES_EQUAL("custom_hello", *firstSettings.MySetting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(RegisterSettingMacro) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString> MySetting;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& MySetting = dispatcher.MySetting;
     REGISTER_SETTING(dispatcher, MySetting);
 
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("macro_test"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "MySetting", TString("macro_test"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT_VALUES_EQUAL("macro_test", *MySetting.Get(ALL_CLUSTERS));
 }
 
 Y_UNIT_TEST(UnknownSettingAtConfigErrorsInStrictMode) {
-    TSettingDispatcher dispatcher("", {}, /*strictConfigValidation=*/true);
+    TDispatcherAndSettings<TTestSettings> dispatcher("", {}, /*strictConfigValidation=*/true);
     TTestErrorCollector errors;
     errors.ShouldContinue = false;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(!ok);
     UNIT_ASSERT(errors.LastIsError);
     UNIT_ASSERT(errors.LastMessage.Contains("Unknown setting name"));
 }
 
 Y_UNIT_TEST(StrictModeDefaultsToFalse) {
-    TSettingDispatcher dispatcher;
+    TDispatcherAndSettings<TTestSettings> dispatcher;
     TTestErrorCollector errors;
-    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), ISettingDispatcher::EStage::CONFIG, errors.MakeCallback());
     UNIT_ASSERT(ok);
     UNIT_ASSERT(errors.LastMessage.empty());
 }
@@ -943,9 +944,9 @@ Y_UNIT_TEST(SerializeHashSetStringRoundTrip) {
 Y_UNIT_TEST_SUITE(TSettingDispatcherSerializeTest) {
 
 Y_UNIT_TEST(StaticSettingWithValueIsEmitted) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("MyStatic", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.StaticString;
+    dispatcher.AddSetting("MyStatic", &TTestSettings::StaticString);
     setting[ALL_CLUSTERS] = "hello";
 
     TVector<std::pair<TString, TString>> collected;
@@ -959,9 +960,8 @@ Y_UNIT_TEST(StaticSettingWithValueIsEmitted) {
 }
 
 Y_UNIT_TEST(StaticSettingWithoutValueNotEmitted) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("MyStatic", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MyStatic", &TTestSettings::StaticString);
     // setting is not set
 
     TVector<std::pair<TString, TString>> collected;
@@ -973,13 +973,13 @@ Y_UNIT_TEST(StaticSettingWithoutValueNotEmitted) {
 }
 
 Y_UNIT_TEST(MixedSettingsOnlyStaticEmitted) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> staticSetting;
-    TConfSetting<TString> dynamicSetting;
-    TConfSetting<TString, EConfSettingType::StaticPerCluster> perClusterSetting;
-    dispatcher.AddSetting("Static", staticSetting);
-    dispatcher.AddSetting("Dynamic", dynamicSetting);
-    dispatcher.AddSetting("PerCluster", perClusterSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& staticSetting = dispatcher.StaticString;
+    auto& dynamicSetting = dispatcher.MySetting;
+    auto& perClusterSetting = dispatcher.PerClusterString;
+    dispatcher.AddSetting("Static", &TTestSettings::StaticString);
+    dispatcher.AddSetting("Dynamic", &TTestSettings::MySetting);
+    dispatcher.AddSetting("PerCluster", &TTestSettings::PerClusterString);
 
     staticSetting[ALL_CLUSTERS] = "static_val";
     dynamicSetting[ALL_CLUSTERS] = "dynamic_val";
@@ -992,13 +992,13 @@ Y_UNIT_TEST(MixedSettingsOnlyStaticEmitted) {
 }
 
 Y_UNIT_TEST(MultipleStaticSettingsAllEmitted) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> s1;
-    TConfSetting<i64, EConfSettingType::Static> s2;
-    TConfSetting<bool, EConfSettingType::Static> s3;
-    dispatcher.AddSetting("StrSetting", s1);
-    dispatcher.AddSetting("IntSetting", s2);
-    dispatcher.AddSetting("BoolSetting", s3);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& s1 = dispatcher.StaticString;
+    auto& s2 = dispatcher.StaticInteger;
+    auto& s3 = dispatcher.StaticBoolean;
+    dispatcher.AddSetting("StrSetting", &TTestSettings::StaticString);
+    dispatcher.AddSetting("IntSetting", &TTestSettings::StaticInteger);
+    dispatcher.AddSetting("BoolSetting", &TTestSettings::StaticBoolean);
 
     s1[ALL_CLUSTERS] = "text";
     s2[ALL_CLUSTERS] = 42LL;
@@ -1016,9 +1016,9 @@ Y_UNIT_TEST(MultipleStaticSettingsAllEmitted) {
 }
 
 Y_UNIT_TEST(CustomSerializerOverride) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("MySetting", setting)
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& setting = dispatcher.StaticString;
+    dispatcher.AddSetting("MySetting", &TTestSettings::StaticString)
         .Serializer([](const TString& v) -> TString { return "custom_" + v; });
 
     setting[ALL_CLUSTERS] = "value";
@@ -1033,24 +1033,24 @@ Y_UNIT_TEST(CustomSerializerOverride) {
 }
 
 Y_UNIT_TEST(SerializationOrderIsAlphabeticRegardlessOfRegistrationOrder) {
-    TConfSetting<TString, EConfSettingType::Static> alphaSettingReversed;
-    TConfSetting<TString, EConfSettingType::Static> betaSettingReversed;
-    TConfSetting<TString, EConfSettingType::Static> charlieSettingReversed;
-    TSettingDispatcher dispatcherReversed;
-    dispatcherReversed.AddSetting("Charlie", charlieSettingReversed);
-    dispatcherReversed.AddSetting("Beta", betaSettingReversed);
-    dispatcherReversed.AddSetting("Alpha", alphaSettingReversed);
+    TDispatcherAndSettings<TTestSettings> dispatcherReversed;
+    TDispatcherAndSettings<TTestSettings> dispatcherForward;
+    auto& alphaSettingReversed = dispatcherReversed.StaticString;
+    auto& betaSettingReversed = dispatcherReversed.OtherStaticString;
+    auto& charlieSettingReversed = dispatcherReversed.ThirdStaticString;
+    dispatcherReversed.AddSetting("Charlie", &TTestSettings::ThirdStaticString);
+    dispatcherReversed.AddSetting("Beta", &TTestSettings::OtherStaticString);
+    dispatcherReversed.AddSetting("Alpha", &TTestSettings::StaticString);
     alphaSettingReversed[ALL_CLUSTERS] = "alpha_value";
     betaSettingReversed[ALL_CLUSTERS] = "beta_value";
     charlieSettingReversed[ALL_CLUSTERS] = "charlie_value";
 
-    TConfSetting<TString, EConfSettingType::Static> alphaSettingForward;
-    TConfSetting<TString, EConfSettingType::Static> betaSettingForward;
-    TConfSetting<TString, EConfSettingType::Static> charlieSettingForward;
-    TSettingDispatcher dispatcherForward;
-    dispatcherForward.AddSetting("Alpha", alphaSettingForward);
-    dispatcherForward.AddSetting("Beta", betaSettingForward);
-    dispatcherForward.AddSetting("Charlie", charlieSettingForward);
+    auto& alphaSettingForward = dispatcherForward.StaticString;
+    auto& betaSettingForward = dispatcherForward.OtherStaticString;
+    auto& charlieSettingForward = dispatcherForward.ThirdStaticString;
+    dispatcherForward.AddSetting("Alpha", &TTestSettings::StaticString);
+    dispatcherForward.AddSetting("Beta", &TTestSettings::OtherStaticString);
+    dispatcherForward.AddSetting("Charlie", &TTestSettings::ThirdStaticString);
     alphaSettingForward[ALL_CLUSTERS] = "alpha_value";
     betaSettingForward[ALL_CLUSTERS] = "beta_value";
     charlieSettingForward[ALL_CLUSTERS] = "charlie_value";
@@ -1081,21 +1081,20 @@ Y_UNIT_TEST(SerializationOrderIsAlphabeticRegardlessOfRegistrationOrder) {
 }
 
 Y_UNIT_TEST(CountSerializableStaticSettingsEmpty) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> setting;
-    dispatcher.AddSetting("MySetting", setting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    dispatcher.AddSetting("MySetting", &TTestSettings::StaticString);
 
     UNIT_ASSERT_VALUES_EQUAL(0U, dispatcher.CountSerializableStaticSettings());
 }
 
 Y_UNIT_TEST(CountSerializableStaticSettingsWithValue) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> stringSetting;
-    TConfSetting<i64, EConfSettingType::Static> integerSetting;
-    TConfSetting<TString, EConfSettingType::Static> anotherStringSetting;
-    dispatcher.AddSetting("StringSetting", stringSetting);
-    dispatcher.AddSetting("IntegerSetting", integerSetting);
-    dispatcher.AddSetting("AnotherStringSetting", anotherStringSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& stringSetting = dispatcher.StaticString;
+    auto& integerSetting = dispatcher.StaticInteger;
+    auto& anotherStringSetting = dispatcher.OtherStaticString;
+    dispatcher.AddSetting("StringSetting", &TTestSettings::StaticString);
+    dispatcher.AddSetting("IntegerSetting", &TTestSettings::StaticInteger);
+    dispatcher.AddSetting("AnotherStringSetting", &TTestSettings::OtherStaticString);
 
     stringSetting[ALL_CLUSTERS] = "string_value";
     integerSetting[ALL_CLUSTERS] = 42LL;
@@ -1108,11 +1107,11 @@ Y_UNIT_TEST(CountSerializableStaticSettingsWithValue) {
 }
 
 Y_UNIT_TEST(CountSerializableStaticSettingsMatchesSerializeCount) {
-    TSettingDispatcher dispatcher;
-    TConfSetting<TString, EConfSettingType::Static> stringSetting;
-    TConfSetting<i64, EConfSettingType::Static> integerSetting;
-    dispatcher.AddSetting("Alpha", stringSetting);
-    dispatcher.AddSetting("Beta", integerSetting);
+    TDispatcherAndSettings<TTestSettings> dispatcher;
+    auto& stringSetting = dispatcher.StaticString;
+    auto& integerSetting = dispatcher.StaticInteger;
+    dispatcher.AddSetting("Alpha", &TTestSettings::StaticString);
+    dispatcher.AddSetting("Beta", &TTestSettings::StaticInteger);
     stringSetting[ALL_CLUSTERS] = "hello";
     integerSetting[ALL_CLUSTERS] = 7LL;
 

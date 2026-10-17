@@ -1,9 +1,10 @@
 #pragma once
 
-#include "runtime_settings_configuration.h"
+#include "runtime_settings.h"
 
 #include <yql/essentials/minikql/runtime_settings/proto/runtime_settings.pb.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
+#include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

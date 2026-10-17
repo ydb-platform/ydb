@@ -14,12 +14,6 @@ SRCS(
     spin_wait_ut.cpp
 )
 
-IF (OS_LINUX)
-    SRCS(
-        cpu_id_ut.cpp
-    )
-ENDIF()
-
 IF (NOT OS_WINDOWS)
     SRC(spin_lock_fork_ut.cpp)
 ENDIF()

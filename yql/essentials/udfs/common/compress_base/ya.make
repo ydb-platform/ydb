@@ -1,19 +1,16 @@
 YQL_UDF_CONTRIB(compress_udf)
 
-YQL_ABI_VERSION(
-    2
-    23
-    0
-)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+    # Base and full UDFs share the library name but use separate resources.
+    SET(COMPRESS_UDF_RESOURCE_DEFAULT ${COMPRESS_BASE_UDF_RESOURCE_DEFAULT})
+    SET(COMPRESS_UDF_RESOURCE_ASAN ${COMPRESS_BASE_UDF_RESOURCE_ASAN})
+    SET(COMPRESS_UDF_RESOURCE_MSAN ${COMPRESS_BASE_UDF_RESOURCE_MSAN})
+    SET(COMPRESS_UDF_RESOURCE_TSAN ${COMPRESS_BASE_UDF_RESOURCE_TSAN})
+    SET(COMPRESS_UDF_RESOURCE_UBSAN ${COMPRESS_BASE_UDF_RESOURCE_UBSAN})
+ENDIF()
 
-SRCS(
-    compress_udf.cpp
-)
-
-PEERDIR(
-    yql/essentials/public/udf
-    yql/essentials/udfs/common/compress_base/lib
-)
+INCLUDE(ya.make.inc)
 
 END()
 

@@ -9,8 +9,7 @@ namespace {
 
 TString DumpRuntimeSettingsToString(const TRuntimeSettings& settings) {
     TStringStream stream;
-    TRuntimeSettingsConfiguration configuration(settings);
-    configuration.SerializeStaticSettings([&](const TString&, const TString& value) {
+    TRuntimeSettingsConfiguration::Get().SerializeStaticSettings(settings, [&](const TString&, const TString& value) {
         stream << value;
     });
     for (const auto& [module, settings] : settings.GetUdfSettings()) {
@@ -39,27 +38,27 @@ Y_UNIT_TEST(StableHashIsStable) {
     const auto hash2 = StableHashRuntimeSettings(*configs[1]);
     UNIT_ASSERT_VALUES_EQUAL(hash1, hash2);
 
-    const auto emptyHash = StableHashRuntimeSettings(*MakeIntrusive<TRuntimeSettingsConfiguration>());
+    const auto emptyHash = StableHashRuntimeSettings(*MakeRuntimeSettingsMutable());
     UNIT_ASSERT_VALUES_UNEQUAL(hash1, emptyHash);
 }
 
 Y_UNIT_TEST(StableHashDiffersByContent) {
-    auto config1 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config1 = MakeRuntimeSettingsMutable();
     config1->DatumValidation.Set(EDatumValidationMode::Cheap);
 
-    auto config2 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config2 = MakeRuntimeSettingsMutable();
     config2->DatumValidation.Set(EDatumValidationMode::Expensive);
 
     UNIT_ASSERT_VALUES_UNEQUAL(StableHashRuntimeSettings(*config1), StableHashRuntimeSettings(*config2));
 }
 
 Y_UNIT_TEST(StableHashUdfSettingOrderIndependent) {
-    auto config1 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config1 = MakeRuntimeSettingsMutable();
     config1->SetUdfSetting("ModuleA", "Key1", "Val1");
     config1->SetUdfSetting("ModuleA", "Key2", "Val2");
     config1->SetUdfSetting("ModuleB", "Key3", "Val3");
 
-    auto config2 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config2 = MakeRuntimeSettingsMutable();
     config2->SetUdfSetting("ModuleB", "Key3", "Val3");
     config2->SetUdfSetting("ModuleA", "Key2", "Val2");
     config2->SetUdfSetting("ModuleA", "Key1", "Val1");
@@ -68,13 +67,13 @@ Y_UNIT_TEST(StableHashUdfSettingOrderIndependent) {
 }
 
 Y_UNIT_TEST(StableHashUdfModuleBoundaryIsDistinct) {
-    auto config1 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config1 = MakeRuntimeSettingsMutable();
     config1->SetUdfSetting("1", "2", "3");
     config1->SetUdfSetting("1", "4", "5");
     config1->SetUdfSetting("1", "6", "7");
     config1->SetUdfSetting("1", "8", "9");
 
-    auto config2 = MakeIntrusive<TRuntimeSettingsConfiguration>();
+    auto config2 = MakeRuntimeSettingsMutable();
     config2->SetUdfSetting("1", "2", "3");
     config2->SetUdfSetting("4", "5", "6");
     config2->SetUdfSetting("7", "8", "9");

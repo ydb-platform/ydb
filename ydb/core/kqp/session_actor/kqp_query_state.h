@@ -78,6 +78,7 @@ public:
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
         , RequestActorId(ev->Get()->GetRequestActorId())
+        , ReplySession(ev->Get()->GetReplySession())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
         , StartTime(TInstant::Now())
@@ -180,6 +181,8 @@ public:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
     TActorId RequestActorId;
+    // the interconnect session the request came through from another node; parts for RequestActorId go only through it
+    TActorId ReplySession;
 
     ui64 CurrentTx = 0;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;

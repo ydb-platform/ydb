@@ -2689,7 +2689,12 @@ public:
                 {"logPrefix", LogPrefix()},
                 {"requestActorId", QueryState->RequestActorId},
                 {"traceId", TraceId()});
-            Send(QueryState->RequestActorId, ev->Release().Release(), 0, QueryState->ProxyRequestId);
+            auto progress = std::make_unique<IEventHandle>(QueryState->RequestActorId, SelfId(), ev->Release().Release(), 0,
+                QueryState->ProxyRequestId);
+            if (QueryState->ReplySession) {
+                progress->Rewrite(TEvInterconnect::EvForward, QueryState->ReplySession);
+            }
+            TActivationContext::Send(progress.release());
         }
     }
 
@@ -3057,7 +3062,16 @@ public:
 
         QueryState->QueryData->AddBuiltResultIndex(ev->Get()->Record.GetQueryResultIndex());
 
-        TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
+        if (QueryState->ReplySession) {
+            // A part lost with a broken session must not be followed by later parts through a new one. The executer
+            // gets the part back as undelivered and fails the query.
+            auto forward = std::make_unique<IEventHandle>(QueryState->RequestActorId, ev->Sender, ev->ReleaseBase().Release(),
+                ev->Flags | IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId));
+            forward->Rewrite(TEvInterconnect::EvForward, QueryState->ReplySession);
+            TlsActivationContext->Send(forward.release());
+        } else {
+            TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
+        }
     }
 
     void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {

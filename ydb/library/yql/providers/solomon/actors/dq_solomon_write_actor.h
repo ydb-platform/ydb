@@ -19,7 +19,8 @@ constexpr i64 DqSolomonDefaultFreeSpace = 16_MB;
 
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
-    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace = DqSolomonDefaultFreeSpace,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace = DqSolomonDefaultFreeSpace,
     bool enableStreamingQueriesCounters = false, bool enableCountersPerTask = false);
 
 void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,

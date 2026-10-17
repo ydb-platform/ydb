@@ -83,7 +83,9 @@ public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
 
     TDqSolomonWriteActor(ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, TDqSolomonWriteParams&& writeParams,
-        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, i64 freeSpace, bool enableStreamingQueriesCounters, bool enableCountersPerTask)
+        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, i64 freeSpace, bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -560,8 +562,7 @@ private:
 std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
     ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace, bool enableStreamingQueriesCounters,
-    bool enableCountersPerTask)
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace, bool enableStreamingQueriesCounters, bool enableCountersPerTask)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());

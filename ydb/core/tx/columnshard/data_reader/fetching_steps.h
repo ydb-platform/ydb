@@ -202,6 +202,18 @@ public:
     using TAskDataResourceStep::TAskDataResourceStep;
 };
 
+class TAskConstructionPreparationResourceStep: public TAskDataResourceStep {
+private:
+    ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,
+        const std::shared_ptr<NReader::NCommon::TColumnsSetIds>& /*columnIds*/,
+        const std::vector<std::shared_ptr<TPortionDataAccessor>>& acc) const override {
+        return fetchingContext->GetMemoryForConstructionPreparation(acc);
+    }
+
+public:
+    using TAskDataResourceStep::TAskDataResourceStep;
+};
+
 class TAskUsageResourceStep: public TAskDataResourceStep {
 private:
     virtual ui64 GetNecessaryDataMemory(const std::shared_ptr<TPortionsDataFetcher>& fetchingContext,

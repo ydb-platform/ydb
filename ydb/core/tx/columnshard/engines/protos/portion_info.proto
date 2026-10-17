@@ -37,6 +37,8 @@ message TIndexPortionMeta {
 
     // Index blob bytes that physically live in blob storage
     optional uint32 BsIndexBlobBytes = 20;
+    optional bool RebuildDecimalPrimaryKey = 21 [default = false];
+    optional bool DecimalKeyOrder = 22 [default = false];
 
     message TWrittenPortion {
     }

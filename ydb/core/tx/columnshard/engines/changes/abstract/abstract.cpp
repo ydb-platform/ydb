@@ -13,6 +13,26 @@
 
 namespace NKikimr::NOlap {
 
+ui64 TColumnEngineChanges::CalcMemoryForConstruction(
+    const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors, const NBlobOperations::NRead::TCompositeReadBlobs* /*blobs*/) const {
+    THashMap<ui32, ui64> memoryByColumns;
+    for (const auto& accessor : accessors) {
+        THashMap<ui32, ui64> memoryByPortionColumns;
+        for (const auto& chunk : accessor->GetRecordsVerified()) {
+            auto& memory = memoryByPortionColumns[chunk.GetEntityId()];
+            memory = Max<ui64>(memory, chunk.GetMeta().GetRawBytes());
+        }
+        for (const auto& [columnId, memory] : memoryByPortionColumns) {
+            memoryByColumns[columnId] += memory;
+        }
+    }
+    ui64 result = 0;
+    for (const auto& [columnId, memory] : memoryByColumns) {
+        result = Max(result, memory);
+    }
+    return result;
+}
+
 void TColumnEngineChanges::SetStage(const NChanges::EStage stage) {
     YDB_LOG_DEBUG("",
         {"event", "new_stage"},

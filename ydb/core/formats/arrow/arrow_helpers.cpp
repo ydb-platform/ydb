@@ -1,3 +1,4 @@
+#include "key_comparator.h"
 #include "arrow_helpers.h"
 #include "permutations.h"
 
@@ -202,22 +203,28 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch, const st
     Y_DEBUG_ABORT_UNLESS(NArrow::IsSortedAndUnique(out.back(), sortingKey));
 }
 
-bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
-    if (desc) {
-        return IsSelfSorted<true, false>(keyBatch);
-    } else {
-        return IsSelfSorted<false, false>(keyBatch);
+namespace {
+bool CheckSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey,
+    const bool desc, const bool unique) {
+    auto keys = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
+    const TKeyComparator comparator(sortingKey->fields());
+    for (i64 i = 1; i < keys->num_rows(); ++i) {
+        const auto cmp = comparator.Compare(keys->columns(), i - 1, i);
+        if (cmp == (desc ? std::partial_ordering::less : std::partial_ordering::greater) ||
+            (unique && cmp == std::partial_ordering::equivalent)) {
+            return false;
+        }
     }
+    return true;
+}
+} // namespace
+
+bool IsSorted(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
+    return CheckSorted(batch, sortingKey, desc, false);
 }
 
 bool IsSortedAndUnique(const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& sortingKey, bool desc) {
-    auto keyBatch = TColumnOperator().Adapt(batch, sortingKey).DetachResult();
-    if (desc) {
-        return IsSelfSorted<true, true>(keyBatch);
-    } else {
-        return IsSelfSorted<false, true>(keyBatch);
-    }
+    return CheckSorted(batch, sortingKey, desc, true);
 }
 
 std::shared_ptr<arrow::RecordBatch> SortBatch(

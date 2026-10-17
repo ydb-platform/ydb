@@ -145,6 +145,9 @@ public:
     virtual ~IColumnResolver() = default;
     virtual TString GetColumnName(ui32 id, bool required = true) const = 0;
     virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const = 0;
+    virtual std::shared_ptr<arrow::Field> GetColumnFieldOptional(ui32 /*id*/) const {
+        return nullptr;
+    }
     bool HasColumn(const ui32 id) const {
         return !!GetColumnName(id, false);
     }
@@ -182,6 +185,10 @@ private:
     std::shared_ptr<arrow::Schema> Schema;
 
 public:
+    std::shared_ptr<arrow::Field> GetColumnFieldOptional(ui32 id) const override {
+        return id && id <= (ui32)Schema->num_fields() ? Schema->field(id - 1) : nullptr;
+    }
+
     virtual TString GetColumnName(ui32 id, bool required = true) const override {
         AFL_VERIFY(id);
         if (id < (ui32)Schema->num_fields() + 1) {

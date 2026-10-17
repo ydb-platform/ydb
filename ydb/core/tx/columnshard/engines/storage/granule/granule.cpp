@@ -69,6 +69,7 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
     NStorageOptimizer::IOptimizerPlanner::TModificationGuard* modificationGuard, const bool onLoad) {
     if (portionAfter) {
         PortionInfoGuard.OnNewPortion(portionAfter);
+        IncompatibleDecimalKeyPortions += portionAfter->GetMeta().HasIncompatibleDecimalKeyOrder();
         if (!portionAfter->HasRemoveSnapshot()) {
             PortionsIndex.AddPortion(portionAfter);
             if (modificationGuard) {
@@ -76,10 +77,10 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
             } else {
                 OptimizerPlanner->StartModificationGuard().AddPortion(portionAfter);
             }
+        }
+        if (!onLoad) {
             NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-            if (!onLoad) {
-                ActualizationIndex->AddPortion(portionAfter, context);
-            }
+            ActualizationIndex->AddPortion(portionAfter, context);
         }
         Stats->OnAddPortion(*portionAfter);
     }
@@ -97,11 +98,12 @@ void TGranuleMeta::OnAfterChangePortion(const std::shared_ptr<TPortionInfo> port
 void TGranuleMeta::OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore) {
     if (portionBefore) {
         PortionInfoGuard.OnDropPortion(portionBefore);
+        IncompatibleDecimalKeyPortions -= portionBefore->GetMeta().HasIncompatibleDecimalKeyOrder();
         if (!portionBefore->HasRemoveSnapshot()) {
             PortionsIndex.RemovePortion(portionBefore);
             OptimizerPlanner->StartModificationGuard().RemovePortion(portionBefore);
-            ActualizationIndex->RemovePortion(portionBefore);
         }
+        ActualizationIndex->RemovePortion(portionBefore);
         Stats->OnRemovePortion(*portionBefore);
     }
     if (!!AdditiveSummaryCache) {

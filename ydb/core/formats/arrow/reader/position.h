@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/formats/arrow/key_comparator.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -24,14 +25,16 @@ class TCursor {
 private:
     YDB_READONLY(ui64, Position, 0);
     std::vector<NAccessor::IChunkedArray::TFullDataAddress> PositionAddress;
+    TKeyComparator Comparators{arrow::FieldVector()};
 
 public:
     TCursor() = default;
     TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns);
 
-    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses)
+    TCursor(const ui64 position, const std::vector<NAccessor::IChunkedArray::TFullDataAddress>& addresses, const TKeyComparator& comparators)
         : Position(position)
-        , PositionAddress(addresses) {
+        , PositionAddress(addresses)
+        , Comparators(comparators) {
     }
 
     NJson::TJsonValue DebugJson() const {
@@ -64,6 +67,7 @@ public:
 
 class TSortableScanData {
 private:
+    TKeyComparator Comparators{arrow::FieldVector()};
     ui64 RecordsCount = 0;
     YDB_READONLY_DEF(std::vector<NAccessor::IChunkedArray::TFullDataAddress>, PositionAddress);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NAccessor::IChunkedArray>>, Columns);
@@ -82,7 +86,7 @@ private:
         AFL_VERIFY(size);
         if (Contains(position) && item.Contains(itemPosition)) {
             for (ui32 idx = 0; idx < size; ++idx) {
-                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                std::partial_ordering cmp = Comparators[idx].Compare(PositionAddress[idx], position, item.PositionAddress[idx], itemPosition);
                 if (cmp != std::partial_ordering::equivalent) {
                     return cmp;
                 }
@@ -93,13 +97,13 @@ private:
                 const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
                 const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
                 if (containsSelf && containsItem) {
-                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                    cmp = Comparators[idx].Compare(PositionAddress[idx], position, item.PositionAddress[idx], itemPosition);
                 } else if (containsSelf) {
                     auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
-                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
+                    cmp = Comparators[idx].Compare(PositionAddress[idx], position, temporaryAddress, itemPosition);
                 } else if (containsItem) {
                     auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
-                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
+                    cmp = Comparators[idx].Compare(temporaryAddress, position, item.PositionAddress[idx], itemPosition);
                 } else {
                     AFL_VERIFY(false);
                 }
@@ -121,6 +125,7 @@ private:
         , FinishPosition(finish)
         , LastInit(lastInit)
     {
+        Comparators = TKeyComparator(Fields);
     }
 
 public:
@@ -139,6 +144,10 @@ public:
 
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
         const std::vector<std::shared_ptr<arrow::Field>>& fields);
+
+    const TKeyComparator& GetComparators() const {
+        return Comparators;
+    }
 
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
@@ -163,7 +172,7 @@ public:
 
     TCursor BuildCursor(const ui64 position) const {
         if (Contains(position)) {
-            return TCursor(position, PositionAddress);
+            return TCursor(position, PositionAddress, Comparators);
         }
         auto addresses = PositionAddress;
         ui32 idx = 0;
@@ -173,7 +182,7 @@ public:
             }
             ++idx;
         }
-        return TCursor(position, addresses);
+        return TCursor(position, addresses, Comparators);
     }
 
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {

@@ -48,6 +48,7 @@ private:
     std::optional<TString> TargetTierName;
     const TString CurrentTierName;
     std::optional<NActualizer::TRWAddress> RWAddress;
+    YDB_ACCESSOR(bool, RebuildDecimalPrimaryKey, false);
 
 public:
     TPortionEvictionFeatures(const std::shared_ptr<ISnapshotSchema>& currentScheme, const std::shared_ptr<ISnapshotSchema>& targetScheme,
@@ -97,6 +98,9 @@ public:
     bool NeedRewrite() const {
         if (TargetTierName == NTiering::NCommon::DeleteTierName) {
             return false;
+        }
+        if (RebuildDecimalPrimaryKey) {
+            return true;
         }
         if (CurrentTierName != TargetTierName) {
             return true;
@@ -354,6 +358,13 @@ public:
 
     ui64 CalcMemoryForUsage() const {
         return DoCalcMemoryForUsage();
+    }
+
+    virtual ui64 CalcMemoryForConstruction(const std::vector<std::shared_ptr<TPortionDataAccessor>>& accessors,
+        const NBlobOperations::NRead::TCompositeReadBlobs* blobs = nullptr) const;
+
+    virtual ui64 GetMemoryForConstructionPreparation(const std::vector<std::shared_ptr<TPortionDataAccessor>>& /*accessors*/) const {
+        return 0;
     }
 
     TString GetTaskIdentifier() const {

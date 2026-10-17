@@ -272,6 +272,7 @@ private:
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
+    void ReplacePortion(const TPortionInfo::TConstPtr& original, const std::shared_ptr<TPortionDataAccessor>& replacement);
 };
 
 }   // namespace NKikimr::NOlap

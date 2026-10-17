@@ -36,7 +36,7 @@ namespace NKikimr::NBsController {
                         record.SetNodeID(nodeId);
                         record.SetInstanceId(Self->InstanceId);
                         record.SetAvailDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
-                        State.Outbox.emplace_back(nodeId, std::move(event), 0);
+                        State.Outbox.emplace_back(nodeId, std::move(event), 0, false, node->ConnectedServerId);
                     }
                 }
 
@@ -850,7 +850,10 @@ namespace NKikimr::NBsController {
             for (TOutgoingMessage& msg : Outbox) {
                 if (msg.ToLocalWarden) {
                     Self.Send(MakeBlobStorageNodeWardenID(Self.SelfId().NodeId()), std::move(msg.Event), 0, msg.Cookie);
-                } else {
+                } else if (const auto *node = Self.FindNode(msg.NodeId);
+                        node && node->ConnectedServerId == msg.ConnectedServerId) {
+                    // The delta was prepared for this registration. A new NodeWarden gets a full snapshot;
+                    // forwarding an old delta to it before that snapshot can start a VDisk without its PDisk.
                     Self.SendToWarden(msg.NodeId, std::move(msg.Event), msg.Cookie);
                 }
             }

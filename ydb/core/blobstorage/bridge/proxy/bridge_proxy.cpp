@@ -694,18 +694,7 @@ namespace NKikimr {
             TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
             while (!PendingForNextGeneration.empty()) {
                 if (auto& [timestamp, ev] = PendingForNextGeneration.front(); timestamp < dropBefore) {
-                    switch (ev->GetTypeRewrite()) {
-#define MAKE_ERROR(TYPE) \
-                        case TYPE::EventType: \
-                            ReplyWithError(*static_cast<TYPE*>(ev->GetBase()), ev->Sender, ev->Cookie, \
-                                "bridge request timed out"); \
-                            break;
-
-                        DSPROXY_ENUM_EVENTS(MAKE_ERROR)
-#undef MAKE_ERROR
-                        default:
-                            Y_ABORT();
-                    }
+                    ReplyWithError(*ev, "bridge request timed out");
                     PendingForNextGeneration.pop_front();
                 } else {
                     break;
@@ -716,6 +705,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
+            ReplyToAllWithError("bridge proxy is stopped");
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             if (InnerProxyId) {
@@ -736,6 +726,67 @@ namespace NKikimr {
             Send(sender, response.release(), 0, cookie);
         }
 
+        void ReplyWithError(IEventBase& msg, TActorId sender, ui64 cookie, const TString& errorReason) {
+            switch (msg.Type()) {
+#define MAKE_ERROR(TYPE) \
+                case TYPE::EventType: \
+                    ReplyWithError(static_cast<TYPE&>(msg), sender, cookie, errorReason); \
+                    break;
+
+                DSPROXY_ENUM_EVENTS(MAKE_ERROR)
+#undef MAKE_ERROR
+                case TEvBlobStorage::EvBunchOfEvents:
+                    for (auto& ev : static_cast<TEvBlobStorage::TEvBunchOfEvents&>(msg).Bunch) {
+                        ReplyWithError(*ev, errorReason);
+                    }
+                    break;
+            }
+        }
+
+        void ReplyWithError(IEventHandle& ev, const TString& errorReason) {
+            ReplyWithError(*ev.GetBase(), ev.Sender, ev.Cookie, errorReason);
+        }
+
+        // reply with error to every request this proxy holds, as DS proxy does when stopped; this happens, for instance,
+        // when the group gets decommitted and loses its piles, and the requests are retried through the BlobDepot agent
+        void ReplyToAllWithError(const TString& errorReason) {
+            for (auto& [cookie, item] : RequestsInFlight) {
+                TRequest& request = *item.Request;
+                if (!request.Finished) {
+                    request.Finished = true;
+                    if (request.Span) {
+                        request.Span.EndError(errorReason);
+                    }
+                    ReplyWithError(*request.OriginalRequest, request.Sender, request.Cookie, errorReason);
+                }
+            }
+            RequestsInFlight.clear();
+            for (auto& [timestamp, ev] : std::exchange(PendingForNextGeneration, {})) {
+                ReplyWithError(*ev, errorReason);
+            }
+            for (auto& ev : std::exchange(PendingQ, {})) {
+                ReplyWithError(*ev, errorReason);
+            }
+        }
+
+        template<typename TEvent>
+        static bool IsFencedWrite([[maybe_unused]] const TEvent& ev) {
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvPut> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvBlock> ||
+                    std::is_same_v<TEvent, TEvBlobStorage::TEvPatch>) {
+                return true;
+            } else if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvCollectGarbage>) {
+                return !TBlobStorageGroupInfo::IsAssimilationBarrier(ev.Hard, ev.RecordGeneration);
+            } else {
+                return false;
+            }
+        }
+
+        // service id of decommitted group points to the BlobDepot agent, and this proxy serves only agent's requests
+        bool IsBehindAgent() const {
+            return Info->BlobDepotId.value_or(0);
+        }
+
         template<typename TEvent>
         void HandleProxyRequest(TAutoPtr<TEventHandle<TEvent>>& ev) {
             if (InnerProxyId && ev->Get()->ForceGroupGeneration) {
@@ -753,6 +804,13 @@ namespace NKikimr {
                 NotCapableReported = true;
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
                     "node runs without BridgeConfig and can't serve bridged group");
+                return;
+            }
+
+            if (Info->DecommitBlocksWrites() && IsFencedWrite(*ev->Get())) {
+                // piles of bridged group don't know about its decommission, so this proxy is the only one to block
+                // writes not coming from the BlobDepot (e.g. requests restarted after the group switched to it)
+                ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie, "group is being decommitted");
                 return;
             }
 
@@ -869,6 +927,15 @@ namespace NKikimr {
             if (!res) {
                 res = std::make_unique<TEvent>(TEvBlobStorage::CloneEventPolicy, ev);
             }
+
+            if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate>) {
+                if (Info->DecommitBlocksWrites()) {
+                    // pile groups don't carry decommit state of their bridge proxy group, while this proxy blocks writes
+                    // for them; let the VDisks of piles proceed with assimilation
+                    res->IgnoreDecommitState = true;
+                }
+            }
+
             return res;
         }
 
@@ -932,8 +999,12 @@ namespace NKikimr {
                     if (myGeneration < msg->RacingGeneration) {
                         PendingForNextGeneration.emplace_back(TActivationContext::Monotonic(), std::move(handle));
                     } else if (msg->RacingGeneration < myGeneration) {
-                        std::unique_ptr<IEventHandle> h(CreateEventForBSProxy(handle->Sender, GroupId,
-                            handle->ReleaseBase().Release(), handle->Cookie, std::move(handle->TraceId)));
+                        // when the group is decommitted, its service id points to the BlobDepot agent, which would take
+                        // restarted request for its client's one; restart it right here then
+                        std::unique_ptr<IEventHandle> h(IsBehindAgent()
+                            ? handle.release()
+                            : CreateEventForBSProxy(handle->Sender, GroupId, handle->ReleaseBase().Release(),
+                                handle->Cookie, std::move(handle->TraceId)));
                         if (TGroupID(item.GroupId).ConfigurationType() == EGroupConfigurationType::Static) {
                             // static group configuration is updated a bit differently, so we can't expect for instant update;
                             // here we introduce a backoff timer
@@ -1010,16 +1081,21 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
             auto *msg = ev->Get();
+            if (msg->Info && msg->Info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+                // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
+                // of us stops us right away, and the requests we hold are answered with error then
+                return;
+            }
             if (InnerProxyId) {
                 // inner proxy has to see its group as an ordinary pile one
                 Y_ABORT_UNLESS(!msg->Info || msg->Info->IsInlinePile());
                 Send(InnerProxyId, new TEvBlobStorage::TEvConfigureProxy(
                     msg->Info ? msg->Info->MakeInlinePileView() : nullptr, msg->NodeLayoutInfo, msg->StoragePoolCounters));
-                if (!msg->Info) {
-                    // keep current configuration; the inner proxy waits for the new one, and subrequests are sent with
-                    // forced group generation anyway
-                    return;
-                }
+            }
+            if (!msg->Info) {
+                // keep current configuration; the inner proxy (if any) waits for the new one, and subrequests are sent
+                // with forced group generation anyway
+                return;
             }
             auto prevInfo = std::exchange(Info, std::move(msg->Info));
             Y_ABORT_UNLESS(prevInfo);
@@ -1082,8 +1158,7 @@ namespace NKikimr {
                     TActivationContext::Send(ev.release());
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                // TODO(alexvru): make PendingQ events undelivered somehow
-                StateFunc(ev);
+                StateFunc(ev); // pending requests are answered with error
             } else {
                 PendingQ.emplace_back(ev.Release());
             }

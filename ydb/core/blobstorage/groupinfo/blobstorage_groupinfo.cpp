@@ -697,6 +697,26 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::MakeInlinePileView()
     return TIntrusivePtr<TBlobStorageGroupInfo>(new TBlobStorageGroupInfo(*this, TInlinePileViewTag()));
 }
 
+bool TBlobStorageGroupInfo::DecommitBlocksWrites() const {
+    switch (DecommitStatus) {
+        case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+        case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+            return false;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+        case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+            return true;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+            return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
+
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+            Y_ABORT();
+            return true;
+    }
+}
+
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
 {}
 

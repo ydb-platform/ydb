@@ -1,26 +1,9 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
-namespace {
-
-TNodeLocation GetLocation(ui32 nodeId) {
-    NActorsInterconnect::TNodeLocation location;
-    if (1 <= nodeId && nodeId <= 8) {
-        location.SetBridgePileName("pile_1");
-    } else if (9 <= nodeId && nodeId <= 16) {
-        location.SetBridgePileName("pile_2");
-    } else if (17 <= nodeId && nodeId <= 24) {
-        location.SetBridgePileName("pile_3");
-    } else {
-        Y_ABORT();
-    }
-    location.SetDataCenter("my_dc");
-    location.SetRack(TStringBuilder() << "rack_" << nodeId);
-    location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-    return TNodeLocation(location);
-}
-
-} // namespace
+using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeDataKind) {
 
@@ -28,7 +11,7 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,
@@ -69,7 +52,7 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
             .Encryption = true,
             .ConfigPreprocessor = [key](ui32, TNodeWardenConfig& config) { config.TenantKey = key; },
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .FeatureFlags = featureFlags,
             .SelfManagementConfig = true,
             .NumPiles = 3,
@@ -132,7 +115,7 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .FeatureFlags = featureFlags,
             .SelfManagementConfig = true,
             .NumPiles = 3,
@@ -194,7 +177,7 @@ Y_UNIT_TEST_SUITE(BridgeDataKind) {
         TEnvironmentSetup env{{
             .NodeCount = 8 * 3,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,

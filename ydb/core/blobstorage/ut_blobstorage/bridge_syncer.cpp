@@ -1,16 +1,11 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
-namespace {
+using NBridgeTest::GetBridgedLocation;
 
-TNodeLocation GetSyncerLocation(ui32 nodeId) {
-    NActorsInterconnect::TNodeLocation location;
-    location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 8 + 1);
-    location.SetDataCenter("my_dc");
-    location.SetRack(TStringBuilder() << "rack_" << nodeId);
-    location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-    return TNodeLocation(location);
-}
+namespace {
 
 enum class ECompletionRace {
     NewGeneration,
@@ -22,7 +17,7 @@ void TestLateSyncerCompletion(ECompletionRace race) {
     TEnvironmentSetup env{{
         .NodeCount = 24,
         .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-        .LocationGenerator = GetSyncerLocation,
+        .LocationGenerator = GetBridgedLocation,
         .SelfManagementConfig = true,
         .NumPiles = 3,
         .AutomaticBootstrap = true,

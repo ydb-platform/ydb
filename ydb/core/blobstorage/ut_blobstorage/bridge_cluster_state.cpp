@@ -1,25 +1,16 @@
+#include "bridge_common.h"
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
-namespace {
-
-TNodeLocation GetBridgeLocation(ui32 nodeId) {
-    NActorsInterconnect::TNodeLocation location;
-    location.SetBridgePileName(TStringBuilder() << "pile_" << (nodeId - 1) / 8 + 1);
-    location.SetDataCenter("my_dc");
-    location.SetRack(TStringBuilder() << "rack_" << nodeId);
-    location.SetUnit(TStringBuilder() << "unit_" << nodeId);
-    return TNodeLocation(location);
-}
-
-} // namespace
+using NBridgeTest::GetBridgedLocation;
 
 Y_UNIT_TEST_SUITE(BridgeClusterState) {
     Y_UNIT_TEST(DisconnectReplacesSyncStateAfterAnotherPile) {
         TEnvironmentSetup env{{
             .NodeCount = 24,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgeLocation,
+            .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 3,
             .AutomaticBootstrap = true,

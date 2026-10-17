@@ -253,6 +253,14 @@ public:
             return result;
         }
 
+        if (settings.HasDatabaseQuotas()
+                && !requestedStoragePools.empty()
+                && !CheckStoragePoolsInQuotas(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
+        ) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -264,6 +272,12 @@ public:
         newNode->UserAttrs->AlterData = userAttrs;
         newNode->DirAlterVersion = 1;
 
+        // Undo-safety contract: the first direct DB write follows — from here
+        // on this Propose is undo-unsafe. Single-part suboperation only
+        // (enforced at ignite time in ProcessOperationParts): a failed propose
+        // aborts the whole transaction and the txc rolls everything back.
+        // All validations MUST stay above this line — a SetError/return after
+        // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ApplyAndPersistUserAttrs(db, newNode->PathId);
@@ -304,12 +318,6 @@ public:
         }
 
         if (settings.HasDatabaseQuotas()) {
-            if (!requestedStoragePools.empty()
-                    && !CheckStoragePoolsInQuotas(settings.GetDatabaseQuotas(), requestedStoragePools, dstPath.PathString(), errStr)
-            ) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result;
-            }
             alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
 

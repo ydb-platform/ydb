@@ -70,6 +70,7 @@ PEERDIR(
     ydb/core/http_proxy
     ydb/core/jaeger_tracing
     ydb/core/kafka_proxy
+    ydb/services/sql/wire
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue

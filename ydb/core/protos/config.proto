@@ -3442,6 +3442,12 @@ message TKafkaProxyConfig {
     optional uint32 TokenRecheckIntervalMs = 21 [default = 300000];
 }
 
+message TSqlConfig {
+    optional bool Enable = 1 [default = false];
+    optional int32 ListeningPort = 2 [default = 5432];
+    optional string ListeningAddress = 3 [default = "::"];
+}
+
 message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
@@ -3778,6 +3784,7 @@ message TAppConfig {
     optional TLongTxServiceConfig LongTxServiceConfig = 121;
     optional TSmallBlobsQuotaConfig SmallBlobsQuotaConfig = 122;
     optional TPathRewriteConfig ResourcePathPrefixMapping = 124;
+    optional TSqlConfig SqlConfig = 123;
 }
 
 message TYdbVersion {

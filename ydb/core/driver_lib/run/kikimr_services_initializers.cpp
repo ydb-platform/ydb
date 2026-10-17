@@ -89,6 +89,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
+#include <ydb/services/sql/wire/listener.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
 #include <ydb/services/workload_manager/service/service.h>
@@ -3483,6 +3484,28 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
     }
 }
 
+
+TSqlServiceInitializer::TSqlServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TSqlServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (!Config.GetSqlConfig().GetEnable()) {
+        return;
+    }
+
+    NRawSocket::TListenerSettings settings;
+    settings.Port = static_cast<uint16_t>(Config.GetSqlConfig().GetListeningPort());
+    settings.Address = Config.GetSqlConfig().GetListeningAddress();
+    settings.TcpNotDelay = true;
+
+    setup->LocalServices.emplace_back(
+        TActorId(),
+        TActorSetupCmd(NSql::CreateSqlListener(MakePollerActorId(), settings),
+            TMailboxType::HTSwap, appData->UserPoolId)
+    );
+}
 
 TIcNodeCacheServiceInitializer::TIcNodeCacheServiceInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)

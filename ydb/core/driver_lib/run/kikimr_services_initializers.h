@@ -649,6 +649,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TSqlServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TSqlServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TIcNodeCacheServiceInitializer : public IKikimrServicesInitializer {
 public:
     TIcNodeCacheServiceInitializer(const TKikimrRunConfig& runConfig);

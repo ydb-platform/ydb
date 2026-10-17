@@ -88,6 +88,7 @@ union TBasicKikimrServicesMask {
         bool EnableUdfStore : 1;
         bool EnableWorkloadManagerService : 1;
         bool EnableCsFlowControlManager : 1;
+        bool EnableSql : 1;
     };
 
     struct {

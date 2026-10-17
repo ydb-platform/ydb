@@ -2307,6 +2307,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TKafkaProxyServiceInitializer(runConfig));
     }
 
+    if (serviceMask.EnableSql) {
+        sil->AddServiceInitializer(new TSqlServiceInitializer(runConfig));
+    }
+
     sil->AddServiceInitializer(new TStatServiceInitializer(runConfig));
 
     if (serviceMask.EnableDatabaseMetadataCache) {

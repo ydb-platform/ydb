@@ -112,6 +112,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/auth
+    ydb/services/sql/wire
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery

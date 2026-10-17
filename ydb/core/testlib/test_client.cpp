@@ -38,6 +38,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
+#include <ydb/services/sql/wire/listener.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kesus/proxy/proxy.h>
@@ -1714,6 +1715,15 @@ namespace Tests {
                 desc->ServedDatabases.insert(desc->ServedDatabases.end(), rootDomains.begin(), rootDomains.end());
                 Runtime->GetActorSystem(0)->Register(NGRpcService::CreateGrpcEndpointPublishActor(desc.Get()), TMailboxType::ReadAsFilled, appData.UserPoolId);
             }
+        }
+
+        if (Settings->AppConfig->GetSqlConfig().GetEnable()) {
+            NRawSocket::TListenerSettings sqlSettings;
+            sqlSettings.Port = static_cast<uint16_t>(Settings->AppConfig->GetSqlConfig().GetListeningPort());
+            sqlSettings.Address = Settings->AppConfig->GetSqlConfig().GetListeningAddress();
+            sqlSettings.TcpNotDelay = true;
+            IActor* sqlListener = NSql::CreateSqlListener(MakePollerActorId(), sqlSettings);
+            Runtime->Register(sqlListener, nodeIdx, userPoolId);
         }
 
         if (Settings->EnableYq) {

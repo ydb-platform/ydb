@@ -68,14 +68,9 @@ namespace NBridgeTest {
 
         void Write(ui32 groupId, ui32 nodeId = 1) {
             const TActorId edge = Env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-            const TString data = TStringBuilder() << "data for step " << Step;
-            const TLogoBlobID id(100500, 1, Step++, 0, data.size(), 0);
-            Env.Runtime->WrapInActorContext(edge, [&] {
-                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
-            });
+            SendPut(groupId, edge);
             auto res = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
-            Written.emplace_back(groupId, id, data);
         }
 
         // send put without waiting for its result, which is to be checked by the caller

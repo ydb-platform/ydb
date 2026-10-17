@@ -121,8 +121,12 @@ namespace {
                 // runtime resolves service id of the recipient at send, and the actor it was resolved to may be gone
                 // already, so the event is sent anew
                 const TActorId forwardOnNondelivery = ev->GetForwardOnNondeliveryRecipient();
-                Env.Runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags,
-                    ev->Cookie, forwardOnNondelivery ? &forwardOnNondelivery : nullptr), nodeId);
+                const TActorId *forward = forwardOnNondelivery ? &forwardOnNondelivery : nullptr;
+                Env.Runtime->Send(ev->HasEvent()
+                    ? new IEventHandle(ev->Recipient, ev->Sender, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie, forward)
+                    // events coming from other nodes are kept serialized
+                    : new IEventHandle(ev->Type, ev->Flags, ev->Recipient, ev->Sender, ev->ReleaseChainBuffer(), ev->Cookie,
+                        forward), nodeId);
             }
         }
     };
@@ -482,7 +486,7 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
                             TInstant::Max(), NKikimrBlobStorage::FastRead)), nodeId);
                     }
                 } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvGetResult && state->GetSent &&
-                        ev->GetRecipientRewrite() == bridgeProxy) {
+                        ev->GetRecipientRewrite() == bridgeProxy && ev->HasEvent()) {
                     const auto& msg = *ev->Get<TEvBlobStorage::TEvGetResult>();
                     if (msg.Status == NKikimrProto::RACE && msg.ResponseSz == 1 && msg.Responses[0].Id == id) {
                         state->RaceSeen = true;
@@ -586,6 +590,98 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TFilterChain chain(env);
         const auto vanished = RunDecommission(env, chain, checker, groupId, {5});
         UNIT_ASSERT(vanished.empty());
+    }
+
+    // requests the bridge proxy holds when the group loses its piles are answered with error: the agent stops the proxy
+    // right after the group is decommitted, and a request either still waits for pile response or waits for the next
+    // generation, when the pile proxy has got newer configuration than the bridge proxy
+    Y_UNIT_TEST(RequestsAnsweredWhenDone) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        TFilterChain chain(env);
+        std::optional<TActorId> bridgeProxyId;
+        CaptureBridgeProxyBehindAgent(chain, bridgeProxyId);
+
+        const TLogoBlobID inFlightId = std::get<1>(checker.GetWritten()[0]);
+        const TLogoBlobID pendingId = std::get<1>(checker.GetWritten()[1]);
+        std::optional<TActorId> edge; // both requests are sent from it, it has to be waiting for any response it gets
+        TEventHold *raceHold = nullptr;
+        TEventHold *doneHold = nullptr;
+
+        RunDecommission(env, chain, checker, groupId, {}, {
+            .InProgress = [&] {
+                UNIT_ASSERT(bridgeProxyId);
+                const TActorId bridgeProxy = *bridgeProxyId;
+                const ui32 nodeId = bridgeProxy.NodeId();
+                edge.emplace(env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__));
+
+                auto send = [&](const TLogoBlobID& id) {
+                    env.Runtime->Send(new IEventHandle(bridgeProxy, *edge, new TEvBlobStorage::TEvGet(id, 0, 0,
+                        TInstant::Max(), NKikimrBlobStorage::FastRead)), nodeId);
+                };
+                auto isResultFor = [bridgeProxy](IEventHandle& ev, const TLogoBlobID& id) {
+                    // results from pile proxies of the same node are local events
+                    if (ev.GetTypeRewrite() != TEvBlobStorage::EvGetResult || ev.GetRecipientRewrite() != bridgeProxy ||
+                            !ev.HasEvent()) {
+                        return false;
+                    }
+                    const auto& msg = *ev.Get<TEvBlobStorage::TEvGetResult>();
+                    return msg.ResponseSz == 1 && msg.Responses[0].Id == id;
+                };
+
+                // the first request never gets responses from piles
+                TEventHold& pileResultHold = chain.AddHold([=](IEventHandle& ev) { return isResultFor(ev, inFlightId); });
+                send(inFlightId);
+                pileResultHold.WaitForHeld();
+
+                // the second one races with the pile proxy, which gets newer configuration (spun by pile state change)
+                // than the bridge proxy has, so it is going to wait for the next generation; this expires in 2 seconds,
+                // so the race result is held until the bridge proxy is about to be stopped
+                chain.AddHold([=](IEventHandle& ev) {
+                    return ev.GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy && ev.GetRecipientRewrite() == bridgeProxy;
+                });
+                raceHold = &chain.AddHold([=](IEventHandle& ev) {
+                    return isResultFor(ev, pendingId) && ev.Get<TEvBlobStorage::TEvGetResult>()->Status == NKikimrProto::RACE;
+                });
+                SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+                env.Sim(TDuration::Seconds(5));
+                send(pendingId);
+                raceHold->WaitForHeld();
+
+                // final configuration of the agent, which makes it stop the bridge proxy, is held too
+                doneHold = &chain.AddHold([=](IEventHandle& ev) {
+                    if (ev.GetTypeRewrite() != TEvBlobStorage::EvConfigureProxy || ev.GetRecipientRewrite() == bridgeProxy ||
+                            !ev.HasEvent()) {
+                        return false;
+                    }
+                    const auto& info = ev.Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                    return info && info->GroupID.GetRawId() == groupId &&
+                        info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
+                });
+            },
+            .Done = [&] {
+                doneHold->WaitForHeld();
+
+                // now the second request waits for the next generation, and the bridge proxy gets stopped right away
+                raceHold->Release();
+                doneHold->Release();
+
+                std::set<TLogoBlobID> answered;
+                for (ui32 i = 0; i < 2; ++i) {
+                    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(*edge, false,
+                        env.Runtime->GetClock() + TDuration::Minutes(1));
+                    UNIT_ASSERT_C(res, "no response from stopped bridge proxy");
+                    const auto& msg = *res->Get();
+                    UNIT_ASSERT_VALUES_EQUAL_C(msg.Status, NKikimrProto::ERROR, msg.ToString());
+                    UNIT_ASSERT_STRING_CONTAINS(msg.ErrorReason, "stopped");
+                    UNIT_ASSERT_VALUES_EQUAL(msg.ResponseSz, 1);
+                    answered.insert(msg.Responses[0].Id);
+                }
+                UNIT_ASSERT(answered == std::set<TLogoBlobID>({inFlightId, pendingId}));
+            },
+        });
     }
 
     // BlobDepot retries notification of decommission finish with a delay when BS_CONTROLLER fails to process it

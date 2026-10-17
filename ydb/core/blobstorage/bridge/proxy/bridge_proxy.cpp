@@ -694,18 +694,7 @@ namespace NKikimr {
             TMonotonic dropBefore = TActivationContext::Monotonic() - TDuration::Seconds(2);
             while (!PendingForNextGeneration.empty()) {
                 if (auto& [timestamp, ev] = PendingForNextGeneration.front(); timestamp < dropBefore) {
-                    switch (ev->GetTypeRewrite()) {
-#define MAKE_ERROR(TYPE) \
-                        case TYPE::EventType: \
-                            ReplyWithError(*static_cast<TYPE*>(ev->GetBase()), ev->Sender, ev->Cookie, \
-                                "bridge request timed out"); \
-                            break;
-
-                        DSPROXY_ENUM_EVENTS(MAKE_ERROR)
-#undef MAKE_ERROR
-                        default:
-                            Y_ABORT();
-                    }
+                    ReplyWithError(*ev, "bridge request timed out");
                     PendingForNextGeneration.pop_front();
                 } else {
                     break;
@@ -716,6 +705,7 @@ namespace NKikimr {
         }
 
         void PassAway() override {
+            ReplyToAllWithError("bridge proxy is stopped");
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
                 MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), nullptr, 0));
             if (InnerProxyId) {
@@ -734,6 +724,49 @@ namespace NKikimr {
             auto response = msg.MakeErrorResponse(NKikimrProto::ERROR, errorReason, GroupId);
             SetExecutionRelay(*response, std::exchange(msg.ExecutionRelay, {}));
             Send(sender, response.release(), 0, cookie);
+        }
+
+        void ReplyWithError(IEventBase& msg, TActorId sender, ui64 cookie, const TString& errorReason) {
+            switch (msg.Type()) {
+#define MAKE_ERROR(TYPE) \
+                case TYPE::EventType: \
+                    ReplyWithError(static_cast<TYPE&>(msg), sender, cookie, errorReason); \
+                    break;
+
+                DSPROXY_ENUM_EVENTS(MAKE_ERROR)
+#undef MAKE_ERROR
+                case TEvBlobStorage::EvBunchOfEvents:
+                    for (auto& ev : static_cast<TEvBlobStorage::TEvBunchOfEvents&>(msg).Bunch) {
+                        ReplyWithError(*ev, errorReason);
+                    }
+                    break;
+            }
+        }
+
+        void ReplyWithError(IEventHandle& ev, const TString& errorReason) {
+            ReplyWithError(*ev.GetBase(), ev.Sender, ev.Cookie, errorReason);
+        }
+
+        // reply with error to every request this proxy holds, as DS proxy does when stopped; this happens, for instance,
+        // when the group gets decommitted and loses its piles, and the requests are retried through the BlobDepot agent
+        void ReplyToAllWithError(const TString& errorReason) {
+            for (auto& [cookie, item] : RequestsInFlight) {
+                TRequest& request = *item.Request;
+                if (!request.Finished) {
+                    request.Finished = true;
+                    if (request.Span) {
+                        request.Span.EndError(errorReason);
+                    }
+                    ReplyWithError(*request.OriginalRequest, request.Sender, request.Cookie, errorReason);
+                }
+            }
+            RequestsInFlight.clear();
+            for (auto& [timestamp, ev] : std::exchange(PendingForNextGeneration, {})) {
+                ReplyWithError(*ev, errorReason);
+            }
+            for (auto& ev : std::exchange(PendingQ, {})) {
+                ReplyWithError(*ev, errorReason);
+            }
         }
 
         template<typename TEvent>
@@ -1049,7 +1082,8 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
             auto *msg = ev->Get();
             if (msg->Info && msg->Info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
-                // decommitted group has lost its piles, BlobDepot agent in front of us is going to stop us
+                // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
+                // of us stops us right away, and the requests we hold are answered with error then
                 return;
             }
             if (InnerProxyId) {
@@ -1124,8 +1158,7 @@ namespace NKikimr {
                     TActivationContext::Send(ev.release());
                 }
             } else if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
-                // TODO(alexvru): make PendingQ events undelivered somehow
-                StateFunc(ev);
+                StateFunc(ev); // pending requests are answered with error
             } else {
                 PendingQ.emplace_back(ev.Release());
             }

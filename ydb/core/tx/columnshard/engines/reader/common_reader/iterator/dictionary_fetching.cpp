@@ -46,7 +46,7 @@ TDictionaryChunkRestoreInfo TDictionaryChunkRestoreInfo::BuildEmpty(const NArrow
     return TDictionaryChunkRestoreInfo(TBlobRange(), chunkExternalInfo);
 }
 
-void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
+TConclusionStatus TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
     for (auto&& i : ColumnChunks) {
         const auto& dictArray = i.GetDictionaryArray();
@@ -56,7 +56,8 @@ void TDictionaryFetchLogic::DoOnDataCollected(TFetchingResultContext& context) {
     context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
     const NArrow::TColumnFilter& filter = context.GetAccessors().GetFilter();
     AFL_VERIFY(NCommon::IsDictionaryOnlyFetchCompatible(filter))("filter", filter.DebugString());
-    context.GetSource()->MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
+    context.GetSource().MutableStageData().MarkDictionaryOnlyFetch(GetEntityId());
+    return TConclusionStatus::Success();
 }
 
 void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
@@ -69,10 +70,10 @@ void TDictionaryFetchLogic::DoOnDataReceived(TReadActionsCollection& /*nextRead*
 }
 
 void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) {
-    auto source = context.GetSource();
-    auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+    auto& source = context.GetSource();
+    auto columnChunks = source.GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
     AFL_VERIFY(columnChunks.size());
-    StorageId = source->GetColumnStorageId(GetEntityId());
+    StorageId = source.GetColumnStorageId(GetEntityId());
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     auto reading = blobsAction.GetReading(*StorageId);
     reading->SetIsBackgroundProcess(false);
@@ -84,7 +85,7 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
         auto& meta = columnChunks[chunkIdx]->GetMeta();
         AFL_VERIFY(!itFinished);
         if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
-            const TBlobRange range = source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
+            const TBlobRange range = source.RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
             auto chunkInfo = ChunkExternalInfo.GetSubset(meta.GetRecordsCount()).WithAdditionalAccessorData(meta.GetAdditionalAccessorData());
             ColumnChunks.emplace_back(range, chunkInfo);
             const auto dictBlobRange = ColumnChunks.back().GetDictionaryBlobRangeOptional();
@@ -101,11 +102,11 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
     }
 }
 
-TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
-    : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
-    , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
+TDictionaryFetchLogic::TDictionaryFetchLogic(const ui32 columnId, const IDataSource& source)
+    : TBase(columnId, source.GetContext()->GetCommonContext()->GetStoragesManager())
+    , ChunkExternalInfo(source.GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source.GetRecordsCount()))
 {
-    const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
+    const auto loader = source.GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
     AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary)(
         "type", loader->GetAccessorConstructor()->GetType());
 }

@@ -149,6 +149,55 @@ Y_UNIT_TEST_SUITE(AssignTxId) {
             });
         }
     }
+
+    Y_UNIT_TEST(AssignsMissingIntermediateBoundaryToNextTxId) {
+        TEnv env;
+
+        env.GetRuntime().RegisterService(
+            MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)),
+            env.GetRuntime().Register(CreateReplicationMockService(env.GetSender()))
+        );
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint())
+            .Database(env.GetDatabase())
+        );
+
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto result = session
+            .ExecuteSchemeQuery(Sprintf(R"(
+                CREATE ASYNC REPLICATION `replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://%s/?database=/Root",
+                    CONSISTENCY_LEVEL = "GLOBAL",
+                    COMMIT_INTERVAL = Interval("PT10S")
+                );
+            )", env.GetEndpoint().c_str()))
+            .GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto tabletId = env.GetDescription("/Root/replication")
+            .GetPathDescription().GetReplicationDescription().GetControllerId();
+
+        TVector<ui64> txIds;
+        for (const auto step : {1, 20000, 30000, 40000, 50000}) {
+            auto ev = env.Send<TEvService::TEvTxIdResult>(tabletId, new TEvService::TEvGetTxId(TVector<TRowVersion>{
+                TRowVersion(step, 0),
+            }));
+            const auto& versionTxId = ev->Get()->Record.GetVersionTxIds(0);
+            UNIT_ASSERT_VALUES_EQUAL(Count(txIds, versionTxId.GetTxId()), 0);
+            txIds.push_back(versionTxId.GetTxId());
+        }
+
+        auto ev = env.Send<TEvService::TEvTxIdResult>(tabletId, new TEvService::TEvGetTxId(TVector<TRowVersion>{
+            TRowVersion(10000, 0),
+        }));
+
+        CheckTxIdResult(ev->Get()->Record, {
+            {TRowVersion(20000, 0), txIds[1]},
+        });
+    }
 }
 
 }

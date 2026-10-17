@@ -4,17 +4,15 @@ Functions for changing global ufunc configuration
 This provides helpers which wrap `_get_extobj_dict` and `_make_extobj`, and
 `_extobj_contextvar` from umath.
 """
-import collections.abc
-import contextlib
-import contextvars
 import functools
 
-from .._utils import set_module
-from .umath import _make_extobj, _get_extobj_dict, _extobj_contextvar
+from numpy._utils import set_module
+
+from .umath import _extobj_contextvar, _get_extobj_dict, _make_extobj
 
 __all__ = [
     "seterr", "geterr", "setbufsize", "getbufsize", "seterrcall", "geterrcall",
-    "errstate", '_no_nep50_warning'
+    "errstate"
 ]
 
 
@@ -77,7 +75,7 @@ def seterr(all=None, divide=None, over=None, under=None, invalid=None):
     >>> import numpy as np
     >>> orig_settings = np.seterr(all='ignore')  # seterr to known value
     >>> np.int16(32000) * np.int16(3)
-    30464
+    np.int16(30464)
     >>> np.seterr(over='raise')
     {'divide': 'ignore', 'over': 'ignore', 'under': 'ignore', 'invalid': 'ignore'}
     >>> old_settings = np.seterr(all='warn', over='raise')
@@ -90,7 +88,7 @@ def seterr(all=None, divide=None, over=None, under=None, invalid=None):
     >>> np.geterr()
     {'divide': 'print', 'over': 'print', 'under': 'print', 'invalid': 'print'}
     >>> np.int16(32000) * np.int16(3)
-    30464
+    np.int16(30464)
     >>> np.seterr(**orig_settings)  # restore original
     {'divide': 'print', 'over': 'print', 'under': 'print', 'invalid': 'print'}
 
@@ -189,6 +187,8 @@ def setbufsize(size):
     8192
 
     """
+    if size < 0:
+        raise ValueError("buffer size must be non-negative")
     old = _get_extobj_dict()["bufsize"]
     extobj = _make_extobj(bufsize=size)
     _extobj_contextvar.set(extobj)
@@ -426,7 +426,14 @@ class errstate:
 
     """
     __slots__ = (
-        "_call", "_all", "_divide", "_over", "_under", "_invalid", "_token")
+        "_all",
+        "_call",
+        "_divide",
+        "_invalid",
+        "_over",
+        "_token",
+        "_under",
+    )
 
     def __init__(self, *, call=_Unspecified,
                  all=None, divide=None, over=None, under=None, invalid=None):
@@ -482,22 +489,3 @@ class errstate:
                 _extobj_contextvar.reset(_token)
 
         return inner
-
-
-NO_NEP50_WARNING = contextvars.ContextVar("_no_nep50_warning", default=False)
-
-@set_module('numpy')
-@contextlib.contextmanager
-def _no_nep50_warning():
-    """
-    Context manager to disable NEP 50 warnings.  This context manager is
-    only relevant if the NEP 50 warnings are enabled globally (which is not
-    thread/context safe).
-
-    This warning context manager itself is fully safe, however.
-    """
-    token = NO_NEP50_WARNING.set(True)
-    try:
-        yield
-    finally:
-        NO_NEP50_WARNING.reset(token)

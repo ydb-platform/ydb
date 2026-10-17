@@ -9,8 +9,8 @@ pragma Ytflow.PipelinePath = "pipelines/test";
 
 $result_stream = select string_field as key, int64_field as value from Input;
 
-insert into OutputFirst
+replace into OutputFirst with primary_key = "[key]"
 select * from $result_stream;
 
-insert into OutputSecond
+replace into OutputSecond with primary_key = "[key]"
 select * from $result_stream;

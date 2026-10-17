@@ -117,7 +117,9 @@ public:
         TActorValidator actorValidation;
         auto conclusion = Scan(schema, actorValidation);
         if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "simple_row_validation")("reason", conclusion.GetErrorMessage());
+            YDB_LOG_ERROR_COMP(NKikimrServices::ARROW_HELPER, "",
+                {"event", "simple_row_validation"},
+                {"reason", conclusion.GetErrorMessage()});
         }
         return !conclusion.IsFail();
     }

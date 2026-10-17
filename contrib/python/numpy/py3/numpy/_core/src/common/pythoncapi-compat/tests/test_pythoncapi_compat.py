@@ -24,12 +24,23 @@ except ImportError:
 from utils import run_command, command_stdout
 
 
+# Windows uses MSVC compiler
+MSVC = (os.name == "nt")
+
 TESTS = [
     ("test_pythoncapi_compat_cext", "C"),
-    ("test_pythoncapi_compat_cppext", "C++"),
-    ("test_pythoncapi_compat_cpp03ext", "C++03"),
-    ("test_pythoncapi_compat_cpp11ext", "C++11"),
 ]
+if not MSVC:
+    TESTS.extend((
+        ("test_pythoncapi_compat_cpp03ext", "C++03"),
+        ("test_pythoncapi_compat_cpp11ext", "C++11"),
+    ))
+else:
+    TESTS.extend((
+        ("test_pythoncapi_compat_cppext", "C++"),
+        ("test_pythoncapi_compat_cpp14ext", "C++14"),
+    ))
+
 
 VERBOSE = False
 

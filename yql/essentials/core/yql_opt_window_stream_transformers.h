@@ -12,7 +12,7 @@ public:
 
     std::pair<TStringBuf, TStringBuf> GetRangeSortedColumnNames(const TWindowFrameSettings::TRangeFrame& rangeFrame) const;
 
-    TVector<TStringBuf> GetAllSortedColumnNames() const;
+    TVector<TString> GetAllSortedColumnNames() const;
 
     bool ShouldAddSortedColumn() const;
 

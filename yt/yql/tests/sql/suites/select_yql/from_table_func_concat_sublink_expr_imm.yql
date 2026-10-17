@@ -1,0 +1,3 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT (SELECT key FROM plato.CONCAT(Input, Input1) ORDER BY key LIMIT 1);

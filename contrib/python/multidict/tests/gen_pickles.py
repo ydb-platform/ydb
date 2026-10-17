@@ -1,12 +1,11 @@
 import pickle
 from importlib import import_module
 from pathlib import Path
-from typing import Union
 
 from multidict import CIMultiDict, MultiDict, istr
 
 TESTS_DIR = Path(__file__).parent.resolve()
-_MD_Classes = Union[type[MultiDict[int]], type[CIMultiDict[int]]]
+_MD_Classes = type[MultiDict[int]] | type[CIMultiDict[int]]
 
 
 def write(tag: str, cls: _MD_Classes, proto: int) -> None:

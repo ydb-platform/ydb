@@ -27,6 +27,8 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
     // Write many messages because small snapshot do not write wal
     WriteMany(setup, "/Root/topic1", 0, 16, 113);
+    ui64 committedOffset = 0;
+    ui64 lockedOffset = 0;
 
     {
         CreateReaderActor(runtime, {
@@ -40,6 +42,8 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        committedOffset = result->Messages[0].MessageId.Offset;
     }
 
     {
@@ -54,6 +58,9 @@ Y_UNIT_TEST(ReloadPQTablet) {
 
         auto result = GetReadResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 1);
+        lockedOffset = result->Messages[0].MessageId.Offset;
+        UNIT_ASSERT_VALUES_UNEQUAL(lockedOffset, committedOffset);
     }
 
     Cerr << ">>>>> BEGIN COMMIT" << Endl;
@@ -63,7 +70,7 @@ Y_UNIT_TEST(ReloadPQTablet) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
-            .Messages = { TMessageId(0, 0) }
+            .Messages = { TMessageId(0, committedOffset) }
         });
 
         auto result = GetChangeResponse(runtime);
@@ -73,21 +80,32 @@ Y_UNIT_TEST(ReloadPQTablet) {
     Cerr << ">>>>> BEGIN REBOOT " << Endl;
     ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
 
-    for (size_t i = 0; i < 10; ++i) {
+    bool sawLocked = false;
+    for (size_t i = 0; i < 10 && !sawLocked; ++i) {
         Sleep(TDuration::Seconds(1));
 
         auto result = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
-        if (i < 9 && result->Messages.size() != 2) {
+        bool hasLocked = false;
+        bool hasUnprocessed = false;
+        for (const auto& message : result->Messages) {
+            if (message.Offset == committedOffset) {
+                UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Committed));
+            }
+            if (message.Offset == lockedOffset) {
+                hasLocked = true;
+                UNIT_ASSERT_VALUES_EQUAL(message.Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
+            }
+            if (message.Status == static_cast<ui32>(TStorage::EMessageStatus::Unprocessed)) {
+                hasUnprocessed = true;
+            }
+        }
+        if (!hasLocked) {
             continue;
         }
-
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Offset, 1);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Offset, 2);
-        UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].Status, static_cast<ui32>(TStorage::EMessageStatus::Unprocessed));
-
-        break;
+        UNIT_ASSERT(hasUnprocessed);
+        sawLocked = true;
     }
+    UNIT_ASSERT(sawLocked);
 }
 
 Y_UNIT_TEST(AlterConsumer) {
@@ -119,6 +137,8 @@ Y_UNIT_TEST(AlterConsumer) {
         UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(result->Config.GetDeadLetterPolicy()),
             ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE));
     }
+
+    client.CreateTopic("/Root/dlq-queue", NYdb::NTopic::TCreateTopicSettings()).GetValueSync();
 
     client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
             .SetRetentionPeriod(TDuration::Seconds(103))
@@ -334,6 +354,8 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
         auto result = GetChangeResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     }
+
+    client.CreateTopic("/Root/dlq-queue", NYdb::NTopic::TCreateTopicSettings()).GetValueSync();
 
     client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
         .SetRetentionPeriod(TDuration::Seconds(103))
@@ -1135,7 +1157,11 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    // Destination is missing at first — mover fails and WakeUpDLQ returns the message.
+    // Create DLQ first so create/alter ACL checks pass, then drop it so the mover fails.
+    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+            .EndAddConsumer()).GetValueSync();
+
     client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
                 .BeginDeadLetterPolicy()
@@ -1146,6 +1172,8 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
                     .MoveAction("/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
+
+    client.DropTopic("/Root/topic1-dlq").GetValueSync();
 
     const auto msg = "dlq-retry-me";
     setup->Write("/Root/topic1", msg, 0);

@@ -6,22 +6,19 @@
 
 namespace NKikimr::NPQ {
 
-void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc) {
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredMessage& prefix, const std::exception& exc) {
     YDB_LOG_CRIT("Unhandled exception",
-        {"prefix", prefix},
+        prefix,
         {"exceptionType", TypeName(exc)},
         {"exceptionMessage", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 }
 
-const TString& TConstantLogPrefix::GetLogPrefix() const {
-    if (!LogPrefix_.Defined()) {
-        LogPrefix_ = BuildLogPrefix();
-    }
-    return *LogPrefix_;
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf prefix, const std::exception& exc) {
+    DoLogUnhandledException(service, YDB_LOG_CREATE_MESSAGE({"prefix", TString(prefix)}), exc);
 }
 
-void NPrivate::IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx) {
+void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx) {
     GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 }
 

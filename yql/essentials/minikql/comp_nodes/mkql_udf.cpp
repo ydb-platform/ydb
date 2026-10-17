@@ -3,10 +3,14 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_bridge.h>
+#include <yql/essentials/minikql/computation/mkql_bridge_inprocess.h>
+#include <yql/essentials/minikql/computation/mkql_bridge_outprocess.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/computation/mkql_validate.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_printer.h>
+#include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
@@ -70,6 +74,58 @@ private:
     const NUdf::TUnboxedValue Callable_;
 };
 
+NUdf::TUnboxedValue MaybeWrapUdfBridge(
+    TComputationContext& ctx, NUdf::TUnboxedValue udf, const TCallableType* functionType,
+    const TString& functionName, const TString& typeConfig, TType* userType) {
+    if (ctx.BridgeMode == NUdf::EBridgeMode::None) {
+        return udf;
+    }
+
+    TBridgeUdfSpec spec;
+    spec.FunctionName = functionName;
+    spec.TypeConfig = typeConfig;
+    if (!userType->IsVoid()) {
+        spec.SerializedUserType = SerializeNode(userType, ctx.TypeEnv);
+    }
+    spec.LangVer = ctx.LangVer;
+
+    TIntrusivePtr<TBridgeChannel> channel;
+    switch (ctx.BridgeMode) {
+        case NUdf::EBridgeMode::InProcess: {
+            static const TString GlobalInProcessKey("__inprocess__");
+            channel = ctx.GetOrCreateBridgeChannel(GlobalInProcessKey, [&](TBridgeNamespaceId workerNamespace) -> TIntrusivePtr<TBridgeChannel> {
+                return CreateInProcessBridgeChannel(*ctx.HolderFactory.GetFunctionRegistry(), ctx.HolderFactory, ctx.Builder, workerNamespace, ctx.GetRuntimeSettingsSharedPtr());
+            });
+            break;
+        }
+        case NUdf::EBridgeMode::OutProcess: {
+            const TString moduleName(ModuleName(functionName));
+            const auto modulePath = ctx.HolderFactory.GetFunctionRegistry()->FindUdfPath(moduleName);
+            if (!modulePath || !*modulePath || modulePath->StartsWith(StaticModulePrefix)) {
+                // Can't be bridged out-of-process -- it was never dlopen'd,
+                // so there's no real .so to hand to a child process. Leave
+                // channel null so this one function just runs undecorated
+                // instead of failing the whole query over an incidental
+                // non-bridgeable UDF (e.g. a statically-linked system one).
+                break;
+            }
+            channel = ctx.GetOrCreateBridgeChannel(*modulePath, [&](TBridgeNamespaceId workerNamespace) -> TIntrusivePtr<TBridgeChannel> {
+                return CreateOutProcessBridgeChannel(ctx.BridgeBinaryPath, *modulePath, ctx.HolderFactory, ctx.Builder, workerNamespace, ctx.GetRuntimeSettingsSharedPtr());
+            });
+            break;
+        }
+        default:
+            MKQL_ENSURE(false, "Unexpected bridge mode: " << static_cast<unsigned>(ctx.BridgeMode));
+    }
+
+    if (!channel) {
+        return udf;
+    }
+
+    WrapCallableWithBridge(functionType, udf, ctx.BridgeMode, std::move(channel), spec);
+    return udf;
+}
+
 template <class TValidatePolicy, class TValidateMode>
 class TSimpleUdfWrapper: public TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy, TValidateMode>> {
     using TBaseComputation = TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy, TValidateMode>>;
@@ -115,6 +171,7 @@ public:
         }
 
         NUdf::TUnboxedValue udf(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
+        udf = MaybeWrapUdfBridge(ctx, std::move(udf), FunctionType_, FunctionName_, TypeConfig_, UserType_);
         TValidate<TValidatePolicy, TValidateMode>::WrapCallable(FunctionType_, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName_ << ">");
         ExtendArgs(udf, CallableType_, funcInfo.FunctionType);
         ConvertDateTimeArg(udf);
@@ -347,6 +404,7 @@ private:
         }
 
         udf = NUdf::TUnboxedValuePod(funcInfo.Implementation.Release());
+        udf = MaybeWrapUdfBridge(ctx, std::move(udf), funcInfo.FunctionType, FunctionName_, TypeConfig_, UserType_);
     }
 
     void Wrap(NUdf::TUnboxedValue& callable) const {
@@ -609,7 +667,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     }
 
     if (runConfigFuncType->IsVoid()) {
-        if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
+        if (ctx.ValidateMode == NUdf::EValidateMode::None && ctx.BridgeMode == NUdf::EBridgeMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
             return new TUdfRunCodegeneratorNode(
                 ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, callableNodeType, callableFuncType, userType, wrapDateTimeConvert,
                 std::move(funcInfo.ModuleIRUniqID), std::move(funcInfo.ModuleIR), std::move(funcInfo.IRFunctionName), std::move(funcInfo.Implementation));

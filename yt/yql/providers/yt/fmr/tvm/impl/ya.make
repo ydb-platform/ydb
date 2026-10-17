@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 IF (NOT OPENSOURCE)
     SRCS(
@@ -16,8 +16,6 @@ ENDIF()
 PEERDIR(
     yt/yql/providers/yt/fmr/tvm/interface
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

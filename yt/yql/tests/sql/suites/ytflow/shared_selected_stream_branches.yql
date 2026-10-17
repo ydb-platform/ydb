@@ -1,0 +1,21 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$stream = select
+    string_field,
+    int64_field
+from Input;
+
+insert into OutputA
+select * from $stream
+where string_field = "foo";
+
+insert into OutputB
+select * from $stream
+where int64_field >= 10;

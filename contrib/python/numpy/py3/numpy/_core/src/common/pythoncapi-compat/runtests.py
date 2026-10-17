@@ -13,7 +13,6 @@ from __future__ import print_function
 import argparse
 import os.path
 import shutil
-import subprocess
 import sys
 try:
     from shutil import which
@@ -53,6 +52,7 @@ PYTHONS = (
     "pypy3.8",
     "pypy3.9",
     "pypy3.10",
+    "pypy3.11",
 )
 
 

@@ -27,6 +27,6 @@ def do(args):
     if common.get_status(response):
         result = nbs.DeletePartitionResult()
         response.operation.result.Unpack(result)
-        output['diskId'] = result.DiskId or ''
+        output['diskId'] = result.DiskId
 
     print(json.dumps(output))

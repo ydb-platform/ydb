@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     registry.cpp
@@ -9,8 +9,6 @@ PEERDIR(
     yql/essentials/minikql/computation
     yql/essentials/public/langver
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

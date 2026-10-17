@@ -44,6 +44,9 @@ message TRequestedConstructor {
             // Store a separated sub-column whose present values are all scalars of one type in the corresponding
             // native Arrow array instead of per-value BinaryJson blobs. `false` (default) - always BinaryJson.
             optional bool EnableNativeColumns = 7 [default = false];
+            // On-disk encoding of the sub-column offset/index streams. A new encoding is a new
+            // version here - never a new setting. 0 = legacy arrow IPC.
+            optional uint32 DenseEncodingVersion = 8 [default = 0];
         }
         optional TSettings Settings = 1;
     }
@@ -77,6 +80,9 @@ message TConstructor {
             optional TDataExtractor DataExtractor = 5;
             optional double DictionaryUniqueFraction = 6 [default = 0];
             optional bool EnableNativeColumns = 7 [default = false];
+            // On-disk encoding of the sub-column offset/index streams. A new encoding is a new
+            // version here - never a new setting. 0 = legacy arrow IPC.
+            optional uint32 DenseEncodingVersion = 8 [default = 0];
         }
         optional TSettings Settings = 1;
     }

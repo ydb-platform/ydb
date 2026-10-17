@@ -1,4 +1,3 @@
-PRAGMA FeatureR010 = 'prototype';
 PRAGMA config.flags('MatchRecognizeStream', 'disable');
 
 $data = [<|dt: 4, host: 'fqdn1', key: 14|>];

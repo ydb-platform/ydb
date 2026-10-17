@@ -2,7 +2,6 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
-#include <yql/essentials/utils/yql_panic.h>
 
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 #include <yt/yt_proto/yt/formats/extension.pb.h>
@@ -48,7 +47,6 @@ private:
     TType* GetOptionalType(TType* type);
     TType* GetListType(TType* type, const std::optional<NYT::NDetail::TProtobufFieldOptions>& ytOpts, TFlags<EFieldFlag>& flags);
 
-private:
     using TTypeMap = THashMap<TType*, TType*>;
 
     EEnumFormat EnumFormat_;
@@ -92,9 +90,7 @@ TTypeBuilder::TTypeBuilder(EEnumFormat enumFormat,
     }
 }
 
-TTypeBuilder::~TTypeBuilder()
-{
-}
+TTypeBuilder::~TTypeBuilder() = default;
 
 void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
     Info_ = info;
@@ -109,7 +105,7 @@ void TTypeBuilder::Build(const Descriptor* descriptor, TProtoInfo* info) {
 }
 
 TType* TTypeBuilder::GenerateTypeInfo(const Descriptor* descriptor, bool defaultYtSerialize) {
-    auto fullName = descriptor->full_name();
+    const auto& fullName = descriptor->full_name();
 
     if (KnownMessages_.find(fullName) != KnownMessages_.end()) {
         auto mi = Info_->Messages.find(fullName);

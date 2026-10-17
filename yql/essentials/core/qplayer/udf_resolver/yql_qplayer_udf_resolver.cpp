@@ -234,7 +234,6 @@ private:
         }
     }
 
-private:
     const IUdfResolver::TPtr Inner_;
     const TQContext QContext_;
 };

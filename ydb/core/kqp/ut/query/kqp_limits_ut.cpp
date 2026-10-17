@@ -292,8 +292,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
-        settings.AppConfig.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
-
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(1000);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheIncreaseBatchSizeBytes(1000);
+        auto cfg = MakeResourceBrokerTestConfig();
+        cfg.MutableQueues(1)->MutableLimit()->MutableResource()->Set(1, 32*1024*1024 + 1000 + 21);
+        settings.AppConfig.MutableResourceBrokerConfig()->CopyFrom(cfg);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);

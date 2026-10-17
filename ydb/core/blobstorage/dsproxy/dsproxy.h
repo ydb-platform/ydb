@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/blobstorage/base/batched_vec.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/dsproxy_events.h>
 #include <ydb/core/blobstorage/base/transparent.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
@@ -121,20 +122,6 @@ NActors::NLog::EPriority PriorityForStatusOutbound(NKikimrProto::EReplyStatus st
 NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus status);
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
 
-#define DSPROXY_ENUM_EVENTS(XX) \
-    XX(TEvBlobStorage::TEvPut) \
-    XX(TEvBlobStorage::TEvGet) \
-    XX(TEvBlobStorage::TEvBlock) \
-    XX(TEvBlobStorage::TEvGetBlock) \
-    XX(TEvBlobStorage::TEvDiscover) \
-    XX(TEvBlobStorage::TEvRange) \
-    XX(TEvBlobStorage::TEvCollectGarbage) \
-    XX(TEvBlobStorage::TEvStatus) \
-    XX(TEvBlobStorage::TEvPatch) \
-    XX(TEvBlobStorage::TEvAssimilate) \
-    XX(TEvBlobStorage::TEvCheckIntegrity) \
-//
-
 #define DSPROXY_ENUM_DISK_EVENTS(XX) \
     XX(TEvBlobStorage::TEvVMovedPatch) \
     XX(TEvBlobStorage::TEvVPatchStart) \
@@ -212,6 +199,14 @@ public:
     };
 
 public:
+    // The batched put path builds the actor out of a queue of events instead of a single one and
+    // leaves Event unset; each of those events keeps its own kind, so the request-wide one is never
+    // consulted there.
+    template<typename TEv>
+    static NKikimrBlobStorage::TDataKind::E DataKindOf(const TEv *ev) {
+        return ev ? ev->DataKind : NKikimrBlobStorage::TDataKind::USER;
+    }
+
     template<typename TGroupRequestParameters>
     TBlobStorageGroupRequestActor(TGroupRequestParameters& params)
         : TActor(&TThis::InitialStateFunc, params.TypeSpecific.Activity)
@@ -222,6 +217,7 @@ public:
         , LogCtx(params.TypeSpecific.LogComponent, params.Common.LogAccEnabled)
         , ParentSpan(TWilson::BlobStorage, std::move(params.Common.TraceId), params.TypeSpecific.Name)
         , RestartCounter(params.Common.RestartCounter)
+        , DataKind(DataKindOf(params.Common.Event))
         , CostModel(GroupQueues->CostModel)
         , RequestStartTime(params.Common.Now)
         , Source(params.Common.Source)
@@ -334,6 +330,10 @@ protected:
     ui32 GeneratedSubrequestBytes = 0;
     bool Dead = false;
     const ui32 RestartCounter = 0;
+    // Admission hint of the request being served; it has to reach every write this request makes on
+    // its own -- notably the parts a MustRestoreFirst read rewrites -- and every internal request it
+    // spawns on the way there.
+    const NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
     std::shared_ptr<const TCostModel> CostModel;
     const TMonotonic RequestStartTime;
     THashMap<ui32, TActorId> NodeSubscriptions;
@@ -447,6 +447,7 @@ struct TBlobStorageGroupPatchParameters {
     };
 
     bool UseVPatch = false;
+    bool EnableVPatchForTesting = false;
 };
 IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params);
 
@@ -553,7 +554,8 @@ struct TBlobStorageGroupAssimilateParameters {
 };
 IActor* CreateBlobStorageGroupAssimilateRequest(TBlobStorageGroupAssimilateParameters params);
 
-IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
+IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
+    const TControlWrapper& dormantTimeoutMinutes = DormantTimeoutDefaultControl);
 
 struct TBlobStorageProxyControlWrappers {
     TMemorizableControlWrapper EnablePutBatching;
@@ -561,6 +563,7 @@ struct TBlobStorageProxyControlWrappers {
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
     TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
+    TMemorizableControlWrapper DormantTimeoutMinutes = DormantTimeoutDefaultControl;
 
     TMemorizableControlWrapper EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGenerationDefaultControl;
     TMemorizableControlWrapper EnableStorageRetroTraceCollectionSlowRequests =

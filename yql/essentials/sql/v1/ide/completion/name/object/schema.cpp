@@ -1,15 +1,15 @@
 #include "schema.h"
 
+#include <yql/essentials/utils/meta/out.h>
+
 namespace NSQLComplete {
 
 THashSet<TString> TFolderEntry::KnownTypes = {
     TFolderEntry::Folder,
     TFolderEntry::Table,
+    TFolderEntry::View,
 };
 
 } // namespace NSQLComplete
 
-template <>
-void Out<NSQLComplete::TFolderEntry>(IOutputStream& out, const NSQLComplete::TFolderEntry& value) {
-    out << "{" << value.Type << ", " << value.Name << "}";
-}
+YQL_DERIVE_OUT_SPEC(NSQLComplete::TFolderEntry);

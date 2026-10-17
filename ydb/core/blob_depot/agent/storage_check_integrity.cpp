@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
                 TString blobId = Request.Id.AsBinaryString();
 
                 if (const TResolvedValue *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
-                        std::make_shared<TRequestContext>(), false)) {
+                        std::make_shared<TRequestContext>(), false, Request.DataKind)) {
                     ProcessResolveResult(value);
                 } else {
                     YDB_LOG_DEBUG("Resolve pending",
@@ -57,6 +57,7 @@ namespace NKikimr::NBlobDepot {
                         0,
                         std::nullopt,
                         Request.Id.AsBinaryString(),
+                        Request.DataKind,
                     };
                     IssueCheckIntegrity(std::move(arg));
                 }

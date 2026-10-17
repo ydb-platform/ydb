@@ -582,12 +582,12 @@ class stable_vector
    //
    //////////////////////////////////////////////
    typedef T                                                                           value_type;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::pointer           pointer;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::const_pointer     const_pointer;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::reference         reference;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::const_reference   const_reference;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::size_type         size_type;
-   typedef typename ::boost::container::allocator_traits<ValueAllocator>::difference_type   difference_type;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::pointer           pointer;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::const_pointer     const_pointer;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::reference         reference;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::const_reference   const_reference;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::size_type         size_type;
+   typedef typename boost::container::allocator_traits<ValueAllocator>::difference_type   difference_type;
    typedef ValueAllocator                                                                   allocator_type;
    typedef node_allocator_type                                                         stored_allocator_type;
    typedef BOOST_CONTAINER_IMPDEF(iterator_impl)                                       iterator;
@@ -793,7 +793,7 @@ class stable_vector
    //! <b>Postcondition</b>: x == *this.
    //!
    //! <b>Complexity</b>: Linear to the elements x contains.
-   stable_vector(const stable_vector& x, const allocator_type &a)
+   stable_vector(const stable_vector& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : internal_data(a), index(a)
    {
       stable_vector_detail::clear_on_destroy<stable_vector> cod(*this);
@@ -808,7 +808,7 @@ class stable_vector
    //! <b>Throws</b>: If allocator_type's copy constructor throws.
    //!
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise
-   stable_vector(BOOST_RV_REF(stable_vector) x, const allocator_type &a)
+   stable_vector(BOOST_RV_REF(stable_vector) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : internal_data(a), index(a)
    {
       if(this->priv_node_alloc() == x.priv_node_alloc()){
@@ -2237,10 +2237,16 @@ class stable_vector
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `stable_vector` to be constructed from the
+//! iterator range <code>[first, last)</code>, deducing the element type from the
+//! value type of `InputIterator` and using the default allocator.
 template <typename InputIterator>
 stable_vector(InputIterator, InputIterator) ->
    stable_vector<typename iterator_traits<InputIterator>::value_type>;
 
+//! <b>Deduction guide</b>: allows a `stable_vector` to be constructed from the
+//! iterator range <code>[first, last)</code>, deducing the element type from the
+//! value type of `InputIterator` and taking the allocator type from the supplied allocator.
 template <typename InputIterator, typename Allocator>
 stable_vector(InputIterator, InputIterator, Allocator const&) ->
    stable_vector<typename iterator_traits<InputIterator>::value_type, Allocator>;
@@ -2281,7 +2287,7 @@ template <class T, class Allocator>
 struct has_trivial_destructor_after_move<boost::container::stable_vector<T, Allocator> >
 {
    typedef typename boost::container::stable_vector<T, Allocator>::allocator_type allocator_type;
-   typedef typename ::boost::container::allocator_traits<allocator_type>::pointer pointer;
+   typedef typename boost::container::allocator_traits<allocator_type>::pointer pointer;
    BOOST_STATIC_CONSTEXPR bool value = ::boost::has_trivial_destructor_after_move<allocator_type>::value &&
                              ::boost::has_trivial_destructor_after_move<pointer>::value;
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/pdisk/mock/subsystem.h>
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
@@ -14,7 +15,7 @@ struct TEnvironmentSetup {
     const ui32 StaticGroupId = 0;
     const TString StoragePoolName = "test";
     TIntrusivePtr<NFake::TProxyDS> Group0 = MakeIntrusive<NFake::TProxyDS>();
-    std::map<std::pair<ui32, ui32>, TIntrusivePtr<TPDiskMockState>> PDiskMockStates;
+    TPDiskMockStates PDiskMockStates;
     NKikimr::NTestShard::TTestShardContext::TPtr TestShardContext = NKikimr::NTestShard::TTestShardContext::Create();
     NKikimr::NTesting::TGroupOverseer GroupOverseer;
 
@@ -25,27 +26,6 @@ struct TEnvironmentSetup {
     };
 
     const TSettings Settings;
-
-    class TMockPDiskServiceFactory : public IPDiskServiceFactory {
-        TEnvironmentSetup& Env;
-
-    public:
-        TMockPDiskServiceFactory(TEnvironmentSetup& env)
-            : Env(env)
-        {}
-
-        void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>& cfg,
-                const NPDisk::TMainKey& /*mainKey*/, ui32 poolId, ui32 nodeId) override {
-            const auto key = std::make_pair(nodeId, pdiskId);
-            TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
-            if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize));
-            }
-            const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
-            const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
-            ctx.ActorSystem()->RegisterLocalService(serviceId, actorId);
-        }
-    };
 
     static TEnvironmentSetup *Env;
 
@@ -98,6 +78,13 @@ struct TEnvironmentSetup {
         };
 
         SetupLogging();
+        Runtime->SetupNodeSubSystems = [this](ui32, TActorSystemSetup* setup) {
+            setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TMockPDiskSubsystem>(&PDiskMockStates,
+                [](ui32 nodeId, ui32 pdiskId, const TPDiskConfig& cfg) {
+                    return MakeIntrusive<TPDiskMockState>(nodeId, pdiskId, cfg.PDiskGuid,
+                        ui64(10) << 40, cfg.ChunkSize);
+                }));
+        };
         Runtime->Start();
         Runtime->SetupTabletRuntime(1, Settings.ControllerNodeId);
         SetupStaticStorage();
@@ -217,7 +204,7 @@ struct TEnvironmentSetup {
                 continue;
             }
 
-            auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
+            auto config = MakeIntrusive<TNodeWardenConfig>();
             config->BlobStorageConfig->MutableServiceSet()->AddAvailabilityDomains(DomainId);
             std::unique_ptr<IActor> warden(CreateBSNodeWarden(config));
 

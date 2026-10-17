@@ -26,6 +26,8 @@
 
 #include <memory>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::ARROW_HELPER
+
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
 namespace NKikimr::NArrow {
@@ -155,8 +157,11 @@ std::shared_ptr<arrow::RecordBatch> DeserializeBatch(const TString& blob, const 
     if (result.ok()) {
         return *result;
     } else {
-        AFL_ERROR(NKikimrServices::ARROW_HELPER)("event", "cannot_parse")("message", result.status().ToString())(
-            "schema_columns_count", schema->num_fields())("schema_columns", JoinSeq(",", schema->field_names()));
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse"},
+            {"message", result.status()},
+            {"schemaColumnsCount", schema->num_fields()},
+            {"schemaColumns", JoinSeq(",", schema->field_names())});
         return nullptr;
     }
 }

@@ -104,7 +104,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, kqpCtx, nullptr);
+    auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
 
@@ -217,7 +217,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             case TIndexDescription::EType::GlobalFulltextCompact:
             case TIndexDescription::EType::GlobalFulltextCompactRelevance:
             case TIndexDescription::EType::GlobalJsonCompact:
-                YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
+                YQL_ENSURE(false, "Compact indexes are always updated by KqpWriteActor");
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalSyncUnique: {
                 upsertIndexRows = MakeInsertIndexRows(*insertRows, table, inputColumnsSet, indexTableColumns,

@@ -9,6 +9,8 @@
 * [{#T}](./capacity-planning.md)
 * [{#T}](./versioning.md)
 * [{#T}](./maintenance-without-downtime.md)
+* [{#T}](./selfheal.md)
+* [{#T}](./node-authorization.md)
 
 Смотрите также:
 

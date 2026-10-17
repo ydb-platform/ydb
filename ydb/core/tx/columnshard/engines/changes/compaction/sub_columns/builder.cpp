@@ -37,8 +37,9 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionar
     if (!Settings.IsDictionary(filledRecordsCount, enumerateNotNull)) {
         return accessor;
     }
-    const NArrow::NAccessor::TChunkConstructionData cData(
-        accessor->GetRecordsCount(), nullptr, arrow::binary(), NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
+    const NArrow::NAccessor::TChunkConstructionData cData(accessor->GetRecordsCount(), nullptr,
+        NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType),
+        NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     return NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
 }
 

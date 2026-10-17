@@ -30,7 +30,7 @@ log_config:
 
 ## Структура логов
 
-Когда происходит TLI, сервер записывает четыре записи — по одной от каждого компонента для каждой из сторон конфликта.
+Когда происходит TLI, сервер записывает в лог записи от каждого компонента (`DataShard` или `SessionActor`) для каждой из сторон конфликта (жертвы или нарушителя). Количество записей зависит от количества запросов в транзакциях.
 
 **Пример сценария:**
 
@@ -42,63 +42,67 @@ log_config:
 | T2 | `2222222222222222` | Нарушитель | `UPDATE Orders SET Status = 'done' WHERE OrderId = 42` (ломает блокировку) |
 | T3 | `3333333333333333` | Жертва | `UPDATE Orders SET Amount = 100 WHERE OrderId = 42` (коммит — падает) |
 
+{% note info %}
+
+В приводимых далее примерах содержимого логов порядок следования отдельных полей внутри записей может отличаться.
+
+{% endnote %}
+
 **Лог нарушителя (DataShard):**
 
 ```text
-Component: DataShard, TabletId: <tablet-id>,
-BreakerQuerySpanId: 2222222222222222, VictimQuerySpanIds: [1111111111111111],
-Message: Write transaction broke other locks
+component=DataShard tabletId=<tablet-id> message="Write transaction broke other locks" breakerQuerySpanId=2222222222222222 victimQuerySpanId=1111111111111111
 ```
 
 **Лог нарушителя (SessionActor):**
 
 ```text
-Component: SessionActor, Message: Query had broken other locks,
-BreakerQuerySpanId: 2222222222222222,
-BreakerQueryText: UPDATE Orders SET Status = 'done' WHERE OrderId = 42,
-BreakerQueryTexts: [QuerySpanId=2222222222222222 QueryText=UPDATE Orders SET Status = 'done' WHERE OrderId = 42]
+component=SessionActor message="Query had broken other locks" breakerTxSpanId=2222222222222222 querySpanId=2222222222222222 queryText="UPDATE Orders SET Status = 'done' WHERE OrderId = 42"
 ```
 
 **Лог жертвы (DataShard):**
 
 ```text
-Component: DataShard, TabletId: <tablet-id>,
-VictimQuerySpanId: 1111111111111111, CurrentQuerySpanId: 3333333333333333,
-Message: Write transaction was a victim of broken locks
+component=DataShard tabletId=<tablet-id> message="Write transaction was a victim of broken locks" victimQuerySpanId=1111111111111111
 ```
 
 **Лог жертвы (SessionActor):**
 
+В этом примере SessionActor записывает две записи — по одной на каждый запрос транзакции-жертвы:
+
 ```text
-Component: SessionActor, Message: Query was a victim of broken locks,
-VictimQuerySpanId: 1111111111111111, CurrentQuerySpanId: 3333333333333333,
-VictimQueryText: SELECT * FROM Orders WHERE OrderId = 42,
-VictimQueryTexts: [QuerySpanId=1111111111111111 QueryText=SELECT * FROM Orders WHERE OrderId = 42 |
-                   QuerySpanId=3333333333333333 QueryText=UPDATE Orders SET Amount = 100 WHERE OrderId = 42]
+component=SessionActor message="Query was a victim of broken locks" victimTxSpanId=1111111111111111 querySpanId=1111111111111111 queryText="SELECT * FROM Orders WHERE OrderId = 42"
+
+component=SessionActor message="Query was a victim of broken locks" victimTxSpanId=1111111111111111 querySpanId=3333333333333333 queryText="UPDATE Orders SET Amount = 100 WHERE OrderId = 42"
 ```
 
 ## Поля логов
 
 | Поле | Описание | Где встречается |
 |:-----|:---------|:----------------|
-| `VictimQuerySpanId` | Идентификатор запроса, чьи блокировки были сломаны | Логи жертвы |
-| `BreakerQuerySpanId` | Идентификатор запроса, который сломал блокировки | Логи нарушителя |
-| `CurrentQuerySpanId` | Идентификатор запроса в момент ошибки (может отличаться от жертвы) | Логи жертвы |
-| `VictimQuerySpanIds` | Массив идентификаторов всех запросов-жертв | Логи нарушителя DataShard |
-| `VictimQueryText` | SQL запроса-жертвы, который установил блокировки | Логи жертвы SessionActor |
-| `BreakerQueryText` | SQL запроса-нарушителя | Логи нарушителя SessionActor |
-| `VictimQueryTexts` | Все запросы транзакции-жертвы | Логи жертвы SessionActor |
-| `BreakerQueryTexts` | Все запросы транзакции-нарушителя | Логи нарушителя SessionActor |
+| `component` | Источник записи: `DataShard` или `SessionActor` | Все логи TLI |
+| `message` | Тип события (см. примеры выше) | Все логи TLI |
+| `tabletId` | Идентификатор таблета DataShard | Логи DataShard |
+| `victimQuerySpanId` | Идентификатор запроса, чьи блокировки были сломаны | Логи жертвы DataShard, логи нарушителя DataShard |
+| `breakerQuerySpanId` | Идентификатор запроса, который сломал блокировки | Логи нарушителя DataShard |
+| `victimTxSpanId` | Идентификатор запроса-жертвы, чьи блокировки были сломаны. Совпадает с victimQuerySpanId в логах DataShard. | Логи жертвы SessionActor |
+| `breakerTxSpanId` | Идентификатор запроса-нарушителя, который сломал блокировки. Совпадает с breakerQuerySpanId в логах DataShard. | Логи нарушителя SessionActor |
+| `querySpanId` | Идентификатор конкретного запроса в записи SessionActor | Логи SessionActor |
+| `queryText` | SQL конкретного запроса в записи SessionActor | Логи SessionActor |
 
 ## Анализ логов
 
 По `VictimQuerySpanId` из сообщения об ошибке SDK можно найти все связанные события:
 
-1. **Поиск запроса-жертвы**: поле `VictimQuerySpanId` в логах жертвы показывает, какой SELECT установил сломанные блокировки, и его текст в поле `VictimQueryText`.
+1. **Поиск идентификатора запроса-жертвы**: в логе жертвы поле `victimQuerySpanId` содержит идентификатор SELECT-запроса, который установил сломанные блокировки.
 
-2. **Поиска запроса-нарушитель**: в логе нарушителя DataShard поле `VictimQuerySpanIds` содержит то же значение. Из этого лога извлекается `BreakerQuerySpanId` и находится лог SessionActor нарушителя — он содержит `BreakerQueryText` с полным текстом запроса.
+2. **Поиск текста запроса-жертвы**: в логе жертвы есть запись, у которой `victimTxSpanId` совпадает с `querySpanId`. Поле `queryText` этой записи содержит текст SELECT-запроса, который установил сломанные блокировки.
 
-3. **Получение полного контекста транзакций**: `VictimQueryTexts` и `BreakerQueryTexts` содержат все запросы соответствующих транзакций в порядке выполнения.
+3. **Поиск идентификатора запроса-нарушителя**: в логе нарушителя DataShard есть запись, у которой поле `victimQuerySpanId` содержит то же самое значение (идентификатор запроса-жертвы). Из этой записи берётся значение `breakerQuerySpanId`, которое является идентификатором запроса-нарушителя.
+
+4. **Поиск текста запроса-нарушителя**: в логе нарушителя есть запись, у которой `breakerTxSpanId` содержит идентификатор запроса-нарушителя и в то же время совпадает с `querySpanId`. Поле `queryText` этой записи содержит текст запроса-нарушителя.
+
+5. **Получение полного контекста транзакций**: все записи SessionActor с одним и тем же `victimTxSpanId` содержат сведения о запросах транзакции-жертвы. Аналогично, все записи SessionActor с одним и тем же `breakerTxSpanId` содержат сведения о запросах транзакции-нарушителя.
 
 ## Утилита find_tli_chain
 
@@ -152,7 +156,7 @@ UPDATE Orders SET Status = 'done' WHERE OrderId = 42
 Утилита выводит:
 
 - **TLI Chain** — `VictimQuerySpanId`, `VictimQueryText`, `BreakerQuerySpanId`, `BreakerQueryText`;
-- **VictimTx** — все запросы транзакции-жертвы в порядке выполнения;
+- **VictimTx** — все запросы транзакции-жертвы;
 - **BreakerTx** — все запросы транзакции-нарушителя.
 
 Дополнительные параметры:

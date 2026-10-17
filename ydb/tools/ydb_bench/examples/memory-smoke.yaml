@@ -1,0 +1,10 @@
+memory-bandwidth-bench:
+  mixed:
+    threads: [1, 2]
+    random-percent: [0, 50, 100]
+    random-mode: [copy, write]
+    buffer-size-mb: [8]
+    part-size-kb: [512]
+    duration: 1
+    repetitions: 1
+    affinity: [none]

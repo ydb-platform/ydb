@@ -1,19 +1,22 @@
 #include "grpc_service.h"
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_fq.h>
+
+#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr::NGRpcService {
 
-TGRpcFederatedQueryService::TGRpcFederatedQueryService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcFederatedQueryService::TGRpcFederatedQueryService(
+    NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
     : ActorSystem_(system)
     , Counters_(counters)
-    , GRpcRequestProxyId_(id) {}
+    , GRpcRequestProxyId_(id)
+{
+}
 
 void TGRpcFederatedQueryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLoggerPtr logger) {
     CQ_ = cq;
@@ -25,16 +28,15 @@ void TGRpcFederatedQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB)                                                                                  \
-MakeIntrusive<TGRpcRequest<FederatedQuery::NAME##Request, FederatedQuery::NAME##Response, TGRpcFederatedQueryService, TSecurityTextFormatPrinter<FederatedQuery::NAME##Request>, TSecurityTextFormatPrinter<FederatedQuery::NAME##Response>>>( \
-    this, &Service_, CQ_,                                                                                      \
-    [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                  \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
-        ActorSystem_->Send(GRpcRequestProxyId_, CreateFederatedQuery##NAME##RequestOperationCall(ctx).release());            \
-    },                                                                                                         \
-    &FederatedQuery::V1::FederatedQueryService::AsyncService::Request##NAME,                                  \
-    #NAME, logger, getCounterBlock("fq", #NAME))                                                     \
-    ->Run();                                                                                                   \
+#define ADD_REQUEST(NAME, CB)                                                                                                         \
+    MakeIntrusive<TGRpcRequest<FederatedQuery::NAME##Request, FederatedQuery::NAME##Response, TGRpcFederatedQueryService,             \
+        TSecurityTextFormatPrinter<FederatedQuery::NAME##Request>, TSecurityTextFormatPrinter<FederatedQuery::NAME##Response>>>(this, \
+        &Service_, CQ_,                                                                                                               \
+        [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                                  \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                          \
+            ActorSystem_->Send(GRpcRequestProxyId_, CreateFederatedQuery##NAME##RequestOperationCall(ctx).release());                 \
+        }, &FederatedQuery::V1::FederatedQueryService::AsyncService::Request##NAME, #NAME, logger, getCounterBlock("fq", #NAME))      \
+        ->Run();
 
     ADD_REQUEST(CreateQuery, DoFederatedQueryCreateQueryRequest)
     ADD_REQUEST(ListQueries, DoFederatedQueryListQueriesRequest)
@@ -59,7 +61,6 @@ MakeIntrusive<TGRpcRequest<FederatedQuery::NAME##Request, FederatedQuery::NAME##
     ADD_REQUEST(DeleteBinding, DoFederatedQueryDeleteBindingRequest)
 
 #undef ADD_REQUEST
-
 }
 
-} // namespace NKikimr::NGRpcService
+}   // namespace NKikimr::NGRpcService

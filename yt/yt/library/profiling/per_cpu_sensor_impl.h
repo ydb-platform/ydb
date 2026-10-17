@@ -3,15 +3,14 @@
 #include "impl.h"
 #include "summary.h"
 
+#include <library/cpp/yt/system/spin_lock.h>
 #include <library/cpp/yt/system/tscp.h>
-
-#include <library/cpp/yt/threading/spin_lock.h>
 
 namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The sharded sensors below index a fixed per-processor array by TTscp::Get() and update
+// The sharded counters and gauge below index a fixed per-processor array by the current CPU and update
 // the shard with a plain atomic. They are the default hot implementation and the fallback
 // everywhere the rseq fast path is not enabled; the rseq-backed counterparts live in
 // yt/yt/library/profiling/rseq and are selected at construction time (see registry.cpp).
@@ -111,7 +110,7 @@ public:
 private:
     struct alignas(CacheLineSize) TShard
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, Lock);
         TSummarySnapshot<T> Value;
         // Lock-free fast path for the collect sweep: skip the lock for shards with no samples.
         std::atomic<bool> Empty = true;

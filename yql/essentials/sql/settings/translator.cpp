@@ -60,7 +60,6 @@ private:
         throw yexception() << "Translator '" << Name_ << "' is not supported";
     }
 
-private:
     const TString Name_;
 };
 

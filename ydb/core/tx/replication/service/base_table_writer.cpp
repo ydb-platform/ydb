@@ -1,4 +1,5 @@
 #include "base_table_writer.h"
+#include "json_change_record.h"
 #include "service.h"
 #include "worker.h"
 
@@ -7,6 +8,7 @@
 #include <ydb/core/change_exchange/util.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -307,15 +309,20 @@ class TLocalTableWriter
 
     void ResolveTable() {
         Resolving = true;
+        const auto generation = ++ResolveGeneration;
 
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = Database;
 
         request->ResultSet.emplace_back(MakeNavigateEntry(TablePathId, TNavigate::OpTable));
-        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()), 0, generation);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (ev->Cookie != ResolveGeneration) {
+            return;
+        }
+
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
@@ -343,7 +350,8 @@ class TLocalTableWriter
             return;
         }
 
-        if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+        const auto generalVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        if (TableVersion && TableVersion == generalVersion) {
             Y_ABORT_UNLESS(Initialized);
             Resolving = false;
             return CreateSenders();
@@ -370,6 +378,39 @@ class TLocalTableWriter
             }
         }
 
+        if (RefreshingSchema) {
+            Y_ABORT_UNLESS(PendingSchemaChange);
+
+            THashMap<TString, TString> expectedColumns;
+            for (const auto& column : PendingSchemaChange->Schema.GetColumns()) {
+                expectedColumns.emplace(column.GetName(), column.GetType());
+            }
+
+            TVector<TString> actualPrimaryKey(schema->KeyColumns.size());
+            for (const auto& [_, column] : entry.Columns) {
+                const auto expected = expectedColumns.find(column.Name);
+                if (expected == expectedColumns.end()
+                    || expected->second != NScheme::TypeName(column.PType, column.PTypeMod))
+                {
+                    return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
+                }
+                expectedColumns.erase(expected);
+
+                if (column.KeyOrder >= 0) {
+                    actualPrimaryKey[column.KeyOrder] = column.Name;
+                }
+            }
+
+            const auto& expectedPrimaryKey = PendingSchemaChange->Schema.GetPrimaryKeyColumnNames();
+            bool samePrimaryKey = actualPrimaryKey.size() == static_cast<size_t>(expectedPrimaryKey.size());
+            for (size_t i = 0; samePrimaryKey && i < actualPrimaryKey.size(); ++i) {
+                samePrimaryKey = actualPrimaryKey[i] == expectedPrimaryKey[i];
+            }
+            if (expectedColumns || !samePrimaryKey) {
+                return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
+            }
+        }
+
         Schema = schema;
         Parser->SetSchema(Schema);
         KeyDesc = MakeHolder<TKeyDesc>(
@@ -381,17 +422,21 @@ class TLocalTableWriter
         );
 
         TChangeSender::SetPartitionResolver(CreateResolverFn(*KeyDesc.Get()));
-        ResolveKeys();
+        ResolveKeys(ev->Cookie);
     }
 
-    void ResolveKeys() {
+    void ResolveKeys(ui64 generation) {
         auto request = MakeHolder<TResolve>();
         request->DatabaseName = Database;
         request->ResultSet.emplace_back(std::move(KeyDesc));
-        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
+        Send(MakeSchemeCacheID(), new TEvResolve(request.Release()), 0, generation);
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        if (ev->Cookie != ResolveGeneration) {
+            return;
+        }
+
         const auto& result = ev->Get()->Request;
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult",
@@ -431,6 +476,14 @@ class TLocalTableWriter
         }
 
         Resolving = false;
+
+        if (RefreshingSchema) {
+            RefreshingSchema = false;
+            Y_ABORT_UNLESS(PendingSchemaChange);
+            Send(Worker, new TEvWorker::TEvSchemaChangeApplied(PendingSchemaChange->Schema));
+            LastAppliedSchema = MakeHolder<NKikimrReplication::TSchemaChange>(PendingSchemaChange->Schema);
+            PendingSchemaChange.Reset();
+        }
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
@@ -449,21 +502,63 @@ class TLocalTableWriter
 
         for (auto& r : ev->Get()->Records) {
             auto offset = r.GetOffset();
-            auto& data = r.GetData();
+            if (IndexBuild && offset < BuildProgress.GetOffset()) {
+                continue; // Durable apply may be ahead of the CDC checkpoint.
+            }
 
+            auto& data = r.GetData();
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
+
+            TString error;
+            NKikimrReplication::TSchemaChange schema;
+            switch (Parser->ParseSchemaChange(*record, schema, error)) {
+            case IChangeRecordParser::ESchemaChangeResult::Error:
+                return LogCritAndLeave(TStringBuilder() << "Malformed CDC record: " << error);
+            case IChangeRecordParser::ESchemaChangeResult::SchemaChange:
+                // The worker must replay the schema record after the barrier
+                // is released.  Keep its raw topic payload in InFlightData;
+                PendingSchemaChange = MakeHolder<TEvWorker::TEvSchemaChange>(schema, offset);
+                break;
+            case IChangeRecordParser::ESchemaChangeResult::NotSchemaChange:
+                break;
+            }
+            if (PendingSchemaChange) {
+                if (IndexBuild) {
+                    return LogCritAndLeave("Schema changes during replicated index build are not supported");
+                }
+
+                break;
+            }
 
             if (Mode == EWriteMode::Consistent) {
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
 
                 if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
                     PendingHeartbeat = version;
+                    if (IndexBuild) {
+                        BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+                        version.ToProto(BuildProgress.MutableHeartbeat());
+                        if (!BuildProgress.HasSwitchOffset()) {
+                            BuildProgress.SetSwitchOffset(BuildProgress.GetOffset());
+                            break;
+                        }
+                    }
+
                     continue;
                 } else if (record->GetKind() != NChangeExchange::IChangeRecord::EKind::CdcDataChange) {
                     Y_ABORT("Unexpected record kind");
                 }
 
-                if (auto it = TxIds.upper_bound(version); it != TxIds.end()) {
+                if (IndexBuild && (!BuildProgress.HasSwitchOffset() || offset < BuildProgress.GetSwitchOffset())) {
+                    const auto maxVersion = Max(version, TRowVersion::FromProto(BuildProgress.GetMaxVersion()));
+                    maxVersion.ToProto(BuildProgress.MutableMaxVersion());
+                    BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+                    records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
+                    Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
+                    continue;
+                }
+
+                if (auto it = TxIds.upper_bound(version); !IndexBuild && it != TxIds.end()) {
                     record->RewriteTxId(it->second);
                     if (PendingTxId.empty()) {
                         records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
@@ -478,6 +573,10 @@ class TLocalTableWriter
                 records.emplace_back(record->GetOrder(), TablePathId, record->GetBody().size());
             }
 
+            if (IndexBuild) {
+                BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+            }
+
             Y_ABORT_UNLESS(PendingRecords.emplace(record->GetOrder(), std::move(record)).second);
         }
 
@@ -490,12 +589,7 @@ class TLocalTableWriter
         } else if (PendingTxId.empty()) {
             Y_ABORT_UNLESS(PendingRecords.empty());
 
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
-
-            Send(Worker, new TEvWorker::TEvPoll());
+            FinishBatch();
         }
     }
 
@@ -514,6 +608,37 @@ class TLocalTableWriter
             {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
+        if (IndexBuild) {
+            for (const auto& assignment : ev->Get()->Record.GetVersionTxIds()) {
+                const auto begin = TRowVersion::FromProto(assignment.GetBegin());
+                const auto end = TRowVersion::FromProto(assignment.GetVersion());
+                for (auto it = PendingTxId.begin(); it != PendingTxId.end();) {
+                    auto& record = PendingRecords.at(*it);
+                    const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+                    if (begin <= version && version < end) {
+                        record->RewriteTxId(assignment.GetTxId());
+                        BlockedRecords.insert(*it);
+                        it = PendingTxId.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+            if (PendingTxId.empty()) {
+                // Replies can cross in flight at C. Preserve topic order by
+                // draining the batch only after both scopes have answered.
+                for (const auto offset : BlockedRecords) {
+                    const auto& record = PendingRecords.at(offset);
+                    records.emplace_back(offset, TablePathId, record->GetBody().size());
+                }
+                BlockedRecords.clear();
+                if (!records.empty()) {
+                    EnqueueRecords(std::move(records));
+                }
+            }
+
+            return;
+        }
 
         for (const auto& kv : ev->Get()->Record.GetVersionTxIds()) {
             const auto version = TRowVersion::FromProto(kv.GetVersion());
@@ -526,7 +651,8 @@ class TLocalTableWriter
                 Y_ABORT_UNLESS(PendingRecords.contains(*it));
                 auto& record = PendingRecords.at(*it);
 
-                if (TRowVersion(record->GetStep(), record->GetTxId()) >= version) {
+                const auto recordVersion = TRowVersion(record->GetStep(), record->GetTxId());
+                if (recordVersion >= version) {
                     return false;
                 }
 
@@ -600,13 +726,67 @@ class TLocalTableWriter
         }
 
         if (PendingRecords.empty() && PendingTxId.empty()) {
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
+            FinishBatch();
+        }
+    }
 
+    void Handle(TEvService::TEvIndexBuildProgressResult::TPtr& ev) {
+        if (IndexBuild) {
+            BuildProgress.CopyFrom(ev->Get()->Record.GetProgress());
+        }
+    }
+
+    void FinishBatch() {
+        if (IndexBuild) {
+            PendingHeartbeat = TRowVersion::Min();
+            auto progress = MakeHolder<TEvService::TEvIndexBuildProgress>();
+            progress->Record.MutableProgress()->CopyFrom(BuildProgress);
+            Send(Worker, std::move(progress));
+            return;
+        }
+
+        if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+            TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+            Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+        }
+        if (PendingSchemaChange) {
+            Send(Worker, new TEvWorker::TEvSchemaChange(PendingSchemaChange->Schema, PendingSchemaChange->Offset));
+        } else {
             Send(Worker, new TEvWorker::TEvPoll());
         }
+    }
+
+    void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
+        if (!ev->Get()->Record.HasSchema()) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        const auto& schema = ev->Get()->Record.GetSchema();
+        if (!PendingSchemaChange) {
+            if (LastAppliedSchema && IsSameSchemaChange(schema, *LastAppliedSchema)) {
+                return;
+            }
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (!IsSameSchemaChange(schema, PendingSchemaChange->Schema)) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (RefreshingSchema) {
+            return; // duplicate controller release while the refresh is in flight
+        }
+
+        RefreshingSchema = true;
+        // A restarted worker may already have the post-DDL destination
+        // version. Exact schema verification below is then the safety check;
+        // requiring a newer version would park replay forever.
+        TableVersion = 0;
+        Schema = {};
+        Parser->SetSchema({});
+        KeyDesc.Reset();
+        KillSenders();
+        ResolveTable();
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
@@ -659,16 +839,21 @@ public:
             const TPathId& tablePathId,
             THolder<IChangeRecordParser>&& parser,
             THolder<IChangeRecordSerializer>&& serializer,
-            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn)
+            std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
+            const NKikimrReplication::TLocalTableWriterSettings* settings)
         : TActor(&TThis::StateWork)
         , TChangeSender(this, this, this, this, TActorId())
         , Mode(mode)
+        , IndexBuild(settings && settings->GetIndexBuild())
         , Database(database)
         , TablePathId(tablePathId)
         , Parser(std::move(parser))
         , Serializer(std::move(serializer))
         , CreateResolverFn(std::move(createResolverFn))
     {
+        if (IndexBuild) {
+            BuildProgress.CopyFrom(settings->GetIndexBuildProgress());
+        }
     }
 
     TPathId GetChangeSenderIdentity() const override final {
@@ -683,6 +868,8 @@ public:
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvSchemaChangeResult, Handle);
+            hFunc(TEvService::TEvIndexBuildProgressResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -697,6 +884,8 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
     const EWriteMode Mode;
+    bool IndexBuild = false;
+    NKikimrReplication::TIndexBuildProgress BuildProgress;
     const TString Database;
     const TPathId TablePathId;
     THolder<IChangeRecordParser> Parser;
@@ -705,17 +894,21 @@ private:
 
     TActorId Worker;
     ui64 TableVersion = 0;
+    ui64 ResolveGeneration = 0;
     THolder<TKeyDesc> KeyDesc;
     TLightweightSchema::TCPtr Schema;
     bool Resolving = false;
     bool Initialized = false;
     bool Terminating = false;
+    bool RefreshingSchema = false;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
+    THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    THolder<NKikimrReplication::TSchemaChange> LastAppliedSchema;
 
 }; // TLocalTableWriter
 
@@ -725,9 +918,9 @@ IActor* CreateLocalTableWriter(
         THolder<IChangeRecordParser>&& parser,
         THolder<IChangeRecordSerializer>&& serializer,
         std::function<NChangeExchange::IPartitionResolverVisitor*(const NKikimr::TKeyDesc&)>&& createResolverFn,
-        EWriteMode mode)
+        EWriteMode mode, const NKikimrReplication::TLocalTableWriterSettings* settings)
 {
-    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn));
+    return new TLocalTableWriter(mode, database, tablePathId, std::move(parser), std::move(serializer), std::move(createResolverFn), settings);
 }
 
 } // namespace NKikimr::NReplication::NService

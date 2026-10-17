@@ -5,6 +5,7 @@ UNITTEST_FOR(yt/yql/providers/yt/provider)
 SIZE(SMALL)
 
 SRCS(
+    yql_yt_activation_ut.cpp
     yql_yt_dq_integration_ut.cpp
     yql_yt_epoch_ut.cpp
     yql_yt_cbo_ut.cpp
@@ -23,6 +24,7 @@ PEERDIR(
     yql/essentials/public/udf/service/terminate_policy
     yql/essentials/core/services
     yql/essentials/core
+    yql/essentials/core/qplayer/storage/memory
     yql/essentials/providers/common/gateway
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/config

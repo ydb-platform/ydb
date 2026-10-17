@@ -185,7 +185,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     {% endcut %}
 
-    {% cut "Configuring retry retry attempts" %}
+    {% cut "Configuring retry parameters" %}
 
     You can configure the retry mechanism behavior using the `TRetryOperationSettings` class:
 
@@ -306,7 +306,7 @@ Below are code examples of using the built-in retry mechanisms in the {{ ydb-sho
 
     In the {{ ydb-short-name }} Go SDK, proper error handling is built into several APIs:
 
-    {% cut "General-purpose retry general purpose" %}
+    {% cut "General-purpose retry function" %}
 
     The core error‑handling logic is implemented by the helper function `retry.Retry`.
     Details of retry execution are largely hidden.

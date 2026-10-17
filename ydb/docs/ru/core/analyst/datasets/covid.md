@@ -22,9 +22,9 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
   ```sql
   CREATE TABLE `covid_research` (
@@ -101,7 +101,7 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ```sql
   SELECT

@@ -475,6 +475,10 @@ public:
     virtual void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize,
                               std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) = 0;
 
+    //! Wait asynchronously until all writes accepted before this call are acknowledged.
+    [[nodiscard]] virtual NThreading::TFuture<bool> Flush() {
+        return NThreading::MakeFuture(false);
+    }
 
     //! Wait for all writes to complete (no more that closeTimeout()), then close.
     //! Return true if all writes were completed and acked, false if timeout was reached and some writes were aborted.

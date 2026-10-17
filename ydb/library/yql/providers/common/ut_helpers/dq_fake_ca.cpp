@@ -1,14 +1,13 @@
 #include "dq_fake_ca.h"
 
+#include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/services/services.pb.h>
+
+#include <util/system/env.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-#include <ydb/library/services/services.pb.h>
-
-#include <util/system/env.h>
-
-#include <condition_variable>
 #include <thread>
 
 namespace NYql::NDq {
@@ -44,18 +43,16 @@ TFakeActor::~TFakeActor() {
 }
 
 void TFakeActor::InitAsyncOutput(IDqComputeActorAsyncOutput* dqAsyncOutput, IActor* dqAsyncOutputAsActor) {
-    DqAsyncOutputActorId = RegisterWithSameMailbox(dqAsyncOutputAsActor),
-    DqAsyncOutput = dqAsyncOutput;
+    DqAsyncOutputActorId = RegisterWithSameMailbox(dqAsyncOutputAsActor), DqAsyncOutput = dqAsyncOutput;
     DqAsyncOutputAsActor = dqAsyncOutputAsActor;
 }
 
 void TFakeActor::InitAsyncInput(IDqComputeActorAsyncInput* dqAsyncInput, IActor* dqAsyncInputAsActor) {
-    DqAsyncInputActorId = RegisterWithSameMailbox(dqAsyncInputAsActor),
-    DqAsyncInput = dqAsyncInput;
+    DqAsyncInputActorId = RegisterWithSameMailbox(dqAsyncInputAsActor), DqAsyncInput = dqAsyncInput;
     DqAsyncInputAsActor = dqAsyncInputAsActor;
 }
 
-void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
+void TFakeActor::Terminate() {
     if (DqAsyncInputActorId) {
         DqAsyncInput->PassAway();
 
@@ -71,7 +68,6 @@ void TFakeActor::Terminate(std::shared_ptr<std::atomic<bool>> done) {
         DqAsyncOutput = nullptr;
         DqAsyncOutputAsActor = nullptr;
     }
-    done->store(true);
 }
 
 TFakeActor::TAsyncOutputCallbacks& TFakeActor::GetAsyncOutputCallbacks() {
@@ -82,44 +78,55 @@ NKikimr::NMiniKQL::THolderFactory& TFakeActor::GetHolderFactory() {
     return HolderFactory;
 }
 
-TFakeCASetup::TFakeCASetup()
-    : Runtime(new NActors::TTestActorRuntimeBase(1, true))
+TFakeCASetup::TFakeCASetup(ui32 nodeCount)
+    : Runtime(new NActors::TTestActorRuntimeBase(nodeCount, true))
     , FakeActorId(0, "FakeActor")
 {
+    if (nodeCount > 1) {
+        auto nameserver = MakeIntrusive<TTableNameserverSetup>();
+        for (ui32 node = 0; node < nodeCount; ++node) {
+            nameserver->StaticNodeTable[Runtime->GetNodeId(node)] = std::make_pair(TString("127.0.0.1"), node + 1);
+        }
+        for (ui32 node = 0; node < nodeCount; ++node) {
+            Runtime->AddLocalService(GetNameserviceActorId(), TActorSetupCmd(CreateNameserverTable(nameserver), TMailboxType::Simple, 0), node);
+        }
+    }
     Runtime->AddLocalService(
-        FakeActorId,
-        NActors::TActorSetupCmd(
-            new TFakeActor(AsyncInputPromises, AsyncOutputPromises),
-            NActors::TMailboxType::Simple,
-            0));
+        FakeActorId, NActors::TActorSetupCmd(new TFakeActor(AsyncInputPromises, AsyncOutputPromises), NActors::TMailboxType::Simple, 0));
 
     Runtime->SetLogBackend(CreateStderrBackend());
 
     Runtime->Initialize();
 
-    Runtime->GetLogSettings(0)->Append(
-        NKikimrServices::EServiceKikimr_MIN,
-        NKikimrServices::EServiceKikimr_MAX,
-        NKikimrServices::EServiceKikimr_Name);
+    for (ui32 node = 0; node < nodeCount; ++node) {
+        Runtime->GetLogSettings(node)->Append(
+            NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+    }
 
     Runtime->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::EPriority::PRI_TRACE);
 }
 
 TFakeCASetup::~TFakeCASetup() {
-    auto shouldStop = std::make_shared<std::atomic<bool>>(); 
-    Execute([shouldStop](TFakeActor& actor) {
-        actor.Terminate(shouldStop);
-    });
+    Terminate();
+}
 
-    while (!*shouldStop) {
-        Sleep(TDuration::MilliSeconds(200));
+void TFakeCASetup::Terminate() {
+    if (Terminated) {
+        return;
     }
+    Terminated = true;
+
+    // Execute() is a blocking round trip: the fake actor runs the callback and only then
+    // sets the promise Execute() waits on. So the actors are passed away by the time it returns.
+    Execute([](TFakeActor& actor) {
+        actor.Terminate();
+    });
 }
 
 void TFakeCASetup::AsyncOutputWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint, bool finish) {
     Execute([&valueProducer, checkpoint, finish](TFakeActor& actor) {
         auto batch = valueProducer(actor.GetHolderFactory());
-        
+
         Y_ASSERT(actor.DqAsyncOutput);
         actor.DqAsyncOutput->SendData(std::move(batch), 0, checkpoint, finish);
     });
@@ -139,10 +146,10 @@ void TFakeCASetup::LoadSource(const TSourceState& state) {
     });
 }
 
-void TFakeCASetup::LoadSink(const TSinkState& state) {
-    Execute([&state](TFakeActor& actor) {
+void TFakeCASetup::LoadSink(const TSinkState& state, const NDqProto::TCheckpoint& checkpoint) {
+    Execute([&state, &checkpoint](TFakeActor& actor) {
         Y_ASSERT(actor.DqAsyncOutput);
-        actor.DqAsyncOutput->LoadState(state);
+        actor.DqAsyncOutput->LoadState(state, checkpoint);
     });
 }
 
@@ -158,4 +165,4 @@ void TFakeCASetup::Execute(TCallback callback) {
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NYql::NDq

@@ -10,6 +10,8 @@
 #  include "opentelemetry/common/macros.h"
 #  include "opentelemetry/sdk/metrics/aggregation/aggregation_config.h"
 #  include "opentelemetry/sdk/metrics/exemplar/aligned_histogram_bucket_exemplar_reservoir.h"
+#  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
+#  include "opentelemetry/sdk/metrics/exemplar/reservoir.h"
 #  include "opentelemetry/sdk/metrics/exemplar/simple_fixed_size_exemplar_reservoir.h"
 #  include "opentelemetry/version.h"
 
@@ -39,8 +41,7 @@ static inline size_t GetSimpleFixedReservoirDefaultSize(const AggregationType ag
   {
     const auto *histogram_agg_config =
         static_cast<const Base2ExponentialHistogramAggregationConfig *>(agg_config);
-    return (std::min)(kMaxBase2ExponentialHistogramReservoirSize,
-                      histogram_agg_config->max_buckets_);
+    return (std::min)(kMaxBase2ExponentialHistogramReservoirSize, histogram_agg_config->max_size_);
   }
 
   return SimpleFixedSizeExemplarReservoir::kDefaultSimpleReservoirSize;
@@ -49,8 +50,14 @@ static inline size_t GetSimpleFixedReservoirDefaultSize(const AggregationType ag
 static inline nostd::shared_ptr<ExemplarReservoir> GetExemplarReservoir(
     const AggregationType agg_type,
     const AggregationConfig *agg_config,
-    const InstrumentDescriptor &instrument_descriptor)
+    const InstrumentDescriptor &instrument_descriptor,
+    ExemplarFilterType filter_type)
 {
+  if (filter_type == ExemplarFilterType::kAlwaysOff)
+  {
+    return ExemplarReservoir::GetNoExemplarReservoir();
+  }
+
   if (agg_type == AggregationType::kHistogram)
   {
     const auto *histogram_agg_config = static_cast<const HistogramAggregationConfig *>(agg_config);
@@ -62,18 +69,18 @@ static inline nostd::shared_ptr<ExemplarReservoir> GetExemplarReservoir(
     //
     if (histogram_agg_config != nullptr && histogram_agg_config->boundaries_.size() > 1)
     {
-      return nostd::shared_ptr<ExemplarReservoir>(new AlignedHistogramBucketExemplarReservoir(
+      return ExemplarReservoir::GetAlignedHistogramBucketExemplarReservoir(
           histogram_agg_config->boundaries_.size(),
           AlignedHistogramBucketExemplarReservoir::GetHistogramCellSelector(
               histogram_agg_config->boundaries_),
-          GetMapAndResetCellMethod(instrument_descriptor)));
+          GetMapAndResetCellMethod(instrument_descriptor));
     }
   }
 
-  return nostd::shared_ptr<ExemplarReservoir>(new SimpleFixedSizeExemplarReservoir(
+  return ExemplarReservoir::GetSimpleFixedSizeExemplarReservoir(
       GetSimpleFixedReservoirDefaultSize(agg_type, agg_config),
       SimpleFixedSizeExemplarReservoir::GetSimpleFixedSizeCellSelector(),
-      GetMapAndResetCellMethod(instrument_descriptor)));
+      GetMapAndResetCellMethod(instrument_descriptor));
 }
 }  // namespace metrics
 }  // namespace sdk

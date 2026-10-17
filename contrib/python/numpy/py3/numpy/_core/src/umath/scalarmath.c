@@ -3418,7 +3418,7 @@ convert_to_byte(PyObject *value, npy_byte *result, npy_bool *may_need_deferring)
     if (PyArray_IsScalar(value, Byte)) {
         *result = PyArrayScalar_VAL(value, Byte);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -3437,10 +3437,6 @@ convert_to_byte(PyObject *value, npy_byte *result, npy_bool *may_need_deferring)
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_BYTE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_BYTE) && !PyTypeNum_ISCOMPLEX(NPY_BYTE)) {
                 return PROMOTION_REQUIRED;
@@ -3457,19 +3453,12 @@ convert_to_byte(PyObject *value, npy_byte *result, npy_bool *may_need_deferring)
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -3481,10 +3470,6 @@ convert_to_byte(PyObject *value, npy_byte *result, npy_bool *may_need_deferring)
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_BYTE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_BYTE)) {
                 return PROMOTION_REQUIRED;
@@ -3730,7 +3715,7 @@ convert_to_ubyte(PyObject *value, npy_ubyte *result, npy_bool *may_need_deferrin
     if (PyArray_IsScalar(value, UByte)) {
         *result = PyArrayScalar_VAL(value, UByte);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -3749,10 +3734,6 @@ convert_to_ubyte(PyObject *value, npy_ubyte *result, npy_bool *may_need_deferrin
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_UBYTE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_UBYTE) && !PyTypeNum_ISCOMPLEX(NPY_UBYTE)) {
                 return PROMOTION_REQUIRED;
@@ -3769,19 +3750,12 @@ convert_to_ubyte(PyObject *value, npy_ubyte *result, npy_bool *may_need_deferrin
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -3793,10 +3767,6 @@ convert_to_ubyte(PyObject *value, npy_ubyte *result, npy_bool *may_need_deferrin
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_UBYTE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_UBYTE)) {
                 return PROMOTION_REQUIRED;
@@ -4042,7 +4012,7 @@ convert_to_short(PyObject *value, npy_short *result, npy_bool *may_need_deferrin
     if (PyArray_IsScalar(value, Short)) {
         *result = PyArrayScalar_VAL(value, Short);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -4061,10 +4031,6 @@ convert_to_short(PyObject *value, npy_short *result, npy_bool *may_need_deferrin
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_SHORT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_SHORT) && !PyTypeNum_ISCOMPLEX(NPY_SHORT)) {
                 return PROMOTION_REQUIRED;
@@ -4081,19 +4047,12 @@ convert_to_short(PyObject *value, npy_short *result, npy_bool *may_need_deferrin
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -4105,10 +4064,6 @@ convert_to_short(PyObject *value, npy_short *result, npy_bool *may_need_deferrin
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_SHORT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_SHORT)) {
                 return PROMOTION_REQUIRED;
@@ -4354,7 +4309,7 @@ convert_to_ushort(PyObject *value, npy_ushort *result, npy_bool *may_need_deferr
     if (PyArray_IsScalar(value, UShort)) {
         *result = PyArrayScalar_VAL(value, UShort);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -4373,10 +4328,6 @@ convert_to_ushort(PyObject *value, npy_ushort *result, npy_bool *may_need_deferr
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_USHORT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_USHORT) && !PyTypeNum_ISCOMPLEX(NPY_USHORT)) {
                 return PROMOTION_REQUIRED;
@@ -4393,19 +4344,12 @@ convert_to_ushort(PyObject *value, npy_ushort *result, npy_bool *may_need_deferr
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -4417,10 +4361,6 @@ convert_to_ushort(PyObject *value, npy_ushort *result, npy_bool *may_need_deferr
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_USHORT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_USHORT)) {
                 return PROMOTION_REQUIRED;
@@ -4666,7 +4606,7 @@ convert_to_int(PyObject *value, npy_int *result, npy_bool *may_need_deferring)
     if (PyArray_IsScalar(value, Int)) {
         *result = PyArrayScalar_VAL(value, Int);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -4685,10 +4625,6 @@ convert_to_int(PyObject *value, npy_int *result, npy_bool *may_need_deferring)
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_INT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_INT) && !PyTypeNum_ISCOMPLEX(NPY_INT)) {
                 return PROMOTION_REQUIRED;
@@ -4705,19 +4641,12 @@ convert_to_int(PyObject *value, npy_int *result, npy_bool *may_need_deferring)
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -4729,10 +4658,6 @@ convert_to_int(PyObject *value, npy_int *result, npy_bool *may_need_deferring)
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_INT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_INT)) {
                 return PROMOTION_REQUIRED;
@@ -4978,7 +4903,7 @@ convert_to_uint(PyObject *value, npy_uint *result, npy_bool *may_need_deferring)
     if (PyArray_IsScalar(value, UInt)) {
         *result = PyArrayScalar_VAL(value, UInt);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -4997,10 +4922,6 @@ convert_to_uint(PyObject *value, npy_uint *result, npy_bool *may_need_deferring)
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_UINT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_UINT) && !PyTypeNum_ISCOMPLEX(NPY_UINT)) {
                 return PROMOTION_REQUIRED;
@@ -5017,19 +4938,12 @@ convert_to_uint(PyObject *value, npy_uint *result, npy_bool *may_need_deferring)
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -5041,10 +4955,6 @@ convert_to_uint(PyObject *value, npy_uint *result, npy_bool *may_need_deferring)
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_UINT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_UINT)) {
                 return PROMOTION_REQUIRED;
@@ -5290,7 +5200,7 @@ convert_to_long(PyObject *value, npy_long *result, npy_bool *may_need_deferring)
     if (PyArray_IsScalar(value, Long)) {
         *result = PyArrayScalar_VAL(value, Long);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -5309,10 +5219,6 @@ convert_to_long(PyObject *value, npy_long *result, npy_bool *may_need_deferring)
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_LONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_LONG) && !PyTypeNum_ISCOMPLEX(NPY_LONG)) {
                 return PROMOTION_REQUIRED;
@@ -5329,19 +5235,12 @@ convert_to_long(PyObject *value, npy_long *result, npy_bool *may_need_deferring)
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -5353,10 +5252,6 @@ convert_to_long(PyObject *value, npy_long *result, npy_bool *may_need_deferring)
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_LONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_LONG)) {
                 return PROMOTION_REQUIRED;
@@ -5602,7 +5497,7 @@ convert_to_ulong(PyObject *value, npy_ulong *result, npy_bool *may_need_deferrin
     if (PyArray_IsScalar(value, ULong)) {
         *result = PyArrayScalar_VAL(value, ULong);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -5621,10 +5516,6 @@ convert_to_ulong(PyObject *value, npy_ulong *result, npy_bool *may_need_deferrin
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_ULONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_ULONG) && !PyTypeNum_ISCOMPLEX(NPY_ULONG)) {
                 return PROMOTION_REQUIRED;
@@ -5641,19 +5532,12 @@ convert_to_ulong(PyObject *value, npy_ulong *result, npy_bool *may_need_deferrin
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -5665,10 +5549,6 @@ convert_to_ulong(PyObject *value, npy_ulong *result, npy_bool *may_need_deferrin
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_ULONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_ULONG)) {
                 return PROMOTION_REQUIRED;
@@ -5914,7 +5794,7 @@ convert_to_longlong(PyObject *value, npy_longlong *result, npy_bool *may_need_de
     if (PyArray_IsScalar(value, LongLong)) {
         *result = PyArrayScalar_VAL(value, LongLong);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -5933,10 +5813,6 @@ convert_to_longlong(PyObject *value, npy_longlong *result, npy_bool *may_need_de
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_LONGLONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_LONGLONG) && !PyTypeNum_ISCOMPLEX(NPY_LONGLONG)) {
                 return PROMOTION_REQUIRED;
@@ -5953,19 +5829,12 @@ convert_to_longlong(PyObject *value, npy_longlong *result, npy_bool *may_need_de
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -5977,10 +5846,6 @@ convert_to_longlong(PyObject *value, npy_longlong *result, npy_bool *may_need_de
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_LONGLONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_LONGLONG)) {
                 return PROMOTION_REQUIRED;
@@ -6226,7 +6091,7 @@ convert_to_ulonglong(PyObject *value, npy_ulonglong *result, npy_bool *may_need_
     if (PyArray_IsScalar(value, ULongLong)) {
         *result = PyArrayScalar_VAL(value, ULongLong);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -6245,10 +6110,6 @@ convert_to_ulonglong(PyObject *value, npy_ulonglong *result, npy_bool *may_need_
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_ULONGLONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_ULONGLONG) && !PyTypeNum_ISCOMPLEX(NPY_ULONGLONG)) {
                 return PROMOTION_REQUIRED;
@@ -6265,19 +6126,12 @@ convert_to_ulonglong(PyObject *value, npy_ulonglong *result, npy_bool *may_need_
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -6289,10 +6143,6 @@ convert_to_ulonglong(PyObject *value, npy_ulonglong *result, npy_bool *may_need_
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_ULONGLONG)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_ULONGLONG)) {
                 return PROMOTION_REQUIRED;
@@ -6538,7 +6388,7 @@ convert_to_half(PyObject *value, npy_half *result, npy_bool *may_need_deferring)
     if (PyArray_IsScalar(value, Half)) {
         *result = PyArrayScalar_VAL(value, Half);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -6557,10 +6407,6 @@ convert_to_half(PyObject *value, npy_half *result, npy_bool *may_need_deferring)
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_HALF)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_HALF) && !PyTypeNum_ISCOMPLEX(NPY_HALF)) {
                 return PROMOTION_REQUIRED;
@@ -6577,19 +6423,12 @@ convert_to_half(PyObject *value, npy_half *result, npy_bool *may_need_deferring)
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -6601,10 +6440,6 @@ convert_to_half(PyObject *value, npy_half *result, npy_bool *may_need_deferring)
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_HALF)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_HALF)) {
                 return PROMOTION_REQUIRED;
@@ -6850,7 +6685,7 @@ convert_to_float(PyObject *value, npy_float *result, npy_bool *may_need_deferrin
     if (PyArray_IsScalar(value, Float)) {
         *result = PyArrayScalar_VAL(value, Float);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -6869,10 +6704,6 @@ convert_to_float(PyObject *value, npy_float *result, npy_bool *may_need_deferrin
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_FLOAT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_FLOAT) && !PyTypeNum_ISCOMPLEX(NPY_FLOAT)) {
                 return PROMOTION_REQUIRED;
@@ -6889,19 +6720,12 @@ convert_to_float(PyObject *value, npy_float *result, npy_bool *may_need_deferrin
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -6913,10 +6737,6 @@ convert_to_float(PyObject *value, npy_float *result, npy_bool *may_need_deferrin
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_FLOAT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_FLOAT)) {
                 return PROMOTION_REQUIRED;
@@ -7162,7 +6982,7 @@ convert_to_double(PyObject *value, npy_double *result, npy_bool *may_need_deferr
     if (PyArray_IsScalar(value, Double)) {
         *result = PyArrayScalar_VAL(value, Double);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -7181,10 +7001,6 @@ convert_to_double(PyObject *value, npy_double *result, npy_bool *may_need_deferr
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_DOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_DOUBLE) && !PyTypeNum_ISCOMPLEX(NPY_DOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -7201,19 +7017,12 @@ convert_to_double(PyObject *value, npy_double *result, npy_bool *may_need_deferr
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -7225,10 +7034,6 @@ convert_to_double(PyObject *value, npy_double *result, npy_bool *may_need_deferr
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_DOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_DOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -7474,7 +7279,7 @@ convert_to_longdouble(PyObject *value, npy_longdouble *result, npy_bool *may_nee
     if (PyArray_IsScalar(value, LongDouble)) {
         *result = PyArrayScalar_VAL(value, LongDouble);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -7493,10 +7298,6 @@ convert_to_longdouble(PyObject *value, npy_longdouble *result, npy_bool *may_nee
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_LONGDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_LONGDOUBLE) && !PyTypeNum_ISCOMPLEX(NPY_LONGDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -7513,19 +7314,12 @@ convert_to_longdouble(PyObject *value, npy_longdouble *result, npy_bool *may_nee
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -7537,10 +7331,6 @@ convert_to_longdouble(PyObject *value, npy_longdouble *result, npy_bool *may_nee
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_LONGDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_LONGDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -7786,7 +7576,7 @@ convert_to_cfloat(PyObject *value, npy_cfloat *result, npy_bool *may_need_deferr
     if (PyArray_IsScalar(value, CFloat)) {
         *result = PyArrayScalar_VAL(value, CFloat);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -7805,10 +7595,6 @@ convert_to_cfloat(PyObject *value, npy_cfloat *result, npy_bool *may_need_deferr
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_CFLOAT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_CFLOAT) && !PyTypeNum_ISCOMPLEX(NPY_CFLOAT)) {
                 return PROMOTION_REQUIRED;
@@ -7825,19 +7611,12 @@ convert_to_cfloat(PyObject *value, npy_cfloat *result, npy_bool *may_need_deferr
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -7849,10 +7628,6 @@ convert_to_cfloat(PyObject *value, npy_cfloat *result, npy_bool *may_need_deferr
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_CFLOAT)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_CFLOAT)) {
                 return PROMOTION_REQUIRED;
@@ -8098,7 +7873,7 @@ convert_to_cdouble(PyObject *value, npy_cdouble *result, npy_bool *may_need_defe
     if (PyArray_IsScalar(value, CDouble)) {
         *result = PyArrayScalar_VAL(value, CDouble);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -8117,10 +7892,6 @@ convert_to_cdouble(PyObject *value, npy_cdouble *result, npy_bool *may_need_defe
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_CDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_CDOUBLE) && !PyTypeNum_ISCOMPLEX(NPY_CDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -8137,19 +7908,12 @@ convert_to_cdouble(PyObject *value, npy_cdouble *result, npy_bool *may_need_defe
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -8161,10 +7925,6 @@ convert_to_cdouble(PyObject *value, npy_cdouble *result, npy_bool *may_need_defe
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_CDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_CDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -8410,7 +8170,7 @@ convert_to_clongdouble(PyObject *value, npy_clongdouble *result, npy_bool *may_n
     if (PyArray_IsScalar(value, CLongDouble)) {
         *result = PyArrayScalar_VAL(value, CLongDouble);
         /*
-         * In principle special, assyemetric, handling could be possible for
+         * In principle special, asymmetric, handling could be possible for
          * explicit subclasses.
          * In practice, we just check the normal deferring logic.
          */
@@ -8429,10 +8189,6 @@ convert_to_clongdouble(PyObject *value, npy_clongdouble *result, npy_bool *may_n
 
     if (PyFloat_CheckExact(value)) {
         if (!IS_SAFE(NPY_DOUBLE, NPY_CLONGDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISFLOAT(NPY_CLONGDOUBLE) && !PyTypeNum_ISCOMPLEX(NPY_CLONGDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -8449,19 +8205,12 @@ convert_to_clongdouble(PyObject *value, npy_clongdouble *result, npy_bool *may_n
              * long -> (c)longdouble is safe, so `OTHER_IS_UNKNOWN_OBJECT` will
              * be returned below for huge integers.
              */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             return CONVERT_PYSCALAR;
         }
         int overflow;
         long val = PyLong_AsLongAndOverflow(value, &overflow);
         if (overflow) {
             /* handle as if "unsafe" */
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                return OTHER_IS_UNKNOWN_OBJECT;
-            }
             return CONVERT_PYSCALAR;
         }
         if (error_converting(val)) {
@@ -8473,10 +8222,6 @@ convert_to_clongdouble(PyObject *value, npy_clongdouble *result, npy_bool *may_n
 
     if (PyComplex_CheckExact(value)) {
         if (!IS_SAFE(NPY_CDOUBLE, NPY_CLONGDOUBLE)) {
-            if (get_npy_promotion_state() != NPY_USE_WEAK_PROMOTION) {
-                /* Legacy promotion and weak-and-warn not handled here */
-                return PROMOTION_REQUIRED;
-            }
             /* Weak promotion is used when self is float or complex: */
             if (!PyTypeNum_ISCOMPLEX(NPY_CLONGDOUBLE)) {
                 return PROMOTION_REQUIRED;
@@ -8614,7 +8359,7 @@ convert_to_clongdouble(PyObject *value, npy_clongdouble *result, npy_bool *may_n
 
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -8785,7 +8530,7 @@ byte_add(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -8956,7 +8701,7 @@ ubyte_add(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9127,7 +8872,7 @@ short_add(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9298,7 +9043,7 @@ ushort_add(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9469,7 +9214,7 @@ int_add(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9640,7 +9385,7 @@ uint_add(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9811,7 +9556,7 @@ long_add(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -9982,7 +9727,7 @@ ulong_add(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -10153,7 +9898,7 @@ longlong_add(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -10324,7 +10069,7 @@ ulonglong_add(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -10495,7 +10240,7 @@ byte_subtract(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -10666,7 +10411,7 @@ ubyte_subtract(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -10837,7 +10582,7 @@ short_subtract(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11008,7 +10753,7 @@ ushort_subtract(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11179,7 +10924,7 @@ int_subtract(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11350,7 +11095,7 @@ uint_subtract(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11521,7 +11266,7 @@ long_subtract(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11692,7 +11437,7 @@ ulong_subtract(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -11863,7 +11608,7 @@ longlong_subtract(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -12034,7 +11779,7 @@ ulonglong_subtract(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -12205,7 +11950,7 @@ byte_multiply(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -12376,7 +12121,7 @@ ubyte_multiply(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -12547,7 +12292,7 @@ short_multiply(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -12718,7 +12463,7 @@ ushort_multiply(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -12889,7 +12634,7 @@ int_multiply(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -13060,7 +12805,7 @@ uint_multiply(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -13231,7 +12976,7 @@ long_multiply(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -13402,7 +13147,7 @@ ulong_multiply(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -13573,7 +13318,7 @@ longlong_multiply(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -13744,7 +13489,7 @@ ulonglong_multiply(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -13915,7 +13660,7 @@ byte_remainder(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14086,7 +13831,7 @@ ubyte_remainder(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14257,7 +14002,7 @@ short_remainder(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14428,7 +14173,7 @@ ushort_remainder(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14599,7 +14344,7 @@ int_remainder(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14770,7 +14515,7 @@ uint_remainder(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -14941,7 +14686,7 @@ long_remainder(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -15112,7 +14857,7 @@ ulong_remainder(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -15283,7 +15028,7 @@ longlong_remainder(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -15454,7 +15199,7 @@ ulonglong_remainder(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -15625,7 +15370,7 @@ byte_divmod(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -15796,7 +15541,7 @@ ubyte_divmod(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -15967,7 +15712,7 @@ short_divmod(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16138,7 +15883,7 @@ ushort_divmod(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16309,7 +16054,7 @@ int_divmod(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16480,7 +16225,7 @@ uint_divmod(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16651,7 +16396,7 @@ long_divmod(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16822,7 +16567,7 @@ ulong_divmod(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -16993,7 +16738,7 @@ longlong_divmod(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -17164,7 +16909,7 @@ ulonglong_divmod(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -17335,7 +17080,7 @@ byte_floor_divide(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -17506,7 +17251,7 @@ ubyte_floor_divide(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -17677,7 +17422,7 @@ short_floor_divide(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -17848,7 +17593,7 @@ ushort_floor_divide(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18019,7 +17764,7 @@ int_floor_divide(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18190,7 +17935,7 @@ uint_floor_divide(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18361,7 +18106,7 @@ long_floor_divide(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18532,7 +18277,7 @@ ulong_floor_divide(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18703,7 +18448,7 @@ longlong_floor_divide(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -18874,7 +18619,7 @@ ulonglong_floor_divide(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19045,7 +18790,7 @@ byte_lshift(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19216,7 +18961,7 @@ ubyte_lshift(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19387,7 +19132,7 @@ short_lshift(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19558,7 +19303,7 @@ ushort_lshift(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19729,7 +19474,7 @@ int_lshift(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -19900,7 +19645,7 @@ uint_lshift(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -20071,7 +19816,7 @@ long_lshift(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -20242,7 +19987,7 @@ ulong_lshift(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -20413,7 +20158,7 @@ longlong_lshift(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_lshift
@@ -20584,7 +20329,7 @@ ulonglong_lshift(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -20755,7 +20500,7 @@ byte_rshift(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -20926,7 +20671,7 @@ ubyte_rshift(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21097,7 +20842,7 @@ short_rshift(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21268,7 +21013,7 @@ ushort_rshift(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21439,7 +21184,7 @@ int_rshift(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21610,7 +21355,7 @@ uint_rshift(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21781,7 +21526,7 @@ long_rshift(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -21952,7 +21697,7 @@ ulong_rshift(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -22123,7 +21868,7 @@ longlong_rshift(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_rshift
@@ -22294,7 +22039,7 @@ ulonglong_rshift(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -22465,7 +22210,7 @@ byte_and(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -22636,7 +22381,7 @@ ubyte_and(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -22807,7 +22552,7 @@ short_and(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -22978,7 +22723,7 @@ ushort_and(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -23149,7 +22894,7 @@ int_and(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -23320,7 +23065,7 @@ uint_and(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -23491,7 +23236,7 @@ long_and(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -23662,7 +23407,7 @@ ulong_and(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -23833,7 +23578,7 @@ longlong_and(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_and
@@ -24004,7 +23749,7 @@ ulonglong_and(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -24175,7 +23920,7 @@ byte_or(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -24346,7 +24091,7 @@ ubyte_or(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -24517,7 +24262,7 @@ short_or(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -24688,7 +24433,7 @@ ushort_or(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -24859,7 +24604,7 @@ int_or(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -25030,7 +24775,7 @@ uint_or(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -25201,7 +24946,7 @@ long_or(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -25372,7 +25117,7 @@ ulong_or(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -25543,7 +25288,7 @@ longlong_or(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_or
@@ -25714,7 +25459,7 @@ ulonglong_or(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_byte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -25885,7 +25630,7 @@ byte_xor(PyObject *a, PyObject *b)
 #undef IS_byte
 
 
-#line 1179
+#line 1164
 #define IS_ubyte
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26056,7 +25801,7 @@ ubyte_xor(PyObject *a, PyObject *b)
 #undef IS_ubyte
 
 
-#line 1179
+#line 1164
 #define IS_short
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26227,7 +25972,7 @@ short_xor(PyObject *a, PyObject *b)
 #undef IS_short
 
 
-#line 1179
+#line 1164
 #define IS_ushort
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26398,7 +26143,7 @@ ushort_xor(PyObject *a, PyObject *b)
 #undef IS_ushort
 
 
-#line 1179
+#line 1164
 #define IS_int
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26569,7 +26314,7 @@ int_xor(PyObject *a, PyObject *b)
 #undef IS_int
 
 
-#line 1179
+#line 1164
 #define IS_uint
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26740,7 +26485,7 @@ uint_xor(PyObject *a, PyObject *b)
 #undef IS_uint
 
 
-#line 1179
+#line 1164
 #define IS_long
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -26911,7 +26656,7 @@ long_xor(PyObject *a, PyObject *b)
 #undef IS_long
 
 
-#line 1179
+#line 1164
 #define IS_ulong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -27082,7 +26827,7 @@ ulong_xor(PyObject *a, PyObject *b)
 #undef IS_ulong
 
 
-#line 1179
+#line 1164
 #define IS_longlong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -27253,7 +26998,7 @@ longlong_xor(PyObject *a, PyObject *b)
 #undef IS_longlong
 
 
-#line 1179
+#line 1164
 #define IS_ulonglong
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_xor
@@ -27424,7 +27169,7 @@ ulonglong_xor(PyObject *a, PyObject *b)
 #undef IS_ulonglong
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -27595,7 +27340,7 @@ half_add(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -27766,7 +27511,7 @@ float_add(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -27937,7 +27682,7 @@ double_add(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -28108,7 +27853,7 @@ longdouble_add(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_cfloat
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -28279,7 +28024,7 @@ cfloat_add(PyObject *a, PyObject *b)
 #undef IS_cfloat
 
 
-#line 1179
+#line 1164
 #define IS_cdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -28450,7 +28195,7 @@ cdouble_add(PyObject *a, PyObject *b)
 #undef IS_cdouble
 
 
-#line 1179
+#line 1164
 #define IS_clongdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_add
@@ -28621,7 +28366,7 @@ clongdouble_add(PyObject *a, PyObject *b)
 #undef IS_clongdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -28792,7 +28537,7 @@ half_subtract(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -28963,7 +28708,7 @@ float_subtract(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -29134,7 +28879,7 @@ double_subtract(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -29305,7 +29050,7 @@ longdouble_subtract(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_cfloat
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -29476,7 +29221,7 @@ cfloat_subtract(PyObject *a, PyObject *b)
 #undef IS_cfloat
 
 
-#line 1179
+#line 1164
 #define IS_cdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -29647,7 +29392,7 @@ cdouble_subtract(PyObject *a, PyObject *b)
 #undef IS_cdouble
 
 
-#line 1179
+#line 1164
 #define IS_clongdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_subtract
@@ -29818,7 +29563,7 @@ clongdouble_subtract(PyObject *a, PyObject *b)
 #undef IS_clongdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -29989,7 +29734,7 @@ half_multiply(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -30160,7 +29905,7 @@ float_multiply(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -30331,7 +30076,7 @@ double_multiply(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -30502,7 +30247,7 @@ longdouble_multiply(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_cfloat
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -30673,7 +30418,7 @@ cfloat_multiply(PyObject *a, PyObject *b)
 #undef IS_cfloat
 
 
-#line 1179
+#line 1164
 #define IS_cdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -30844,7 +30589,7 @@ cdouble_multiply(PyObject *a, PyObject *b)
 #undef IS_cdouble
 
 
-#line 1179
+#line 1164
 #define IS_clongdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_multiply
@@ -31015,7 +30760,7 @@ clongdouble_multiply(PyObject *a, PyObject *b)
 #undef IS_clongdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -31186,7 +30931,7 @@ half_true_divide(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -31357,7 +31102,7 @@ float_true_divide(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -31528,7 +31273,7 @@ double_true_divide(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -31699,7 +31444,7 @@ longdouble_true_divide(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_cfloat
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -31870,7 +31615,7 @@ cfloat_true_divide(PyObject *a, PyObject *b)
 #undef IS_cfloat
 
 
-#line 1179
+#line 1164
 #define IS_cdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -32041,7 +31786,7 @@ cdouble_true_divide(PyObject *a, PyObject *b)
 #undef IS_cdouble
 
 
-#line 1179
+#line 1164
 #define IS_clongdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_true_divide
@@ -32212,7 +31957,7 @@ clongdouble_true_divide(PyObject *a, PyObject *b)
 #undef IS_clongdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -32383,7 +32128,7 @@ half_floor_divide(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -32554,7 +32299,7 @@ float_floor_divide(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -32725,7 +32470,7 @@ double_floor_divide(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_floor_divide
@@ -32896,7 +32641,7 @@ longdouble_floor_divide(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -33067,7 +32812,7 @@ half_divmod(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -33238,7 +32983,7 @@ float_divmod(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -33409,7 +33154,7 @@ double_divmod(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_divmod
@@ -33580,7 +33325,7 @@ longdouble_divmod(PyObject *a, PyObject *b)
 #undef IS_longdouble
 
 
-#line 1179
+#line 1164
 #define IS_half
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -33751,7 +33496,7 @@ half_remainder(PyObject *a, PyObject *b)
 #undef IS_half
 
 
-#line 1179
+#line 1164
 #define IS_float
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -33922,7 +33667,7 @@ float_remainder(PyObject *a, PyObject *b)
 #undef IS_float
 
 
-#line 1179
+#line 1164
 #define IS_double
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -34093,7 +33838,7 @@ double_remainder(PyObject *a, PyObject *b)
 #undef IS_double
 
 
-#line 1179
+#line 1164
 #define IS_longdouble
 /* drop the "true_" from "true_divide" for floating point warnings: */
 #define IS_remainder
@@ -34266,7 +34011,7 @@ longdouble_remainder(PyObject *a, PyObject *b)
 
 
 
-#line 1362
+#line 1347
 static PyObject *
 byte_true_divide(PyObject *a, PyObject *b)
 {
@@ -34354,7 +34099,7 @@ byte_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 ubyte_true_divide(PyObject *a, PyObject *b)
 {
@@ -34442,7 +34187,7 @@ ubyte_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 short_true_divide(PyObject *a, PyObject *b)
 {
@@ -34530,7 +34275,7 @@ short_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 ushort_true_divide(PyObject *a, PyObject *b)
 {
@@ -34618,7 +34363,7 @@ ushort_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 int_true_divide(PyObject *a, PyObject *b)
 {
@@ -34706,7 +34451,7 @@ int_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 uint_true_divide(PyObject *a, PyObject *b)
 {
@@ -34794,7 +34539,7 @@ uint_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 long_true_divide(PyObject *a, PyObject *b)
 {
@@ -34882,7 +34627,7 @@ long_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 ulong_true_divide(PyObject *a, PyObject *b)
 {
@@ -34970,7 +34715,7 @@ ulong_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 longlong_true_divide(PyObject *a, PyObject *b)
 {
@@ -35058,7 +34803,7 @@ longlong_true_divide(PyObject *a, PyObject *b)
     return ret;
 }
 
-#line 1362
+#line 1347
 static PyObject *
 ulonglong_true_divide(PyObject *a, PyObject *b)
 {
@@ -35150,7 +34895,7 @@ ulonglong_true_divide(PyObject *a, PyObject *b)
 
 #define _IS_ZERO(x) (x == 0)
 
-#line 1481
+#line 1466
 #define IS_byte
 
 static PyObject *
@@ -35262,7 +35007,7 @@ byte_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_byte
 
-#line 1481
+#line 1466
 #define IS_ubyte
 
 static PyObject *
@@ -35374,7 +35119,7 @@ ubyte_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_ubyte
 
-#line 1481
+#line 1466
 #define IS_short
 
 static PyObject *
@@ -35486,7 +35231,7 @@ short_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_short
 
-#line 1481
+#line 1466
 #define IS_ushort
 
 static PyObject *
@@ -35598,7 +35343,7 @@ ushort_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_ushort
 
-#line 1481
+#line 1466
 #define IS_int
 
 static PyObject *
@@ -35710,7 +35455,7 @@ int_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_int
 
-#line 1481
+#line 1466
 #define IS_uint
 
 static PyObject *
@@ -35822,7 +35567,7 @@ uint_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_uint
 
-#line 1481
+#line 1466
 #define IS_long
 
 static PyObject *
@@ -35934,7 +35679,7 @@ long_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_long
 
-#line 1481
+#line 1466
 #define IS_ulong
 
 static PyObject *
@@ -36046,7 +35791,7 @@ ulong_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_ulong
 
-#line 1481
+#line 1466
 #define IS_longlong
 
 static PyObject *
@@ -36158,7 +35903,7 @@ longlong_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_longlong
 
-#line 1481
+#line 1466
 #define IS_ulonglong
 
 static PyObject *
@@ -36270,7 +36015,7 @@ ulonglong_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_ulonglong
 
-#line 1481
+#line 1466
 #define IS_half
 
 static PyObject *
@@ -36382,7 +36127,7 @@ half_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_half
 
-#line 1481
+#line 1466
 #define IS_float
 
 static PyObject *
@@ -36494,7 +36239,7 @@ float_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_float
 
-#line 1481
+#line 1466
 #define IS_double
 
 static PyObject *
@@ -36606,7 +36351,7 @@ double_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_double
 
-#line 1481
+#line 1466
 #define IS_longdouble
 
 static PyObject *
@@ -36718,7 +36463,7 @@ longdouble_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_longdouble
 
-#line 1481
+#line 1466
 #define IS_cfloat
 
 static PyObject *
@@ -36830,7 +36575,7 @@ cfloat_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_cfloat
 
-#line 1481
+#line 1466
 #define IS_cdouble
 
 static PyObject *
@@ -36942,7 +36687,7 @@ cdouble_power(PyObject *a, PyObject *b, PyObject *modulo)
 
 #undef IS_cdouble
 
-#line 1481
+#line 1466
 #define IS_clongdouble
 
 static PyObject *
@@ -37057,7 +36802,7 @@ clongdouble_power(PyObject *a, PyObject *b, PyObject *modulo)
 #undef _IS_ZERO
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37072,7 +36817,7 @@ cfloat_floor_divide(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37087,7 +36832,7 @@ cdouble_floor_divide(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37102,7 +36847,7 @@ clongdouble_floor_divide(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37117,7 +36862,7 @@ cfloat_divmod(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37132,7 +36877,7 @@ cdouble_divmod(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37147,7 +36892,7 @@ clongdouble_divmod(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37162,7 +36907,7 @@ cfloat_remainder(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37177,7 +36922,7 @@ cdouble_remainder(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 }
 
 
-#line 1601
+#line 1586
 
 /*
  * Complex numbers do not support remainder so we manually make sure that the
@@ -37193,203 +36938,203 @@ clongdouble_remainder(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define half_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define half_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define half_and NULL
 
 
-#line 1627
+#line 1612
 
 #define half_or NULL
 
 
-#line 1627
+#line 1612
 
 #define half_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define float_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define float_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define float_and NULL
 
 
-#line 1627
+#line 1612
 
 #define float_or NULL
 
 
-#line 1627
+#line 1612
 
 #define float_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define double_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define double_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define double_and NULL
 
 
-#line 1627
+#line 1612
 
 #define double_or NULL
 
 
-#line 1627
+#line 1612
 
 #define double_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define longdouble_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define longdouble_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define longdouble_and NULL
 
 
-#line 1627
+#line 1612
 
 #define longdouble_or NULL
 
 
-#line 1627
+#line 1612
 
 #define longdouble_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define cfloat_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define cfloat_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define cfloat_and NULL
 
 
-#line 1627
+#line 1612
 
 #define cfloat_or NULL
 
 
-#line 1627
+#line 1612
 
 #define cfloat_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define cdouble_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define cdouble_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define cdouble_and NULL
 
 
-#line 1627
+#line 1612
 
 #define cdouble_or NULL
 
 
-#line 1627
+#line 1612
 
 #define cdouble_xor NULL
 
 
 
 
-#line 1621
+#line 1606
 
-#line 1627
+#line 1612
 
 #define clongdouble_lshift NULL
 
 
-#line 1627
+#line 1612
 
 #define clongdouble_rshift NULL
 
 
-#line 1627
+#line 1612
 
 #define clongdouble_and NULL
 
 
-#line 1627
+#line 1612
 
 #define clongdouble_or NULL
 
 
-#line 1627
+#line 1612
 
 #define clongdouble_xor NULL
 
@@ -37397,7 +37142,7 @@ clongdouble_remainder(PyObject *NPY_UNUSED(a), PyObject *NPY_UNUSED(b))
 
 
 
-#line 1685
+#line 1670
 static PyObject *
 byte_negative(PyObject *a)
 {
@@ -37425,7 +37170,7 @@ byte_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ubyte_negative(PyObject *a)
 {
@@ -37453,7 +37198,7 @@ ubyte_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 short_negative(PyObject *a)
 {
@@ -37481,7 +37226,7 @@ short_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ushort_negative(PyObject *a)
 {
@@ -37509,7 +37254,7 @@ ushort_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 int_negative(PyObject *a)
 {
@@ -37537,7 +37282,7 @@ int_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 uint_negative(PyObject *a)
 {
@@ -37565,7 +37310,7 @@ uint_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 long_negative(PyObject *a)
 {
@@ -37593,7 +37338,7 @@ long_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulong_negative(PyObject *a)
 {
@@ -37621,7 +37366,7 @@ ulong_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longlong_negative(PyObject *a)
 {
@@ -37649,7 +37394,7 @@ longlong_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulonglong_negative(PyObject *a)
 {
@@ -37677,7 +37422,7 @@ ulonglong_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 half_negative(PyObject *a)
 {
@@ -37705,7 +37450,7 @@ half_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 float_negative(PyObject *a)
 {
@@ -37733,7 +37478,7 @@ float_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 double_negative(PyObject *a)
 {
@@ -37761,7 +37506,7 @@ double_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longdouble_negative(PyObject *a)
 {
@@ -37789,7 +37534,7 @@ longdouble_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cfloat_negative(PyObject *a)
 {
@@ -37817,7 +37562,7 @@ cfloat_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cdouble_negative(PyObject *a)
 {
@@ -37845,7 +37590,7 @@ cdouble_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 clongdouble_negative(PyObject *a)
 {
@@ -37873,7 +37618,7 @@ clongdouble_negative(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 byte_positive(PyObject *a)
 {
@@ -37901,7 +37646,7 @@ byte_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ubyte_positive(PyObject *a)
 {
@@ -37929,7 +37674,7 @@ ubyte_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 short_positive(PyObject *a)
 {
@@ -37957,7 +37702,7 @@ short_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ushort_positive(PyObject *a)
 {
@@ -37985,7 +37730,7 @@ ushort_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 int_positive(PyObject *a)
 {
@@ -38013,7 +37758,7 @@ int_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 uint_positive(PyObject *a)
 {
@@ -38041,7 +37786,7 @@ uint_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 long_positive(PyObject *a)
 {
@@ -38069,7 +37814,7 @@ long_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulong_positive(PyObject *a)
 {
@@ -38097,7 +37842,7 @@ ulong_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longlong_positive(PyObject *a)
 {
@@ -38125,7 +37870,7 @@ longlong_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulonglong_positive(PyObject *a)
 {
@@ -38153,7 +37898,7 @@ ulonglong_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 half_positive(PyObject *a)
 {
@@ -38181,7 +37926,7 @@ half_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 float_positive(PyObject *a)
 {
@@ -38209,7 +37954,7 @@ float_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 double_positive(PyObject *a)
 {
@@ -38237,7 +37982,7 @@ double_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longdouble_positive(PyObject *a)
 {
@@ -38265,7 +38010,7 @@ longdouble_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cfloat_positive(PyObject *a)
 {
@@ -38293,7 +38038,7 @@ cfloat_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cdouble_positive(PyObject *a)
 {
@@ -38321,7 +38066,7 @@ cdouble_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 clongdouble_positive(PyObject *a)
 {
@@ -38349,7 +38094,7 @@ clongdouble_positive(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 byte_absolute(PyObject *a)
 {
@@ -38377,7 +38122,7 @@ byte_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ubyte_absolute(PyObject *a)
 {
@@ -38405,7 +38150,7 @@ ubyte_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 short_absolute(PyObject *a)
 {
@@ -38433,7 +38178,7 @@ short_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ushort_absolute(PyObject *a)
 {
@@ -38461,7 +38206,7 @@ ushort_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 int_absolute(PyObject *a)
 {
@@ -38489,7 +38234,7 @@ int_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 uint_absolute(PyObject *a)
 {
@@ -38517,7 +38262,7 @@ uint_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 long_absolute(PyObject *a)
 {
@@ -38545,7 +38290,7 @@ long_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulong_absolute(PyObject *a)
 {
@@ -38573,7 +38318,7 @@ ulong_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longlong_absolute(PyObject *a)
 {
@@ -38601,7 +38346,7 @@ longlong_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulonglong_absolute(PyObject *a)
 {
@@ -38629,7 +38374,7 @@ ulonglong_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 half_absolute(PyObject *a)
 {
@@ -38657,7 +38402,7 @@ half_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 float_absolute(PyObject *a)
 {
@@ -38685,7 +38430,7 @@ float_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 double_absolute(PyObject *a)
 {
@@ -38713,7 +38458,7 @@ double_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longdouble_absolute(PyObject *a)
 {
@@ -38741,7 +38486,7 @@ longdouble_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cfloat_absolute(PyObject *a)
 {
@@ -38769,7 +38514,7 @@ cfloat_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 cdouble_absolute(PyObject *a)
 {
@@ -38797,7 +38542,7 @@ cdouble_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 clongdouble_absolute(PyObject *a)
 {
@@ -38825,7 +38570,7 @@ clongdouble_absolute(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 byte_invert(PyObject *a)
 {
@@ -38853,7 +38598,7 @@ byte_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ubyte_invert(PyObject *a)
 {
@@ -38881,7 +38626,7 @@ ubyte_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 short_invert(PyObject *a)
 {
@@ -38909,7 +38654,7 @@ short_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ushort_invert(PyObject *a)
 {
@@ -38937,7 +38682,7 @@ ushort_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 int_invert(PyObject *a)
 {
@@ -38965,7 +38710,7 @@ int_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 uint_invert(PyObject *a)
 {
@@ -38993,7 +38738,7 @@ uint_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 long_invert(PyObject *a)
 {
@@ -39021,7 +38766,7 @@ long_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulong_invert(PyObject *a)
 {
@@ -39049,7 +38794,7 @@ ulong_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 longlong_invert(PyObject *a)
 {
@@ -39077,7 +38822,7 @@ longlong_invert(PyObject *a)
     return ret;
 }
 
-#line 1685
+#line 1670
 static PyObject *
 ulonglong_invert(PyObject *a)
 {
@@ -39106,44 +38851,44 @@ ulonglong_invert(PyObject *a)
 }
 
 
-#line 1717
+#line 1702
 
 #define half_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define float_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define double_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define longdouble_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define cfloat_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define cdouble_invert NULL
 
 
-#line 1717
+#line 1702
 
 #define clongdouble_invert NULL
 
 
 
 #define _IS_NONZERO(x) (x != 0)
-#line 1745
+#line 1730
 static int
 byte_bool(PyObject *a)
 {
@@ -39161,7 +38906,7 @@ byte_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 ubyte_bool(PyObject *a)
 {
@@ -39179,7 +38924,7 @@ ubyte_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 short_bool(PyObject *a)
 {
@@ -39197,7 +38942,7 @@ short_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 ushort_bool(PyObject *a)
 {
@@ -39215,7 +38960,7 @@ ushort_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 int_bool(PyObject *a)
 {
@@ -39233,7 +38978,7 @@ int_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 uint_bool(PyObject *a)
 {
@@ -39251,7 +38996,7 @@ uint_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 long_bool(PyObject *a)
 {
@@ -39269,7 +39014,7 @@ long_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 ulong_bool(PyObject *a)
 {
@@ -39287,7 +39032,7 @@ ulong_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 longlong_bool(PyObject *a)
 {
@@ -39305,7 +39050,7 @@ longlong_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 ulonglong_bool(PyObject *a)
 {
@@ -39323,7 +39068,7 @@ ulonglong_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 half_bool(PyObject *a)
 {
@@ -39341,7 +39086,7 @@ half_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 float_bool(PyObject *a)
 {
@@ -39359,7 +39104,7 @@ float_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 double_bool(PyObject *a)
 {
@@ -39377,7 +39122,7 @@ double_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 longdouble_bool(PyObject *a)
 {
@@ -39395,7 +39140,7 @@ longdouble_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 cfloat_bool(PyObject *a)
 {
@@ -39413,7 +39158,7 @@ cfloat_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 cdouble_bool(PyObject *a)
 {
@@ -39431,7 +39176,7 @@ cdouble_bool(PyObject *a)
     return ret;
 }
 
-#line 1745
+#line 1730
 static int
 clongdouble_bool(PyObject *a)
 {
@@ -39459,7 +39204,7 @@ emit_complexwarning(void)
             "Casting complex values to real discards the imaginary part", 1);
 }
 
-#line 1799
+#line 1784
 static PyObject *
 byte_int(PyObject *obj)
 {
@@ -39485,7 +39230,7 @@ byte_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 ubyte_int(PyObject *obj)
 {
@@ -39511,7 +39256,7 @@ ubyte_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 short_int(PyObject *obj)
 {
@@ -39537,7 +39282,7 @@ short_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 ushort_int(PyObject *obj)
 {
@@ -39563,7 +39308,7 @@ ushort_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 int_int(PyObject *obj)
 {
@@ -39589,7 +39334,7 @@ int_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 uint_int(PyObject *obj)
 {
@@ -39615,7 +39360,7 @@ uint_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 long_int(PyObject *obj)
 {
@@ -39641,7 +39386,7 @@ long_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 ulong_int(PyObject *obj)
 {
@@ -39667,7 +39412,7 @@ ulong_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 longlong_int(PyObject *obj)
 {
@@ -39693,7 +39438,7 @@ longlong_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 ulonglong_int(PyObject *obj)
 {
@@ -39719,7 +39464,7 @@ ulonglong_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 half_int(PyObject *obj)
 {
@@ -39745,7 +39490,7 @@ half_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 float_int(PyObject *obj)
 {
@@ -39771,7 +39516,7 @@ float_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 double_int(PyObject *obj)
 {
@@ -39797,7 +39542,7 @@ double_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 longdouble_int(PyObject *obj)
 {
@@ -39823,7 +39568,7 @@ longdouble_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 cfloat_int(PyObject *obj)
 {
@@ -39849,7 +39594,7 @@ cfloat_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 cdouble_int(PyObject *obj)
 {
@@ -39875,7 +39620,7 @@ cdouble_int(PyObject *obj)
     return long_result;
 }
 
-#line 1799
+#line 1784
 static PyObject *
 clongdouble_int(PyObject *obj)
 {
@@ -39902,7 +39647,7 @@ clongdouble_int(PyObject *obj)
 }
 
 
-#line 1840
+#line 1825
 static PyObject *
 byte_float(PyObject *obj)
 {
@@ -39916,7 +39661,7 @@ byte_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 ubyte_float(PyObject *obj)
 {
@@ -39930,7 +39675,7 @@ ubyte_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 short_float(PyObject *obj)
 {
@@ -39944,7 +39689,7 @@ short_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 ushort_float(PyObject *obj)
 {
@@ -39958,7 +39703,7 @@ ushort_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 int_float(PyObject *obj)
 {
@@ -39972,7 +39717,7 @@ int_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 uint_float(PyObject *obj)
 {
@@ -39986,7 +39731,7 @@ uint_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 long_float(PyObject *obj)
 {
@@ -40000,7 +39745,7 @@ long_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 ulong_float(PyObject *obj)
 {
@@ -40014,7 +39759,7 @@ ulong_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 longlong_float(PyObject *obj)
 {
@@ -40028,7 +39773,7 @@ longlong_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 ulonglong_float(PyObject *obj)
 {
@@ -40042,7 +39787,7 @@ ulonglong_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 half_float(PyObject *obj)
 {
@@ -40056,7 +39801,7 @@ half_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 float_float(PyObject *obj)
 {
@@ -40070,7 +39815,7 @@ float_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 double_float(PyObject *obj)
 {
@@ -40084,7 +39829,7 @@ double_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 longdouble_float(PyObject *obj)
 {
@@ -40098,7 +39843,7 @@ longdouble_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 cfloat_float(PyObject *obj)
 {
@@ -40112,7 +39857,7 @@ cfloat_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 cdouble_float(PyObject *obj)
 {
@@ -40126,7 +39871,7 @@ cdouble_float(PyObject *obj)
 #endif
 }
 
-#line 1840
+#line 1825
 static PyObject *
 clongdouble_float(PyObject *obj)
 {
@@ -40141,7 +39886,7 @@ clongdouble_float(PyObject *obj)
 }
 
 
-#line 1860
+#line 1845
 #define def_cmp_le(arg1, arg2) (arg1 <= arg2)
 #define cmplx_cmp_le(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) <= npy_cimag(arg2) :        \
@@ -40154,7 +39899,7 @@ clongdouble_float(PyObject *obj)
                                       npy_creall(arg1) <= npy_creall(arg2))
 #define def_half_cmp_le(arg1, arg2) npy_half_le(arg1, arg2)
 
-#line 1860
+#line 1845
 #define def_cmp_ge(arg1, arg2) (arg1 >= arg2)
 #define cmplx_cmp_ge(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) >= npy_cimag(arg2) :        \
@@ -40167,7 +39912,7 @@ clongdouble_float(PyObject *obj)
                                       npy_creall(arg1) >= npy_creall(arg2))
 #define def_half_cmp_ge(arg1, arg2) npy_half_ge(arg1, arg2)
 
-#line 1860
+#line 1845
 #define def_cmp_lt(arg1, arg2) (arg1 < arg2)
 #define cmplx_cmp_lt(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) < npy_cimag(arg2) :        \
@@ -40180,7 +39925,7 @@ clongdouble_float(PyObject *obj)
                                       npy_creall(arg1) < npy_creall(arg2))
 #define def_half_cmp_lt(arg1, arg2) npy_half_lt(arg1, arg2)
 
-#line 1860
+#line 1845
 #define def_cmp_gt(arg1, arg2) (arg1 > arg2)
 #define cmplx_cmp_gt(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) > npy_cimag(arg2) :        \
@@ -40193,7 +39938,7 @@ clongdouble_float(PyObject *obj)
                                       npy_creall(arg1) > npy_creall(arg2))
 #define def_half_cmp_gt(arg1, arg2) npy_half_gt(arg1, arg2)
 
-#line 1860
+#line 1845
 #define def_cmp_eq(arg1, arg2) (arg1 == arg2)
 #define cmplx_cmp_eq(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) == npy_cimag(arg2) :        \
@@ -40206,7 +39951,7 @@ clongdouble_float(PyObject *obj)
                                       npy_creall(arg1) == npy_creall(arg2))
 #define def_half_cmp_eq(arg1, arg2) npy_half_eq(arg1, arg2)
 
-#line 1860
+#line 1845
 #define def_cmp_ne(arg1, arg2) (arg1 != arg2)
 #define cmplx_cmp_ne(arg1, arg2) ((npy_creal(arg1) == npy_creal(arg2)) ?        \
                                       npy_cimag(arg1) != npy_cimag(arg2) :        \
@@ -40220,7 +39965,7 @@ clongdouble_float(PyObject *obj)
 #define def_half_cmp_ne(arg1, arg2) npy_half_ne(arg1, arg2)
 
 
-#line 1889
+#line 1874
 #define IS_byte
 
 static PyObject*
@@ -40313,7 +40058,7 @@ byte_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_byte
 
-#line 1889
+#line 1874
 #define IS_ubyte
 
 static PyObject*
@@ -40406,7 +40151,7 @@ ubyte_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_ubyte
 
-#line 1889
+#line 1874
 #define IS_short
 
 static PyObject*
@@ -40499,7 +40244,7 @@ short_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_short
 
-#line 1889
+#line 1874
 #define IS_ushort
 
 static PyObject*
@@ -40592,7 +40337,7 @@ ushort_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_ushort
 
-#line 1889
+#line 1874
 #define IS_int
 
 static PyObject*
@@ -40685,7 +40430,7 @@ int_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_int
 
-#line 1889
+#line 1874
 #define IS_uint
 
 static PyObject*
@@ -40778,7 +40523,7 @@ uint_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_uint
 
-#line 1889
+#line 1874
 #define IS_long
 
 static PyObject*
@@ -40871,7 +40616,7 @@ long_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_long
 
-#line 1889
+#line 1874
 #define IS_ulong
 
 static PyObject*
@@ -40964,7 +40709,7 @@ ulong_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_ulong
 
-#line 1889
+#line 1874
 #define IS_longlong
 
 static PyObject*
@@ -41057,7 +40802,7 @@ longlong_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_longlong
 
-#line 1889
+#line 1874
 #define IS_ulonglong
 
 static PyObject*
@@ -41150,7 +40895,7 @@ ulonglong_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_ulonglong
 
-#line 1889
+#line 1874
 #define IS_half
 
 static PyObject*
@@ -41243,7 +40988,7 @@ half_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_half
 
-#line 1889
+#line 1874
 #define IS_float
 
 static PyObject*
@@ -41336,7 +41081,7 @@ float_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_float
 
-#line 1889
+#line 1874
 #define IS_double
 
 static PyObject*
@@ -41429,7 +41174,7 @@ double_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_double
 
-#line 1889
+#line 1874
 #define IS_longdouble
 
 static PyObject*
@@ -41522,7 +41267,7 @@ longdouble_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_longdouble
 
-#line 1889
+#line 1874
 #define IS_cfloat
 
 static PyObject*
@@ -41615,7 +41360,7 @@ cfloat_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_cfloat
 
-#line 1889
+#line 1874
 #define IS_cdouble
 
 static PyObject*
@@ -41708,7 +41453,7 @@ cdouble_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 #undef IS_cdouble
 
-#line 1889
+#line 1874
 #define IS_clongdouble
 
 static PyObject*
@@ -41803,7 +41548,7 @@ clongdouble_richcompare(PyObject *self, PyObject *other, int cmp_op)
 
 
 
-#line 1989
+#line 1974
 static PyNumberMethods byte_as_number = {
     .nb_add = (binaryfunc)byte_add,
     .nb_subtract = (binaryfunc)byte_subtract,
@@ -41829,7 +41574,7 @@ static PyNumberMethods byte_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods ubyte_as_number = {
     .nb_add = (binaryfunc)ubyte_add,
     .nb_subtract = (binaryfunc)ubyte_subtract,
@@ -41855,7 +41600,7 @@ static PyNumberMethods ubyte_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods short_as_number = {
     .nb_add = (binaryfunc)short_add,
     .nb_subtract = (binaryfunc)short_subtract,
@@ -41881,7 +41626,7 @@ static PyNumberMethods short_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods ushort_as_number = {
     .nb_add = (binaryfunc)ushort_add,
     .nb_subtract = (binaryfunc)ushort_subtract,
@@ -41907,7 +41652,7 @@ static PyNumberMethods ushort_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods int_as_number = {
     .nb_add = (binaryfunc)int_add,
     .nb_subtract = (binaryfunc)int_subtract,
@@ -41933,7 +41678,7 @@ static PyNumberMethods int_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods uint_as_number = {
     .nb_add = (binaryfunc)uint_add,
     .nb_subtract = (binaryfunc)uint_subtract,
@@ -41959,7 +41704,7 @@ static PyNumberMethods uint_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods long_as_number = {
     .nb_add = (binaryfunc)long_add,
     .nb_subtract = (binaryfunc)long_subtract,
@@ -41985,7 +41730,7 @@ static PyNumberMethods long_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods ulong_as_number = {
     .nb_add = (binaryfunc)ulong_add,
     .nb_subtract = (binaryfunc)ulong_subtract,
@@ -42011,7 +41756,7 @@ static PyNumberMethods ulong_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods longlong_as_number = {
     .nb_add = (binaryfunc)longlong_add,
     .nb_subtract = (binaryfunc)longlong_subtract,
@@ -42037,7 +41782,7 @@ static PyNumberMethods longlong_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods ulonglong_as_number = {
     .nb_add = (binaryfunc)ulonglong_add,
     .nb_subtract = (binaryfunc)ulonglong_subtract,
@@ -42063,7 +41808,7 @@ static PyNumberMethods ulonglong_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods half_as_number = {
     .nb_add = (binaryfunc)half_add,
     .nb_subtract = (binaryfunc)half_subtract,
@@ -42089,7 +41834,7 @@ static PyNumberMethods half_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods float_as_number = {
     .nb_add = (binaryfunc)float_add,
     .nb_subtract = (binaryfunc)float_subtract,
@@ -42115,7 +41860,7 @@ static PyNumberMethods float_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods double_as_number = {
     .nb_add = (binaryfunc)double_add,
     .nb_subtract = (binaryfunc)double_subtract,
@@ -42141,7 +41886,7 @@ static PyNumberMethods double_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods longdouble_as_number = {
     .nb_add = (binaryfunc)longdouble_add,
     .nb_subtract = (binaryfunc)longdouble_subtract,
@@ -42167,7 +41912,7 @@ static PyNumberMethods longdouble_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods cfloat_as_number = {
     .nb_add = (binaryfunc)cfloat_add,
     .nb_subtract = (binaryfunc)cfloat_subtract,
@@ -42193,7 +41938,7 @@ static PyNumberMethods cfloat_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods cdouble_as_number = {
     .nb_add = (binaryfunc)cdouble_add,
     .nb_subtract = (binaryfunc)cdouble_subtract,
@@ -42219,7 +41964,7 @@ static PyNumberMethods cdouble_as_number = {
     .nb_index = (unaryfunc)NULL,  /* set in add_scalarmath below */
 };
 
-#line 1989
+#line 1974
 static PyNumberMethods clongdouble_as_number = {
     .nb_add = (binaryfunc)clongdouble_add,
     .nb_subtract = (binaryfunc)clongdouble_subtract,
@@ -42249,87 +41994,87 @@ static PyNumberMethods clongdouble_as_number = {
 NPY_NO_EXPORT void
 add_scalarmath(void)
 {
-    #line 2028
+    #line 2013
     byte_as_number.nb_index = PyByteArrType_Type.tp_as_number->nb_index;
     PyByteArrType_Type.tp_as_number = &(byte_as_number);
     PyByteArrType_Type.tp_richcompare = byte_richcompare;
     
-#line 2028
+#line 2013
     ubyte_as_number.nb_index = PyUByteArrType_Type.tp_as_number->nb_index;
     PyUByteArrType_Type.tp_as_number = &(ubyte_as_number);
     PyUByteArrType_Type.tp_richcompare = ubyte_richcompare;
     
-#line 2028
+#line 2013
     short_as_number.nb_index = PyShortArrType_Type.tp_as_number->nb_index;
     PyShortArrType_Type.tp_as_number = &(short_as_number);
     PyShortArrType_Type.tp_richcompare = short_richcompare;
     
-#line 2028
+#line 2013
     ushort_as_number.nb_index = PyUShortArrType_Type.tp_as_number->nb_index;
     PyUShortArrType_Type.tp_as_number = &(ushort_as_number);
     PyUShortArrType_Type.tp_richcompare = ushort_richcompare;
     
-#line 2028
+#line 2013
     int_as_number.nb_index = PyIntArrType_Type.tp_as_number->nb_index;
     PyIntArrType_Type.tp_as_number = &(int_as_number);
     PyIntArrType_Type.tp_richcompare = int_richcompare;
     
-#line 2028
+#line 2013
     uint_as_number.nb_index = PyUIntArrType_Type.tp_as_number->nb_index;
     PyUIntArrType_Type.tp_as_number = &(uint_as_number);
     PyUIntArrType_Type.tp_richcompare = uint_richcompare;
     
-#line 2028
+#line 2013
     long_as_number.nb_index = PyLongArrType_Type.tp_as_number->nb_index;
     PyLongArrType_Type.tp_as_number = &(long_as_number);
     PyLongArrType_Type.tp_richcompare = long_richcompare;
     
-#line 2028
+#line 2013
     ulong_as_number.nb_index = PyULongArrType_Type.tp_as_number->nb_index;
     PyULongArrType_Type.tp_as_number = &(ulong_as_number);
     PyULongArrType_Type.tp_richcompare = ulong_richcompare;
     
-#line 2028
+#line 2013
     longlong_as_number.nb_index = PyLongLongArrType_Type.tp_as_number->nb_index;
     PyLongLongArrType_Type.tp_as_number = &(longlong_as_number);
     PyLongLongArrType_Type.tp_richcompare = longlong_richcompare;
     
-#line 2028
+#line 2013
     ulonglong_as_number.nb_index = PyULongLongArrType_Type.tp_as_number->nb_index;
     PyULongLongArrType_Type.tp_as_number = &(ulonglong_as_number);
     PyULongLongArrType_Type.tp_richcompare = ulonglong_richcompare;
     
-#line 2028
+#line 2013
     half_as_number.nb_index = PyHalfArrType_Type.tp_as_number->nb_index;
     PyHalfArrType_Type.tp_as_number = &(half_as_number);
     PyHalfArrType_Type.tp_richcompare = half_richcompare;
     
-#line 2028
+#line 2013
     float_as_number.nb_index = PyFloatArrType_Type.tp_as_number->nb_index;
     PyFloatArrType_Type.tp_as_number = &(float_as_number);
     PyFloatArrType_Type.tp_richcompare = float_richcompare;
     
-#line 2028
+#line 2013
     double_as_number.nb_index = PyDoubleArrType_Type.tp_as_number->nb_index;
     PyDoubleArrType_Type.tp_as_number = &(double_as_number);
     PyDoubleArrType_Type.tp_richcompare = double_richcompare;
     
-#line 2028
+#line 2013
     longdouble_as_number.nb_index = PyLongDoubleArrType_Type.tp_as_number->nb_index;
     PyLongDoubleArrType_Type.tp_as_number = &(longdouble_as_number);
     PyLongDoubleArrType_Type.tp_richcompare = longdouble_richcompare;
     
-#line 2028
+#line 2013
     cfloat_as_number.nb_index = PyCFloatArrType_Type.tp_as_number->nb_index;
     PyCFloatArrType_Type.tp_as_number = &(cfloat_as_number);
     PyCFloatArrType_Type.tp_richcompare = cfloat_richcompare;
     
-#line 2028
+#line 2013
     cdouble_as_number.nb_index = PyCDoubleArrType_Type.tp_as_number->nb_index;
     PyCDoubleArrType_Type.tp_as_number = &(cdouble_as_number);
     PyCDoubleArrType_Type.tp_richcompare = cdouble_richcompare;
     
-#line 2028
+#line 2013
     clongdouble_as_number.nb_index = PyCLongDoubleArrType_Type.tp_as_number->nb_index;
     PyCLongDoubleArrType_Type.tp_as_number = &(clongdouble_as_number);
     PyCLongDoubleArrType_Type.tp_richcompare = clongdouble_richcompare;

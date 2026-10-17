@@ -436,14 +436,18 @@ static inline int generic_to_chars_fixed(const struct floating_decimal_128 v, ch
             {
                 current_len = static_cast<int>(shift_width) + precision;
             }
+            else
+            {
+                current_len = static_cast<int>(shift_width) - 1;
+            }
 
             precision = 0;
-            // Since we wrote additional characters into the buffer we need to add a null terminator,
+            // Since we wrote additional characters into the buffer, we need to add a null terminator,
             // so they are not read
             const auto round_val = result[current_len];
             result[current_len] = '\0';
 
-            // More complicated rounding situations like 9999.999999 are already handled
+            // More complicated rounding situations like 9999.999999 are already handled,
             // so we don't need to worry about rounding past the decimal point
             if (round_val >= '5')
             {

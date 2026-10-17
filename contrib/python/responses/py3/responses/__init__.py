@@ -234,7 +234,7 @@ def get_wrapped(
     return wrapper
 
 
-class CallList(Sequence[Any], Sized):
+class CallList(Sequence[Call], Sized):
     def __init__(self) -> None:
         self._calls: List[Call] = []
 

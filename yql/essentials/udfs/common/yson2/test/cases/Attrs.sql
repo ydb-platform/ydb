@@ -1,5 +1,3 @@
-/* syntax version 1 */
-
 $no_strict = Yson::Options(false AS Strict);
 
 select

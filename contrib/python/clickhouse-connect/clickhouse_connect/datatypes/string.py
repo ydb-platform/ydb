@@ -1,7 +1,7 @@
 from collections.abc import Collection, MutableSequence, Sequence
 from typing import Any
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.driver import options
 from clickhouse_connect.driver.common import first_value
 from clickhouse_connect.driver.ctypes import data_conv
@@ -61,6 +61,7 @@ class String(ClickHouseType):
 class FixedString(ClickHouseType):
     python_type = str
     valid_formats = "string", "native"
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 1, None),))
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -128,6 +129,9 @@ class FixedString(ClickHouseType):
                     ext(b)
         else:
             for b in column:
-                if len(b) != sz:
+                if len(b) == sz:
+                    ext(b)
+                elif not b:
+                    ext(empty)
+                else:
                     raise ctx.data_error(f"Fixed String binary value {b.hex(' ')} does not match column size {sz}")
-                ext(b)

@@ -125,6 +125,7 @@ enum class ERequestType: size_t {
     // Nbs 2.0 requests
     NBS_CREATEPARTITION,
     NBS_DELETEPARTITION,
+    NBS_RESIZEPARTITION,
     NBS_GETLOADACTORADAPTERACTORID,
     NBS_LISTPARTITIONS,
     NBS_WRITEBLOCKS,
@@ -133,6 +134,8 @@ enum class ERequestType: size_t {
     // DistributedStorage requests
     DISTRIBUTED_STORAGE_STREAMSTORAGESTATE,
     DISTRIBUTED_STORAGE_REASSIGNVDISK,
+
+    TOPIC_RESETOFFSET,
 
     REQUEST_TYPES_CNT, // Add new types above this line
 };

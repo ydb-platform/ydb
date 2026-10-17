@@ -15,8 +15,8 @@ namespace NPageCollection {
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(TPageId page, TSharedData data)
-            : PageId(page)
+        TLoadedPage(TPageLocation location, TSharedData data)
+            : Location(location)
             , Data(std::move(data))
         {
 
@@ -24,10 +24,30 @@ namespace NPageCollection {
 
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<TPageId>();
+            return Data && bool(Location);
         }
 
-        TPageId PageId = Max<TPageId>();
+        TPageLocation Location;
+        TSharedData Data;
+    };
+
+    // Lightweight: offset+data only; Size/Type/Crc32 are authoritative in the cache's PageSet.
+    struct TLoadedPageData {
+        TLoadedPageData() = default;
+
+        TLoadedPageData(TPageOffset offset, TSharedData data)
+            : Offset(offset)
+            , Data(std::move(data))
+        {
+
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return Data && bool(Offset);
+        }
+
+        TPageOffset Offset;
         TSharedData Data;
     };
 

@@ -15,6 +15,49 @@
 
 namespace NYql::NFastCheck {
 
+namespace {
+
+class TPGParseEvents final: public IPGParseEvents {
+public:
+    explicit TPGParseEvents(TIssues* issues = nullptr)
+        : Issues_(issues)
+    {
+    }
+
+    bool IsSuccessful() const {
+        return IsSuccessful_;
+    }
+
+    void OnResult(const List* raw) final {
+        Y_UNUSED(raw);
+        IsSuccessful_ = true;
+    }
+
+    void OnError(const TIssue& issue) final {
+        if (Issues_) {
+            Issues_->AddIssue(issue);
+        }
+    }
+
+private:
+    bool IsSuccessful_ = false;
+    TIssues* Issues_;
+};
+
+bool IsOk(const TPGParseResult& result, TIssues* issues = nullptr) {
+    TPGParseEvents v(issues);
+    result.Visit(v);
+    return v.IsSuccessful();
+}
+
+void AddIssues(TIssues* output, const TIssues& issues) {
+    if (output) {
+        output->AddIssues(issues);
+    }
+}
+
+} // namespace
+
 TCheckState::TCheckState(const TChecksRequest& request)
     : Request_(request)
 {
@@ -39,10 +82,10 @@ ESyntax TCheckState::GetEffectiveSyntax() {
     return Request_.Syntax;
 }
 
-bool TCheckState::CheckLexer(TIssues& issues) {
+bool TCheckState::CheckLexer(TIssues* issues) {
     if (LexerCache_) {
         const auto& cached = *LexerCache_;
-        issues.AddIssues(cached.Issues);
+        AddIssues(issues, cached.Issues);
         return cached.Success;
     }
 
@@ -52,7 +95,7 @@ bool TCheckState::CheckLexer(TIssues& issues) {
     if (!BuildLexerSettings(Request_, settings, result.Issues, ParsedSettingsCache_)) {
         result.Success = false;
         LexerCache_ = result;
-        issues.AddIssues(result.Issues);
+        AddIssues(issues, result.Issues);
         return false;
     }
 
@@ -72,18 +115,18 @@ bool TCheckState::CheckLexer(TIssues& issues) {
         /*utf8Aware=*/true);
 
     LexerCache_ = result;
-    issues.AddIssues(result.Issues);
+    AddIssues(issues, result.Issues);
     return result.Success;
 }
 
-google::protobuf::Message* TCheckState::ParseSql(TIssues& issues) {
+google::protobuf::Message* TCheckState::ParseSql(TIssues* issues) {
     if (ParserCache_) {
         const auto& cached = *ParserCache_;
-        issues.AddIssues(cached.Issues);
+        AddIssues(issues, cached.Issues);
         return cached.Msg;
     }
 
-    if (!CheckLexer(issues)) {
+    if (!CheckLexer(Request_.SuppressPrerequisiteIssues ? nullptr : issues)) {
         return nullptr;
     }
 
@@ -93,7 +136,7 @@ google::protobuf::Message* TCheckState::ParseSql(TIssues& issues) {
     if (!BuildSqlParsingSettings(Request_, &Arena_, settings, result.Issues, ParsedSettingsCache_)) {
         result.Msg = nullptr;
         ParserCache_ = result;
-        issues.AddIssues(result.Issues);
+        AddIssues(issues, result.Issues);
         return nullptr;
     }
 
@@ -119,14 +162,14 @@ google::protobuf::Message* TCheckState::ParseSql(TIssues& issues) {
         &Arena_);
 
     ParserCache_ = result;
-    issues.AddIssues(result.Issues);
+    AddIssues(issues, result.Issues);
     return result.Msg;
 }
 
-const TAstParseResult* TCheckState::TranslateSql(TIssues& issues) {
+const TAstParseResult* TCheckState::TranslateSql(TIssues* issues) {
     if (TranslateCache_) {
         const auto& cached = *TranslateCache_;
-        issues.AddIssues(cached.Issues);
+        AddIssues(issues, cached.Issues);
         return &cached.Result;
     }
 
@@ -136,22 +179,24 @@ const TAstParseResult* TCheckState::TranslateSql(TIssues& issues) {
     if (!BuildSqlTranslationSettings(Request_, &Arena_, settings, result.Issues, ParsedSettingsCache_)) {
         result.Result = TAstParseResult();
         TranslateCache_ = std::move(result);
-        issues.AddIssues(TranslateCache_->Issues);
+        AddIssues(issues, TranslateCache_->Issues);
         return &TranslateCache_->Result;
     }
 
-    if (!CheckLexer(result.Issues)) {
+    TIssues* issueSink = Request_.SuppressPrerequisiteIssues ? nullptr : &result.Issues;
+
+    if (!CheckLexer(issueSink)) {
         result.Result = TAstParseResult();
         TranslateCache_ = std::move(result);
-        issues.AddIssues(TranslateCache_->Issues);
+        AddIssues(issues, TranslateCache_->Issues);
         return &TranslateCache_->Result;
     }
 
-    auto* protoAst = ParseSql(result.Issues);
+    auto* protoAst = ParseSql(issueSink);
     if (!protoAst) {
         result.Result = TAstParseResult();
         TranslateCache_ = std::move(result);
-        issues.AddIssues(TranslateCache_->Issues);
+        AddIssues(issues, TranslateCache_->Issues);
         return &TranslateCache_->Result;
     }
 
@@ -183,29 +228,30 @@ const TAstParseResult* TCheckState::TranslateSql(TIssues& issues) {
     TranslateCache_ = std::move(result);
 
     const auto& cached = *TranslateCache_;
-    issues.AddIssues(cached.Issues);
+    AddIssues(issues, cached.Issues);
     return &cached.Result;
 }
 
-const NYql::TPGParseResult* TCheckState::ParsePg(TIssues& issues) {
+const NYql::TPGParseResult* TCheckState::ParsePg(TIssues* issues) {
     if (PgParserCache_) {
         const auto& cached = *PgParserCache_;
-        issues.AddIssues(cached.Issues);
-        return &cached.Result;
+        AddIssues(issues, cached.Issues);
+        return IsOk(cached.Result) ? &cached.Result : nullptr;
     }
 
     TPgParserResult result;
     NYql::PGParse(Request_.Program, result.Result);
+    const bool isOk = IsOk(result.Result, &result.Issues);
 
     PgParserCache_ = std::move(result);
-    issues.AddIssues(PgParserCache_->Issues);
-    return &PgParserCache_->Result;
+    AddIssues(issues, PgParserCache_->Issues);
+    return isOk ? &PgParserCache_->Result : nullptr;
 }
 
-const TAstParseResult* TCheckState::TranslatePg(TIssues& issues) {
+const TAstParseResult* TCheckState::TranslatePg(TIssues* issues) {
     if (TranslateCache_) {
         const auto& cached = *TranslateCache_;
-        issues.AddIssues(cached.Issues);
+        AddIssues(issues, cached.Issues);
         return &cached.Result;
     }
 
@@ -214,11 +260,11 @@ const TAstParseResult* TCheckState::TranslatePg(TIssues& issues) {
     NSQLTranslation::TTranslationSettings settings;
     BuildPgTranslationSettings(Request_, &Arena_, settings);
 
-    const auto* pgResult = ParsePg(result.Issues);
+    const auto* pgResult = ParsePg(Request_.SuppressPrerequisiteIssues ? nullptr : &result.Issues);
     if (!pgResult) {
         result.Result = TAstParseResult();
         TranslateCache_ = std::move(result);
-        issues.AddIssues(TranslateCache_->Issues);
+        AddIssues(issues, TranslateCache_->Issues);
         return &TranslateCache_->Result;
     }
 
@@ -228,14 +274,14 @@ const TAstParseResult* TCheckState::TranslatePg(TIssues& issues) {
     TranslateCache_ = std::move(result);
 
     const auto& cached = *TranslateCache_;
-    issues.AddIssues(cached.Issues);
+    AddIssues(issues, cached.Issues);
     return &cached.Result;
 }
 
-const TAstParseResult* TCheckState::ParseSExpr(TIssues& issues) {
+const TAstParseResult* TCheckState::ParseSExpr(TIssues* issues) {
     if (TranslateCache_) {
         const auto& cached = *TranslateCache_;
-        issues.AddIssues(cached.Issues);
+        AddIssues(issues, cached.Issues);
         return &cached.Result;
     }
 
@@ -246,12 +292,12 @@ const TAstParseResult* TCheckState::ParseSExpr(TIssues& issues) {
     TranslateCache_ = std::move(result);
 
     const auto& cached = *TranslateCache_;
-    issues.AddIssues(cached.Issues);
+    AddIssues(issues, cached.Issues);
     return &cached.Result;
 }
 
-const TAstParseResult* TCheckState::TranslateSExpr(TIssues& issues) {
-    return ParseSExpr(issues);
+const TAstParseResult* TCheckState::TranslateSExpr(TIssues* issues) {
+    return ParseSExpr(Request_.SuppressPrerequisiteIssues ? nullptr : issues);
 }
 
 } // namespace NYql::NFastCheck

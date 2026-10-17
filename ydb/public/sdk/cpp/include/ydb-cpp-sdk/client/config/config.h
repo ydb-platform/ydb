@@ -29,7 +29,9 @@ struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchA
     FLUENT_SETTING_DEFAULT(EFetchAllConfigsTransform, Transform, EFetchAllConfigsTransform::NONE);
 };
 
-struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};
+struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {
+    FLUENT_SETTING_FLAG(AllowUnknownFields);
+};
 
 struct TMainConfigIdentity {
     std::uint64_t Version;

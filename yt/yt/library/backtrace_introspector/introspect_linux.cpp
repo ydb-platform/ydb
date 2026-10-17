@@ -161,7 +161,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
         YT_VERIFY(IntrospectionLock.exchange(false));
     });
 
-    YT_LOG_INFO("Thread introspection started");
+    YT_TLOG_INFO("Thread introspection started");
 
     {
         struct sigaction action;
@@ -171,7 +171,7 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
@@ -179,31 +179,33 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
     for (auto threadId : GetCurrentProcessThreadIds()) {
         try {
             if (!IsUserspaceThread(threadId)) {
-                YT_LOG_DEBUG("Skipping a non-userspace thread (ThreadId: %v)",
-                    threadId);
+                YT_TLOG_DEBUG("Skipping a non-userspace thread")
+                    .With("ThreadId", threadId);
                 continue;
             }
         } catch (const std::exception& ex) {
-            YT_LOG_DEBUG(ex, "Failed to get thread flags (ThreadId: %v)",
-                threadId);
+            YT_TLOG_DEBUG("Failed to get thread flags")
+                .With("ThreadId", threadId)
+                .With(ex);
             continue;
         }
 
         TSignalHandlerContext signalHandlerContext;
         if (::syscall(SYS_tkill, threadId, SIGUSR1) != 0) {
-            YT_LOG_DEBUG(TError::FromSystem(), "Failed to signal to thread (ThreadId: %v)",
-                threadId);
+            YT_TLOG_DEBUG("Failed to signal to thread")
+                .With("ThreadId", threadId)
+                .With(TError::FromSystem());
             continue;
         }
 
-        YT_LOG_DEBUG("Sent signal to thread (ThreadId: %v)",
-            threadId);
+        YT_TLOG_DEBUG("Sent signal to thread")
+            .With("ThreadId", threadId);
 
         signalHandlerContext.WaitUntilFinished();
 
-        YT_LOG_DEBUG("Signal handler finished (ThreadId: %v, FiberId: %x)",
-            threadId,
-            signalHandlerContext.FiberId);
+        YT_TLOG_DEBUG("Signal handler finished")
+            .With("ThreadId", threadId)
+            .WithFormat("FiberId", "%x", signalHandlerContext.FiberId);
 
         infos.push_back(TThreadIntrospectionInfo{
             .ThreadId = threadId,
@@ -224,11 +226,11 @@ std::vector<TThreadIntrospectionInfo> IntrospectThreads()
 
         if (::sigaction(SIGUSR1, &action, nullptr) != 0) {
             THROW_ERROR_EXCEPTION("Failed to de-install signal handler")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 
-    YT_LOG_INFO("Thread introspection completed");
+    YT_TLOG_INFO("Thread introspection completed");
 
     return infos;
 }

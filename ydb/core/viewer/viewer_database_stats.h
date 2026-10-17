@@ -20,9 +20,9 @@ struct TDatabaseStorageStats {
             const NKikimrWhiteboard::TVDiskStateInfo& vdisk,
             const NKikimrWhiteboard::TPDiskStateInfo& pdisk,
             ui32 groupSizeInUnits) {
-        ui64 slotSize = pdisk.GetExpectedSlotSize();
+        ui64 slotSize = pdisk.GetEnforcedDynamicSlotSize();
         if (!slotSize) {
-            slotSize = pdisk.GetEnforcedDynamicSlotSize();
+            slotSize = pdisk.GetExpectedSlotSize();
         }
         if (!slotSize) {
             const ui32 slotCount = pdisk.GetExpectedSlotCount();
@@ -34,11 +34,10 @@ struct TDatabaseStorageStats {
             slotSize = pdisk.GetTotalSize() / slotCount;
         }
 
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
-            groupSizeInUnits,
-            pdisk.GetSlotSizeInUnits(),
-            pdisk.GetExpectedSlotSize());
-        Total += slotSize * ownerWeight;
+        slotSize = TPDiskConfig::GetOwnerQuota(
+            slotSize, groupSizeInUnits, pdisk.GetSlotSizeInUnits(), pdisk.GetExpectedSlotSize(),
+            pdisk.HasUserChunkPoolSize() ? std::make_optional(pdisk.GetUserChunkPoolSize()) : std::nullopt);
+        Total += Min(slotSize, Max<ui64>() - Total);
     }
 };
 
@@ -51,7 +50,6 @@ class TJsonDatabaseStats : public TViewerPipeClient {
     using TPDiskId = std::pair<TNodeId, ui32>; // node id : pdisk id
 
     // Requests
-    TRequestResponse<TEvInterconnect::TEvNodesInfo> NodesInfoResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvNodeStateResponse>> NodeStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvPDiskStateResponse>> PDiskStateResponse;
@@ -127,7 +125,6 @@ public:
 
         ConfigureRefreshSettings();
 
-        NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         PoolsResponse = MakeCachedRequestBSControllerPools();
         GroupsResponse = MakeCachedRequestBSControllerGroups();
         VSlotsResponse = MakeCachedRequestBSControllerVSlots();
@@ -223,6 +220,8 @@ public:
             }
             if (PDiskStateResponse.count(nodeId) == 0) {
                 auto request = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest>();
+                request->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+                request->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
                 PDiskStateResponse[nodeId] = MakeWhiteboardRequest(nodeId, request.release());
             }
             if (VDiskStateResponse.count(nodeId) == 0) {
@@ -238,18 +237,13 @@ public:
     }
 
     bool IsPrimaryDataReady() {
-        return NodesInfoResponse.IsDone()
-            && PoolsResponse.IsDone()
+        return PoolsResponse.IsDone()
             && GroupsResponse.IsDone()
             && VSlotsResponse.IsDone();
     }
 
     void ProcessResponses() {
         if (!IsPrimaryDataReady()) {
-            return;
-        }
-        if (NodesInfoResponse.IsError()) {
-            NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
             return;
         }
         if (PoolsResponse.IsError()) {
@@ -287,7 +281,11 @@ public:
         if (VSlotsResponse.IsOk() && !StorageGroups.empty() && StorageNodes.empty()) {
             std::unordered_set<TNodeId> storageNodes;
             for (const auto& vslot : VSlotsResponse->Record.GetEntries()) {
-                storageNodes.insert(vslot.GetKey().GetNodeId());
+                const NKikimrSysView::TVSlotInfo& info = vslot.GetInfo();
+                auto itGroup = StorageGroups.find(info.GetGroupId());
+                if (itGroup != StorageGroups.end() && itGroup->second.GetInfo().GetGeneration() == info.GetGroupGeneration()) {
+                    storageNodes.insert(vslot.GetKey().GetNodeId());
+                }
             }
             StorageNodes.assign(storageNodes.begin(), storageNodes.end());
             Result.SetStorageNodes(StorageNodes.size());
@@ -584,7 +582,6 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
@@ -598,13 +595,6 @@ public:
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             default:
                 return TBase::StateWork(ev);
-        }
-    }
-
-    void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
-        if (NodesInfoResponse.Set(std::move(ev))) {
-            ProcessResponses();
-            RequestDone();
         }
     }
 
@@ -677,7 +667,6 @@ public:
         DatabaseNodes = GetDatabaseNodes();
         Result.SetDatabaseNodes(DatabaseNodes.size());
         RequestDatabaseNodes();
-        NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         PoolsResponse = MakeCachedRequestBSControllerPools();
         GroupsResponse = MakeCachedRequestBSControllerGroups();
         VSlotsResponse = MakeCachedRequestBSControllerVSlots();

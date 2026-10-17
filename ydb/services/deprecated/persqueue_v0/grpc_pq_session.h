@@ -4,6 +4,7 @@
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <library/cpp/string_utils/quote/quote.h>
+#include <util/generic/guid.h>
 #include <util/generic/queue.h>
 
 using grpc::Status;
@@ -212,6 +213,20 @@ public:
         return "";
     }
 
+    TString GetRequestId() const {
+        const auto& clientMetadata = Context.client_metadata();
+        for (const TStringBuf key : {TStringBuf("x-ydb-trace-id"), TStringBuf("x-request-id")}) {
+            const auto range = clientMetadata.equal_range(grpc::string_ref{key.data(), key.size()});
+            for (auto it = range.first; it != range.second; ++it) {
+                const TString requestId(it->second.data(), it->second.size());
+                if (!requestId.empty()) {
+                    return requestId;
+                }
+            }
+        }
+        return CreateGuidAsString();
+    }
+
     TString GetPeerName() const {
         auto res = Context.peer();
         // Remove percent-encoding
@@ -235,6 +250,11 @@ public:
             }
         }
         return res;
+    }
+
+    TString GetAuthority() const {
+        const auto authority = Context.ExperimentalGetAuthority();
+        return TString(authority.data(), authority.size());
     }
 
 protected:

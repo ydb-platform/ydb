@@ -5,14 +5,13 @@ SPLIT_FACTOR(50)
 
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ELSE()
     SIZE(MEDIUM)
-    REQUIREMENTS(cpu:2)
+    REQUIREMENTS(cpu:1)
 ENDIF()
 
 SRCS(
-    kqp_compile_fallback_ut.cpp
     kqp_replay_log_ut.cpp
 )
 

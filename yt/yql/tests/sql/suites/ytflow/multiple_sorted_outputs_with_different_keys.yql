@@ -20,8 +20,8 @@ $lambda = ($row) -> {
 
 $sorted_by_key, $sorted_by_value = process Input using $lambda(TableRow());
 
-insert into OutputKey
+replace into OutputKey with primary_key = "[key]"
 select * from $sorted_by_key;
 
-insert into OutputValue
+replace into OutputValue with primary_key = "[value]"
 select * from $sorted_by_value;

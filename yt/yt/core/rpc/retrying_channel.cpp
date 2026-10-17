@@ -7,7 +7,7 @@
 
 #include <yt/yt/core/bus/client.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <util/system/guard.h>
 
@@ -175,7 +175,7 @@ private:
             }
 
         private:
-            YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+            YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
             std::atomic<bool> Canceled_ = false;
             IClientRequestControlPtr Underlying_;
 
@@ -284,13 +284,13 @@ private:
         void ReportError(const TError& error)
         {
             auto detailedError = error
-                << UnderlyingChannel_->GetEndpointAttributes()
-                << TErrorAttribute("omitted_inner_error_count", OmittedInnerErrorCount_);
+                .With(UnderlyingChannel_->GetEndpointAttributes())
+                .With("omitted_inner_error_count", OmittedInnerErrorCount_);
             if (FirstError_) {
-                detailedError = detailedError << *FirstError_;
+                detailedError = detailedError.With(*FirstError_);
             }
             if (LastError_) {
-                detailedError = detailedError << *LastError_;
+                detailedError = detailedError.With(*LastError_);
             }
             ResponseHandler_->HandleError(std::move(detailedError), LastAddress_);
         }

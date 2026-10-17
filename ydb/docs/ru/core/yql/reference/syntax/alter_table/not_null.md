@@ -1,6 +1,8 @@
-# Выставление и сброс ограничения `NOT NULL`
+# Изменение ограничения `NOT NULL`
 
-Ограничение целостности данных на уровне колонки, которое запрещает запись `NULL` в качестве значений. Это ограничение гарантирует, что колонка всегда содержит действительное значение.
+`NOT NULL` — ограничение целостности данных на уровне колонки, запрещающее запись значений `NULL`. Оно гарантирует, что колонка всегда содержит действительное значение.
+
+{% if feature_alter_column_not_null == true %}
 
 В YDB операция `SET NOT NULL` выполняется как синхронная SQL-операция, ожидающая применения изменения схемы. При этом создаётся фоновая операция для проверки таблицы на наличие `NULL`-значений в существующих данных.
 
@@ -20,8 +22,16 @@ ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
 * `SET NOT NULL` может занять длительное время: перед установкой ограничения YDB проверяет таблицу на наличие `NULL`-значений для существующих данных в указанной колонке.
 * SQL-операция выполняется синхронно и ожидает завершения. При этом создаётся фоновая операция для наблюдаемости.
 * За ходом выполнения операций можно следить с помощью [CLI-команды](../../../../reference/ydb-cli/operation-list.md) `ydb operation list setnotnull`. Также доступны команды, позволяющие [получить статус конкретной операции](../../../../reference/ydb-cli/operation-get.md), [отменить операцию](../../../../reference/ydb-cli/operation-cancel.md) или [удалить запись о завершённой операции](../../../../reference/ydb-cli/operation-forget.md).
-* После запуска операции `SET NOT NULL` и до её завершения в указанную колонку нельзя записывать `NULL`-значения. При попытке записать такие значения, вы получите ошибку вида ``Can't set NULL or optional value to column: <column>. `SET NOT NULL` operation is currently in progress for this column``.
+* После запуска операции `SET NOT NULL` и до её завершения в указанную колонку нельзя записывать `NULL`-значения. При попытке записать такие значения, вы получите ошибку вида:
+
+  ```text
+  Can't set NULL or optional value to column: <column>.
+  SET NOT NULL operation is currently in progress for this column
+  ```
+
 * Если валидация не пройдена, операция `SET NOT NULL` завершится с ошибкой `Validation failed for SET NOT NULL on table ...: one or more columns contain NULL values`.
+
+{% endif %}
 
 ## Сброс `NOT NULL`
 
@@ -33,11 +43,8 @@ ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
 ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 ```
 
-Примечание:
-
-* `DROP NOT NULL` поддерживается только для [строковых таблиц](../../../../concepts/datamodel/table.md#row-oriented-tables).
+`DROP NOT NULL` можно применить к неключевым колонкам как строковых, так и колоночных таблиц.
 
 ## См. также
 
 * [ALTER COLUMN](columns.md)
-

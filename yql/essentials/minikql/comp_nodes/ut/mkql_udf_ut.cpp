@@ -2,6 +2,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>

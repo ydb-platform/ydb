@@ -74,7 +74,7 @@ public:
                 }
             }
         } catch (const TErrorException& ex) {
-            auto error = TError(ex) << TErrorAttribute("listener", Name_);
+            auto error = TError(ex).With("listener", Name_);
             Abort(error);
             YT_TLOG_FATAL("Listener crashed with fatal error")
                 .With(error);
@@ -141,7 +141,7 @@ public:
                 }
             }
             promise.TrySet(TError(NYT::EErrorCode::Canceled, "Accept canceled")
-                << error);
+                .With(error));
         }));
 
         return promise.ToFuture();
@@ -160,7 +160,7 @@ private:
     const IPollerPtr Acceptor_;
     const NLogging::TLoggingTagList LoggingTags_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     std::atomic<bool> Pending_ = false;
     std::deque<TPromise<IConnectionPtr>> Queue_;
     TError Error_;
@@ -179,7 +179,7 @@ private:
 
             Pending_ = false;
             Error_ = error
-                << TErrorAttribute("listener", Name_);
+                .With("listener", Name_);
             Acceptor_->Unarm(ServerSocket_, this);
         }
 

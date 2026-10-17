@@ -269,8 +269,7 @@ struct IProviderContext {
  */
 
 struct TBaseProviderContext: public IProviderContext {
-    TBaseProviderContext() {
-    }
+    TBaseProviderContext() = default;
 
     double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
@@ -335,8 +334,7 @@ struct TRelOptimizerNode: public IBaseOptimizerNode {
     {
     }
 
-    virtual ~TRelOptimizerNode() {
-    }
+    virtual ~TRelOptimizerNode() = default;
 
     TVector<TString> Labels() override;
     void Print(std::stringstream& stream, int ntabs = 0) override;
@@ -370,8 +368,7 @@ struct TJoinOptimizerNode: public IBaseOptimizerNode {
                        bool leftAny,
                        bool rightAny,
                        bool nonReorderable = false);
-    virtual ~TJoinOptimizerNode() {
-    }
+    virtual ~TJoinOptimizerNode() = default;
     TVector<TString> Labels() override;
     void Print(std::stringstream& stream, int ntabs = 0) override;
 };

@@ -64,6 +64,13 @@ public:
         // We have not found txs that could use it.
         return false;
     }
+
+    bool CouldUseTable(const TSnapshot& dropSnapshot) const {
+        if (MinSnapshotForNewReads < dropSnapshot) {
+            return true;
+        }
+        return !TxInFlight.empty() && TxInFlight.front() < dropSnapshot;
+    }
 };
 
 class ISnapshotHolders {
@@ -71,6 +78,7 @@ public:
     virtual ~ISnapshotHolders() = default;
     virtual TSnapshot GetMinSnapshotForNewReads() const = 0;
     virtual bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const = 0;
+    virtual bool CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const = 0;
 };
 
 class TLegacySnapshotHolders: public ISnapshotHolders {
@@ -89,6 +97,16 @@ public:
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override {
         return impl.CouldUsePortion(portion);
     }
+
+    bool CouldUseTable(const TInternalPathId& /*pathId*/, const TSnapshot& dropSnapshot) const override {
+        return impl.CouldUseTable(dropSnapshot);
+    }
+};
+
+// Snapshots of the scans running on this tablet
+struct TLocalActiveSnapshots {
+    std::vector<TSnapshot> ForAllTables;
+    THashMap<TInternalPathId, std::vector<TSnapshot>> ByPathId;
 };
 
 class TRegistrySnapshotHolders: public ISnapshotHolders {
@@ -97,21 +115,24 @@ private:
     const TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> Registry;
     const ui64 SchemeShardId;
     const IPathIdTranslator& PathIdTranslator;
+    const TLocalActiveSnapshots LocalActiveSnapshots;
     mutable THashMap<TInternalPathId, TSnapshotHoldersPerTable> HoldersByPathId;
 
 private:
-    TSnapshotHoldersPerTable BuildHoldersForTable(const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const;
+    TSnapshotHoldersPerTable BuildHoldersForTable(
+        const TInternalPathId pathId, const std::set<NColumnShard::TSchemeShardLocalPathId>& schemeShardLocalPathIds) const;
     const TSnapshotHoldersPerTable& GetHoldersByPathId(const TInternalPathId pathId) const;
 
 public:
     TRegistrySnapshotHolders(const TSnapshot minSnapshotForNewReads, TTrueAtomicSharedPtr<IImmutableSnapshotRegistry> registry,
-        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator);
+        const ui64 schemeShardId, const IPathIdTranslator& pathIdTranslator, TLocalActiveSnapshots localActiveSnapshots = {});
 
     TSnapshot GetMinSnapshotForNewReads() const override {
         return MinSnapshotForNewReads;
     }
 
     bool CouldUsePortion(const TPortionInfo::TConstPtr& portion) const override;
+    bool CouldUseTable(const TInternalPathId& pathId, const TSnapshot& dropSnapshot) const override;
 };
 
 }   // namespace NKikimr::NOlap

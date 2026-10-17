@@ -10,7 +10,14 @@ from ydb.query import QuerySessionPool
 from ydb.tests.library.harness.util import LogLevels
 
 import http_helpers
-from helpers import cluster_endpoint, make_test_file_with_content, execute_ydbd, execute_dstool_grpc, execute_dstool_http, CanonicalCaptureAuditFileOutput
+from helpers import (
+    CanonicalCaptureAuditFileOutput,
+    capture_dstool_evict_vdisk_audit,
+    cluster_endpoint,
+    execute_dstool_http,
+    execute_ydbd,
+    make_test_file_with_content,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,7 @@ CLUSTER_CONFIG = dict(
     },
     enable_audit_log=True,
     extra_feature_flags=['enable_column_statistics'],
+    extra_grpc_services=['distributed_storage'],
     audit_log_config={
         'file_backend': {
             'format': 'json',
@@ -365,15 +373,7 @@ def test_execute_minikql(ydb_cluster):
 
 
 def test_dstool_evict_vdisk_grpc(ydb_cluster):
-    list_result = json.loads(execute_dstool_grpc(ydb_cluster, TOKEN, ['vdisk', 'list', '--format', 'json']))
-    assert len(list_result) > 0
-    vdisk_id = list_result[0]["VDiskId"]
-    assert vdisk_id
-
-    capture_audit = CanonicalCaptureAuditFileOutput(ydb_cluster.config.audit_file_path)
-    with capture_audit:
-        execute_dstool_grpc(ydb_cluster, TOKEN, ['vdisk', 'evict', '--vdisk-ids', vdisk_id, '--ignore-degraded-group-check', '--ignore-failure-model-group-check'])
-    return capture_audit.canonize()
+    return capture_dstool_evict_vdisk_audit(ydb_cluster, TOKEN)
 
 
 def test_dstool_add_group_http(ydb_cluster):

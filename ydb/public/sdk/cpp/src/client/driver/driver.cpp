@@ -367,7 +367,7 @@ TDriver::TDriver(const TDriverConfig& config) {
 
 void TDriver::Stop(bool wait) {
     auto impl = Impl_;
-    TGRpcConnectionsImpl::DeferOrRunNow(impl->StopState_, [impl, wait]() mutable {
+    impl->DriverScope_->DeferOrRun([impl, wait]() mutable {
         impl->Stop(wait);
     });
 }

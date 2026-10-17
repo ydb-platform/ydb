@@ -4,6 +4,7 @@
 #include "executor_pool.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
+#include <optional>
 
 namespace NActors {
     struct TActorSystemSetup;
@@ -39,6 +40,8 @@ namespace NActors {
         IExecutorPool* GetExecutorPool(ui32 poolId) {
             return Executors[poolId].Get();
         }
+
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {

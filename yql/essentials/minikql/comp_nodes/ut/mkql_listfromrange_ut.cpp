@@ -7,6 +7,27 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
+
+class TDecimal {
+public:
+    explicit TDecimal(NYql::NDecimal::TInt128 value, ui8 scale, ui8 precision)
+        : Value_(value)
+        , Scale_(scale)
+        , Precision_(precision)
+    {
+        MKQL_ENSURE(scale <= precision, "Decimal scale must not exceed precision");
+    }
+
+    TRuntimeNode BuildLiteral(TProgramBuilder& builder) const {
+        return builder.NewDecimalLiteral(Value_, Precision_, Scale_);
+    }
+
+private:
+    const NYql::NDecimal::TInt128 Value_;
+    const ui8 Scale_;
+    const ui8 Precision_;
+};
+
 template <bool UseLLVM, typename T>
 TRuntimeNode MakeList(TSetup<UseLLVM>& setup, T Start, T End, i64 Step, const auto dateType) {
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -19,6 +40,19 @@ TRuntimeNode MakeList(TSetup<UseLLVM>& setup, T Start, T End, i64 Step, const au
         NUdf::TStringRef((const char*)&Step, sizeof(Step)));
 
     return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step), {}));
+}
+
+template <bool UseLLVM>
+void AssertDecimalRange(TSetup<UseLLVM>& setup,
+                        const TDecimal& start, const TDecimal& end, const TDecimal& step,
+                        const TVector<NYql::NDecimal::TInt128>& expected) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    const auto startNode = start.BuildLiteral(pb);
+    const auto endNode = end.BuildLiteral(pb);
+    const auto stepNode = step.BuildLiteral(pb);
+    const auto range = pb.Collect(pb.ToFlow(pb.ListFromRange(startNode, endNode, stepNode), {}));
+    const auto graph = setup.BuildGraph(range);
+    AssertUnboxedValueElementEqual(graph->GetValue(), expected);
 }
 } // namespace
 
@@ -451,6 +485,51 @@ Y_UNIT_TEST_LLVM(TestFloatWithExtraLargeStep) {
 Y_UNIT_TEST_LLVM(TestFloatWithLargeNegativeStep) {
     TSetup<LLVM> setup;
     TestFloatStep(setup, -0.000000000346562223F, -277088.812F, -23368489200000.0F, 1);
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalForward) {
+    TSetup<LLVM> setup;
+    AssertDecimalRange(setup, TDecimal(100, 2, 5), TDecimal(200, 2, 5), TDecimal(25, 2, 5),
+                       {100, 125, 150, 175});
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalReverse) {
+    TSetup<LLVM> setup;
+    AssertDecimalRange(setup, TDecimal(200, 2, 5), TDecimal(100, 2, 5), TDecimal(-25, 2, 5),
+                       {200, 175, 150, 125});
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalMaximumPrecisionAndScale) {
+    TSetup<LLVM> setup;
+    AssertDecimalRange(setup, TDecimal(1, 35, 35), TDecimal(4, 35, 35), TDecimal(1, 35, 35),
+                       {1, 2, 3});
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalInvalidInputsProduceEmptyList) {
+    for (const auto invalid : {NYql::NDecimal::TInt128(0), NYql::NDecimal::Inf(),
+                               -NYql::NDecimal::Inf(), NYql::NDecimal::Nan()})
+    {
+        TSetup<LLVM> setup;
+        AssertDecimalRange(setup, TDecimal(1, 0, 3), TDecimal(5, 0, 3), TDecimal(invalid, 0, 3), {});
+    }
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalInvalidBoundsProduceEmptyList) {
+    for (const auto invalid : {NYql::NDecimal::Inf(), -NYql::NDecimal::Inf(), NYql::NDecimal::Nan()}) {
+        TSetup<LLVM> startSetup;
+        AssertDecimalRange(startSetup, TDecimal(invalid, 0, 3), TDecimal(5, 0, 3), TDecimal(1, 0, 3), {});
+        TSetup<LLVM> endSetup;
+        AssertDecimalRange(endSetup, TDecimal(1, 0, 3), TDecimal(invalid, 0, 3), TDecimal(1, 0, 3), {});
+    }
+}
+
+Y_UNIT_TEST_LLVM(TestDecimalRejectsDifferentEndType) {
+    TSetup<LLVM> setup;
+    TProgramBuilder& pb = *setup.PgmBuilder;
+    UNIT_ASSERT_EXCEPTION(pb.ListFromRange(
+                              TDecimal(1, 2, 5).BuildLiteral(pb),
+                              TDecimal(20, 1, 2).BuildLiteral(pb),
+                              TDecimal(1, 2, 5).BuildLiteral(pb)), yexception);
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLListFromRangeTest)

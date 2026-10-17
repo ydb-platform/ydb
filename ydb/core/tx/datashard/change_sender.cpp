@@ -328,3 +328,7 @@ IActor* CreateChangeSender(const TDataShard* self) {
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -3,8 +3,9 @@
 #include "actors/write_session_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
+#include <ydb/core/persqueue/common/actor.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -19,7 +20,9 @@ namespace V1 {
 IActor* CreatePQWriteService(const NActors::TActorId& schemeCache,
                              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
-class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
+class TPQWriteService : public NPQ::TBaseActor<TPQWriteService>
+                      , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPQWriteService>;
 public:
     TPQWriteService(const NActors::TActorId& schemeCache,
                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
@@ -104,10 +107,10 @@ template <typename WriteRequest>
 void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const TActorContext& ctx) {
     constexpr EProtocol Protocol = std::is_same_v<WriteRequest, NGRpcService::TEvStreamPQWriteRequest> ? EProtocol::PQv1 : EProtocol::Topic;
 
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection");
+    LOG_D("New grpc connection");
 
     if (TooMuchSessions()) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - too much sessions");
+        LOG_I("New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
             FillWriteResponse<Protocol>("proxy overloaded", PersQueue::ErrorCode::OVERLOAD),
@@ -120,10 +123,10 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->Attach(ctx.SelfID);
         if (LocalCluster) {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - cluster disabled");
+            LOG_I("New grpc connection failed - cluster disabled");
             ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), Ydb::StatusIds::UNSUPPORTED); //CANCELLED
         } else {
-            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New grpc connection failed - initializing");
+            LOG_I("New grpc connection failed - initializing");
             ev->Get()->WriteAndFinish(FillWriteResponse<Protocol>("initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         }
         return;
@@ -138,7 +141,7 @@ void TPQWriteService::HandleWriteRequest(typename WriteRequest::TPtr& ev, const 
         );
         const ui64 cookie = NextCookie();
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_WRITE_PROXY, "New session created cookie",
+        LOG_D("New session created cookie",
             {"cookie", cookie});
 
         auto ip = ev->Get()->GetPeerName();

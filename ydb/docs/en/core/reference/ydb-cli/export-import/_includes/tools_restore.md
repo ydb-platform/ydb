@@ -16,7 +16,7 @@ When restoring a cluster' metadata, databases and their administrators are creat
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
-A [cluster configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+A [cluster configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is restored separately using the following steps:
 
 1) Load the saved configuration using the `{{ ydb-cli }} admin cluster config replace` command.
 2) Restart the cluster nodes.
@@ -49,7 +49,7 @@ The `admin database restore` command restores the database from a backup on the 
 
 Restoring database schema objects follows the same process described in [Schema objects](#schema-objects).
 
-[Database configuration](../../../../maintenance/manual/config-overview.md) is restored separately using the following steps:
+[Database configuration](../../../../devops/configuration-management/configuration-v1/config-overview.md) is restored separately using the following steps:
 
 1) Load the saved configuration using the `{{ ydb-cli }} admin database config replace` command.
 2) Restart the database nodes.
@@ -64,7 +64,7 @@ Restoring database schema objects follows the same process described in [Schema 
 
 `--wait-nodes-duration <DURATION>`: The period of time that the restore command waits for available database nodes. Example: `10s`, `5m`, `1h`, `1.5d`, `30`. Duration can be expressed in weeks, days, hours, minutes, seconds, microseconds, nanoseconds. If no suffix is specified, the duration is seconds. The duration can be fractional. Combined duration like `1h30m` is not supported. If the duration is `0`, the restore command does not wait for available nodes.
 
-## Schema objets {#schema-objects}
+## Schema objects {#schema-objects}
 
 The `tools restore` command creates the items of the database schema in the database, and populates them with the data previously exported there with the `tools dump` command or prepared manually as per the rules from the [{#T}](../file-structure.md) article:
 
@@ -164,7 +164,7 @@ From the specified file system directory:
 {{ ydb-cli }} -e <endpoint> -d <database> admin database restore -i ~/backup_db
 ```
 
-### Importing schema objets to the database root
+### Importing schema objects to the database root
 
 From the current file system directory:
 

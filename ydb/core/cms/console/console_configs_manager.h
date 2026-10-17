@@ -18,6 +18,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

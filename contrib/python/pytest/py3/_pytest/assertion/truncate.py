@@ -14,7 +14,7 @@ from _pytest.nodes import Item
 
 DEFAULT_MAX_LINES = 8
 DEFAULT_MAX_CHARS = 8 * 80
-USAGE_MSG = "use '-vv' to show"
+USAGE_MSG = "use '--pytest-args=-vv' to show"
 
 
 def truncate_if_required(
@@ -54,7 +54,7 @@ def _truncate_explanation(
     # removed but is at least 68 characters:
     # The real value is
     # 64 (for the base message:
-    # '...\n...Full output truncated (1 line hidden), use '-vv' to show")'
+    # '...\n...Full output truncated (1 line hidden), use '--pytest-args=-vv' to show")'
     # )
     # + 1 (for plural)
     # + int(math.log10(len(input_lines) - max_lines)) (number of hidden line, at least 1)

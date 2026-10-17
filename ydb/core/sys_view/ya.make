@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scan.h
@@ -22,12 +22,11 @@ PEERDIR(
     ydb/core/sys_view/storage
     ydb/core/sys_view/streaming_queries
     ydb/core/sys_view/tablets
+    ydb/core/sys_view/udf_modules
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy
     ydb/core/wrappers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 
@@ -41,9 +40,11 @@ RECURSE(
     resource_pool_classifiers
     resource_pools
     service
+    show_create
     storage
     streaming_queries
     tablets
+    udf_modules
 )
 
 RECURSE_FOR_TESTS(

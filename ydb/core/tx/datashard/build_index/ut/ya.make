@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 
 FORK_SUBTESTS()
 
-SPLIT_FACTOR(1)
+SPLIT_FACTOR(8)
 
 REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/core/testlib/default
     ydb/core/tx
+    ydb/library/superlemmer_stub
     yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/yson_value
     ydb/public/sdk/cpp/src/client/result

@@ -1,4 +1,5 @@
 #include "transaction_cache.h"
+#include "client_config.h"
 #include "yt_helpers.h"
 
 #include <yt/cpp/mapreduce/common/helpers.h>
@@ -454,7 +455,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         createdEntry = MakeIntrusive<TEntry>();
         createdEntry->Cluster = cluster;
         createdEntry->Server = server;
-        auto createClientOptions = TCreateClientOptions().Token(token);
+        auto createClientOptions = TCreateClientOptions().Token(token).Config(CreateYtClientConfig(*config));
         if (impersonationUser) {
             createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
         }

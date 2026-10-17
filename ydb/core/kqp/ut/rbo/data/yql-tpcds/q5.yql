@@ -38,7 +38,7 @@ $ssr = (
         `/Root/test/ds/store` as store
     WHERE
         date_sk == d_date_sk
-        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+        AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (
             CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
         )
         AND store_sk == s_store_sk
@@ -80,7 +80,7 @@ $csr = (
         `/Root/test/ds/catalog_page` as catalog_page
     WHERE
         date_sk == d_date_sk
-        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+        AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (
             CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
         )
         AND page_sk == cp_catalog_page_sk
@@ -129,7 +129,7 @@ $wsr = (
         `/Root/test/ds/web_site` as web_site
     WHERE
         date_sk == d_date_sk
-        AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
+        AND CAST(d_date AS Date) BETWEEN CAST('1998-08-04' AS Date) AND (
             CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(14)
         )
         AND wsr_web_site_sk == web_site_sk

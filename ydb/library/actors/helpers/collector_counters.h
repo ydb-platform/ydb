@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -13,6 +14,7 @@ struct TExecutorThreadStats;
 struct TExecutorPoolStats;
 struct THarmonizerStats;
 struct TLogHistogram;
+struct TAllocationCacheFamilyStats;
 
 struct THistogramCounters {
     void Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal);
@@ -120,8 +122,11 @@ struct TActorSystemCounters {
     NMonitoring::TDynamicCounters::TCounterPtr AvgAwakeningTimeNs;
     NMonitoring::TDynamicCounters::TCounterPtr AvgWakingUpTimeNs;
 
+    NMonitoring::TDynamicCounters::TCounterPtr AsyncFrameCacheCachedFrames;
+    NMonitoring::TDynamicCounters::TCounterPtr AsyncFrameCacheCachedBytes;
 
     void Init(NMonitoring::TDynamicCounters* group);
+    void SetAllocationCacheStats(const std::vector<TAllocationCacheFamilyStats>& stats);
     void Set(const THarmonizerStats& harmonizerStats);
 };
 

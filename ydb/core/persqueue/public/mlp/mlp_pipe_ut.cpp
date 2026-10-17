@@ -28,7 +28,7 @@ Y_UNIT_TEST(WriterPipeBreakReturnsInternalError) {
 
     auto response = GetWriteResponse(runtime);
     UNIT_ASSERT(response);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::INTERNAL_ERROR);
     UNIT_ASSERT(!response->Messages[0].MessageId.has_value());

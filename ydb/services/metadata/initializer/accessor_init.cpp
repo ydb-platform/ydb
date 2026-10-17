@@ -3,10 +3,12 @@
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
+#include <ydb/library/actors/core/invoke.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/library/actors/core/invoke.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_INITIALIZER
 
 namespace NKikimr::NMetadata::NInitializer {
 
@@ -26,18 +28,18 @@ void TDSAccessorInitialized::DoNextModifier(const bool doPop) {
         Modifiers.pop_front();
     }
     if (Modifiers.size()) {
-        ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
+        YDB_LOG_INFO("Modifiers",
+            {"count", Modifiers.size()});
         Modifiers.front()->Execute(GetSelfPtr(), Config);
     } else {
-        ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "initialization finished";
+        YDB_LOG_INFO("Initialization finished");
         ExternalController->OnInitializationFinished(ComponentId);
     }
 }
 
-TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
-    const TString& componentId,
-    IInitializationBehaviour::TPtr initializationBehaviour,
-    IInitializerOutput::TPtr controller, const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
+TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config, const TString& componentId,
+    IInitializationBehaviour::TPtr initializationBehaviour, IInitializerOutput::TPtr controller,
+    const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
     : Config(config)
     , InitializationBehaviour(initializationBehaviour)
     , ExternalController(controller)
@@ -48,14 +50,14 @@ TDSAccessorInitialized::TDSAccessorInitialized(const NRequest::TConfig& config,
 
 TDSAccessorInitialized::~TDSAccessorInitialized() {
     if (!Modifiers.empty()) {
-        ALS_WARN(NKikimrServices::METADATA_INITIALIZER)
-            << "Try to destroy TDSAccessorInitialized with remaining modifiers: " 
-            << Modifiers.size() << Endl;
+        YDB_LOG_WARN("Try to destroy TDSAccessorInitialized with remaining",
+            {"modifiers", Modifiers.size()});
     }
 }
 
 void TDSAccessorInitialized::OnModificationFinished(const TString& modificationId) {
-    ALS_INFO(NKikimrServices::METADATA_INITIALIZER) << "modifiers count: " << Modifiers.size();
+    YDB_LOG_INFO("Modifiers",
+        {"count", Modifiers.size()});
     Y_ABORT_UNLESS(Modifiers.size());
     Y_ABORT_UNLESS(Modifiers.front()->GetModificationId() == modificationId);
 
@@ -63,12 +65,11 @@ void TDSAccessorInitialized::OnModificationFinished(const TString& modificationI
         TDBInitialization dbInit(ComponentId, Modifiers.front()->GetModificationId());
         NModifications::IOperationsManager::TExternalModificationContext extContext;
         extContext.SetUserToken(NACLib::TSystemUsers::Metadata());
-        auto alterCommand = std::make_shared<NModifications::TUpsertObjectCommand<TDBInitialization>>(
-            dbInit.SerializeToRecord(), TDBInitialization::GetBehaviour(), GetSelfPtr(),
-            NModifications::IOperationsManager::TInternalModificationContext(extContext));
+        auto alterCommand = std::make_shared<NModifications::TUpsertObjectCommand<TDBInitialization>>(dbInit.SerializeToRecord(),
+            TDBInitialization::GetBehaviour(), GetSelfPtr(), NModifications::IOperationsManager::TInternalModificationContext(extContext));
 
-        TActorContext::AsActorContext().Send(NProvider::MakeServiceId(TActorContext::AsActorContext().SelfID.NodeId()),
-            new NProvider::TEvObjectsOperation(alterCommand));
+        TActorContext::AsActorContext().Send(
+            NProvider::MakeServiceId(TActorContext::AsActorContext().SelfID.NodeId()), new NProvider::TEvObjectsOperation(alterCommand));
     } else {
         DoNextModifier(true);
     }
@@ -84,22 +85,30 @@ void TDSAccessorInitialized::OnPreparationFinished(const TVector<ITableModifier:
 }
 
 void TDSAccessorInitialized::OnPreparationProblem(const TString& errorMessage) const {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnPreparationProblem")("error", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "OnPreparationProblem"},
+        {"error", errorMessage});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
-        self->InitializationBehaviour->Prepare(self); 
+        self->InitializationBehaviour->Prepare(self);
     }, RETRY_AFTER_DURATION);
 }
 
 void TDSAccessorInitialized::OnAlteringProblem(const TString& errorMessage) {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnAlteringProblem")("error", errorMessage);
+    YDB_LOG_ERROR("",
+        {"event", "OnAlteringProblem"},
+        {"error", errorMessage});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->OnModificationFinished(self->Modifiers.front()->GetModificationId());
     }, RETRY_AFTER_DURATION);
 }
 
-void TDSAccessorInitialized::OnModificationFailed(Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& modificationId) {
-    AFL_ERROR(NKikimrServices::METADATA_INITIALIZER)("event", "OnModificationFailed")("error", errorMessage)("modificationId", modificationId);
+void TDSAccessorInitialized::OnModificationFailed(
+    Ydb::StatusIds::StatusCode /*status*/, const TString& errorMessage, const TString& modificationId) {
+    YDB_LOG_ERROR("",
+        {"event", "OnModificationFailed"},
+        {"error", errorMessage},
+        {"modificationId", modificationId});
     NActors::ScheduleInvokeActivity([self = GetSelfPtr()]() {
         Y_ABORT_UNLESS(self->Modifiers.size());
         self->DoNextModifier(false);
@@ -115,10 +124,10 @@ void TDSAccessorInitialized::Execute(const NRequest::TConfig& config, const TStr
     const std::shared_ptr<NProvider::TInitializationSnapshotOwner>& snapshotOwner)
 {
     AFL_VERIFY(snapshotOwner);
-    std::shared_ptr<TDSAccessorInitialized> initializer(new TDSAccessorInitialized(config,
-        componentId, initializationBehaviour, controller, snapshotOwner));
+    std::shared_ptr<TDSAccessorInitialized> initializer(
+        new TDSAccessorInitialized(config, componentId, initializationBehaviour, controller, snapshotOwner));
 
     initializationBehaviour->Prepare(initializer);
 }
 
-} // NKikimr::NMetadata::NInitializer
+}   // namespace NKikimr::NMetadata::NInitializer

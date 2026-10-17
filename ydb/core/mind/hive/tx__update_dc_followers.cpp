@@ -22,6 +22,18 @@ public:
             {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
+        // precharge before popping updates: the processing loop below can't be restarted
+        bool ready = true;
+        const auto& pendingUpdates = Self->PendingFollowerUpdates.Updates;
+        for (size_t i = 0; i < pendingUpdates.size() && i < MAX_UPDATES_PROCESSED; ++i) {
+            const auto& op = pendingUpdates[i];
+            if (op.Action == TFollowerUpdates::EAction::Update) {
+                ready &= db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select().IsReady();
+            }
+        }
+        if (!ready) {
+            return false;
+        }
         for (size_t i = 0; !Self->PendingFollowerUpdates.Empty() && i < MAX_UPDATES_PROCESSED; ++i) {
             auto op = Self->PendingFollowerUpdates.Pop();
             TTabletInfo* tablet = Self->FindTablet(op.TabletId);
@@ -50,7 +62,7 @@ public:
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics),
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::DataCenter>(op.DataCenter));
                     follower.InitTabletMetrics();
-                    follower.BecomeStopped();
+                    follower.BecomeStopped(EHiveEventReason::InitialState);
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
                     YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute created follower",
@@ -61,8 +73,9 @@ public:
                 case TFollowerUpdates::EAction::Update:
                 {
                     // This is updated in memory in LoadEverything
-                    bool exists = db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select().IsValid();
-                    Y_ABORT_UNLESS(exists, "%s", (TStringBuilder() << "trying to update tablet " << op.TabletId).data());
+                    auto rowset = db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Select();
+                    Y_ABORT_UNLESS(rowset.IsReady(), "%s", (TStringBuilder() << "follower " << op.TabletId << " was not precharged").data());
+                    Y_ABORT_UNLESS(rowset.IsValid(), "%s", (TStringBuilder() << "trying to update tablet " << op.TabletId).data());
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Update<Schema::TabletFollowerTablet::DataCenter>(op.DataCenter);
                     break;
                 }
@@ -73,7 +86,7 @@ public:
                     }
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId).Delete();
                     db.Table<Schema::Metrics>().Key(op.TabletId).Delete();
-                    tablet->InitiateStop(SideEffects);
+                    tablet->InitiateStop(SideEffects, EHiveEventReason::FollowerRemoved);
                     auto& followers = dc.Followers[{op.TabletId.first, op.GroupId}]; // Note: there are at most 3 followers here, see TPartitionConfigMerger
                     auto iter = std::find_if(followers.begin(), followers.end(), [tabletId = op.TabletId](const auto& fw) {
                         return fw->GetFullTabletId() == tabletId;

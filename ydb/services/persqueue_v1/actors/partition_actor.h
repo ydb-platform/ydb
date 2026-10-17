@@ -5,20 +5,18 @@
 #include "helpers.h"
 #include "partition_id.h"
 
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
-#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
-
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/public/inflight_limiter.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/util/ulid.h>
 
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
+
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -57,8 +55,9 @@ struct TTopicCounters {
 };
 
 
-class TPartitionActor : public NActors::TActorBootstrapped<TPartitionActor>
-                      , public NActors::IActorExceptionHandler {
+class TPartitionActor : public NPQ::TBaseActor<TPartitionActor>
+                      , public NPQ::TConstantLogPrefix {
+    using TBase = NPQ::TBaseActor<TPartitionActor>;
 private:
     static constexpr TDuration READ_TIMEOUT_DURATION = TDuration::Seconds(1);
 
@@ -89,6 +88,15 @@ public:
                             const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
+
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session},
+            {"tabletId", TabletID});
+    }
+
 private:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {

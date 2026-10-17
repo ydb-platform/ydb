@@ -25,8 +25,7 @@ TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
 {
 }
 
-TTypeEnvironment::~TTypeEnvironment() {
-}
+TTypeEnvironment::~TTypeEnvironment() = default;
 
 void TTypeEnvironment::ClearCookies() const {
     if (TypeOfType_) {
@@ -223,8 +222,10 @@ TType* TTypeEnvironment::InternType(TType* type) const {
 void TNode::Accept(INodeVisitor& visitor) {
     const auto kind = Type_->GetKind();
     switch (kind) {
-        case TType::EKind::Type:
-            return static_cast<TType&>(*this).Accept(visitor);
+        case TType::EKind::Type: {
+            static_cast<TType&>(*this).Accept(visitor);
+            return;
+        }
 
 #define APPLY(kind, type)    \
     case TType::EKind::kind: \
@@ -285,8 +286,10 @@ TNode* TNode::CloneOnCallableWrite(const TTypeEnvironment& env) const {
 void TNode::Freeze(const TTypeEnvironment& env) {
     const auto kind = Type_->GetKind();
     switch (kind) {
-        case TType::EKind::Type:
-            return static_cast<TType&>(*this).Freeze(env);
+        case TType::EKind::Type: {
+            static_cast<TType&>(*this).Freeze(env);
+            return;
+        }
 
 #define APPLY(kind, type)    \
     case TType::EKind::kind: \

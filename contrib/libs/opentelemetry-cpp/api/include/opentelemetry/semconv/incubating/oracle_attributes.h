@@ -60,7 +60,7 @@ static constexpr const char *kOracleDbPdb = "oracle.db.pdb";
   The service name currently associated with the database connection.
   <p>
   The effective service name for a connection can change during its lifetime,
-  for example after executing sql, @code ALTER SESSION @endcode. If an instrumentation cannot
+  for example after executing SQL, @code ALTER SESSION @endcode. If an instrumentation cannot
   reliably obtain the current service name for each operation without issuing an additional query
   (such as @code SELECT SYS_CONTEXT @endcode), it is RECOMMENDED to fall back to the service name
   originally provided at connection establishment.

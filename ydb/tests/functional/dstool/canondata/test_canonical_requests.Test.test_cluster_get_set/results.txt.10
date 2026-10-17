@@ -1,4 +1,8 @@
-dstool -e <endpoint> --mon-port <mon_port> cluster set --pdisk-space-margin-promille 1001
+dstool -e <endpoint> --mon-port <mon_port> cluster set --enable-self-heal --enable-donor-mode
 Exit Status: 1
+===== stdout =====
+To see more info run 'dstool cluster set --help'
+
 ===== stderr =====
-error, Incorrect PDisk space margin setting 1001.000000
+dstool [global options ...] cluster set [set options ...]
+Presented mutually exclusive options: --enable-self-heal,--enable-donor-mode

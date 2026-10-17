@@ -316,7 +316,11 @@ Instance* Runtime::instantiateModuleInternal(Compartment* compartment,
 		{ debugName = "<function #" + std::to_string(functionDefIndex) + ">"; }
 		debugName = "wasm!" + moduleDebugName + '!' + debugName;
 
-		functionDefMutableDatas.push_back(new FunctionMutableData(std::move(debugName)));
+		auto* mutableData = new FunctionMutableData(std::move(debugName));
+		mutableData->moduleDebugInfo = module->debugInfo;
+		mutableData->operatorCodeSectionOffsets
+			= module->ir.functions.defs[functionDefIndex].operatorCodeSectionOffsets;
+		functionDefMutableDatas.push_back(mutableData);
 	}
 
 	// Load the compiled module's object code with this instance's imports.

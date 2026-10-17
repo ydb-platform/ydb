@@ -11,7 +11,9 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+DECLARE_REFCOUNTED_STRUCT(TUserTicketAuthenticationConfig)
 DECLARE_REFCOUNTED_STRUCT(TTvmServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TTvmServiceDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(ITvmService)
 DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
 

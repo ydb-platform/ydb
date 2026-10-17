@@ -320,7 +320,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForSchemafulDsv(
         }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Failed to add columns to name table for schemaful DSV format")
-            << ex;
+            .With(ex);
     }
 
     idToIndexInRow.resize(nameTable->GetSize(), -1);
@@ -355,7 +355,7 @@ ISchemalessFormatWriterPtr CreateSchemalessWriterForSchemafulDsv(
             controlAttributesConfig,
             keyColumnCount);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for schemaful DSV format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for schemaful DSV format").With(ex);
     }
 }
 

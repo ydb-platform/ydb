@@ -3,6 +3,9 @@
 @@ -4,1 +4,1 @@
 -from numpy.linalg.tests.test_linalg import (
 +from __tests__.numpy.linalg.tests.test_linalg import (
+@@ -8,1 +8,1 @@
+-from numpy.linalg.tests.test_linalg import TestQR as _TestQR
++from __tests__.numpy.linalg.tests.test_linalg import TestQR as _TestQR
 --- contrib/python/numpy/py3/numpy/_core/tests/test_records.py	(index)
 +++ contrib/python/numpy/py3/numpy/_core/tests/test_records.py	(working tree)
 @@ -73,1 +75,2 @@ class TestFromrecords:
@@ -28,8 +31,8 @@
 +import yatest.common as yc
 +pwd = yc.source_path(os.path.dirname(__file__))
 @@ -539,1 +539,1 @@ class TestSFC64(Base):
--        pkl_file = os.path.join(base_path, "data", f"sfc64_np126.pkl.gz")
-+        pkl_file = os.path.join(pwd, "data", f"sfc64_np126.pkl.gz")
+-        pkl_file = os.path.join(base_path, "data", "sfc64_np126.pkl.gz")
++        pkl_file = os.path.join(pwd, "data", "sfc64_np126.pkl.gz")
 --- contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(index)
 +++ contrib/python/numpy/py3/numpy/lib/tests/test_format.py	(working tree)
 @@ -90 +90 @@ Test the magic string writing.
@@ -212,12 +215,11 @@
          rg = pickle.load(gz)
 --- contrib/python/numpy/py3/numpy/_core/tests/test_deprecations.py	(index)
 +++ contrib/python/numpy/py3/numpy/_core/tests/test_deprecations.py	(working tree)
-@@ -655,8 +655,27 @@ class TestLibImports(_DeprecationTestCase):
-         from numpy.lib._function_base_impl import disp
+@@ -655,7 +655,26 @@ class TestLibImports(_DeprecationTestCase):
+         from numpy.lib._npyio_impl import recfromcsv, recfromtxt
          from numpy.lib._shape_base_impl import get_array_wrap
-         from numpy._core.numerictypes import maximum_sctype
+         from numpy.lib._utils_impl import safe_eval
 -        from numpy.lib.tests.test_io import TextIO
-         from numpy import in1d, row_stack, trapz
 +        import io
 +        from numpy._utils import asbytes
 +

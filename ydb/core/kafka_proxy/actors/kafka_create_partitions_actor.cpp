@@ -290,7 +290,7 @@ void TKafkaCreatePartitionsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.Register(new TCreatePartitionsActor(
             SelfId(),
-            Context->UserToken,
+            Context->Token.UserToken,
             topic.Name.value(),
             Context->DatabasePath,
             topic.Count

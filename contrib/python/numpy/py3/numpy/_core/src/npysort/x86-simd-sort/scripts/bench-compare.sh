@@ -11,7 +11,7 @@ if [ ! -d .bench/google-benchmark ]; then
 fi
 compare=$(realpath .bench/google-benchmark/tools/compare.py)
 
-meson setup -Dbuild_benchmarks=true -Dbuild_ippbench=true --warnlevel 0 --buildtype release builddir-${branch}
+meson setup -Dbuild_benchmarks=true -Dbuild_vqsortbench=true --warnlevel 0 --buildtype release builddir-${branch}
 cd builddir-${branch}
 ninja
 $compare filters ./benchexe $1 $2 --benchmark_repetitions=$3

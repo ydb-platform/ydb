@@ -54,9 +54,20 @@ class PublicTopicReaderUnexpectedCodecError(YdbError):
 
 class PublicTopicReaderPartitionExpiredError(TopicReaderError):
     """
-    Commit message when partition read session are dropped.
-    It is ok - the message/batch will not commit to server and will receive in other read session
-    (with this or other reader).
+    This error is raised when trying to commit a message/batch that belongs to
+    a partition read session that has already ended (expired).
+
+    A partition read session can end for several reasons, e.g.:
+      - the reader reconnected to the server (connection was lost and restored);
+      - the partition was rebalanced to another reader in the same consumer group.
+
+    This is an expected situation, not a bug. The message/batch simply will not be
+    committed to the server, and will be delivered again in a new read session
+    (either by this reader or by another reader in the same consumer group).
+
+    You do not need to recreate the reader when this error occurs - it can be
+    safely ignored. Just be prepared that the same message may be received more
+    than once (at-least-once delivery semantics).
     """
 
     def __init__(self, message: str = "Topic reader partition session is closed"):

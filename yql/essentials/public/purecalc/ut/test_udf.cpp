@@ -107,7 +107,6 @@ public:
         return &Msg;
     }
 
-public:
     NPureCalcProto::TUnparsed Msg;
     bool Extracted = false;
 };

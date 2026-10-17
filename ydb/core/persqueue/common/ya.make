@@ -1,9 +1,10 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     actor.cpp
     common_app.cpp
     heartbeat.cpp
+    schema_change.cpp
     key.cpp
     microseconds_sliding_window.cpp
     partition_id.cpp

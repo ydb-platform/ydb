@@ -88,6 +88,7 @@ public:
         mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
         mapJob->SetLangVer(execCtx->Options_.LangVer());
         mapJob->SetRuntimeSettings(execCtx->Options_.RuntimeSettings());
+        mapJob->SetBridgeMode(execCtx->Options_.BridgeMode());
     }
 
     template<class ExecCtxPtr>
@@ -95,8 +96,7 @@ public:
         bool withNativeBlockIO = true) {
         TString mapLambda;
         {
-            TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-                execCtx->FunctionRegistry_->SupportsSizedAllocators());
+            TScopedAlloc alloc(__LOCATION__);
             alloc.SetLimit(execCtx->Options_.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TGatewayLambdaBuilder builder(execCtx->FunctionRegistry_, alloc);
             mapLambda = builder.BuildLambdaWithIO(*execCtx->MkqlCompiler_, map.Mapper(), ctx, withNativeBlockIO);

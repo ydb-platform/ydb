@@ -1,0 +1,8 @@
+items:
+- name: Row-oriented
+  href: partitioning/index.md
+  include:
+    mode: link
+    path: partitioning/toc_p.yaml
+- name: Column-oriented
+  href: partitioning/column-oriented.md

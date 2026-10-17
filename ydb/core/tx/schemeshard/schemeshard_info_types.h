@@ -49,6 +49,7 @@
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
@@ -62,6 +63,10 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+#include <array>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -85,6 +90,7 @@ struct TSplitSettings {
     TControlWrapper MergeByLoadMinLowLoadDurationSec;
     TControlWrapper ForceShardSplitDataSize;
     TControlWrapper DisableForceShardSplit;
+    TControlWrapper EnableSplitMergeFairScheduling;
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -97,6 +103,7 @@ struct TSplitSettings {
         , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
         , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
         , DisableForceShardSplit(0, 0, 1)
+        , EnableSplitMergeFairScheduling(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -112,6 +119,8 @@ struct TSplitSettings {
 
         TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
         TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
+
+        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,    icb->SchemeShardControls.EnableSplitMergeFairScheduling);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
@@ -539,6 +548,136 @@ private:
      *          Unlike the TopCpuUsage field, it does not include any followers.
      */
     ui64 CPU = 0;
+};
+
+// History of a partition (key range). Keyed in the map by the shard that currently backs it;
+// subdivided/merged along the partition lineage in ApplySplitMerge (children inherit the parent).
+// In-memory only; recorded only when EnableSplitMergeDemandTracking is on.
+struct TPartitionSplitMergeState {
+    // raw threshold crossings by direction: SplitSide = split-side, MergeSide = merge-side
+    struct TThresholdCrossTimes {
+        TInstant SplitSide;
+        TInstant MergeSide;
+    };
+
+    // candidacy counters (reset-on-fire)
+    ui32 SplitCandidateCount = 0;
+    ui32 MergeCandidateCount = 0;
+    ui32 SplitDeferredCount = 0;
+    ui32 MergeDeferredCount = 0;
+
+    // last-candidate / last-action timestamps (also seed PR2 anti-oscillation)
+    TInstant LastSplitCandidate;
+    TInstant LastMergeCandidate;
+    TInstant LastSplitTime;
+    TInstant LastMergeTime;
+
+    TThresholdCrossTimes SizeThresholdCross;   // size > splitThreshold / size < mergeThreshold
+    TThresholdCrossTimes LoadThresholdCross;   // cpu  > splitThreshold / cpu  < mergeThreshold
+
+    // partition-lineage signal: consecutive by-load splits whose children stayed small.
+    // Survives the shard identity change (seeded in ApplySplitMerge); resets on grow/merge.
+    // Whether a split deepens the lineage is carried by the op itself
+    // (TTxState::LoadSplitLineage), not by a fire-time flag here.
+    ui32 LoadSplitLineageDepth = 0;
+
+    // per-reason deferral frequency (NOT just last event); reset-on-fire
+    enum class EDeferralReason : ui8 {
+        InFlightLimit = 0,
+        Borrowed = 1,
+        PathLocked = 2,
+        ShardLimitPath = 3,
+        ShardLimitSubdomain = 4,
+        NoCachedTxId = 5,
+        COUNT = 6,
+    };
+    std::array<ui16, static_cast<size_t>(EDeferralReason::COUNT)> DeferralReasonCounts = {};
+
+    void RecordDeferral(EDeferralReason r) {
+        const size_t idx = static_cast<size_t>(r);
+        if (idx >= DeferralReasonCounts.size()) {
+            return;  // guard against a garbage/uninitialized reason value (OOB write)
+        }
+        auto& c = DeferralReasonCounts[idx];
+        if (c != Max<ui16>()) {
+            ++c;
+        }
+    }
+
+    // Direction-indexed accessors: internal use only (the Record* family and its impl).
+    // A wrong `wantsSplit` silently corrupts the opposite counter, so these must not
+    // leak beyond that code; the public API names the direction in the method instead.
+    ui32& DeferredCount(bool wantsSplit) {
+        return wantsSplit ? SplitDeferredCount : MergeDeferredCount;
+    }
+    const TInstant& LastCandidate(bool wantsSplit) const {
+        return wantsSplit ? LastSplitCandidate : LastMergeCandidate;
+    }
+
+    // How stuck this partition is: the fair scheduler's inner-pick weight.
+    ui32 DeferredWeight() const {
+        return Max(SplitDeferredCount, MergeDeferredCount);
+    }
+
+    // Oldest of the last split/merge candidate timestamps; TInstant::Max when never a candidate.
+    TInstant OldestCandidate() const {
+        return Min(
+            LastSplitCandidate ? LastSplitCandidate : TInstant::Max(),
+            LastMergeCandidate ? LastMergeCandidate : TInstant::Max());
+    }
+
+    // on this partition's split/merge firing: clear "stuck" counters (pressure-since-last-op).
+    // Does NOT touch LoadSplitLineageDepth -- surviving the fire is the point of the lineage signal.
+    void ResetOnSplitMerge() {
+        SplitCandidateCount = MergeCandidateCount = 0;
+        SplitDeferredCount = MergeDeferredCount = 0;
+        DeferralReasonCounts = {};
+    }
+};
+
+// Per-table aggregate of TPartitionSplitMergeState; the cross-table fairness key. Maintained
+// incrementally (never recomputed on the hot path). In-memory only.
+struct TTableSplitMergeState {
+    TInstant LastSplitMergeTime;        // when this table last got a slot
+    // Timestamp of the oldest candidate among *currently* deferred shards; reset when the
+    // deferred set drains, so it never reflects candidates that are no longer waiting.
+    TInstant OldestPendingCandidateAt;
+    ui32 SplitDemandCount = 0;
+    ui32 MergeDemandCount = 0;
+    // Currently-stuck partitions only -> inner weighted pick is O(stuck-in-table), not O(all).
+    // Value = direction (true = split, false = merge) of the deferral that inserted the shard;
+    // removal paths decrement exactly the count that was incremented on insert.
+    THashMap<TShardIdx, bool> DeferredShards;
+    bool QueuedForRevisit = false;         // membership guard: table appears once in the RR queue
+
+    // Re-deferral with a changed direction: move the aggregate count from the opposite
+    // direction to `wantsSplit`, so the aggregate always mirrors the latest deferral
+    // direction. The guard protects against underflow on inconsistent state.
+    void MoveDemandCount(bool wantsSplit) {
+        ui32& opposite = wantsSplit ? MergeDemandCount : SplitDemandCount;
+        ui32& target = wantsSplit ? SplitDemandCount : MergeDemandCount;
+        if (opposite) {
+            --opposite;
+        }
+        ++target;
+    }
+
+    // Direction-indexed accessor: internal use only (the Record* family and its impl).
+    // A wrong `wantsSplit` silently corrupts the opposite counter, so it must not leak
+    // beyond that code; the public API names the direction in the method instead.
+    ui32& DemandCount(bool wantsSplit) {
+        return wantsSplit ? SplitDemandCount : MergeDemandCount;
+    }
+
+    // Incrementally maintained cache of PickMostDeferredPartition's result. While a shard
+    // stays deferred its weight only grows (counter resets are paired with removal from
+    // DeferredShards) and candidate timestamps only move forward, so the winner changes only
+    // via RecordSplitDeferral/RecordMergeDeferral (UpdateSplitMergePickCache) or removal
+    // (InvalidateSplitMergePickCache). Gives the revisit turn an O(1) fast path; a failed
+    // validation falls back to the O(deferred-in-table) rescan.
+    TShardIdx CachedPickShardIdx = InvalidShardIdx;
+    ui32 CachedPickWeight = 0;
+    TInstant CachedPickCandidate;
 };
 
 struct TStoragePoolStatsDelta {
@@ -978,12 +1117,30 @@ private:
     TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
+    // Split/merge candidacy memory. Keyed by the shard that currently backs each partition;
+    // a separate map (NOT folded into TPartitionStats) precisely so the partition lineage
+    // survives ApplySplitMerge -- where Stats.PartitionStats is zeroed -- which would otherwise
+    // wipe the history we need for lineage, hysteresis, and fairness.
+    // Invariant: PartitionSplitMergeStates keys subset of Stats.PartitionStats keys. In-memory only.
+    THashMap<TShardIdx, TPartitionSplitMergeState> PartitionSplitMergeStates;
+    TTableSplitMergeState TableSplitMergeState;
+
     TTableShardInfo* FindPartition(const TShardIdx& shardIdx) {
         return PartitionStore.FindPtr(shardIdx);
     }
 
 public:
     TTableInfo() = default;
+
+    // Remove a shard from the per-table split/merge aggregate (deferred set + demand counts),
+    // keeping the cached counts consistent. No-op when the shard is not currently deferred.
+    // Public: unit tests exercise the stored-direction decrement directly.
+    void DropFromSplitMergeState(const TShardIdx& shardIdx);
+
+    // Recompute OldestPendingCandidateAt as the min over the remaining deferred shards.
+    // Call after a removal from DeferredShards so the timestamp never reflects a shard
+    // that is no longer waiting (O(deferred), removal paths only -- not the hot path).
+    void RecomputeOldestPendingCandidateAt();
 
     explicit TTableInfo(TAlterTableInfo&& alterData)
         : NextColumnId(alterData.NextColumnId)
@@ -1028,7 +1185,8 @@ public:
         const NScheme::TTypeRegistry& typeRegistry,
         const TSchemeLimits& limits, const TSubDomainInfo& subDomain,
         const TCreateAlterDataFeatureFlags& featureFlags,
-        TString& errStr, const THashSet<TString>& localSequences = {});
+        TString& errStr, const THashSet<TString>& localSequences = {},
+        bool allowReplicationMode = false);
 
     static ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& descr) {
         if (descr.HasUniformPartitionsCount()) {
@@ -1128,7 +1286,14 @@ public:
     void VerifyConsistency() const;
 
     // In-place split/merge: replaces the contiguous src shard range with dst shards.
-    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const TVector<TShardIdx>& removedShards, ui64 splitFirstIdx, TInstant now);
+    // trackSplitMergeDemand gates the lineage/demand-state propagation (the caller passes the
+    // EnableSplitMergeDemandTracking flag); cleanup of removed shards' entries always runs
+    // (guarded by map emptiness) so the keys-subset-of-PartitionStats invariant holds even
+    // after a flag toggle-off left the map populated.
+    // loadSplitLineage: whether this op deepens the by-load split lineage (carried by the
+    // op's tx state; see TTxState::LoadSplitLineage).
+    void ApplySplitMerge(TVector<TTableShardInfo>&& dstPartitions, const TVector<TShardIdx>& removedShards,
+        ui64 splitFirstIdx, TInstant now, bool trackSplitMergeDemand, bool loadSplitLineage);
 
     const TVector<TTableShardInfo*>& GetPartitions() const {
         return Partitions;
@@ -1137,6 +1302,36 @@ public:
     const TAggregatedStats& GetStats() const {
         return Stats;
     }
+
+    // Split/merge state accessors. MutablePartitionSplitMergeState find-or-inserts (node alloc only on
+    // a partition's first candidacy); GetPartitionSplitMergeState returns nullptr when none recorded yet.
+    TPartitionSplitMergeState& MutablePartitionSplitMergeState(const TShardIdx& shardIdx) {
+        return PartitionSplitMergeStates[shardIdx];
+    }
+    const TPartitionSplitMergeState* GetPartitionSplitMergeState(const TShardIdx& shardIdx) const {
+        return PartitionSplitMergeStates.FindPtr(shardIdx);
+    }
+    const THashMap<TShardIdx, TPartitionSplitMergeState>& GetPartitionSplitMergeStates() const {
+        return PartitionSplitMergeStates;
+    }
+    TTableSplitMergeState& MutableTableSplitMergeState() {
+        return TableSplitMergeState;
+    }
+    const TTableSplitMergeState& GetTableSplitMergeState() const {
+        return TableSplitMergeState;
+    }
+
+    // Pick the most-stuck deferred partition (max deferral count, oldest candidate breaks ties).
+    // Returns InvalidShardIdx when no partition is currently deferred. O(1) via the cached
+    // pick when the cache validates; otherwise O(deferred-in-table) rescan that refreshes it.
+    // Non-const: prunes stale entries (deferred shard without per-shard state) while picking.
+    TShardIdx PickMostDeferredPartition();
+
+    // Fast-path cache maintenance for PickMostDeferredPartition: call after a deferral was
+    // recorded for shardIdx (weight only grows while deferred, so the cache stays exact).
+    void UpdateSplitMergePickCache(const TShardIdx& shardIdx);
+    // Call when shardIdx leaves DeferredShards; clears the cache if it pointed at it.
+    void InvalidateSplitMergePickCache(const TShardIdx& shardIdx);
 
     bool IsShardsStatsDetached() const {
         return ShardsStatsDetached;
@@ -1183,12 +1378,14 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
+                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TInstant now,
+                            TString& reason, bool& mergeByLoad) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex, TInstant now, TString& reason) const;
+                                 const TTableInfo* mainTableForIndex, TInstant now,
+                                 TString& reason, bool& mergeByLoad) const;
 
     /**
      * Check if the given partition should be split by load.
@@ -1463,7 +1660,8 @@ public:
     bool IsUsingSequence(const TString& name) {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
-                pr.second.DefaultValue == name)
+                pr.second.DefaultValue == name &&
+                !pr.second.IsDropped())
             {
                 // A column scheduled to be dropped by the pending alter no longer keeps the
                 // sequence alive. This lets a single ALTER drop a serial column and cascade
@@ -1538,8 +1736,9 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
                 Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
             } else {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Read unknown topic partition status value " << value);
+                YDB_LOG_ERROR_CTX(ctx, "Read unknown topic partition status value",
+                    {"topicPartitionStatus", value},
+                );
                 Status = NKikimrPQ::ETopicPartitionStatus::Active;
             }
         }
@@ -2173,6 +2372,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetGraphShard());
     }
 
+    TTabletId GetTenantWasmCompileControllerID() const {
+        if (!ProcessingParams.HasWasmCompileController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetWasmCompileController());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -2334,6 +2540,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
         AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+        AlterData->StorageSpaceExhausted = StorageSpaceExhausted;
 
         // Update usage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
@@ -2566,6 +2773,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (graphs.size()) {
             ProcessingParams.SetGraphShard(ui64(graphs.front()));
         }
+
+        ProcessingParams.ClearWasmCompileController();
+        TVector<TTabletId> wasmCompileControllers = FilterPrivateTablets(ETabletType::WasmCompileController, allShards);
+        Y_ENSURE(wasmCompileControllers.size() <= 1, "size was: " << wasmCompileControllers.size());
+        if (wasmCompileControllers.size()) {
+            ProcessingParams.SetWasmCompileController(ui64(wasmCompileControllers.front()));
+        }
     }
 
     void InitializeAsGlobal(NKikimrSubDomains::TProcessingParams&& processingParams) {
@@ -2714,6 +2928,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         SmallBlobsQuotaExceeded = value;
     }
 
+    // storage pools of the database are running out of space, as reported by BS_CONTROLLER
+    bool GetStorageSpaceExhausted() const {
+        return StorageSpaceExhausted;
+    }
+
+    void SetStorageSpaceExhausted(bool value) {
+        StorageSpaceExhausted = value;
+    }
+
+    // Returns true when the value has changed and needs to be persisted and pushed to scheme board.
+    bool ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters);
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2772,6 +2998,7 @@ private:
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
     bool SmallBlobsQuotaExceeded = false;
+    bool StorageSpaceExhausted = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
 
@@ -3537,7 +3764,7 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 };
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 
@@ -4517,6 +4744,7 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+    TActorId OperationOwnerActorId;
 };
 
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
@@ -4626,3 +4854,5 @@ bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
     stream << value.ShortDebugString();
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

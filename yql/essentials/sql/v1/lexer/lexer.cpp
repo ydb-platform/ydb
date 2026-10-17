@@ -92,7 +92,6 @@ private:
         return JoinSeq("_", parts);
     }
 
-private:
     NSQLTranslation::TLexerFactoryPtr Factory_;
 };
 

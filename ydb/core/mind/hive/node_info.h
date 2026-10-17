@@ -2,6 +2,7 @@
 
 #include "hive.h"
 #include "tablet_info.h"
+#include "event_history.h"
 
 #include <util/generic/intrlist.h>
 
@@ -65,6 +66,7 @@ public:
         TFullTabletId TabletId;
         NMetrics::TFastRiseAverageValue<double, 20> UsageSince;
         double UsageBefore;
+        double PriorImpact; // estimate carried over from before the move, acts as a floor until this measurement completes
     };
 
     THive& Hive;
@@ -79,6 +81,8 @@ public:
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    // Resource-draining tablets with a high UsageImpact. Expected to hold zero or one elements
+    std::unordered_set<TTabletInfo*> HighImpactTablets;
     std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
     TResourceRawValues ResourceTotalValues; // actual used resources from the node (should be greater or equal one above)
@@ -104,6 +108,8 @@ public:
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
     TBridgePileId BridgePileId;
     THiveDrain* DrainActor = nullptr;
+    // diagnostics only: newest events of this node, constructed on the first event, see THive::RecordNodeEvent
+    TEventHistory EventHistory;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -120,6 +126,16 @@ public:
     void ChangeVolatileState(EVolatileState state);
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
+    void UpdateHighImpactTablet(TTabletInfo* tablet);
+    void UpdateUsageImpacts(NIceDb::TNiceDb& db);
+
+    // Largest UsageImpact among the node's high-impact tablets, ignoring `exclude` if given.
+    // Used as a floor on the node's expected usage, see GetNodeUsageForTablet.
+    double GetMaxTabletImpact(const TTabletInfo* exclude = nullptr) const;
+
+    // The tablet, if any, that accounts for most of this node's usage and is therefore not moved
+    // by the balancer. Diagnostics only.
+    const TTabletInfo* GetPinnedTablet() const;
 
     ui32 GetTabletsScheduled() const {
         auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING);
@@ -147,7 +163,7 @@ public:
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
             auto count = it->second.size();
-            if (tablet.IsAliveOnLocal(Local)) {
+            if (tablet.IsPresentOnLocal(Local)) {
                 --count;
             }
             return count;
@@ -225,7 +241,7 @@ public:
                 }
             }
             for (const auto& t : TabletsToRestart) {
-                t->BecomeStopped();
+                t->BecomeStopped(EHiveEventReason::NodeDisconnected);
             }
             Y_ABORT_UNLESS(GetTabletsTotal() == 0, "%s", DumpTablets().data());
             Local = TActorId();
@@ -254,8 +270,10 @@ public:
     void DeregisterInDomains();
     void Ping();
     void SendReconnect(const TActorId& local);
-    void SetDown(bool down);
-    void SetFreeze(bool freeze);
+    // reason and details describe who/what initiated the change, see THive::RecordNodeEvent
+    void SetDown(bool down, EHiveEventReason reason, TString details = {});
+    void SetFreeze(bool freeze, EHiveEventReason reason, TString details = {});
+    void SetLocation(const TNodeLocation& location, EHiveEventReason reason);
     void UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics);
 
     TResourceRawValues GetResourceCurrentValues() const;

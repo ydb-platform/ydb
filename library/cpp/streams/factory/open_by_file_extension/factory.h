@@ -35,7 +35,7 @@ enum class ECompression {
  * for `gz` and `bz2` files with given compression level and buffer size.
  *
  * @param url                           File to open.
- * @param compression_level             Compression level.
+ * @param compressionLevel              Compression level.
  * @param buflen                        Compression buffer length in bytes.
  */
 THolder<IOutputStream> OpenOutput(const TString& url, ECompression compressionLevel, size_t buflen);

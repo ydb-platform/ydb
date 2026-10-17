@@ -19,9 +19,11 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/misc/property.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <atomic>
 #include <optional>
@@ -67,7 +69,7 @@ struct IClientRequest
     virtual std::string GetService() const = 0;
     virtual std::string GetMethod() const = 0;
 
-    virtual const std::string& GetRequestInfo() const = 0;
+    virtual const NLogging::TLoggingTagList& GetLoggingTags() const = 0;
 
     virtual void DeclareClientFeature(int featureId) = 0;
     virtual void RequireServerFeature(int featureId) = 0;
@@ -198,10 +200,10 @@ public:
     std::string GetService() const override;
     std::string GetMethod() const override;
 
-    template <class... TArgs>
-    void SetRequestInfo(TFormatString<TArgs...> format, TArgs&&... args);
+    //! Fluent request annotation: |request->Annotate().With("Key", value)|.
+    NLogging::TLoggingTagListBuilderGuard<> Annotate();
 
-    const std::string& GetRequestInfo() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
 
     using NRpc::IClientRequest::DeclareClientFeature;
     using NRpc::IClientRequest::RequireServerFeature;
@@ -258,7 +260,7 @@ private:
     std::atomic<bool> Serialized_ = false;
 
     std::atomic<bool> HeaderPrepared_ = false;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, HeaderPreparationLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, HeaderPreparationLock_);
     NProto::TRequestHeader Header_;
 
     mutable TSharedRefArray SerializedHeaderlessMessage_;
@@ -282,11 +284,9 @@ private:
 
     std::string User_ = RootUserName;
     std::string UserTag_;
-    std::string RequestInfo_;
+    NLogging::TLoggingTagList LoggingTags_;
 
     TWeakPtr<IClientRequestControl> RequestControl_;
-
-    void SetRawRequestInfo(std::string requestInfo);
 
     void OnPullRequestAttachmentsStream();
     void OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error);
@@ -525,11 +525,15 @@ struct TMethodDescriptor
     std::string MethodName;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
     bool StreamingEnabled = false;
+    bool RequestHeavy = false;
+    bool ResponseHeavy = false;
 
     explicit TMethodDescriptor(std::string methodName);
 
     TMethodDescriptor& SetMultiplexingBand(EMultiplexingBand value);
     TMethodDescriptor& SetStreamingEnabled(bool value);
+    TMethodDescriptor& SetRequestHeavy(bool value);
+    TMethodDescriptor& SetResponseHeavy(bool value);
 };
 
 #define DEFINE_RPC_PROXY_METHOD_GENERIC(method, request, response, ...) \

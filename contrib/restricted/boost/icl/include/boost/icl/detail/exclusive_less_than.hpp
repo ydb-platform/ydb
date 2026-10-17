@@ -17,7 +17,7 @@ namespace boost{ namespace icl
 template <class IntervalT>
 struct exclusive_less_than 
 {
-    /** Operator <tt>operator()</tt> implements a strict weak ordering on intervals. */
+    /** Operator <tt>operator()</tt> implements a strict partial ordering on intervals. */
     bool operator()(const IntervalT& left, const IntervalT& right)const
     { 
         return icl::non_empty::exclusive_less(left, right); 

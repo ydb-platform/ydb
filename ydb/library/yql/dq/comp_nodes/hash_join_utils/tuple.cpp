@@ -1,6 +1,9 @@
 #include "tuple.h"
 
 #include <algorithm>
+#include <bit>
+#include <cstring>
+#include <limits>
 #include <vector>
 #include <queue>
 
@@ -92,9 +95,25 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     }
 }
 
+// Branchless on purpose: zero keys are common enough to make a branch mispredict.
+template <typename TFloat, typename TBits>
+Y_FORCE_INLINE void CanonicalizeFloatKey(ui8* data) {
+    static_assert(sizeof(TFloat) == sizeof(TBits));
+    constexpr TBits signMask = TBits(1) << (sizeof(TBits) * 8 - 1);
+    constexpr TBits infBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::infinity());
+    constexpr TBits nanBits = std::bit_cast<TBits>(std::numeric_limits<TFloat>::quiet_NaN());
+
+    const TBits bits = ReadUnaligned<TBits>(data);
+    const TBits magnitude = bits & ~signMask;
+    TBits canonical = magnitude == 0 ? TBits(0) : bits;
+    canonical = magnitude > infBits ? nanBits : canonical;
+    WriteUnaligned<TBits>(data, canonical);
+}
+
 } // namespace
 
 
+template <bool EqualNulls>
 bool TupleKeysEqual(const TTupleLayout *layout,
                            const ui8 *lhsRow, const ui8 *lhsOverflow,
                            const ui8 *rhsRow, const ui8 *rhsOverflow) {
@@ -108,14 +127,29 @@ bool TupleKeysEqual(const TTupleLayout *layout,
     for (i32 i = layout->KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
         const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + byteN);
         const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + layout->BitmaskOffset + byteN);
-        const ui8 midx = (i >= 8);
-        if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
+        const ui8 mask = masks[i >= 8];
+        if constexpr (EqualNulls) {
+            const ui8 eqMask = layout->GetEqualNullsMaskByte(byteN) & mask;
+            const ui8 reqMask = mask & ~eqMask;
+            if ((lhsBits & rhsBits & reqMask) != reqMask || (lhsBits & eqMask) != (rhsBits & eqMask)) {
+                return false;
+            }
+        } else if (((lhsBits & mask) != mask) || ((rhsBits & mask) != mask)) {
             return false;
         }
     }
 
     for (auto colInd = layout->KeyColumnsFixedNum; colInd != layout->KeyColumnsNum; ++colInd) {
         const auto &col = layout->Columns[colInd];
+        if constexpr (EqualNulls) {
+            if (layout->EqualNullsKeyMask.Get(colInd)) {
+                const ui8 bit =
+                    (ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + colInd / 8) >> (colInd % 8)) & 1u;
+                if (bit == 0) {
+                    continue; // both sides are NULL; payload of a null variable key is not meaningful
+                }
+            }
+        }
 
         const auto lhsPrefSize = ReadUnaligned<ui8>(lhsRow + col.Offset);
         const auto rhsPrefSize = ReadUnaligned<ui8>(rhsRow + col.Offset);
@@ -153,6 +187,13 @@ bool TupleKeysEqual(const TTupleLayout *layout,
 
     return true;
 }
+
+template bool TupleKeysEqual<false>(const TTupleLayout *layout,
+    const ui8 *lhsRow, const ui8 *lhsOverflow,
+    const ui8 *rhsRow, const ui8 *rhsOverflow);
+template bool TupleKeysEqual<true>(const TTupleLayout *layout,
+    const ui8 *lhsRow, const ui8 *lhsOverflow,
+    const ui8 *rhsRow, const ui8 *rhsOverflow);
 
 /// used just for having AN order on tuples
 /// cant rely on that comparison in any other way
@@ -215,6 +256,79 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
     }
 
     return false;
+}
+
+void TTupleLayout::StashFloatOriginals(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            ui8* row = rows + i * rowSize;
+            std::memcpy(row + orig.PayloadOffset, row + orig.KeyOffset, orig.Size);
+        }
+    }
+}
+
+void TTupleLayout::RestoreFloatOriginalsImpl(ui8** columns, const ui8* rows, ui32 start, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const auto& orig : FloatOriginals) {
+        for (ui32 i = 0; i < count; ++i) {
+            std::memcpy(columns[orig.OriginalIndex] + (start + i) * orig.Size,
+                        rows + i * rowSize + orig.PayloadOffset, orig.Size);
+        }
+    }
+}
+
+void TTupleLayout::CanonicalizeFloatKeysImpl(ui8* rows, ui32 count) const {
+    const ui32 rowSize = TotalRowSize;
+    for (const ui32 offset : FloatKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<float, ui32>(rows + i * rowSize + offset);
+        }
+    }
+    for (const ui32 offset : DoubleKeyOffsets) {
+        for (ui32 i = 0; i < count; ++i) {
+            CanonicalizeFloatKey<double, ui64>(rows + i * rowSize + offset);
+        }
+    }
+}
+
+void TTupleLayout::NormalizeEqualNullsFixedKeys(ui8* res) const {
+    if (Y_LIKELY(!HasEqualNullsKeys)) {
+        return;
+    }
+
+    const ui32 fixedMaskBytes = (KeyColumnsFixedNum + 7) / 8;
+    for (ui32 byteN = 0; byteN < fixedMaskBytes; ++byteN) {
+        ui8 nullEqualNulls = GetEqualNullsMaskByte(byteN) & ~res[BitmaskOffset + byteN];
+        while (nullEqualNulls) {
+            const ui32 j = byteN * 8 + CountTrailingZeroBits(static_cast<ui32>(nullEqualNulls));
+            if (j >= KeyColumnsFixedNum) {
+                break;
+            }
+            const auto& col = KeyColumns[j];
+            std::memset(res + col.Offset, 0, col.DataSize);
+            nullEqualNulls &= nullEqualNulls - 1;
+        }
+    }
+}
+
+bool TTupleLayout::HashVariableKey(const ui8* res, ui32 keyColIdx) const {
+    if (Y_LIKELY(!HasEqualNullsKeys) || !EqualNullsKeyMask.Get(keyColIdx)) {
+        return true;
+    }
+    return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
+}
+
+void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns) {
+    EqualNullsKeyMask.Clear();
+    HasEqualNullsKeys = false;
+    for (ui32 j = 0; j < KeyColumnsNum; ++j) {
+        if (std::find(equalNullsInputColumns.begin(), equalNullsInputColumns.end(),
+                      KeyColumns[j].OriginalColumnIndex) != equalNullsInputColumns.end()) {
+            EqualNullsKeyMask.Set(j);
+            HasEqualNullsKeys = true;
+        }
+    }
 }
 
 THolder<TTupleLayout>
@@ -297,7 +411,16 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         col.Offset = currOffset;
         Columns.push_back(col);
         currOffset += col.DataSize;
+
+        if (col.FloatingPoint) {
+            Y_ENSURE(col.SizeType == EColumnSizeType::Fixed &&
+                         (col.DataSize == sizeof(float) || col.DataSize == sizeof(double)),
+                     "floating point key column must be a fixed Float or Double");
+            auto& offsets = col.DataSize == sizeof(float) ? FloatKeyOffsets : DoubleKeyOffsets;
+            offsets.push_back(col.Offset);
+        }
     }
+    HasFloatingPointKeys = !FloatKeyOffsets.empty() || !DoubleKeyOffsets.empty();
 
     KeyColumnsEnd = currOffset;
 
@@ -332,6 +455,17 @@ TTupleLayoutFallback::TTupleLayoutFallback(
         currOffset += col.DataSize;
     }
 
+    // Original float/double key bytes. Not a real column: the null bitmask and
+    // column index space stay sized by the input columns. Unpack writes this
+    // slot back over the canonical key.
+    for (const auto& key : KeyColumns) {
+        if (!key.FloatingPoint) {
+            continue;
+        }
+        FloatOriginals.push_back({key.Offset, currOffset, key.DataSize, key.OriginalIndex});
+        currOffset += key.DataSize;
+    }
+
     PayloadEnd = currOffset;
     PayloadSize = PayloadEnd - PayloadOffset;
 
@@ -340,6 +474,8 @@ TTupleLayoutFallback::TTupleLayoutFallback(
     for (auto &col : Columns) {
         if (col.SizeType == EColumnSizeType::Variable) {
             VariableColumns.push_back(col);
+        } else if (col.DataSize == 0) {
+            // singular types (void/null...) no payload bytes to pack/unpack
         } else if (IsPowerOf2(col.DataSize) &&
                    col.DataSize < (1u << FixedPOTColumns_.size())) {
             FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(
@@ -366,13 +502,23 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     std::vector<const TColumnDesc *> fallback_cols;
     std::queue<const TColumnDesc *> next_cols;
 
+    auto packableFixedPrefix = [](const std::vector<TColumnDesc> &columns) {
+        std::vector<TColumnDesc> result;
+        for (const auto &col : columns) {
+            if (col.SizeType != EColumnSizeType::Fixed) {
+                break;
+            }
+            if (col.DataSize != 0) {
+                result.push_back(col);
+            }
+        }
+        return result;
+    };
+    const auto packableKeyColumns = packableFixedPrefix(KeyColumns);
+    const auto packablePayloadColumns = packableFixedPrefix(PayloadColumns);
+
     size_t fixed_cols_left =
-        KeyColumnsFixedNum +
-        std::accumulate(PayloadColumns.begin(), PayloadColumns.end(), 0ul,
-                        [](size_t prev, const auto &col) {
-                            return prev +
-                                   (col.SizeType == EColumnSizeType::Fixed);
-                        });
+        packableKeyColumns.size() + packablePayloadColumns.size();
 
     const auto small_tuple_packing = [&](const std::vector<TColumnDesc>
                                              &columns) {
@@ -392,13 +538,19 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
                     ? col.DataSize
                     : col.DataSize + col.Offset - next_cols.front()->Offset;
 
-            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size;
+            // PackTupleOr/UnpackTupleOr are instantiated for at most
+            // kSIMDMaxCols columns, so a wider group cannot be dispatched.
+            // Stop growing the group there and let the rest of the columns go
+            // through the fallback path.
+            const bool col_pushed = tuple_size_with_col <= max_simd_tuple_size &&
+                                    next_cols.size() < kSIMDMaxCols;
             if (col_pushed) {
                 next_cols.push(&col);
                 tuple_size = tuple_size_with_col;
             }
 
             if (!SIMDSmallTuple_.Cols && next_cols.size() > 1 &&
+                next_cols.size() <= kSIMDMaxCols &&
                 tuple_size <= max_simd_tuple_size &&
                 (!col_pushed || !fixed_cols_left)) {
                 SIMDSmallTupleDesc simd_desc;
@@ -520,16 +672,16 @@ TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
     };
 
     if (max_simd_tuple_size) {
-        small_tuple_packing(KeyColumns);
-        small_tuple_packing(PayloadColumns);
+        small_tuple_packing(packableKeyColumns);
+        small_tuple_packing(packablePayloadColumns);
 
         while (!next_cols.empty()) {
             fallback_cols.push_back(next_cols.front());
             next_cols.pop();
         }
     } else {
-        transpose_packing(KeyColumns, 0);
-        transpose_packing(PayloadColumns, 1);
+        transpose_packing(packableKeyColumns, 0);
+        transpose_packing(packablePayloadColumns, 1);
     }
 
     for (const auto col_desc_p : fallback_cols) {
@@ -632,10 +784,16 @@ void TTupleLayoutFallback::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
+        NormalizeEqualNullsFixedKeys(res);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(res, i)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -691,6 +849,9 @@ void TTupleLayoutFallback::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
+    const ui8* const rows = res;
+    const ui32 rowStart = start;
+    const ui32 rowCount = count;
     std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
 
     {
@@ -814,6 +975,8 @@ void TTupleLayoutFallback::Unpack(
                                  dataOffset + size);
         }
     }
+
+    RestoreFloatOriginals(columns, rows, rowStart, rowCount);
 }
 
 void TTupleLayoutFallback::BucketPack(
@@ -910,10 +1073,16 @@ void TTupleLayoutFallback::BucketPack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
+        CanonicalizeFloatKeys(res, 1);
+        NormalizeEqualNullsFixedKeys(res);
+
         ui32 hash = CalculateCRC32<TTraits>(
             res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
         for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            if (!HashVariableKey(res, i)) {
+                continue;
+            }
             auto &col = KeyColumns[i];
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -975,9 +1144,6 @@ void TTupleLayoutFallback::BucketPack(
     }
 }
 
-#define MULTI_8_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
-#define MULTI_8(C, A) C(A, 0) C(A, 1) C(A, 2) C(A, 3)
-
 template <typename TTraits>
 void TTupleLayoutSIMD<TTraits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -993,26 +1159,14 @@ void TTupleLayoutSIMD<TTraits>::Pack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1095,6 +1249,8 @@ void TTupleLayoutSIMD<TTraits>::Pack(
             edge_mask_transpose(cur_block_size);
         }
 
+        CanonicalizeFloatKeys(res, cur_block_size);
+
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
              ++block_row_ind) {
 
@@ -1104,10 +1260,15 @@ void TTupleLayoutSIMD<TTraits>::Pack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(res);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(res, i)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1178,26 +1339,16 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template UnpackTupleOr<i + 1, j + 1>(               \
-            res + SIMDSmallTuple_.RowOffset, block_columns.data() + cols_past, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data() + (i + 1) * (j + 1), start);                 \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::UnpackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                res + SIMDSmallTuple_.RowOffset,
+                block_columns.data() + cols_past, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data() + SIMDSmallTuple_.InnerLoopIters *
+                    SIMDSmallTuple_.Cols,
+                start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1332,6 +1483,8 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
             }
         }
 
+        RestoreFloatOriginals(columns, res, start, cur_block_size);
+
         start += cur_block_size;
         res += cur_block_size * TotalRowSize;
     }
@@ -1373,26 +1526,14 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
         size_t cols_past = 0;
 
         if (SIMDSmallTuple_.Cols) {
-
-#define CASE(i, j)                                                             \
-    case i *kSIMDMaxCols + j:                                                  \
-        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
-            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
-            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
-            BlockColsOffsets_.data() + cols_past,                              \
-            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
-            SIMDPermMasks_.data(), start);                                     \
-        break;
-
-            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
-                    SIMDSmallTuple_.Cols - 1) {
-                MULTI_8(MULTI_8_I, CASE)
-
-            default:
-                std::abort();
-            }
-
-#undef CASE
+            SIMDPack<TTraits>::PackTupleOr(
+                SIMDSmallTuple_.InnerLoopIters, SIMDSmallTuple_.Cols,
+                block_columns.data() + cols_past,
+                res + SIMDSmallTuple_.RowOffset, cur_block_size,
+                BlockFixedColsSizes_.data() + cols_past,
+                BlockColsOffsets_.data() + cols_past,
+                SIMDSmallTuple_.SmallTupleSize, TotalRowSize,
+                SIMDPermMasks_.data(), start);
 
             cols_past += SIMDSmallTuple_.Cols;
         }
@@ -1475,6 +1616,8 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             edge_mask_transpose(cur_block_size);
         }
 
+        CanonicalizeFloatKeys(res, cur_block_size);
+
         for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
             ++block_row_ind) {
 
@@ -1484,10 +1627,15 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
+            NormalizeEqualNullsFixedKeys(res);
+
             ui32 hash = CalculateCRC32<TTraits>(
                 res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                if (!HashVariableKey(res, i)) {
+                    continue;
+                }
                 auto &col = KeyColumns[i];
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
@@ -1553,6 +1701,13 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 }
 
 #ifdef USE_X86_SIMD
+template __attribute__((target("avx2")))
+TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::TTupleLayoutSIMD(
+    const std::vector<TColumnDesc> &columns);
+template __attribute__((target("sse4.2")))
+TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::TTupleLayoutSIMD(
+    const std::vector<TColumnDesc> &columns);
+
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,

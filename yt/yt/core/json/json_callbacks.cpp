@@ -152,7 +152,7 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(INodePtr node, int nestingLeve
 {
     if (NestingLevelLimit_ > 0 && nestingLevel > NestingLevelLimit_) {
         THROW_ERROR_EXCEPTION("JSON nesting level limit exceeded")
-            << TErrorAttribute("nesting_level_limit", NestingLevelLimit_);
+            .With("nesting_level_limit", NestingLevelLimit_);
     }
     switch (node->GetType()) {
         case ENodeType::Int64:
@@ -283,8 +283,8 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map, int nestingLe
                     case ENodeType::Boolean:
                     case ENodeType::String:
                         THROW_ERROR_EXCEPTION("Type mismatch in JSON")
-                            << TErrorAttribute("expected_type", expectedType)
-                            << TErrorAttribute("actual_type", node->GetType());
+                            .With("expected_type", expectedType)
+                            .With("actual_type", node->GetType());
                         break;
                     default:
                         YT_ABORT();
@@ -292,8 +292,8 @@ void TJsonCallbacksBuildingNodesImpl::ConsumeNode(IMapNodePtr map, int nestingLe
                 }
             } else {
                 THROW_ERROR_EXCEPTION("Type mismatch in JSON")
-                    << TErrorAttribute("expected_type", expectedType)
-                    << TErrorAttribute("actual_type", node->GetType());
+                    .With("expected_type", expectedType)
+                    .With("actual_type", node->GetType());
             }
         } else {
             ConsumeNode(node, nestingLevel);

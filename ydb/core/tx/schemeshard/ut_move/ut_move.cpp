@@ -1,5 +1,8 @@
+#include "move_replace_path_types.h"
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/tx/schemeshard/ut_move/move_replace_path_types.h_serialized.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/change_exchange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
@@ -380,9 +383,78 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         ui32 ShardCount = 1;
         // Some identity check for the created object (to verify result path after replacement)
         IdentityChecksMethod CreateIdentityChecks;
+        // Suffix appended to the created object path to get the actual path subject to move.
+        // Used for objects nested inside the created one (e.g. an index impl table).
+        TString PathSuffix;
     };
 
-    TCreatePathOp CreateOpRowTableWithIndexes() {
+    TCreatePathOp CreateOpRowTable() {
+        return {
+            .CreateRequest = [](const TString& workingDir, const TString& name) {
+                const TString modifyScheme = Sprintf(
+                    R"(
+                        Name: "%s"
+                        Columns { Name: "key"   Type: "Uint64" }
+                        Columns { Name: "value0" Type: "Utf8" }
+                        Columns { Name: "value1" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    )",
+                    name.c_str()
+                );
+                return CreateTableRequest(0 /* txId */, workingDir, modifyScheme);
+            },
+            .PathCount = 1,
+            .ShardCount = 1,
+            .CreateIdentityChecks = [](const TString& name) -> TVector<NLs::TCheckFunc> {
+                return {
+                    NLs::IsTable,
+                    NLs::CheckColumns(name, {"key", "value0", "value1"}, {}, {"key"}, /*strictCount*/ true),
+                    NLs::IndexesCount(0),
+                };
+            }
+        };
+    }
+
+    TCreatePathOp CreateOpRowTableWithLocalIndex() {
+        return {
+            .CreateRequest = [](const TString& workingDir, const TString& name) {
+                const TString modifyScheme = Sprintf(
+                    R"(
+                        TableDescription {
+                            Name: "%s"
+                            Columns { Name: "key"   Type: "Uint64" }
+                            Columns { Name: "value0" Type: "Utf8" }
+                            Columns { Name: "value1" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+                            }
+                        }
+                        IndexDescription {
+                            Name: "LocalBloom"
+                            Type: EIndexTypeLocalBloomFilter
+                            State: EIndexStateReady
+                            KeyColumnNames: ["key"]
+                            BloomFilterDescription { FalsePositiveProbability: 0.01 }
+                        }
+                    )",
+                    name.c_str()
+                );
+                return CreateIndexedTableRequest(0 /* txId */, workingDir, modifyScheme);
+            },
+            .PathCount = 2,
+            .ShardCount = 1,
+            .CreateIdentityChecks = [](const TString& name) -> TVector<NLs::TCheckFunc> {
+                return {
+                    NLs::IsTable,
+                    NLs::CheckColumns(name, {"key", "value0", "value1"}, {}, {"key"}, /*strictCount*/ true),
+                    NLs::IndexesCount(1),
+                };
+            }
+        };
+    }
+
+    TCreatePathOp CreateOpRowTableWithGlobalIndexes() {
         return {
             .CreateRequest = [](const TString& workingDir, const TString& name) {
                 const TString modifyScheme = Sprintf(
@@ -416,6 +488,70 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                     NLs::CheckColumns(name, {"key", "value0", "value1"}, {}, {"key"}, /*strictCount*/ true),
                     NLs::IndexesCount(2),
                     // NLs::ChildrenCount(2),
+                };
+            }
+        };
+    }
+
+    TCreatePathOp CreateOpRowTableWithLocalAndGlobalIndexes() {
+        return {
+            .CreateRequest = [](const TString& workingDir, const TString& name) {
+                const TString modifyScheme = Sprintf(
+                    R"(
+                        TableDescription {
+                            Name: "%s"
+                            Columns { Name: "key"   Type: "Uint64" }
+                            Columns { Name: "value0" Type: "Utf8" }
+                            Columns { Name: "value1" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                                ByKeyFilterPrefixes { PrefixLength: 1 FalsePositiveProbability: 0.01 }
+                            }
+                        }
+                        IndexDescription {
+                            Name: "LocalBloom"
+                            Type: EIndexTypeLocalBloomFilter
+                            State: EIndexStateReady
+                            KeyColumnNames: ["key"]
+                            BloomFilterDescription { FalsePositiveProbability: 0.01 }
+                        }
+                        IndexDescription {
+                            Name: "Sync"
+                            KeyColumnNames: ["value0"]
+                        }
+                        IndexDescription {
+                            Name: "Async"
+                            KeyColumnNames: ["value1"]
+                            Type: EIndexTypeGlobalAsync
+                        }
+                    )",
+                    name.c_str()
+                );
+                return CreateIndexedTableRequest(0 /* txId */, workingDir, modifyScheme);
+            },
+            .PathCount = 6,
+            .ShardCount = 3,
+            .CreateIdentityChecks = [](const TString& name) -> TVector<NLs::TCheckFunc> {
+                return {
+                    NLs::IsTable,
+                    NLs::CheckColumns(name, {"key", "value0", "value1"}, {}, {"key"}, /*strictCount*/ true),
+                    NLs::IndexesCount(3),
+                };
+            }
+        };
+    }
+
+    TCreatePathOp CreateOpDirectory() {
+        return {
+            .CreateRequest = [](const TString& workingDir, const TString& name) {
+                return MkDirRequest(0 /* txId */, workingDir, name);
+            },
+            .PathCount = 1,
+            .ShardCount = 0,
+            .CreateIdentityChecks = [](const TString& /*name*/) -> TVector<NLs::TCheckFunc> {
+                return {
+                    NLs::IsDirectory,
+                    NLs::ChildrenCount(0),
                 };
             }
         };
@@ -471,18 +607,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         };
     }
 
-    enum EMoveReplaceTestPathType {
-        RowTable,
-        ColumnTable,
-        ColumnTableWithIndexes,
-        //TODO: extend to IndexImplTable and non-tables like Directory and Topic
-    };
+    TCreatePathOp CreateOpRowTableIndexImplTable() {
+        // A row table with a global async index; the actual path subject
+        // to move is the hidden index impl table of the async index.
+        return {
+            .CreateRequest = [](const TString& workingDir, const TString& name) {
+                const TString modifyScheme = Sprintf(
+                    R"(
+                        TableDescription {
+                            Name: "%s"
+                            Columns { Name: "key"   Type: "Uint64" }
+                            Columns { Name: "value0" Type: "Utf8" }
+                            Columns { Name: "value1" Type: "Utf8" }
+                            KeyColumnNames: ["key"]
+                        }
+                        IndexDescription {
+                            Name: "Async"
+                            KeyColumnNames: ["value1"]
+                            Type: EIndexTypeGlobalAsync
+                        }
+                    )",
+                    name.c_str()
+                );
+                return CreateIndexedTableRequest(0 /* txId */, workingDir, modifyScheme);
+            },
+            .PathCount = 3, // table + index dir + index impl table
+            .ShardCount = 2, // main table shard + index impl table shard
+            .CreateIdentityChecks = [](const TString& name) -> TVector<NLs::TCheckFunc> {
+                return {
+                    NLs::IsTable,
+                    NLs::CheckColumns(name, {"key", "value0", "value1"}, {}, {"key"}, /*strictCount*/ true),
+                    NLs::IndexesCount(1),
+                };
+            },
+            .PathSuffix = "/Async/indexImplTable",
+        };
+    }
 
     TCreatePathOp PathCreateOp(EMoveReplaceTestPathType pathType) {
         switch (pathType) {
-            case EMoveReplaceTestPathType::RowTable: return CreateOpRowTableWithIndexes();
+            case EMoveReplaceTestPathType::RowTable: return CreateOpRowTable();
+            case EMoveReplaceTestPathType::RowTableWithLocalIndex: return CreateOpRowTableWithLocalIndex();
+            case EMoveReplaceTestPathType::RowTableWithGlobalIndexes: return CreateOpRowTableWithGlobalIndexes();
+            case EMoveReplaceTestPathType::RowTableWithLocalAndGlobalIndexes: return CreateOpRowTableWithLocalAndGlobalIndexes();
             case EMoveReplaceTestPathType::ColumnTable: return CreateOpColumnTable();
             case EMoveReplaceTestPathType::ColumnTableWithIndexes: return CreateOpColumnTableWithIndexes();
+            case EMoveReplaceTestPathType::Directory: return CreateOpDirectory();
+            case EMoveReplaceTestPathType::RowTableIndexImplTable: return CreateOpRowTableIndexImplTable();
         }
     }
 
@@ -497,14 +668,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
     }
 
-    void TestMoveReplace(TTestActorRuntime& runtime, ui64 txId, const TString& srcPath, const TString& dstPath) {
+    void TestMoveReplace(TTestActorRuntime& runtime, ui64 txId, const TString& srcPath, const TString& dstPath,
+            const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}}) {
         //NOTE: DropTableRequest generates ESchemeOpDropTable operation, which is row table specific
         // but will work here in general way for any table type due to hackish/magical way
         // drop-table is implemented (see CreateDropIndexedTable for details)
         auto* dstDrop = DropTableRequest(txId, TString(ExtractParent(dstPath)), TString(ExtractBase(dstPath)));
         auto* srcMove = MoveTableRequest(txId, srcPath, dstPath);
         AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({dstDrop, srcMove}));
-        TestModificationResults(runtime, txId, {{NKikimrScheme::StatusAccepted}});
+        TestModificationResults(runtime, txId, expectedResults);
     }
 
     // Replace test. Parametrized test body
@@ -513,12 +685,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TString Tag;
         EMoveReplaceTestPathType SrcType;
         EMoveReplaceTestPathType DstType;
+        // Whether the move-with-replace is expected to succeed.
+        // When false, the combined transaction is expected to be rejected
+        // and both Src and Dst paths should remain unchanged.
+        bool ExpectSuccess = true;
     };
 
     void MoveReplaceTest(const TMoveReplaceTestCase& params) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveWithColumnTableReplace(true);
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
@@ -541,84 +718,116 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             NLs::ShardsInsideDomain(dstCreateOp.ShardCount + srcCreateOp.ShardCount),
         });
 
-        // Test body.
         TLocalPathId movedTablePathId = GetNextLocalPathId(runtime, txId);
-        TestMoveReplace(runtime, ++txId, "/MyRoot/Src", "/MyRoot/Dst");
+
+        TVector<TExpectedResult> expectedResults;
+        if (params.ExpectSuccess) {
+            expectedResults = {{NKikimrScheme::StatusAccepted}};
+        } else {
+            expectedResults = {{NKikimrScheme::StatusPreconditionFailed, NKikimrScheme::StatusNameConflict}};
+        }
+
+        // Test body.
+        const TString srcPath = "/MyRoot/Src" + srcCreateOp.PathSuffix;
+        const TString dstPath = "/MyRoot/Dst" + dstCreateOp.PathSuffix;
+        TestMoveReplace(runtime, ++txId, srcPath, dstPath, expectedResults);
         env.TestWaitNotification(runtime, txId);
 
         // Result check phase.
-        // dst shards should be removed
-        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + dstCreateOp.ShardCount));
+        if (params.ExpectSuccess) {
+            // dst shards should be removed
+            env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + dstCreateOp.ShardCount));
 
-        // src path should be removed
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathNotExist});
+            // src path should be removed
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathNotExist});
 
-        // dst should exist and be the Src
-        {
-            const auto& dst = DescribePath(runtime, "/MyRoot/Dst");
-            TestDescribeResult(dst, {
-                NLs::PathExist,
-                NLs::PathIdEqual(movedTablePathId),
-                //FIXME: NLs::PathVersionEqual(5),
+            // dst should exist and be the Src
+            {
+                const auto& dst = DescribePath(runtime, "/MyRoot/Dst");
+                TestDescribeResult(dst, {
+                    NLs::PathExist,
+                    NLs::PathIdEqual(movedTablePathId),
+                    //FIXME: NLs::PathVersionEqual(5),
+                });
+                TestDescribeResult(dst, srcCreateOp.CreateIdentityChecks("Dst"));
+            }
+
+            // database should contain only new dst, no traces of src
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+                NLs::ChildrenCount(2),  // .sys + Dst
+                NLs::PathsInsideDomain(initialPathCount + srcCreateOp.PathCount),
+                NLs::ShardsInsideDomain(srcCreateOp.ShardCount)
             });
-            TestDescribeResult(dst, srcCreateOp.CreateIdentityChecks("Dst"));
-        }
 
-        // database should contain only new dst, no traces of src
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
-            NLs::ChildrenCount(2),  // .sys + Dst
-            NLs::PathsInsideDomain(initialPathCount + srcCreateOp.PathCount),
-            NLs::ShardsInsideDomain(srcCreateOp.ShardCount)
-        });
+        } else {
+            // The combined transaction should be rejected atomically,
+            // leaving both Src and Dst paths (and their shards) unchanged.
+
+            // both src and dst paths should remain unchanged
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), srcCreateOp.CreateIdentityChecks("Src"));
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"), dstCreateOp.CreateIdentityChecks("Dst"));
+
+            // database should still contain both src and dst paths and shards
+            TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
+                NLs::ChildrenCount(3),
+                NLs::PathsInsideDomain(initialPathCount + dstCreateOp.PathCount + srcCreateOp.PathCount),
+                NLs::ShardsInsideDomain(dstCreateOp.ShardCount + srcCreateOp.ShardCount),
+            });
+        }
     }
 
     // MoveReplace test. Parametrized test
 
-    //TODO: switch to iteration through all possible pairs when all variants will work
-    static const std::vector<TMoveReplaceTestCase> MoveReplaceTests = {
-        { .Tag = "RowTable-over-RowTable", .SrcType = RowTable, .DstType = RowTable },
-        // { .Tag = "ColumnTable-over-ColumnTable", .SrcType = ColumnTable, .DstType = ColumnTable },
-        // { .Tag = "ColumnTableWithIndexes-over-ColumnTableWithIndexes", .SrcType = ColumnTableWithIndexes, .DstType = ColumnTableWithIndexes },
-        // { .Tag = "RowTable-over-ColumnTable", .SrcType = RowTable, .DstType = ColumnTable },
-        { .Tag = "ColumnTable-over-RowTable", .SrcType = ColumnTable, .DstType = RowTable },
-    };
+    // Whether a move-with-replace of Src over Dst is expected to succeed.
+    //
+    // All table-like objects can be moved over each other (successful replace).
+    //
+    // Directory is not a table: it cannot be moved, and a table cannot be moved
+    // over it, so every combination involving a directory is expected to fail.
+    bool ExpectMoveReplaceSuccess(EMoveReplaceTestPathType srcType, EMoveReplaceTestPathType dstType) {
+        if (srcType == EMoveReplaceTestPathType::Directory || dstType == EMoveReplaceTestPathType::Directory) {
+            return false;
+        }
+        // An index impl table is an internal object of another table's index:
+        // it cannot be moved, and a table cannot be moved over it.
+        if (srcType == EMoveReplaceTestPathType::RowTableIndexImplTable ||
+                dstType == EMoveReplaceTestPathType::RowTableIndexImplTable) {
+            return false;
+        }
+        return true;
+    }
+
     struct TTestRegistration_MoveReplace {
         TTestRegistration_MoveReplace() {
             static std::vector<TString> TestNames;
-            TestNames.reserve(MoveReplaceTests.size());
-            for (const auto& param : MoveReplaceTests) {
+
+            const auto allTypes = GetEnumAllValues<EMoveReplaceTestPathType>();
+
+            auto addTest = [&](const TMoveReplaceTestCase& param) {
                 TestNames.emplace_back(TStringBuilder() << "Move-" << param.Tag);
                 TCurrentTest::AddTest(
                     TestNames.back().c_str(),
                     std::bind(std::bind(MoveReplaceTest, param), std::placeholders::_1),
                     /*forceFork*/ false
                 );
+            };
+
+            // Iterate over all src/dst combinations, expecting success or failure
+            // according to the actual product behavior.
+            for (const auto srcType : allTypes) {
+                for (const auto dstType : allTypes) {
+                    addTest({
+                        .Tag = TStringBuilder() << srcType << "-over-" << dstType,
+                        .SrcType = srcType,
+                        .DstType = dstType,
+                        .ExpectSuccess = ExpectMoveReplaceSuccess(srcType, dstType),
+                    });
+                }
             }
         }
     };
     static TTestRegistration_MoveReplace testRegistration_MoveReplace;
 
-    Y_UNIT_TEST(MoveReplaceOverColumnTableDisabledByDefault) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
-        ui64 txId = 100;
-
-        TestCreateObject(CreateOpColumnTable(), runtime, ++txId, "/MyRoot", "Dst");
-        TestCreateObject(CreateOpRowTableWithIndexes(), runtime, ++txId, "/MyRoot", "Src");
-        env.TestWaitNotification(runtime, {txId - 1, txId});
-
-        auto* dstDrop = DropTableRequest(txId + 1, "/MyRoot", "Dst");
-        auto* srcMove = MoveTableRequest(txId + 1, "/MyRoot/Src", "/MyRoot/Dst");
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({dstDrop, srcMove}));
-        TestModificationResults(runtime, ++txId, {{
-            NKikimrScheme::StatusPreconditionFailed,
-            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off"
-        }});
-
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathExist});
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"), {NLs::PathExist, NLs::IsColumnTable});
-    }
 
     Y_UNIT_TEST(Replace2) {
         TTestBasicRuntime runtime;
@@ -1780,10 +1989,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable, NLs::IndexesCount(2)});
 
         auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        // Wait until temporary index build tablets are actually deleted
+        const ui64 expectedDomainShards = 4;
+        for (int i = 0; i < 5; i++) {
+            if (preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside() != expectedDomainShards) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside(), expectedDomainShards);
         const ui64 expectedDomainPaths =
             preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-        const ui64 expectedDomainShards =
-            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
         env.TestWaitNotification(runtime, txId);
@@ -1795,7 +2011,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         // json_idx must preserve UseRowIdAsDocId=true through the move.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -1807,16 +2025,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // Auto-provisioned unique index must have been moved.
         TestDescribeResult(DescribePrivatePath(runtime,
@@ -1872,10 +2097,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable, NLs::IndexesCount(2)});
 
         auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        // Wait until tablets are actually deleted
+        const ui64 expectedDomainShards = 4;
+        for (int i = 0; i < 5; i++) {
+            if (preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside() != expectedDomainShards) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside(), expectedDomainShards);
         const ui64 expectedDomainPaths =
             preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-        const ui64 expectedDomainShards =
-            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
         env.TestWaitNotification(runtime, txId);
@@ -1886,7 +2118,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -1898,15 +2132,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
         }
 
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // User-created unique index must have been moved.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/uniq_rowid"), {
@@ -2529,4 +2771,83 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         });
     }
 
- }
+    Y_UNIT_TEST(MoveColumnTableWithTieringWhileDropInProgress) {
+       TTestBasicRuntime runtime;
+       TTestEnvOptions options;
+       options.EnableTieringInColumnShard(true);
+       options.RunFakeConfigDispatcher(true);
+       TTestEnv env(runtime, options);
+       runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+       ui64 txId = 100;
+
+       // Create external data source for tiering.
+       TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+           Name: "Tier1"
+           SourceType: "ObjectStorage"
+           Location: "http://fake.fake/fake"
+           Auth: {
+               Aws: {
+                   AwsAccessKeyIdSecretName: "secret"
+                   AwsSecretAccessKeySecretName: "secret"
+               }
+           }
+       )");
+       env.TestWaitNotification(runtime, txId);
+
+       // Create standalone column table with tiering configured.
+       TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+           Name: "TableWithTiering"
+           ColumnShardCount: 1
+           Schema {
+               Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+               Columns { Name: "data" Type: "Utf8" }
+               KeyColumnNames: "timestamp"
+           }
+           TtlSettings {
+               Enabled: {
+                   ColumnName: "timestamp"
+                   ColumnUnit: UNIT_AUTO
+                   Tiers: {
+                       ApplyAfterSeconds: 360
+                       EvictToExternalStorage {
+                           Storage: "/MyRoot/Tier1"
+                       }
+                   }
+               }
+           }
+       )");
+       env.TestWaitNotification(runtime, txId);
+
+       // Verify the table was created with tiering.
+       TestLs(runtime, "/MyRoot/TableWithTiering", false, NLs::All(
+           NLs::HasColumnTableTtlSettingsTier("timestamp", TDuration::Seconds(360), "/MyRoot/Tier1")));
+
+       // Start drop operation but block it at the planning stage.
+       const ui64 dropTxId = ++txId;
+       TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime, [dropTxId](const auto& ev) {
+           const auto& record = ev->Get()->Record;
+           for (const auto& tx : record.GetTransactions()) {
+               if (tx.GetTxId() == dropTxId) {
+                   return true;
+               }
+           }
+           return false;
+       });
+
+       // Send drop request — this will be blocked at planning stage.
+       AsyncDropColumnTable(runtime, dropTxId, "/MyRoot", "TableWithTiering");
+
+       // Wait until the plan is blocked (drop is in Propose state).
+       runtime.WaitFor("blocked plan", [&] { return !blockedPlan.empty(); });
+
+       // Try to move the table while drop is in progress.
+       // The move should fail because the table is under operation (being dropped),
+       auto* moveRequest = MoveTableRequest(++txId, "/MyRoot/TableWithTiering", "/MyRoot/MovedTable");
+       AsyncSend(runtime, TTestTxConfig::SchemeShard, moveRequest);
+       TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
+
+       // Unblock the blocked plan events so the drop can complete.
+       blockedPlan.Unblock();
+   }
+
+}

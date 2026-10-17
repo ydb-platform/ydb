@@ -178,6 +178,7 @@ public:
     bool UseUnordered(const TTableRef& table) const;
 
     bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
+    void SetRelativePathPrefix(const TString& value);
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
@@ -269,6 +270,14 @@ public:
     TVector<NSQLTranslation::TSQLHint> PullHintForToken(
         NYql::TPosition tokenPos,
         std::function<bool(NSQLTranslation::TSQLHint)> pred);
+
+    const NSQLTranslation::TSQLHints& GetSqlHints() const {
+        return SqlHints_;
+    }
+
+    void SetSqlHints(NSQLTranslation::TSQLHints hints) {
+        SqlHints_ = std::move(hints);
+    }
 
     bool WarnUnusedHints();
 
@@ -382,13 +391,12 @@ public:
     bool PositionalUnionAll = false;
     bool BogousStarInGroupByOverJoin = false;
     bool UnorderedSubqueries = true;
-    bool PragmaDataWatermarks = true;
     bool WarnOnAnsiAliasShadowing = true;
     ui32 ResultRowsLimit = 0;
     ui64 ResultSizeLimit = 0;
     TString RuntimeLogLevel;
-    ui32 PragmaGroupByLimit = 1 << 6;
-    ui32 PragmaGroupByCubeLimit = 5;
+    ui32 PragmaGroupByLimit = Settings.GroupByLimit;
+    ui32 PragmaGroupByCubeLimit = Settings.GroupByCubeLimit;
     // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
     bool FlexibleTypes = true;
     // see YQL-10265
@@ -414,7 +422,6 @@ public:
     bool UseBlocks = false;
     bool EmitTableSource = false;
     bool AnsiLike = false;
-    bool FeatureR010 = false; // Row pattern recognition: FROM clause
     TMaybe<bool> CompactGroupBy;
     bool BlockEngineEnable = false;
     bool BlockEngineForce = false;
@@ -428,6 +435,7 @@ public:
     bool DistinctOverKeys = false;
     bool GroupByExprAfterWhere = false;
     bool FailOnGroupByExprOverride = false;
+    bool RespectWarnPolicyForUnusedSqlHints = false;
     bool EmitUnionMerge = false;
     bool OptimizeSimpleIlike = false;
     EFlattenAndAggrExprsPersistence FlattenAndAggrExprsPersistence =
@@ -436,6 +444,7 @@ public:
     bool DebugPositions = false;
     bool WindowNewPipeline = true;
     bool YqlSelectAllowUnnamedGroupByExpr = false;
+    bool RuntimeUserAttrs = false;
     TMaybe<bool> DirectRowDependsOn;
     TVector<size_t> ForAllStatementsParts;
     TMaybe<TString> Engine;
@@ -489,7 +498,6 @@ class TTranslation {
 protected:
     using TSetType = TSet<ui32>;
 
-protected:
     explicit TTranslation(TContext& ctx);
     TTranslation(const TTranslation&) = default;
 
@@ -526,7 +534,6 @@ public:
 protected:
     void AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr);
 
-protected:
     TContext& Ctx_;
 };
 

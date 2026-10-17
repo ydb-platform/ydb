@@ -1,7 +1,8 @@
 #pragma once
 
-#include <util/generic/strbuf.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
+
+#include <util/generic/strbuf.h>
 
 namespace NYql {
 
@@ -25,5 +26,17 @@ constexpr TStringBuf SkipJsonErrors = "SkipJsonErrors";
 constexpr TStringBuf StreamingTopicRead = "StreamingTopicRead";
 constexpr TStringBuf PartitionsBalancingIdleTimeoutUsSetting = "PartitionsBalancingIdleTimeoutUs";
 constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+constexpr TStringBuf UsedPartitionPredicateSetting = "UsedPartitionPredicate";
 
-} // namespace NYql
+// Write settings
+
+namespace NDeliveryGuaranteeSetting {
+
+static constexpr TStringBuf Name = "deliveryguarantee";
+static constexpr TStringBuf PrettyName = "DELIVERY_GUARANTEE";
+static constexpr TStringBuf ExactlyOnceValue = "exactly_once";
+static constexpr TStringBuf AtLeastOnceValue = "at_least_once";
+
+}   // namespace NDeliveryGuaranteeSetting
+
+}   // namespace NYql

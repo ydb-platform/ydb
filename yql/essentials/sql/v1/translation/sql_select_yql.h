@@ -22,6 +22,18 @@ TNodeResult BuildYqlSelectStatement(
     TSqlTranslation& that,
     const NSQLv1Generated::TRule_values_stmt& rule);
 
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_select_stmt& rule);
+
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_values_stmt& rule);
+
+TSourceResult BuildYqlSelect(
+    TSqlTranslation& that,
+    const NSQLv1Generated::TRule_into_values_source& rule);
+
 TNodeResult BuildYqlSelectSubExpr(
     TSqlTranslation& that,
     const NSQLv1Generated::TRule_select_subexpr& rule,

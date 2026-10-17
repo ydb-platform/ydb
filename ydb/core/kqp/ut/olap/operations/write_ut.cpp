@@ -6,12 +6,17 @@
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -415,6 +420,67 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("portion_id")), 1);
         }
         AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 0);
+    }
+
+    Y_UNIT_TEST(ColumnShardMaxOperationBytes) {
+        auto checkConfigRange = [&](TKikimrRunner& kikimr) {
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            const auto edgeActor = runtime.AllocateEdgeActor();
+            for (const auto& [configuredBytes, expectedBytes] : std::initializer_list<std::pair<ui64, ui64>>{
+                    {0, 64_MB},
+                    {64_KB, 64_MB},
+                    {64_MB, 64_MB},
+                    {64_GB, 64_MB},
+                    {std::numeric_limits<ui64>::max(), 64_MB}})
+            {
+                auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+                request->Record.MutableConfig()->MutableTableServiceConfig()
+                    ->MutableWriteActorSettings()->SetColumnShardMaxOperationBytes(configuredBytes);
+                runtime.Send(MakeKqpNodeServiceID(runtime.GetNodeId()), edgeActor, request.Release());
+                auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                    edgeActor, TDuration::Seconds(10));
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(GetWriteActorSettings().ColumnShardMaxOperationBytes, expectedBytes);
+            }
+        };
+
+        auto countPortionsWithOperationSizeLimit = [&](const size_t limit) -> size_t {
+            auto csController = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TController>();
+            csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            auto* tableServiceConfig = settings.AppConfig.MutableTableServiceConfig();
+            tableServiceConfig->SetEnableOlapSink(true);
+            tableServiceConfig->MutableWriteActorSettings()->SetColumnShardMaxOperationBytes(limit);
+
+            TKikimrRunner kikimr(settings);
+            TTypedLocalHelper helper("Utf8", kikimr);
+            helper.CreateTestOlapTable(1, 1);
+
+            auto result = kikimr.GetQueryClient()
+                .ExecuteQuery(R"(
+                    $rows = ListMap(ListFromRange(0, 500000), ($x) -> { RETURN AsStruct($x AS item); });
+                    UPSERT INTO `/Root/olapStore/olapTable` (pk_int, field)
+                    SELECT CAST(item AS Int64), CAST(item AS Utf8) FROM AS_TABLE($rows);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            checkConfigRange(kikimr);
+
+            auto tableClient = kikimr.GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                SELECT COUNT(*) AS count
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`;
+            )");
+            const size_t portions = GetUint64(rows[0].at("count"));
+            UNIT_ASSERT_VALUES_EQUAL(helper.GetQueryResult("SELECT COUNT(*) FROM `/Root/olapStore/olapTable`;"), "[[500000u]]");
+            UNIT_ASSERT_VALUES_EQUAL(csController->GetCompactionStartedCounter().Val(), 0);
+            return portions;
+        };
+
+        UNIT_ASSERT_GT(countPortionsWithOperationSizeLimit(1_MB), 3);
+        UNIT_ASSERT_VALUES_EQUAL(countPortionsWithOperationSizeLimit(64_MB), 1);
     }
 
     Y_UNIT_TEST(MultiWriteInTimeDiffSchemas) {

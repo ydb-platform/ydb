@@ -133,6 +133,7 @@ private:
         auto& securityConfig = *appConfig.MutableDomainsConfig()->MutableSecurityConfig();
         securityConfig.SetEnforceUserTokenRequirement(true);
         securityConfig.AddAdministrationAllowedSIDs(RootToken);
+        securityConfig.AddRegisterDynamicNodeAllowedSIDs(RootToken);
         securityConfig.SetHideAuthenticationFailureReasons(hideAuthenticationFailureReasons);
 
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);

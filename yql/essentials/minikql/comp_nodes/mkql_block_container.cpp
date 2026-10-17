@@ -36,6 +36,7 @@ public:
         if (allScalars) {
             // return scalar too
             std::vector<std::shared_ptr<arrow::Scalar>> arrowValue;
+            arrowValue.reserve(batch.values.size());
             for (const auto& x : batch.values) {
                 arrowValue.emplace_back(x.scalar());
             }

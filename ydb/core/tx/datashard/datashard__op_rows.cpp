@@ -2,6 +2,8 @@
 #include "datashard_direct_transaction.h"
 #include "datashard_txs.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -23,8 +25,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Execute"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Execute",
+            {"txType", GetTxType()},
+            {"tabletId", Self->TabletID()});
 
         if (Self->IsFollower()) {
             return true; // TODO: report error
@@ -77,8 +80,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TTxDirectBase(" << GetTxType() << ") Complete"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxDirectBase Complete",
+            {"txType", GetTxType()},
+            {"tabletId", Self->TabletID()});
 
         if (Op) {
             if (!CompleteList.empty()) {
@@ -204,9 +208,13 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
         TSetStatusFunc<TEvResponse> setStatusFunc, const TActorContext& ctx,
         TDataShard::ELogThrottlerType logThrottlerType)
 {
-    LOG_LOG_S_THROTTLE(self->GetLogThrottler(logThrottlerType), ctx, NActors::NLog::PRI_NOTICE, NKikimrServices::TX_DATASHARD, "Rejecting " << txDesc << " request on datashard"
-        << ": tablet# " << self->TabletID()
-        << ", error# " << rejectDescription);
+    if (self->GetLogThrottler(logThrottlerType).Kick()) {
+        YDB_LOG_NOTICE_CTX(ctx, "Rejecting request on datashard",
+            {"txDesc", txDesc},
+            {"tabletId", self->TabletID()},
+            {"error", rejectDescription}
+        );
+    }
 
     auto response = MakeHolder<TEvResponse>();
     setStatusFunc(*response);
@@ -304,3 +312,7 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

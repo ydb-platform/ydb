@@ -1,17 +1,19 @@
 #pragma once
 
 #include "snapshot.h"
-#include <ydb/services/metadata/abstract/common.h>
+#include "udf_module_behaviour.h"
+
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/services/metadata/abstract/common.h>
 
 namespace NKikimr::NUdfStore {
 
 class TSnapshotsFetcher: public NMetadata::NFetcher::TSnapshotsFetcher<TSnapshot> {
     virtual std::vector<NMetadata::IClassBehaviour::TPtr> DoGetManagers() const override {
-        return  {
-            TUdfMeta::GetBehaviour()
+        return {
+            TUdfModule::GetBehaviour(),
         };
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

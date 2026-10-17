@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     collection.cpp
@@ -16,7 +16,5 @@ PEERDIR(
     yql/essentials/core/expr_nodes_gen
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

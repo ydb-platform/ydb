@@ -8,6 +8,7 @@
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_sectorrestorator.h"
 #include "blobstorage_pdisk_state.h"
+#include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
@@ -25,7 +26,62 @@
 
 namespace NKikimr { namespace NPDisk {
 
+class TDriveEstimatorTestPeer {
+public:
+    static void StopDevice(TDriveEstimator& estimator) {
+        estimator.Device->Stop();
+    }
+
+    static void Measure(TDriveEstimator& estimator, ui32 type) {
+        estimator.MeasureOperationDuration(type, TDriveEstimator::SectorSize);
+    }
+
+    static bool BatchRetired(TDriveEstimator& estimator) {
+        TGuard<TMutex> guard(estimator.Mtx);
+        return estimator.Counter == TDriveEstimator::Repeats;
+    }
+};
+
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
+
+    Y_UNIT_TEST(NativeThreadAppliesConfiguredAffinity) {
+#if defined(_linux_)
+        // The thread must set its own affinity; the creator's affinity must never change.
+        TAffinity originalAffinity;
+        originalAffinity.Current();
+        const TCpuMask originalMask = originalAffinity;
+        UNIT_ASSERT(!originalMask.IsEmpty());
+
+        TCpuId selectedCpu = 0;
+        while (!originalMask.IsSet(selectedCpu)) {
+            ++selectedCpu;
+        }
+        const TCpuMask selectedMask(selectedCpu);
+
+        TCpuMask childMask;
+        TPDiskFunctionThread thread(
+            [] (void* cookie) -> void* {
+                TAffinity affinity;
+                affinity.Current();
+                *static_cast<TCpuMask*>(cookie) = affinity;
+                return nullptr;
+            },
+            &childMask,
+            selectedMask);
+
+        thread.Start();
+        thread.Join();
+
+        UNIT_ASSERT((childMask - selectedMask).IsEmpty());
+        UNIT_ASSERT((selectedMask - childMask).IsEmpty());
+
+        TAffinity restoredAffinity;
+        restoredAffinity.Current();
+        const TCpuMask restoredMask = restoredAffinity;
+        UNIT_ASSERT((restoredMask - originalMask).IsEmpty());
+        UNIT_ASSERT((originalMask - restoredMask).IsEmpty());
+#endif
+    }
 
     Y_UNIT_TEST(FreeChunksSortingCanBeToggled) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
@@ -281,6 +337,26 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         TDriveModel model = estimator.EstimateDriveModel();
         UNIT_ASSERT_UNEQUAL(model.Speed(TDriveModel::OP_TYPE_AVG), 0);
         UNIT_ASSERT_UNEQUAL(model.SeekTimeNs(), 0);
+    }
+
+    Y_UNIT_TEST(DriveEstimatorReportsReleasedSeek) {
+        TTempFileHandle file;
+        file.Resize(1 << 30);
+        TDriveEstimator estimator(file.Name());
+        TDriveEstimatorTestPeer::StopDevice(estimator);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(estimator.EstimateDriveModel(), yexception, "seek I/O released");
+    }
+
+    Y_UNIT_TEST(DriveEstimatorRetiresRejectedBatchBeforeReportingError) {
+        TTempFileHandle file;
+        file.Resize(1 << 30);
+        TDriveEstimator estimator(file.Name());
+        TDriveEstimatorTestPeer::StopDevice(estimator);
+        for (const ui32 type : {TDriveModel::OP_TYPE_READ, TDriveModel::OP_TYPE_WRITE}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TDriveEstimatorTestPeer::Measure(estimator, type),
+                yexception, "I/O released");
+            UNIT_ASSERT(TDriveEstimatorTestPeer::BatchRetired(estimator));
+        }
     }
 
 void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedLastSector,

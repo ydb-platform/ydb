@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/kqp/expr_nodes
@@ -8,7 +8,6 @@ PEERDIR(
     ydb/library/yql/dq/opt/core
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/dq_integration
@@ -25,8 +24,6 @@ SRCS(
     kqp_opt_predicate_selectivity.cpp
     kqp_opt_stat.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

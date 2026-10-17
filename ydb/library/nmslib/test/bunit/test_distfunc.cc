@@ -38,6 +38,7 @@
 #include "permutation_utils.h"
 #include "ztimer.h"
 #include "pow.h"
+#include <util/system/sanitizers.h>
 
 #define RANGE          8.0f
 #define RANGE_SMALL    1e-6f
@@ -1294,31 +1295,34 @@ TEST(TestAgree) {
 #endif
     int nTest  = 0;
     int nFail = 0;
+    const size_t sparseDataQty = NSan::MSanIsOn() ? 256 : 1000;
+    const size_t sparseRepQty = NSan::MSanIsOn() ? 64 : 200;
+    const size_t testVectorQty = NSan::MSanIsOn() ? 128 : 1024;
 
     nTest++;
-    nFail += !TestSparseAngularDistanceAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+    nFail += !TestSparseAngularDistanceAgree(sampleDataPrefix + "sparse_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseAngularDistanceAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+    nFail += !TestSparseAngularDistanceAgree(sampleDataPrefix + "sparse_wiki_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseCosineSimilarityAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+    nFail += !TestSparseCosineSimilarityAgree(sampleDataPrefix + "sparse_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseCosineSimilarityAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+    nFail += !TestSparseCosineSimilarityAgree(sampleDataPrefix + "sparse_wiki_5K.txt", sparseDataQty, sparseRepQty);
 
 
     nTest++;
-    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+    nFail += !TestSparseNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", 1000, 200);
+    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_5K.txt", sparseDataQty, sparseRepQty);
 
     nTest++;
-    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", 1000, 200);
+    nFail += !TestSparseQueryNormNegativeScalarProductAgree(sampleDataPrefix + "sparse_wiki_5K.txt", sparseDataQty, sparseRepQty);
 
 
   /*
@@ -1331,7 +1335,7 @@ TEST(TestAgree) {
     for (unsigned dim = 1; dim <= 1024; dim+=2) {
         LOG(LIB_INFO) << "Dim = " << dim;
 
-        nFail += !TestBitHammingAgree(1000, dim, 1000);
+        nFail += !TestBitHammingAgree(testVectorQty, dim, testVectorQty);
     }
 
     for (unsigned dim = 16; dim <= 256; dim += 16) {
@@ -1340,11 +1344,11 @@ TEST(TestAgree) {
 
         // This function is good only for multiples of 16
         nTest++;
-        nFail += !TestL2Sqr16ExtAVXAgree(1024, dim, 10);
+        nFail += !TestL2Sqr16ExtAVXAgree(testVectorQty, dim, 10);
 
         // This function is good only for multiples of 16
         nTest++;
-        nFail += !TestL2Sqr16ExtSSEAgree(1024, dim, 10);
+        nFail += !TestL2Sqr16ExtSSEAgree(testVectorQty, dim, 10);
     }
 
     for (unsigned dim = 1; dim <= 32; ++dim) {
@@ -1357,77 +1361,77 @@ TEST(TestAgree) {
         if (dim <= 8) {
 
           for (float power = 0.125; power <= 32; power += 0.125) {
-            TestLPGenericAgree<float>(1024, dim, 10, power);
+            TestLPGenericAgree<float>(testVectorQty, dim, 10, power);
           }
           for (double power = 0.125; power <= 32; power += 0.125) {
-            TestLPGenericAgree<float>(1024, dim, 10, power);
+            TestLPGenericAgree<float>(testVectorQty, dim, 10, power);
           }
 
           // In the case of Renyi divergence 0 < alpha < 1, 1 < alpha < infinity
           // https://en.wikipedia.org/wiki/R%C3%A9nyi_entropy#R%C3%A9nyi_divergence
           for (float alpha = 0.125; alpha <= 2; alpha += 0.125) {
             if (fabs(alpha - 1) < 1e-6) continue;
-            TestRenyiDivAgree<float>(1024, dim, 10, alpha);
+            TestRenyiDivAgree<float>(testVectorQty, dim, 10, alpha);
           }
           for (double alpha = 0.125; alpha <= 2; alpha += 0.125) {
             if (fabs(alpha - 1) < 1e-6) continue;
-            TestRenyiDivAgree<float>(1024, dim, 10, alpha);
+            TestRenyiDivAgree<float>(testVectorQty, dim, 10, alpha);
           }
 
           for (float alpha = -2; alpha <= 2; alpha += 0.5) 
           for (float beta = -2; beta <= 2; beta += 0.5) 
           {
-            TestAlphaBetaDivAgree<float>(1024, dim, 10, alpha, beta);
+            TestAlphaBetaDivAgree<float>(testVectorQty, dim, 10, alpha, beta);
           }
 
           for (double alpha = -2; alpha <= 2; alpha += 0.5) 
           for (double beta = -2; beta <= 2; beta += 0.5) 
           {
-            TestAlphaBetaDivAgree<float>(1024, dim, 10, alpha, beta);
+            TestAlphaBetaDivAgree<float>(testVectorQty, dim, 10, alpha, beta);
           }
         }
 
         nTest++;
-        nFail += !TestNormScalarProductAgree<float>(1024, dim, 10);
+        nFail += !TestNormScalarProductAgree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestScalarProductAgree<float>(1024, dim, 10);
+        nFail += !TestScalarProductAgree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestScalarProductAVXAgree(1024, dim, 10);
+        nFail += !TestScalarProductAVXAgree(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestScalarProductSSEAgree(1024, dim, 10);
+        nFail += !TestScalarProductSSEAgree(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestSpearmanFootruleAgree(1024, dim, 10);
+        nFail += !TestSpearmanFootruleAgree(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestSpearmanRhoAgree(1024, dim, 10);
+        nFail += !TestSpearmanRhoAgree(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestJSAgree<float>(1024, dim, 10, 0.5);
+        nFail += !TestJSAgree<float>(testVectorQty, dim, 10, 0.5);
 
         nTest++;
-        nFail += !TestKLGeneralAgree<float>(1024, dim, 10);
+        nFail += !TestKLGeneralAgree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestLInfAgree<float>(1024, dim, 10);
+        nFail += !TestLInfAgree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestL1Agree<float>(1024, dim, 10);
+        nFail += !TestL1Agree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestL2Agree<float>(1024, dim, 10);
+        nFail += !TestL2Agree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestL2SqrExtSSEAgree(1024, dim, 10);
+        nFail += !TestL2SqrExtSSEAgree(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestKLAgree<float>(1024, dim, 10);
+        nFail += !TestKLAgree<float>(testVectorQty, dim, 10);
 
         nTest++;
-        nFail += !TestItakuraSaitoAgree<float>(1024, dim, 10);
+        nFail += !TestItakuraSaitoAgree<float>(testVectorQty, dim, 10);
     }
 
     LOG(LIB_INFO) << nTest << " (sub) tests performed " << nFail << " failed";
@@ -1469,4 +1473,3 @@ TEST(TestAgreePivotIndex) {
 
 
 }  // namespace similarity
-

@@ -65,7 +65,7 @@ std::optional<TError> TOverloadControllingServiceBase<TBaseService>::GetThrottle
 
     if (!overloadedTrackers.empty()) {
         return TError(NRpc::EErrorCode::Overloaded, "Instance is overloaded")
-            << TErrorAttribute("overloaded_trackers", overloadedTrackers);
+            .With("overloaded_trackers", overloadedTrackers);
     }
 
     return TBaseService::GetThrottledError(requestHeader);

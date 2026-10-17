@@ -1,8 +1,14 @@
 #pragma once
 
+#include <ydb/library/yql/dq/common/dq_common.h>
+
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
 #include <util/system/types.h>
+
+#include <atomic>
+#include <functional>
+#include <limits>
 
 namespace NYql::NDq {
 
@@ -25,22 +31,34 @@ public:
         return Limit;
     }
 
+    // The totals are lock-free snapshots: read by every task of the node on its memory hot path
+    // (see TMemoryQuotaManager::GetExtraMemoryAvailability in the local worker manager). They may lag a
+    // concurrent Allocate / Free by one step, the decision itself is always taken under the lock.
     ui64 GetAllocatedTotal() const {
-        TGuard<TMutex> lock(Mutex);
-        return Allocated;
+        return Allocated.load(std::memory_order_relaxed);
     }
 
     ui64 GetFreeTotal() const {
-        TGuard<TMutex> lock(Mutex);
-        return Limit > Allocated ? Limit - Allocated : 0;
+        const ui64 allocated = Allocated.load(std::memory_order_relaxed);
+        return Limit > allocated ? Limit - allocated : 0;
+    }
+
+    // Bytes that may still be allocated, in the signed convention of the memory quota managers: i64 max for a
+    // quoter without a limit (Limit == 0, which Allocate() never refuses), otherwise Limit - allocated.
+    i64 GetMemoryAvailability() const {
+        if (!Limit) {
+            return std::numeric_limits<i64>::max();
+        }
+        return static_cast<i64>(Limit) - static_cast<i64>(GetAllocatedTotal());
     }
 
     bool Allocate(const NDq::TTxId& txId, ui64 taskId, ui64 size) {
         TGuard<TMutex> lock(Mutex);
-        if (Limit && Allocated + size > Limit) {
+        const ui64 allocated = Allocated.load(std::memory_order_relaxed);
+        if (Limit && allocated + size > Limit) {
             return false;
         }
-        Allocated += size;
+        Allocated.store(allocated + size, std::memory_order_relaxed);
 
         auto& txMap = ResourceMap[txId];
         auto itt = txMap.find(taskId);
@@ -80,7 +98,7 @@ public:
             }
         }
 
-        Y_ABORT_UNLESS(Allocated >= size);
+        Y_ABORT_UNLESS(GetAllocatedTotal() >= size);
 
         itt->second.Size -= size;
         if (itt->second.Size == 0) {
@@ -90,7 +108,7 @@ public:
             }
         }
 
-        Allocated -= size;
+        Allocated.fetch_sub(size, std::memory_order_relaxed);
         Notify();
     }
 
@@ -112,8 +130,8 @@ public:
         if (itx != ResourceMap.end()) {
             auto itt = itx->second.find(taskId);
             if (itt != itx->second.end()) {
-                Y_ABORT_UNLESS(Allocated >= itt->second.Size);
-                Allocated -= itt->second.Size;
+                Y_ABORT_UNLESS(GetAllocatedTotal() >= itt->second.Size);
+                Allocated.fetch_sub(itt->second.Size, std::memory_order_relaxed);
                 itx->second.erase(itt);
                 if (itx->second.size() == 0) {
                     ResourceMap.erase(itx);
@@ -132,14 +150,14 @@ public:
 private:
     ui64 Limit;
     bool Strict;
-    ui64 Allocated = 0;
+    std::atomic<ui64> Allocated = 0; // written under Mutex only, read lock-free by the totals
     TMutex Mutex;
     THashMap<NDq::TTxId, THashMap<ui64, TTransactionTaskInfo>> ResourceMap;
     TNotifyCallback Cb;
 
     void Notify() const {
         if (Cb) {
-            Cb(Limit, Allocated);
+            Cb(Limit, GetAllocatedTotal());
         }
     }
 };

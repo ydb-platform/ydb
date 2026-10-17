@@ -1,13 +1,7 @@
-import sys
-from typing import Any
+from typing import Any, assert_type
 
 import numpy as np
 import numpy.typing as npt
-
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
 
 AR_LIKE_b: list[bool]
 AR_LIKE_u: list[np.uint32]

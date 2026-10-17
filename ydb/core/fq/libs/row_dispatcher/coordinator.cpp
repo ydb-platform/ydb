@@ -1,11 +1,11 @@
 #include "coordinator.h"
 
 #include <ydb/core/fq/libs/actors/nodes_manager_events.h>
-#include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/core/fq/libs/ydb/schema.h>
-#include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/ydb/schema.h>
+#include <ydb/core/fq/libs/ydb/util.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -13,8 +13,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
-
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
+
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
@@ -32,7 +32,8 @@ namespace {
 
 struct TCoordinatorMetrics {
     explicit TCoordinatorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
-        : Counters(counters) {
+        : Counters(counters)
+    {
         IncomingRequests = Counters->GetCounter("IncomingRequests", true);
         LeaderChanged = Counters->GetCounter("LeaderChanged", true);
         KnownRowDispatchers = Counters->GetCounter("KnownRowDispatchers");
@@ -46,7 +47,7 @@ struct TCoordinatorMetrics {
 };
 
 struct TEvPrivate {
-    enum EEv : ui32 {
+    enum EEv: ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvPrintState = EvBegin,
         EvListNodes,
@@ -54,15 +55,19 @@ struct TEvPrivate {
         EvStartingTimeout,
         EvEnd
     };
+
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
-    struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
-    struct TEvListNodes : public NActors::TEventLocal<TEvListNodes, EvListNodes> {};
-    struct TEvRebalancing : public NActors::TEventLocal<TEvRebalancing, EvRebalancing> {};
-    struct TEvStartingTimeout : public NActors::TEventLocal<TEvStartingTimeout, EvStartingTimeout> {};
+
+    struct TEvPrintState: public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
+
+    struct TEvListNodes: public NActors::TEventLocal<TEvListNodes, EvListNodes> {};
+
+    struct TEvRebalancing: public NActors::TEventLocal<TEvRebalancing, EvRebalancing> {};
+
+    struct TEvStartingTimeout: public NActors::TEventLocal<TEvStartingTimeout, EvStartingTimeout> {};
 };
 
-class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
-
+class TActorCoordinator: public TActorBootstrapped<TActorCoordinator> {
     static constexpr ui64 PrintStatePeriodSec = 300;
     static constexpr ui64 PrintStateToLogSplitSize = 64000;
     static constexpr TDuration NodesManagerRetryPeriod = TDuration::Seconds(10);
@@ -80,9 +85,9 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
             hash = CombineHashes<ui64>(hash, std::hash<TString>()(TopicName));
             return hash;
         }
+
         bool operator==(const TTopicKey& other) const {
-            return Endpoint == other.Endpoint && Database == other.Database
-                && ReadGroup == other.ReadGroup && TopicName == other.TopicName;
+            return Endpoint == other.Endpoint && Database == other.Database && ReadGroup == other.ReadGroup && TopicName == other.TopicName;
         }
     };
 
@@ -101,6 +106,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
             hash = CombineHashes<ui64>(hash, std::hash<ui64>()(PartitionId));
             return hash;
         }
+
         bool operator==(const TPartitionKey& other) const {
             return Topic == other.Topic && PartitionId == other.PartitionId;
         }
@@ -121,7 +127,10 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         TRowDispatcherInfo(bool connected, ENodeState state, bool isLocal)
             : Connected(connected)
             , State(state)
-            , IsLocal(isLocal) {}
+            , IsLocal(isLocal)
+        {
+        }
+
         bool Connected = false;
         ENodeState State;
         bool IsLocal = false;
@@ -163,7 +172,8 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
         TTopicInfo(const TCoordinatorMetrics& metrics, const TString& topicName)
             : Metrics(metrics, topicName)
-        {}
+        {
+        }
 
         void AddPendingPartition(const TPartitionKey& key) {
             if (PendingPartitions.insert(key).second) {
@@ -180,7 +190,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         void IncNodeUsage(ui32 nodeId) {
             auto nodeIt = NodesInfo.find(nodeId);
             if (nodeIt == NodesInfo.end()) {
-                nodeIt = NodesInfo.insert({nodeId, TNodeInfo{.NumberPartitions = 0, .Metrics = TNodeMetrics(Metrics, nodeId)}}).first;
+                nodeIt = NodesInfo.insert({ nodeId, TNodeInfo{ .NumberPartitions = 0, .Metrics = TNodeMetrics(Metrics, nodeId) } }).first;
             }
             nodeIt->second.NumberPartitions++;
             nodeIt->second.Metrics.PartitionsCount->Inc();
@@ -207,17 +217,14 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     bool RebalancingScheduled = false;
     ENodeState State = ENodeState::Initializing;
     TDuration RebalancingTimeout;
-    bool PrintStateEnabled = false;         // Logs (InternalState) is too big
+    bool PrintStateEnabled = false;   // Logs (InternalState) is too big
 
 public:
-    TActorCoordinator(
-        NActors::TActorId localRowDispatcherId,
-        const TRowDispatcherSettings::TCoordinatorSettings& config,
-        const TString& tenant,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        NActors::TActorId nodesManagerId);
+    TActorCoordinator(NActors::TActorId localRowDispatcherId, const TRowDispatcherSettings::TCoordinatorSettings& config, const TString& tenant,
+        const ::NMonitoring::TDynamicCounterPtr& counters, NActors::TActorId nodesManagerId);
 
     void Bootstrap();
+    void PassAway() override;
 
     static constexpr char ActorName[] = "FQ_RD_COORDINATOR";
 
@@ -236,6 +243,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         hFunc(NActors::TEvents::TEvPing, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -251,11 +259,11 @@ public:
     })
 
 private:
-
     void UpdateKnownRowDispatchers(NActors::TActorId actorId, bool isLocal);
     void PrintInternalState();
     TTopicInfo& GetOrCreateTopicInfo(const TTopicKey& topic);
-    std::optional<TActorId> GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);  // std::nullopt if TopicPartitionsLimitPerNode reached
+    std::optional<TActorId> GetAndUpdateLocation(
+        const TPartitionKey& key, const TSet<ui32>& filteredNodeIds);   // std::nullopt if TopicPartitionsLimitPerNode reached
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
@@ -266,12 +274,8 @@ private:
     void UpdateGlobalState();
 };
 
-TActorCoordinator::TActorCoordinator(
-    NActors::TActorId localRowDispatcherId,
-    const TRowDispatcherSettings::TCoordinatorSettings& config,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nodesManagerId)
+TActorCoordinator::TActorCoordinator(NActors::TActorId localRowDispatcherId, const TRowDispatcherSettings::TCoordinatorSettings& config,
+    const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters, NActors::TActorId nodesManagerId)
     : Config(config)
     , LocalRowDispatcherId(localRowDispatcherId)
     , LogPrefix("Coordinator: ")
@@ -291,13 +295,21 @@ void TActorCoordinator::Bootstrap() {
     if (PrintStateEnabled) {
         Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     }
-    YDB_LOG_DEBUG("Successfully bootstrapped coordinator, id NodesManagerId rebalancing timeout",
+    YDB_LOG_DEBUG("Successfully bootstrapped coordinator",
         {"logPrefix", LogPrefix},
         {"selfId", SelfId()},
         {"nodesManagerId", NodesManagerId},
         {"rebalancingTimeout", RebalancingTimeout});
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
     Metrics.IsActive = nodeGroup->GetCounter("IsActive");
+}
+
+void TActorCoordinator::PassAway() {
+    for (const auto& sessionId : InterconnectSessions) {
+        Send(sessionId, new NActors::TEvents::TEvUnsubscribe());
+    }
+    Metrics.IsActive->Set(0);
+    TActorBootstrapped::PassAway();
 }
 
 void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, bool isLocal) {
@@ -336,10 +348,10 @@ void TActorCoordinator::UpdateKnownRowDispatchers(NActors::TActorId actorId, boo
         nodeState = ENodeState::Started;
     }
 
-    YDB_LOG_TRACE("Add new row dispatcher to map (state",
+    YDB_LOG_TRACE("Add new row dispatcher to map",
         {"logPrefix", LogPrefix},
         {"nodeState", static_cast<int>(nodeState)});
-    RowDispatchers.emplace(actorId, TRowDispatcherInfo{true, nodeState, isLocal});
+    RowDispatchers.emplace(actorId, TRowDispatcherInfo{ true, nodeState, isLocal });
     UpdateGlobalState();
 
     if (nodeState == ENodeState::Initializing && !RebalancingScheduled) {
@@ -382,17 +394,20 @@ TString TActorCoordinator::GetInternalState() {
     str << "Known row dispatchers:\n";
 
     for (const auto& [actorId, info] : RowDispatchers) {
-        str << "node " << actorId.NodeId() << "[" << actorId << "], state " << (info.State == ENodeState::Initializing ? "Initializing" : "Started")  << " connected " << info.Connected << " partitions count " << info.Locations.size()<< "\n";
+        str << "node " << actorId.NodeId() << "[" << actorId << "], state "
+            << (info.State == ENodeState::Initializing ? "Initializing" : "Started") << " connected " << info.Connected << " partitions count "
+            << info.Locations.size() << "\n";
     }
 
     str << "\nLocations:\n";
     for (auto& [key, actorId] : PartitionLocations) {
-        str << "    " << key.Topic.Endpoint << " / " << key.Topic.Database << " / " << key.Topic.TopicName << ", partId " << key.PartitionId  <<  ", row dispatcher actor id: " << actorId << "\n";
+        str << "    " << key.Topic.Endpoint << " / " << key.Topic.Database << " / " << key.Topic.TopicName << ", partId " << key.PartitionId
+            << ", row dispatcher actor id: " << actorId << "\n";
     }
 
     str << "\nPending partitions:\n";
     for (const auto& [topic, topicInfo] : TopicsInfo) {
-        str << "    " << topic.TopicName << " (" << topic.Endpoint <<  "), pending partitions: " << topicInfo.PendingPartitions.size() << "\n";
+        str << "    " << topic.TopicName << " (" << topic.Endpoint << "), pending partitions: " << topicInfo.PendingPartitions.size() << "\n";
     }
     return str.Str();
 }
@@ -404,14 +419,14 @@ void TActorCoordinator::PrintInternalState() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        YDB_LOG_DEBUG("Dump logPrefix, state",
+        YDB_LOG_DEBUG("Dump state",
             {"logPrefix", LogPrefix},
             {"state", buf.SubString(offset, PrintStateToLogSplitSize)});
     }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-    YDB_LOG_DEBUG("EvNodeConnected",
+    YDB_LOG_DEBUG("TEvNodeConnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
     // Dont set Connected = true.
@@ -419,7 +434,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr&
 }
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-    YDB_LOG_DEBUG("TEvNodeDisconnected, node id",
+    YDB_LOG_DEBUG("TEvNodeDisconnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
 
@@ -448,7 +463,8 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         YDB_LOG_INFO("TEvUndelivered, from nodes manager",
             {"logPrefix", LogPrefix},
             {"reason", ev->Get()->Reason});
-        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
+        NActors::TActivationContext::Schedule(NodesManagerRetryPeriod,
+            new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
         return;
     }
 
@@ -469,7 +485,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    YDB_LOG_DEBUG("New leader SelfId",
+    YDB_LOG_DEBUG("New leader found",
         {"logPrefix", LogPrefix},
         {"coordinatorActorId", ev->Get()->CoordinatorActorId},
         {"selfId", SelfId()});
@@ -484,7 +500,7 @@ TActorCoordinator::TTopicInfo& TActorCoordinator::GetOrCreateTopicInfo(const TTo
     if (it != TopicsInfo.end()) {
         return it->second;
     }
-    return TopicsInfo.insert({topic, TTopicInfo(Metrics, topic.TopicName)}).first->second;
+    return TopicsInfo.insert({ topic, TTopicInfo(Metrics, topic.TopicName) }).first->second;
 }
 
 std::optional<TActorId> TActorCoordinator::GetAndUpdateLocation(const TPartitionKey& key, const TSet<ui32>& filteredNodeIds) {
@@ -546,11 +562,11 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
         {"partIds", JoinSeq(", ", ev->Get()->Record.GetPartitionIds())});
     Metrics.IncomingRequests->Inc();
 
-    TCoordinatorRequest request = {.Cookie = ev->Cookie, .Record = ev->Get()->Record};
+    TCoordinatorRequest request = { .Cookie = ev->Cookie, .Record = ev->Get()->Record };
     if (ComputeCoordinatorRequest(ev->Sender, request)) {
         PendingReadActors.erase(ev->Sender);
     } else {
-        YDB_LOG_INFO("Not all nodes connected, known add request into pending queue",
+        YDB_LOG_INFO("Not all nodes connected, add request into pending queue",
             {"logPrefix", LogPrefix},
             {"nodesCount", NodesCount},
             {"rdCount", RowDispatchers.size()});
@@ -561,14 +577,14 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
 
 bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request) {
     const auto& source = request.Record.GetSource();
-    TSet<ui32> filteredNodeIds{source.GetNodeIds().begin(), source.GetNodeIds().end()};
+    TSet<ui32> filteredNodeIds{ source.GetNodeIds().begin(), source.GetNodeIds().end() };
     Y_ENSURE(!RowDispatchers.empty());
 
     bool hasPendingPartitions = false;
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
     for (auto& partitionId : request.Record.GetPartitionIds()) {
-        TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetReadGroup(), source.GetTopicPath()};
-        TPartitionKey key {topicKey, partitionId};
+        TTopicKey topicKey{ source.GetEndpoint(), source.GetDatabase(), source.GetReadGroup(), source.GetTopicPath() };
+        TPartitionKey key{ topicKey, partitionId };
         auto locationIt = PartitionLocations.find(key);
         NActors::TActorId rowDispatcherId;
         if (locationIt != PartitionLocations.end()) {
@@ -633,7 +649,7 @@ void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult
         ScheduleNodeInfoRequest();
         return;
     }
-    YDB_LOG_INFO("Updated node info, node",
+    YDB_LOG_INFO("Updated node info",
         {"logPrefix", LogPrefix},
         {"count", ev->Get()->AssignedNodes.size()},
         {"assignedNodes", JoinSeq(", ", ev->Get()->AssignedNodes)});
@@ -662,12 +678,12 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
     bool needRebalance = false;
     TSet<TActorId> toDelete;
 
-    auto printState = [&](const TString& str){
-        YDB_LOG_DEBUG("Dump logPrefix, str",
+    auto printState = [&](const TString& str) {
+        YDB_LOG_DEBUG("Dump state",
             {"logPrefix", LogPrefix},
             {"str", str});
         for (auto& [actorId, info] : RowDispatchers) {
-            YDB_LOG_DEBUG("Node state connected partitions count",
+            YDB_LOG_DEBUG("Node state",
                 {"logPrefix", LogPrefix},
                 {"nodeId", actorId.NodeId()},
                 {"actorId", actorId},
@@ -687,7 +703,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
             } else {
                 toDelete.insert(actorId);
             }
-        } else {    // Started
+        } else {   // Started
             if (!info.Connected) {
                 toDelete.insert(actorId);
                 if (!info.Locations.empty()) {
@@ -743,7 +759,7 @@ void TActorCoordinator::SendError(TActorId readActorId, const TCoordinatorReques
         {"readActorId", readActorId},
         {"issues", message});
     auto response = std::make_unique<TEvRowDispatcher::TEvCoordinatorResult>();
-    NYql::IssuesToMessage(NYql::TIssues{NYql::TIssue{message}}, response->Record.MutableIssues());
+    NYql::IssuesToMessage(NYql::TIssues{ NYql::TIssue{ message } }, response->Record.MutableIssues());
     Send(readActorId, response.release(), IEventHandle::FlagTrackDelivery, request.Cookie);
 }
 
@@ -753,9 +769,9 @@ void TActorCoordinator::ScheduleNodeInfoRequest() const {
 
 void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& ev) {
     NodesCount = ev->Get()->NodeIds.size();
-    YDB_LOG_INFO("Updated node info, node",
+    YDB_LOG_INFO("Updated node info",
         {"logPrefix", LogPrefix},
-        {"count", NodesCount});
+        {"nodesCount", NodesCount});
     UpdateGlobalState();
     if (!NodesCount) {
         ScheduleNodeInfoRequest();
@@ -771,13 +787,11 @@ void TActorCoordinator::UpdateGlobalState() {
         PrintInternalState();
     }
 }
-} // anonymous namespace
+}   // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDuration GetCoordinatorRebalancingTimeout(
-    const TRowDispatcherSettings::TCoordinatorSettings& config
-) {
+TDuration GetCoordinatorRebalancingTimeout(const TRowDispatcherSettings::TCoordinatorSettings& config) {
     if (config.GetRebalancingTimeout()) {
         return config.GetRebalancingTimeout();
     }
@@ -789,14 +803,10 @@ TDuration GetCoordinatorRebalancingTimeout(
     return TDuration::Seconds(DefaultRebalancingTimeoutSec);
 }
 
-std::unique_ptr<NActors::IActor> NewCoordinator(
-    NActors::TActorId rowDispatcherId,
-    const TRowDispatcherSettings::TCoordinatorSettings& config,
-    const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    NActors::TActorId nodesManagerId)
+std::unique_ptr<NActors::IActor> NewCoordinator(NActors::TActorId rowDispatcherId, const TRowDispatcherSettings::TCoordinatorSettings& config,
+    const TString& tenant, const ::NMonitoring::TDynamicCounterPtr& counters, NActors::TActorId nodesManagerId)
 {
     return std::unique_ptr<NActors::IActor>(new TActorCoordinator(rowDispatcherId, config, tenant, counters, nodesManagerId));
 }
 
-} // namespace NFq
+}   // namespace NFq

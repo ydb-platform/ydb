@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::NotFound);
     }
 
     Y_UNIT_TEST(EmptyWrite) {
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
     }
 
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(response->Messages[0].MessageId.has_value());
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Success);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(response->Messages[0].MessageId.has_value());
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
         });
 
         auto response = GetWriteResponse(runtime);
-        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::Unauthorized);
     }
 
     Y_UNIT_TEST(WriteToAutopartitioningTopic) {

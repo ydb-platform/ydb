@@ -3,12 +3,40 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
+
+TVChunkConfig::EHostHumanReadableState CalcHostHumanReadableState(
+    EHostRole ddisk,
+    EHostRole pbuffer,
+    bool enabled,
+    bool fresh)
+{
+    Y_ABORT_UNLESS(ddisk != EHostRole::HandOff);
+
+    if (ddisk == EHostRole::Primary && enabled) {
+        Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
+        return fresh ? TVChunkConfig::EHostHumanReadableState::Fresh
+                     : TVChunkConfig::EHostHumanReadableState::Primary;
+    }
+    if (ddisk == EHostRole::Primary && !enabled) {
+        Y_ABORT_UNLESS(pbuffer == EHostRole::Primary);
+        return TVChunkConfig::EHostHumanReadableState::Rotten;
+    }
+
+    Y_ABORT_UNLESS(pbuffer != EHostRole::Primary);
+
+    if (pbuffer == EHostRole::HandOff) {
+        return enabled ? TVChunkConfig::EHostHumanReadableState::HandOff
+                       : TVChunkConfig::EHostHumanReadableState::Disabled;
+    }
+    return TVChunkConfig::EHostHumanReadableState::Demoted;
+}
 
 THostMask
 Filter(const THostRoles& hosts, THostMask enabledHosts, EHostRole role)
@@ -56,7 +84,6 @@ TVChunkConfig TVChunkConfig::MakeDefault(
         primaryCount,
         EHostRole::None);
     result.EnabledHosts = THostMask::MakeAll(hostCount);
-    result.Watermarks = TVector<std::optional<ui64>>(hostCount);
     return result;
 }
 
@@ -65,8 +92,7 @@ TVChunkConfig TVChunkConfig::Make(
     ui32 vChunkIndex,
     THostRoles pbufferHosts,
     THostRoles ddiskHosts,
-    THostMask enabledHosts,
-    TVector<std::optional<ui64>> watermarks)
+    THostMask enabledHosts)
 {
     TVChunkConfig result;
     result.HostCount = pbufferHosts.HostCount();
@@ -74,9 +100,18 @@ TVChunkConfig TVChunkConfig::Make(
     result.PBufferHosts = pbufferHosts;
     result.DDiskHosts = ddiskHosts;
     result.EnabledHosts = enabledHosts;
-    watermarks.resize(result.HostCount);
-    result.Watermarks = std::move(watermarks);
     return result;
+}
+
+TVChunkConfig::EHostHumanReadableState TVChunkConfig::GetHostHumanReadableState(
+    THostIndex hostIndex,
+    bool fresh) const
+{
+    return CalcHostHumanReadableState(
+        DDiskHosts.GetRole(hostIndex),
+        PBufferHosts.GetRole(hostIndex),
+        EnabledHosts.Get(hostIndex),
+        fresh);
 }
 
 bool TVChunkConfig::Empty() const
@@ -112,7 +147,6 @@ void TVChunkConfig::EnableHost(THostIndex hostIndex)
         ddisks.Count() < QuorumDirectBlockGroupHostCount)
     {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        Watermarks[hostIndex] = 0;
     }
 }
 
@@ -131,11 +165,9 @@ void TVChunkConfig::AppendHost()
     if (ddiskCount < QuorumDirectBlockGroupHostCount) {
         PBufferHosts.AppendRole(EHostRole::Primary);
         DDiskHosts.AppendRole(EHostRole::Primary);
-        Watermarks.push_back(0);
     } else {
         PBufferHosts.AppendRole(EHostRole::HandOff);
         DDiskHosts.AppendRole(EHostRole::None);
-        Watermarks.push_back(std::nullopt);
     }
 
     EnabledHosts.Set(newHostIndex);
@@ -172,15 +204,14 @@ TString TVChunkConfig::EvacuateHost(THostIndex hostIndex)
 
 TString TVChunkConfig::DemoteHost(THostIndex hostIndex)
 {
-    const auto fullDDisks = GetFullDDisks();
-    if (fullDDisks.Count() == 1 && fullDDisks.Get(hostIndex)) {
-        return TStringBuilder() << "Can't demote last healthy ddisk "
-                                << PrintHostIndex(hostIndex);
+    const auto ddisks = GetDDisks();
+    if (ddisks.Count() == 1 && ddisks.Get(hostIndex)) {
+        return TStringBuilder()
+               << "Can't demote last ddisk " << PrintHostIndex(hostIndex);
     }
 
     DDiskHosts.SetRole(hostIndex, EHostRole::None);
     PBufferHosts.SetRole(hostIndex, EHostRole::HandOff);
-    Watermarks[hostIndex] = std::nullopt;
     return {};
 }
 
@@ -189,7 +220,6 @@ void TVChunkConfig::PromoteHost(THostIndex hostIndex)
     PBufferHosts.SetRole(hostIndex, EHostRole::Primary);
     if (DDiskHosts.GetRole(hostIndex) != EHostRole::Primary) {
         DDiskHosts.SetRole(hostIndex, EHostRole::Primary);
-        Watermarks[hostIndex] = 0;
     }
 }
 
@@ -246,45 +276,14 @@ THostMask TVChunkConfig::GetDDisks() const
         EHostRole::Primary);
 }
 
-THostMask TVChunkConfig::GetFullDDisks() const
+THostMask TVChunkConfig::GetEnabledDDisks() const
 {
-    THostMask result;
-    for (THostIndex hostIndex: GetDDisks()) {
-        if (Watermarks[hostIndex] == std::nullopt) {
-            result.Set(hostIndex);
-        }
-    }
-    return result;
+    return Filter(DDiskHosts, EnabledHosts, EHostRole::Primary);
 }
 
 THostMask TVChunkConfig::GetDisabledHosts() const
 {
-    return EnabledHosts.LogicalNot();
-}
-
-THostMask TVChunkConfig::GetHealthyDDisks() const
-{
-    THostMask result;
-    for (THostIndex hostIndex: EnabledHosts) {
-        if (DDiskHosts.GetRole(hostIndex) == EHostRole::Primary &&
-            Watermarks[hostIndex] == std::nullopt)
-        {
-            result.Set(hostIndex);
-        }
-    }
-    return result;
-}
-
-void TVChunkConfig::SetWatermark(
-    THostIndex hostIndex,
-    std::optional<ui64> watermarkBlockCount)
-{
-    Watermarks[hostIndex] = watermarkBlockCount;
-}
-
-std::optional<ui64> TVChunkConfig::GetWatermark(THostIndex hostIndex) const
-{
-    return Watermarks[hostIndex];
+    return EnabledHosts.LogicalNot().LogicalAnd(THostMask::MakeAll(HostCount));
 }
 
 bool TVChunkConfig::IsValid() const
@@ -305,19 +304,44 @@ bool TVChunkConfig::operator==(const TVChunkConfig& other) const = default;
 TString TVChunkConfig::DebugPrint() const
 {
     TStringBuilder result;
-    result << "[" << DBGIndex << "/" << VChunkIndex << "] PBuffer{"
-           << PBufferHosts.DebugPrint() << "} DDisk{" << DDiskHosts.DebugPrint()
-           << "} Enabled{";
-    for (THostIndex hostIndex = 0; hostIndex < PBufferHosts.HostCount();
-         ++hostIndex)
-    {
-        result << (EnabledHosts.Get(hostIndex) ? "+" : "-");
-        if (Watermarks[hostIndex] != std::nullopt) {
-            result << "[" << *Watermarks[hostIndex] << "]";
+
+    result << "[" << PrintDbgId(DBGIndex);
+    result << "/" << PrintVChunkId(VChunkIndex) << "]";
+
+    result << "{";
+    for (size_t i = 0; i < HostCount; ++i) {
+        if (i) {
+            result << ",";
         }
+        const auto state = GetHostHumanReadableState(i, false);
+        result << Print(state, false);
     }
     result << "}";
+
     return result;
+}
+
+TString Print(TVChunkConfig::EHostHumanReadableState state, bool brief)
+{
+    if (!brief) {
+        return ToString(state);
+    }
+
+    switch (state) {
+        case TVChunkConfig::EHostHumanReadableState::Primary:
+            return "P";
+        case TVChunkConfig::EHostHumanReadableState::Fresh:
+            return "F";
+        case TVChunkConfig::EHostHumanReadableState::HandOff:
+            return "H";
+        case TVChunkConfig::EHostHumanReadableState::Rotten:
+            return "R";
+        case TVChunkConfig::EHostHumanReadableState::Disabled:
+            return "-";
+        case TVChunkConfig::EHostHumanReadableState::Demoted:
+            return "_";
+    }
+    return "?";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

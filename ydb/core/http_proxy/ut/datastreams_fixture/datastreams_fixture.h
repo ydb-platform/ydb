@@ -76,13 +76,12 @@ public:
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
         bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
         bool EnableTopicMessagesBatching : 1 = false;
-        bool EnableAccessServiceV2Interface : 1 = false;
         bool TopicsAreFirstClassCitizen : 1 = true;
     };
 
     void InitAll(const TInitParameters initParameters);
 
-    TString FormAuthorizationStr(const TString& region) const;
+    TString FormAuthorizationStr(const TString& region, const TString& service = "kinesis") const;
 
     void EnableAuthorization();
     void DisableAuthorization();
@@ -126,7 +125,8 @@ public:
                                    const TString& host, const TString& date, const TString& userAgent,
                                    const TString& acceptEncoding,
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
-                                   const TString& contentType = "application/json");
+                                   const TString& contentType = "application/json",
+                                   const TVector<std::pair<TString, TString>>& extraHeaders = {});
 
     THttpResult SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& authorizationStr,
@@ -140,7 +140,8 @@ public:
     THttpResult SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding, const TString& authorizationStr,
-                                const TString& contentType = "application/json");
+                                const TString& contentType = "application/json",
+                                const TVector<std::pair<TString, TString>>& extraHeaders = {});
 
     THttpResult SendPing();
 
@@ -336,9 +337,9 @@ private:
 
     void InitKikimr(const TInitParameters& initParameters);
 
-    void InitAccessServiceService(bool enableAccessServiceV2Interface);
+    void InitAccessServiceService();
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -346,7 +347,6 @@ public:
     TPortManager PortManager;
     TTestActorRuntime* ActorRuntime = nullptr;
     TAccessServiceMock AccessServiceMock;
-    TAccessServiceMockV2 AccessServiceMockV2;
     TString AccessServiceEndpoint;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
@@ -408,15 +408,6 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(TInitParameters{
             .EnableTopicPartitionSplitBasedOnKllSketch = true,
-        });
-    }
-};
-
-class THttpProxyTestMockForAccessServiceV2 : public THttpProxyTestMock {
-public:
-    void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(TInitParameters{
-            .EnableAccessServiceV2Interface = true,
         });
     }
 };

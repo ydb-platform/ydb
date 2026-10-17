@@ -236,13 +236,16 @@ namespace boost { namespace spirit { namespace x3 { namespace detail
         {
             for (;;)
             {
+                Iterator it = first;
+
             #if BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
                 try
             #endif
                 {
                     if (parse_rhs_main(
-                        rhs, first, last, context, rcontext, attr, mpl::false_()))
+                        rhs, it, last, context, rcontext, attr, mpl::false_()))
                     {
+                        first = it;
                         return true;
                     }
                 }

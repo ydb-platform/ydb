@@ -13,6 +13,7 @@ struct TYqlSourceAlias {
     enum class EKind {
         Subquery,
         CTE,
+        IntoValues,
     };
 
     TPosition Position;
@@ -50,6 +51,17 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TYqlWithout {
+    struct TColumn {
+        TPosition Position;
+        TString Source;
+        TString Name;
+    };
+
+    TVector<TColumn> Columns;
+    bool IsIfExists = false;
+};
+
 struct TGroupingSets {
     struct TRollup {
         TVector<TNodePtr> Expressions;
@@ -70,6 +82,7 @@ struct TGroupBy {
         TGroupingSets::TCube>;
 
     TVector<TElement> Elements;
+    bool IsCompact = false;
 };
 
 struct TOrderBy {
@@ -87,6 +100,7 @@ struct TYqlTableRefArgs {
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Key;
+    TViewDescription View;
     bool IsAnonymous = false;
 };
 
@@ -98,6 +112,7 @@ struct TYqlSetItemArgs {
     TPosition Position;
     bool Distinct = false;
     TProjection Projection;
+    TMaybe<TYqlWithout> Without;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
     TMaybe<TGroupBy> GroupBy;
@@ -130,6 +145,8 @@ EYqlSetOp AllQualified(EYqlSetOp op);
 
 TNodePtr GetYqlSource(const TNodePtr& node);
 
+TSourcePtr ToTableExpression(TYqlSource source);
+
 TNodePtr ToTableExpression(TNodePtr source);
 
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
@@ -138,9 +155,9 @@ TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
 
 TNodePtr BuildYqlSelf(TPosition position);
 
-TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
+TSourcePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 
-TNodePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
+TSourcePtr BuildYqlSelect(TPosition position, TYqlSelectArgs&& args);
 
 TNodePtr WrapYqlSelectSubExpr(TNodePtr node);
 

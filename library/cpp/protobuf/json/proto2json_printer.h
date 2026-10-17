@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include "json_output.h"
 
 #include <google/protobuf/descriptor.h>
@@ -54,7 +56,7 @@ namespace NProtobufJson {
 
         template <bool InMapContext>
         void PrintStringValue(const NProtoBuf::FieldDescriptor& field,
-                              const TStringBuf& key, const TString& value,
+                              const TStringBuf& key, TStringBuf value,
                               IJsonOutput& json);
 
         template <class T>

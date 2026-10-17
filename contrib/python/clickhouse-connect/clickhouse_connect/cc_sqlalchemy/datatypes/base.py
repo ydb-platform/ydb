@@ -1,5 +1,8 @@
 import logging
+from collections.abc import Callable
+from typing import Any
 
+from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.exc import CompileError
 
 from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, ClickHouseType, TypeDef
@@ -19,13 +22,14 @@ class ChSqlaType:
     generic_type: None
     _ch_type_cls: type[ClickHouseType] | None = None
     _instance_cache: dict[TypeDef, "ChSqlaType"] | None = None
+    _schema_name: str | None = None
 
     def __init_subclass__(cls):
         """
         Registers ChSqla type in the type map and sets the underlying ClickHouseType class to use to initialize
         ChSqlaType instances
         """
-        base = cls.__name__
+        base = cls.__dict__.get("_schema_name") or cls.__name__
         if not cls._ch_type_cls:
             try:
                 cls._ch_type_cls = type_map[base]
@@ -79,14 +83,17 @@ class ChSqlaType:
         """
         return None
 
-    @staticmethod
-    def _cached_literal_processor(*_):
+    def literal_processor(self, dialect: Dialect) -> Callable[[Any], str]:
         """
-        Override for the SqlAlchemy TypeEngine _cached_literal_processor. We delegate to the driver format_query_value
-        method and should be able to ignore literal_processor definitions in the dialect, which are verbose and
-        confusing.
+        Delegate SQLAlchemy literal rendering to the driver's query value formatter.
         """
-        return str_query_value
+        if not dialect.identifier_preparer._double_percents:
+            return str_query_value
+
+        def process(value: Any) -> str:
+            return str_query_value(value).replace("%", "%%")
+
+        return process
 
     def _compiler_dispatch(self, _visitor, **_):
         """

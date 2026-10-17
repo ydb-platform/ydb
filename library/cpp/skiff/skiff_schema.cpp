@@ -10,7 +10,7 @@ namespace NSkiff {
 
 bool operator==(const TSkiffSchema& lhs, const TSkiffSchema& rhs)
 {
-    if (lhs.GetWireType() != rhs.GetWireType() || lhs.GetName() != rhs.GetName()) {
+    if (lhs.GetWireType() != rhs.GetWireType() || lhs.GetName() != rhs.GetName() || lhs.GetSize() != rhs.GetSize()) {
         return false;
     }
     const auto& lhsChildren = lhs.GetChildren();
@@ -33,15 +33,23 @@ bool operator!=(const TSkiffSchema& lhs, const TSkiffSchema& rhs)
 void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out)
 {
     (*out) << ToString(schema->GetWireType());
-    if (!IsSimpleType(schema->GetWireType())) {
-        auto children = schema->GetChildren();
-        if (!children.empty()) {
-            (*out) << '<';
-            for (const auto& child : children) {
-                PrintShortDebugString(child, out);
-                (*out) << ';';
+    switch (GetSchemaKind(schema->GetWireType())) {
+        case ESchemaKind::Simple:
+            break;
+        case ESchemaKind::StringFixed:
+            (*out) << '(' << schema->GetSize() << ')';
+            break;
+        case ESchemaKind::Complex: {
+            auto children = schema->GetChildren();
+            if (!children.empty()) {
+                (*out) << '<';
+                for (const auto& child : children) {
+                    PrintShortDebugString(child, out);
+                    (*out) << ';';
+                }
+                (*out) << '>';
             }
-            (*out) << '>';
+            break;
         }
     }
 }
@@ -55,7 +63,18 @@ TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema)
 
 std::shared_ptr<TSimpleTypeSchema> CreateSimpleTypeSchema(EWireType type)
 {
+    if (GetSchemaKind(type) != ESchemaKind::Simple) {
+        ythrow TSkiffException() << "WireType must be Simple, got \"" << ToString(type) << "\"";
+    }
     return std::make_shared<TSimpleTypeSchema>(type);
+}
+
+std::shared_ptr<TStringFixedSchema> CreateStringFixedSchema(i64 size)
+{
+    if (size < 0 || size > MaxStringLength) {
+        ythrow TSkiffException() << "\"" << ToString(EWireType::StringFixed) << "\" size " << size << " is out of range [0, " << MaxStringLength << "]";
+    }
+    return std::make_shared<TStringFixedSchema>(size);
 }
 
 static void VerifyNonemptyChildren(const TSkiffSchemaList& children, EWireType wireType)
@@ -82,6 +101,12 @@ std::shared_ptr<TVariant16Schema> CreateVariant16Schema(TSkiffSchemaList childre
     return std::make_shared<TVariant16Schema>(std::move(children));
 }
 
+std::shared_ptr<TVariantVarSchema> CreateVariantVarSchema(TSkiffSchemaList children)
+{
+    VerifyNonemptyChildren(children, EWireType::VariantVar);
+    return std::make_shared<TVariantVarSchema>(std::move(children));
+}
+
 std::shared_ptr<TRepeatedVariant8Schema> CreateRepeatedVariant8Schema(TSkiffSchemaList children)
 {
     VerifyNonemptyChildren(children, EWireType::RepeatedVariant8);
@@ -92,6 +117,14 @@ std::shared_ptr<TRepeatedVariant16Schema> CreateRepeatedVariant16Schema(TSkiffSc
 {
     VerifyNonemptyChildren(children, EWireType::RepeatedVariant16);
     return std::make_shared<TRepeatedVariant16Schema>(std::move(children));
+}
+
+std::shared_ptr<TRepeatedBlockVarSchema> CreateRepeatedBlockVarSchema(TSkiffSchemaList children)
+{
+    if (std::ssize(children) != 1) {
+        ythrow TSkiffException() << "\"" << ToString(EWireType::RepeatedBlockVar) << "\" must have exactly one child";
+    }
+    return std::make_shared<TRepeatedBlockVarSchema>(std::move(children));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,12 +155,31 @@ const TSkiffSchemaList& TSkiffSchema::GetChildren() const
     return children;
 }
 
+i64 TSkiffSchema::GetSize() const
+{
+    return 0;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TSimpleTypeSchema::TSimpleTypeSchema(EWireType type)
     : TSkiffSchema(type)
 {
-    Y_ABORT_UNLESS(IsSimpleType(type));
+    Y_ABORT_UNLESS(GetSchemaKind(type) == ESchemaKind::Simple);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TStringFixedSchema::TStringFixedSchema(i64 size)
+    : TSkiffSchema(EWireType::StringFixed)
+    , Size_(size)
+{
+    Y_ABORT_UNLESS(0 <= size && size <= MaxStringLength);
+}
+
+i64 TStringFixedSchema::GetSize() const
+{
+    return Size_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -158,6 +210,7 @@ size_t THash<NSkiff::TSkiffSchema>::operator()(const NSkiff::TSkiffSchema &schem
     for (const auto& child : schema.GetChildren()) {
         hash = CombineHashes(hash, (*this)(*child));
     }
+    hash = CombineHashes(hash, static_cast<size_t>(schema.GetSize()));
     return hash;
 }
 

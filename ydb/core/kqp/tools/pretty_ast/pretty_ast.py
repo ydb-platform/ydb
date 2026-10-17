@@ -3,7 +3,6 @@
 import sys
 import argparse
 import json
-from typing import Self
 
 NEVER_INLINE = {
     'DqPhyStage',
@@ -91,6 +90,7 @@ COLOR_ARG = 'arg'
 COLOR_LAMBDA = COLOR_ARG
 COLOR_REF = None
 COLOR_TABLINE = 'tabline'
+COLOR_COLUMNS = 'columns'
 
 COLORS = {
     COLOR_COMMENT: '2;128;128;128',
@@ -100,7 +100,11 @@ COLORS = {
     COLOR_LITERAL: '2;64;192;192',
     COLOR_ARG: '2;192;156;0',
     COLOR_TABLINE: '2;64;64;64',
+    COLOR_COLUMNS: '2;96;168;96',
 }
+
+NOTE_OPEN = '⟨'
+NOTE_CLOSE = '⟩'
 
 
 def ansi_truecolor_spec_to_css_color(spec: str) -> str:
@@ -159,7 +163,7 @@ class HtmlPrinter:
     lines: list[str]
     curr_line: str
     style_stack: list[str]
-    prev_style_depth: int
+    prev_style: str | None
 
     class HtmlColorWrapper:
         color_name: str | None
@@ -179,19 +183,23 @@ class HtmlPrinter:
                 self.style_stack.pop()
 
     def __init__(self):
-        self.prev_style_depth = 0
+        self.prev_style = None
         self.style_stack = []
         self.curr_line = ''
         self.lines = []
 
+    def current_style(self):
+        return self.style_stack[-1] if self.style_stack else None
+
     def check_change_color(self):
-        if len(self.style_stack) == self.prev_style_depth:
+        style = self.current_style()
+        if style == self.prev_style:
             return
-        if self.prev_style_depth > 0:
+        if self.prev_style is not None:
             self.curr_line += '</span>'
-        if len(self.style_stack) > 0:
-            self.curr_line += html_syntax_span_open(self.style_stack[-1])
-        self.prev_style_depth = len(self.style_stack)
+        if style is not None:
+            self.curr_line += html_syntax_span_open(style)
+        self.prev_style = style
 
     def color(self, color_name):
         return HtmlPrinter.HtmlColorWrapper(self.style_stack, color_name)
@@ -202,13 +210,14 @@ class HtmlPrinter:
 
     def endl(self):
         self.check_change_color()
-        if len(self.style_stack) > 0:
+        if self.prev_style is not None:
             self.curr_line += '</span>'
         self.lines.append(self.curr_line)
         self.curr_line = ''
-        if len(self.style_stack) > 0:
-            self.curr_line += html_syntax_span_open(self.style_stack[-1])
-        self.prev_style_depth = len(self.style_stack)
+        style = self.current_style()
+        if style is not None:
+            self.curr_line += html_syntax_span_open(style)
+        self.prev_style = style
 
     def finalize(self):
         if self.curr_line:
@@ -266,7 +275,7 @@ class Context:
     printer: TerminalPrinter | HtmlPrinter
 
     def __init__(
-        self, parent: Self = None, shift: int = None, is_lambda_args: bool = False, tabstops: bool = None, printer=None
+        self, parent: 'Context' = None, shift: int = None, is_lambda_args: bool = False, tabstops: bool = None, printer=None
     ):
         self.shift = 0
         self.lambda_args = set()
@@ -311,6 +320,13 @@ def has_long_or_block_oper_inside(item):
         return False
 
 
+def print_note(context: Context, note):
+    if not note:
+        return
+    with context.printer.color(COLOR_COLUMNS):
+        context.printer.out(' ' + NOTE_OPEN + note + NOTE_CLOSE)
+
+
 def print_list(out, the_list: List, callables, context: Context):
     def print_shift(sh):
         for _ in range(sh):
@@ -332,9 +348,12 @@ def print_list(out, the_list: List, callables, context: Context):
     if oper and oper in callables:
         child_list = callables[oper].children_names
 
+    notes = getattr(the_list, 'child_notes', None)
+
     for pos, item in enumerate(the_list.list):
         is_last = pos == (len(the_list.list) - 1)
         is_first = pos == 0
+        note = notes.get(pos) if notes else None
 
         if not is_first and is_long_oper:
             context.printer.endl()
@@ -350,6 +369,9 @@ def print_list(out, the_list: List, callables, context: Context):
             if param_name:
                 with context.printer.color(COLOR_COMMENT):
                     context.printer.out('⦗' + param_name + '⦘')
+                if note:
+                    print_note(context, note)
+                    note = None
                 if not is_first and is_long_oper and isinstance(item, List) and has_long_or_block_oper_inside(item):
                     context.printer.endl()
                     print_shift(context.shift)
@@ -379,6 +401,7 @@ def print_list(out, the_list: List, callables, context: Context):
                 context.lambda_args.update(sub_ctx.lambda_args)
             with context.printer.color(sub_oper_color):
                 context.printer.out(')')
+            print_note(context, note)
             if sub_oper in ('return', 'let', 'declare'):
                 context.printer.endl()
                 if is_last:
@@ -400,6 +423,7 @@ def print_list(out, the_list: List, callables, context: Context):
                 color = get_oper_color(oper) if (oper and pos == 0) else COLOR_LITERAL
                 with context.printer.color(color):
                     context.printer.out(str(item.value))
+            print_note(context, note)
             if not is_last:
                 context.printer.out(' ')
         elif isinstance(item, Reference):
@@ -411,6 +435,7 @@ def print_list(out, the_list: List, callables, context: Context):
             with context.printer.color(color):
                 context.printer.out('$')
                 context.printer.out(str(item.alias))
+            print_note(context, note)
 
             if not is_last:
                 context.printer.out(' ')
@@ -791,6 +816,266 @@ def build_callable_index(node_descriptions):
     return result
 
 
+STAGE_OPERS = {'DqPhyStage', 'DqStage'}
+
+WIDE_MAP_OPERS = {'WideMap', 'ExpandMap'}
+
+FLOW_PASSTHROUGH_OPERS = {
+    'ToFlow',
+    'FromFlow',
+    'ToStream',
+    'FromStream',
+    'AsFlow',
+    'WideToBlocks',
+    'WideFilter',
+    'WideSort',
+    'WideTop',
+    'WideTopSort',
+    'WideTakeBlocks',
+    'WideSkipBlocks',
+    'Take',
+    'Skip',
+}
+
+BLOCK_LENGTH_NAME = '_block_length'
+UNKNOWN_NAME = '?'
+
+
+def as_index(item):
+    if not isinstance(item, Element):
+        return None
+    try:
+        return int(item.value)
+    except (TypeError, ValueError):
+        return None
+
+
+def format_names(names):
+    return ', '.join(name if name else UNKNOWN_NAME for name in names)
+
+
+class ColumnResolver:
+    def __init__(self, program: List):
+        self.ref_table, _, _ = collect_refs(program)
+
+    def deref(self, item):
+        seen = set()
+        while isinstance(item, Reference) and item.alias not in seen:
+            seen.add(item.alias)
+            macro = self.ref_table.get(item.alias)
+            if macro is None or len(macro.definition) != 1:
+                return None
+            item = macro.definition[0]
+        return item if isinstance(item, List) else None
+
+    @staticmethod
+    def literal(item):
+        return str(item.value) if isinstance(item, Element) else None
+
+    @staticmethod
+    def child(the_list: List, pos):
+        return the_list.list[pos] if pos < len(the_list.list) else None
+
+    def struct_member_names(self, node):
+        struct = self.deref(node)
+        if struct is None or get_oper(struct) != 'StructType':
+            return None
+        names = []
+        for item in struct.list[1:]:
+            member = self.deref(item)
+            names.append(self.literal(member.list[0]) if member and member.list else None)
+        return names
+
+    def stage_wide_names(self, stage: List):
+        settings = self.deref(self.child(stage, 3))
+        if settings is None:
+            return None
+        for item in settings.list:
+            setting = self.deref(item)
+            if setting is None or len(setting.list) < 2:
+                continue
+            if self.literal(setting.list[0]) == '_wide_channels':
+                return self.struct_member_names(setting.list[1])
+        return None
+
+    def connection_names(self, node):
+        connection = self.deref(node)
+        if connection is None:
+            return None
+        output = self.deref(self.child(connection, 1))
+        if output is None or get_oper(output) != 'TDqOutput':
+            return None
+        stage = self.deref(self.child(output, 1))
+        return self.stage_wide_names(stage) if stage is not None and get_oper(stage) in STAGE_OPERS else None
+
+    def wide_map_names(self, node: List, input_names, declared):
+        lam = self.deref(self.child(node, 2))
+        if lam is None or get_oper(lam) != 'lambda' or len(lam.list) < 3:
+            return None
+        args_list = self.deref(lam.list[1])
+        if args_list is None:
+            return None
+
+        args = [item.alias for item in args_list.list if isinstance(item, Reference)]
+        arg_names = list(input_names) if input_names else []
+        if len(arg_names) + 1 == len(args):
+            arg_names.append(BLOCK_LENGTH_NAME)
+        arg_pos = {alias: pos for pos, alias in enumerate(args)}
+
+        result = [self.expr_name(body, arg_pos, arg_names) for body in lam.list[2:]]
+        if declared and len(result) == len(declared):
+            result = [name or declared[pos] for pos, name in enumerate(result)]
+        if result:
+            self.note(node, 2, result, prefix='→ ')
+        return result
+
+    def expr_name(self, body, arg_pos, arg_names):
+        if isinstance(body, Reference):
+            pos = arg_pos.get(body.alias)
+            return arg_names[pos] if pos is not None and pos < len(arg_names) else None
+        if isinstance(body, List) and get_oper(body) == 'Member' and len(body.list) > 2:
+            return self.literal(body.list[2])
+        return None
+
+    def map_join_names(self, node: List, env):
+        left = self.columns(self.child(node, 1), env)
+        renames = {}
+        for pos, is_left in ((6, True), (7, False)):
+            items = self.deref(self.child(node, pos))
+            if items is None:
+                return None
+            for item_pos in range(0, len(items.list) - 1, 2):
+                source = items.list[item_pos]
+                target = as_index(items.list[item_pos + 1])
+                if target is None or target < 0:
+                    return None
+                source_index = as_index(source)
+                if not is_left:
+                    renames[target] = self.literal(source)
+                elif left is not None and source_index is not None and 0 <= source_index < len(left):
+                    renames[target] = left[source_index]
+                else:
+                    renames[target] = None
+        return [renames.get(pos) for pos in range(max(renames) + 1)] if renames else None
+
+    def index_names(self, node, names):
+        index_list = self.deref(node)
+        if index_list is None or not names:
+            return None
+
+        resolved = []
+        for item in index_list.list:
+            index = as_index(item)
+            if index is None:
+                tuple_item = self.deref(item)
+                index = as_index(tuple_item.list[0]) if tuple_item and tuple_item.list else None
+            if index is None:
+                return None
+            resolved.append(names[index] if 0 <= index < len(names) else UNKNOWN_NAME)
+        return resolved
+
+    @staticmethod
+    def note(node: List, pos, names, prefix=''):
+        if not names:
+            return
+        notes = getattr(node, 'child_notes', None) or {}
+        notes[pos] = prefix + format_names(names)
+        node.child_notes = notes
+
+    def note_indexes(self, node: List, pos, names):
+        self.note(node, pos, self.index_names(self.child(node, pos), names))
+
+    def columns(self, node, env, declared=None):
+        if isinstance(node, Reference):
+            if node.alias in env:
+                return env[node.alias]
+            node = self.deref(node)
+        if not isinstance(node, List):
+            return None
+
+        oper = get_oper(node)
+        if oper in ('WideSort', 'WideTopSort', 'WideTop'):
+            names = self.columns(self.child(node, 1), env)
+            self.note_indexes(node, 2, names)
+            return names
+
+        if oper in FLOW_PASSTHROUGH_OPERS:
+            return self.columns(self.child(node, 1), env, declared)
+
+        if oper == 'WideFromBlocks':
+            block_names = list(declared) + [BLOCK_LENGTH_NAME] if declared else None
+            names = self.columns(self.child(node, 1), env, block_names)
+            return names[:-1] if names and names[-1] == BLOCK_LENGTH_NAME else names
+
+        if oper in WIDE_MAP_OPERS:
+            input_names = self.columns(self.child(node, 1), env)
+            return self.wide_map_names(node, input_names, declared)
+
+        if oper == 'BlockHashJoinCore':
+            left = self.columns(self.child(node, 1), env)
+            right = self.columns(self.child(node, 2), env)
+            self.note(node, 1, left)
+            self.note(node, 2, right)
+            self.note_indexes(node, 4, left)
+            self.note_indexes(node, 5, right)
+            return list(left) + list(right) if left is not None and right is not None else None
+
+        if oper == 'MapJoinCore':
+            left = self.columns(self.child(node, 1), env)
+            self.note(node, 1, left)
+            self.note_indexes(node, 4, left)
+            return self.map_join_names(node, env)
+
+        if oper in ('FlatMap', 'OrderedFlatMap'):
+            lam = self.deref(self.child(node, 2))
+            if lam is not None and get_oper(lam) == 'lambda':
+                return self.columns(self.child(lam, 2), env, declared)
+
+        return None
+
+    def annotate_stage(self, stage: List):
+        inputs = self.deref(self.child(stage, 1))
+        program = self.deref(self.child(stage, 2))
+        if inputs is None or program is None or get_oper(program) != 'lambda':
+            return
+
+        input_names = []
+        for item in inputs.list:
+            names = self.connection_names(item)
+            connection = self.deref(item)
+            if connection is not None and get_oper(connection) in ('DqCnHashShuffle', 'DqCnMerge'):
+                self.note_indexes(connection, 2, names)
+            input_names.append(names)
+        args = self.deref(self.child(program, 1))
+        env = {}
+        if args is not None:
+            notes = {}
+            for pos, arg in enumerate(args.list):
+                if not isinstance(arg, Reference) or pos >= len(input_names):
+                    continue
+                names = input_names[pos]
+                if names is not None:
+                    env[arg.alias] = names
+                if names:
+                    notes[pos] = format_names(names)
+            if notes:
+                args.child_notes = notes
+
+        declared = self.stage_wide_names(stage)
+        bodies = program.list[2:]
+        for pos, body in enumerate(bodies):
+            self.columns(body, env, declared if pos == len(bodies) - 1 else None)
+
+    def annotate(self, node):
+        if not isinstance(node, List):
+            return
+        if get_oper(node) in STAGE_OPERS:
+            self.annotate_stage(node)
+            return
+        for item in node.list:
+            self.annotate(item)
+
+
 def parse_and_process(lines, replace_refs_options: ReplaceRefsOptions):
     program = parse(lines)
     ref_table, ref_counts, _ = collect_refs(program)
@@ -798,6 +1083,7 @@ def parse_and_process(lines, replace_refs_options: ReplaceRefsOptions):
     replaced_program.list, _ = replace_refs(program.list, ref_table, ref_counts, replace_refs_options)
     simplified_program = List(False)
     simplified_program.list = simplify_blocks(replaced_program.list)
+    ColumnResolver(simplified_program).annotate(simplified_program)
     return simplified_program
 
 
@@ -883,7 +1169,10 @@ def climain():
     # print('%d callables' % len(callables), file=sys.stderr)
 
     input = sys.stdin.read()
-    program = parse_and_process(input.split('\n'), ReplaceRefsOptions(max_uses_for_inlining=args.max_uses_for_inlining))
+    program = parse_and_process(
+        input.split('\n'),
+        ReplaceRefsOptions(max_uses_for_inlining=args.max_uses_for_inlining),
+    )
     printer = HtmlPrinter() if args.html else TerminalPrinter()
     print_list(sys.stdout, program, callables, Context(tabstops=tabstops, printer=printer))
     printer.finalize()

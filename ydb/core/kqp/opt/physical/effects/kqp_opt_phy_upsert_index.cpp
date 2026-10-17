@@ -648,7 +648,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, kqpCtx, filter);
+    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
     const bool useStreamIndex = kqpCtx.Config->GetEnableIndexStreamWrite();
     const bool needPrecompute = !useStreamIndex
@@ -1047,7 +1047,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltextCompact:
                 case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 case TIndexDescription::EType::GlobalJsonCompact:
-                    YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
+                    YQL_ENSURE(false, "Compact indexes are always updated by KqpWriteActor");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:
@@ -1130,7 +1130,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalFulltextCompact:
                 case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 case TIndexDescription::EType::GlobalJsonCompact:
-                    YQL_ENSURE(false, "Compact fulltext index update requires EnableIndexStreamWrite");
+                    YQL_ENSURE(false, "Compact indexes are always updated by KqpWriteActor");
                 case TIndexDescription::EType::LocalBloomFilter:
                 case TIndexDescription::EType::LocalBloomNgramFilter:
                 case TIndexDescription::EType::LocalMinMax:

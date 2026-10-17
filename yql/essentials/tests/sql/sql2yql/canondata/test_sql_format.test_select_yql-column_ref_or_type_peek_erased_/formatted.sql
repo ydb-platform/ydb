@@ -1,0 +1,10 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    PeekErased(AsErased(1), Int64) AS value
+FROM (
+    VALUES
+        (CAST(42 AS Int64))
+) AS src (
+    Int64
+);

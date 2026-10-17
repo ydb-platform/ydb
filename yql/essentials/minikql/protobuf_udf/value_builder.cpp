@@ -1,11 +1,9 @@
-#include "type_builder.h"
 #include "value_builder.h"
+#include "type_builder.h"
 
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/public/udf/udf_terminator.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_node.h>
 
 #include <utility>
 
@@ -13,22 +11,16 @@ namespace NYql::NUdf {
 
 using namespace NProtoBuf;
 
-IProtobufParser::~IProtobufParser()
-{
-}
+IProtobufParser::~IProtobufParser() = default;
 
-IProtobufSerialize::~IProtobufSerialize()
-{
-}
+IProtobufSerialize::~IProtobufSerialize() = default;
 
 TProtobufValue::TProtobufValue(TProtoInfo info)
     : Info_(std::move(info))
 {
 }
 
-TProtobufValue::~TProtobufValue()
-{
-}
+TProtobufValue::~TProtobufValue() = default;
 
 TUnboxedValue TProtobufValue::Run(
     const IValueBuilder* valueBuilder,
@@ -40,7 +32,7 @@ TUnboxedValue TProtobufValue::Run(
         if (result == nullptr) {
             return TUnboxedValue();
         }
-        auto proto(result);
+        const auto& proto = result;
         return FillValueFromProto(*proto.Get(), valueBuilder, Info_);
     } catch (const std::exception& e) {
         UdfTerminate(e.what());
@@ -52,9 +44,7 @@ TProtobufSerialize::TProtobufSerialize(TProtoInfo info)
 {
 }
 
-TProtobufSerialize::~TProtobufSerialize()
-{
-}
+TProtobufSerialize::~TProtobufSerialize() = default;
 
 TUnboxedValue TProtobufSerialize::Run(
     const IValueBuilder* valueBuilder,

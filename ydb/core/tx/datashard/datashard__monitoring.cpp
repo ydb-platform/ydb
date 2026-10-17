@@ -11,12 +11,14 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/subst.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NDataShard {
 
 void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
-                "HTTP request at " << TabletID() << " url="
-                << ev->Get()->PathInfo());
+    YDB_LOG_DEBUG("HTTP request",
+        {"tabletId", TabletID()},
+        {"url", ev->Get()->PathInfo()});
 
     TString blob;
     NResource::FindExact("datashard/index.html", &blob);
@@ -361,7 +363,7 @@ void TDataShard::HandleMonSendReadSetToSelf(NMon::TEvRemoteHttpInfo::TPtr ev, co
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nInvalid request parameters."));
         return;
     }
-    auto tx = GetVolatileTxManager().FindByCommitTxId(txId);
+    auto tx = GetVolatileTxManager().FindByTxId(txId);
     if (!tx) {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes("HTTP/1.1 400 Bad Request\r\nContent-Type: text-plain\r\nConnection: Close\r\n\r\nTransaction not found."));
         return;
@@ -386,3 +388,5 @@ void TDataShard::Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev) {
 }
 
 } // namespace NKikimr::NDataShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -388,6 +388,10 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(YandexCloudSq
         wait_check_messages_sent(cloud_q_name, 0)
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
+    @pytest.mark.skipif(
+        not YandexCloudSqsTestBase._is_topic_migration_stage(),
+        reason='Legacy YMQ DLQ readiness race; covered by migration compatibility/finished suites',
+    )
     def test_dlq_mechanics_in_cloud(self, is_fifo):
         tables_format = 1
 

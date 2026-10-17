@@ -18,7 +18,7 @@ from ydb.tests.stability.nemesis.internal.agent.agent_warden_catalog import (
     collect_agent_safety_check_specs,
 )
 from ydb.tests.stability.nemesis.internal.event_loop import BackgroundEventLoop
-from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult
+from ydb.tests.stability.nemesis.internal.models import WardenCheckReport, WardenCheckResult, WardenTimeWindow
 from ydb.tests.stability.nemesis.internal.safety_warden_execution import (
     SafetyWardenRun,
     build_safety_runs,
@@ -75,14 +75,19 @@ class AgentWardenChecker:
         with self._lock:
             return self._last_report.to_dict()
 
-    def start_checks(self) -> bool:
+    def start_checks(self, time_window: WardenTimeWindow | None = None) -> bool:
         with self._lock:
             if self._is_running:
                 logger.debug("Safety checks already running, skipping")
                 return False
             self._is_running = True
             started = datetime.utcnow().isoformat() + "Z"
-            ctx = AgentSafetyContext(log_directory=self._log_directory, hostname=self._hostname)
+            window = time_window or WardenTimeWindow.from_hours_back(24)
+            ctx = AgentSafetyContext(
+                log_directory=self._log_directory,
+                hostname=self._hostname,
+                time_window=window,
+            )
             try:
                 specs = collect_agent_safety_check_specs(ctx)
                 slot_names, runs = build_safety_runs(specs, log_prefix=ctx.log_prefix)

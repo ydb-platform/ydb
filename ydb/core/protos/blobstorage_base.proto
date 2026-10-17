@@ -14,6 +14,16 @@ enum EPutHandleClass {
     // NOTE: currently NoneRT/TMP blobs must be treated as AsyncBlob
 }
 
+// Kind of the data being written. Space management rejects writes of different kinds at
+// different space colors: system data survives worse colors than user data, so that a tenant
+// which has run out of space can still boot its system tablets and delete user data.
+message TDataKind {
+    enum E {
+        USER = 0;   // data of user tablets: DataShard, ColumnShard, PersQueue, KeyValue, ...
+        SYSTEM = 1; // data of system tablets: SchemeShard, Hive, Coordinator, Mediator, ...
+    }
+}
+
 // VDisk handle read of LogoBlobs in different ways, below we define several classes of these requests
 enum EGetHandleClass {
     AsyncRead = 1;      // read of tablet's compacted data

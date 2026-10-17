@@ -1,5 +1,6 @@
 #include "data.h"
 #include "schema.h"
+#include "blocks.h"
 #include "garbage_collection.h"
 #include "coro_tx.h"
 #include "s3.h"
@@ -194,6 +195,8 @@ namespace NKikimr::NBlobDepot {
         for (auto& [key, record] : RecordsPerChannelGroup) {
             record.CollectIfPossible(this);
         }
+
+        Self->ProcessMoveDataQueue();
     }
 
     bool TData::EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress) {
@@ -266,6 +269,7 @@ namespace NKikimr::NBlobDepot {
 
             case ELoadTrashResult::Complete:
                 TrashLoadState = ETrashLoadState::Complete;
+                Self->ProcessMoveDataQueue();
                 break;
         }
 
@@ -276,6 +280,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::OnDataLoadComplete() {
         BarrierServer->OnDataLoaded();
+        BlocksManager->OnDataLoaded();
         S3Manager->OnDataLoaded();
         StartGroupAssimilator();
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 0;

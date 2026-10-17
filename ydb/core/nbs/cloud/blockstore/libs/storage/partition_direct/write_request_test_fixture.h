@@ -25,8 +25,8 @@ struct TWriteClientMock: IWriteClient
 ////////////////////////////////////////////////////////////////////////////////
 struct TWriteRequestTestFixture: public TBaseFixture
 {
-    ui64 UserLsn = 123;
-    TBlockRange64 Range = TBlockRange64::WithLength(10, 10);
+    TPBufferKey UserPBufferKey{.Generation = 1, .Lsn = 123};
+    TBlockRange16 Range = TBlockRange16::WithLength(10, 10);
     TDuration HedgeDelay = TDuration::MilliSeconds(1000);
     TDuration Timeout = TDuration::MilliSeconds(1000);
     TDuration PBufferReplyTimeout = TDuration::MilliSeconds(500);

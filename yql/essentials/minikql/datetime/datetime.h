@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <library/cpp/type_info/tz/tz.h>
 
@@ -11,6 +10,9 @@
 namespace NYql::NDateTime {
 
 constexpr size_t MAX_TIMEZONE_NAME_LEN = 64;
+
+bool IsLeapYear(i32 year);
+ui32 GetMonthLength(ui32 month, bool isLeap);
 
 struct TTMStorage {
     unsigned int Year : 12;
@@ -222,8 +224,8 @@ bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builde
         }
     }
     storage.Month = newMonth;
-    bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
-    ui32 monthLength = NKikimr::NMiniKQL::GetMonthLength(storage.Month, isLeap);
+    bool isLeap = IsLeapYear(storage.Year);
+    ui32 monthLength = GetMonthLength(storage.Month, isLeap);
     storage.Day = std::min(monthLength, storage.Day);
     return storage.Validate(builder);
 }
@@ -239,7 +241,7 @@ bool DoAddYears(TStorage& storage, i64 years, const NUdf::IDateBuilder& builder)
         }
     }
     if (storage.Month == 2 && storage.Day == 29) {
-        bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
+        bool isLeap = IsLeapYear(storage.Year);
         if (!isLeap) {
             storage.Day--;
         }

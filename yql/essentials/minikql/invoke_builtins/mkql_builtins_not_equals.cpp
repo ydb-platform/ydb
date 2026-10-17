@@ -270,40 +270,43 @@ struct TCustomNotEquals: public TAggrNotEquals {
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalNotEquals {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        return NUdf::TUnboxedValuePod(NYql::NDecimal::IsNotEqual(left.GetInt128(), right.GetInt128()));
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsNotEqual(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto bad = NDecimal::GenIsNonComparable(r, context, block);
-        const auto neq = GenNotEqualsIntegral(l, r, block);
-        const auto res = BinaryOperator::CreateOr(bad, neq, "res", block);
-        return MakeBoolean(res, context, block);
+        const auto leftValue = GetterForInt128(left, block);
+        const auto rightValue = GetterForInt128(right, block);
+        const auto result = NDecimal::GenIsNotEqual(
+            leftValue, rightValue, ScaleFactor, /*aggregate=*/false, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
 
+template <i8 ScaleFactor>
 struct TDecimalAggrNotEquals: public TAggrNotEquals {
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
-        const auto l = left.GetInt128();
-        const auto r = right.GetInt128();
-        return NUdf::TUnboxedValuePod(l != r);
+    static NUdf::TUnboxedValuePod Execute(
+        const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
+        return NUdf::TUnboxedValuePod(
+            NYql::NDecimal::IsNotEqual<true>(left.GetInt128(), right.GetInt128(), ScaleFactor));
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    static Value* Generate(
+        Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) {
         auto& context = ctx.Codegen.GetContext();
-        const auto l = GetterForInt128(left, block);
-        const auto r = GetterForInt128(right, block);
-        const auto neq = GenNotEqualsIntegral(l, r, block);
-        return MakeBoolean(neq, context, block);
+        const auto result = NDecimal::GenIsNotEqual(
+            GetterForInt128(left, block), GetterForInt128(right, block),
+            ScaleFactor, /*aggregate=*/true, block);
+        return MakeBoolean(result, context, block);
     }
 #endif
 };
@@ -318,8 +321,6 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterCompareBigDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, name);
-    RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>,
-                             TDecimalNotEquals, TCompareArgsOpt>(registry, name);
 
     const auto aggrName = "AggrNotEquals";
     RegisterAggrComparePrimitive<TNotEquals, TCompareArgsOpt>(registry, aggrName);
@@ -329,8 +330,7 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     RegisterAggrCompareBigTzDatetime<TAggrTzDateNotEquals, TCompareArgsOpt>(registry, aggrName);
 
     RegisterAggrCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, aggrName);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>,
-                                 TDecimalAggrNotEquals, TCompareArgsOpt>(registry, aggrName);
+    NDecimal::RegisterCompare<TDecimalNotEquals, TDecimalAggrNotEquals>(registry, name, aggrName);
 }
 
 void RegisterNotEquals(TKernelFamilyMap& kernelFamilyMap) {

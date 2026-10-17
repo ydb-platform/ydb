@@ -31,7 +31,9 @@ snappy = CMakeNinjaNixProject(
             "snappy-stubs-public.h",
         ]
     },
-    # Do not install unittests
     install_targets=["snappy"],
+    disable_includes=[
+        "riscv_vector.h",
+    ],
     post_install=post_install,
 )

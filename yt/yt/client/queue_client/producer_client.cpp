@@ -2,20 +2,19 @@
 
 #include "private.h"
 
-#include <yt/yt/client/table_client/public.h>
-
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/table_client/name_table.h>
+#include <yt/yt/client/table_client/public.h>
 #include <yt/yt/client/table_client/wire_protocol.h>
 
 #include <yt/yt/client/ypath/rich.h>
 
-#include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
-
 #include <yt/yt/core/concurrency/action_queue.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
+
+#include <yt/yt_proto/yt/client/api/rpc_proxy/proto/api_service.pb.h>
 
 namespace NYT::NQueueClient {
 

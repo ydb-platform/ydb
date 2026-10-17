@@ -1,25 +1,31 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
+#include <ydb/core/blobstorage/ddisk/ddisk_actor_test_peer.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/library/pdisk_io/sector_map.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/folder/tempdir.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 #include <util/random/entropy.h>
 
 #include <algorithm>
 #include <cstring>
 #include <numeric>
 #include <random>
+#include <set>
 
 namespace NKikimr {
 namespace {
@@ -34,7 +40,7 @@ constexpr ui32 ChunkCount = 1000;
 constexpr ui64 DiskSize = (ui64)ChunkSize * ChunkCount;
 constexpr ui64 DefaultPDiskSequence = 0x7e5700007e570000;
 
-void FormatDisk(const TString& path, ui64 guid) {
+void FormatDisk(const TString& path, ui64 guid, std::optional<ui32> physicalChunkSize = std::nullopt) {
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
@@ -44,6 +50,7 @@ void FormatDisk(const TString& path, ui64 guid) {
 
     TFormatOptions options;
     options.EnableSmallDiskOptimization = true;
+    options.PhysicalChunkSizeBytes = physicalChunkSize;
     FormatPDisk(path, DiskSize, MinBlockSize, ChunkSize, guid,
         chunkKey, logKey, sysLogKey, DefaultPDiskSequence, "ddisk_pdisk_test", options);
 }
@@ -62,13 +69,156 @@ struct TDiskInfo {
     ui32 GroupId = 0;    // unique per disk slot so PDisk treats them as distinct VDisks
 };
 
+struct TEvProbeReservations : TEventLocal<TEvProbeReservations, EventSpaceBegin(TEvents::ES_PRIVATE) + 100> {};
+struct TEvReservationsSettled : TEventLocal<TEvReservationsSettled, EventSpaceBegin(TEvents::ES_PRIVATE) + 101> {
+    bool Settled;
+    explicit TEvReservationsSettled(bool settled) : Settled(settled) {}
+};
+
+struct TEvControlGate : TEventLocal<TEvControlGate, EventSpaceBegin(TEvents::ES_PRIVATE) + 102> {
+    ui32 Type = 0;
+    bool Release = false;
+    bool Broken = false;
+    TEvControlGate(ui32 type = 0, bool release = false, bool broken = false)
+        : Type(type), Release(release), Broken(broken) {
+        }
+};
+struct TEvGateState : TEventLocal<TEvGateState, EventSpaceBegin(TEvents::ES_PRIVATE) + 103> {
+    size_t Held;
+    ui64 IoCompletions;
+    bool Router;
+    size_t Reserved;
+    TEvGateState(size_t held, ui64 io, bool router, size_t reserved)
+        : Held(held), IoCompletions(io), Router(router), Reserved(reserved) {
+        }
+};
+
+// System resumes bypass a decorator's state function. This ordinary envelope lets
+// the real-thread fixture inspect them before forwarding the untouched system event.
+struct TEvProbeBatchResume : TEventLocal<TEvProbeBatchResume, EventSpaceBegin(TEvents::ES_PRIVATE) + 104> {
+    TAutoPtr<IEventHandle> Original;
+
+    explicit TEvProbeBatchResume(IEventHandle* original)
+        : Original(original) {
+    }
+};
+
+class TProbeBatchResumeExecutorPool : public TBasicExecutorPool {
+    static void WrapBatchResume(std::unique_ptr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvents::TEvResumeRunnable::EventType) {
+            const TActorId recipient = event->GetRecipientRewrite();
+            const TActorId sender = event->Sender;
+            const ui64 cookie = event->Cookie;
+            auto envelope = std::make_unique<TEvProbeBatchResume>(event.release());
+            event = std::make_unique<IEventHandle>(recipient, sender, envelope.release(), 0, cookie);
+        }
+    }
+
+public:
+    TProbeBatchResumeExecutorPool()
+        : TBasicExecutorPool(0, 2, 20, "System") {
+    }
+
+    bool Send(std::unique_ptr<IEventHandle>& event) override {
+        WrapBatchResume(event);
+        return TBasicExecutorPool::Send(event);
+    }
+
+    bool SpecificSend(std::unique_ptr<IEventHandle>& event) override {
+        WrapBatchResume(event);
+        return TBasicExecutorPool::SpecificSend(event);
+    }
+};
+
+// A mailbox probe avoids racing test-thread reads of the actor's reservation state.
+class TReservationProbeDecorator : public TDecorator {
+    ui32 GateType = 0;
+    ui64 IoCompletions = 0;
+    std::vector<TAutoPtr<IEventHandle>> Held;
+    std::set<IEventHandle*> Released;
+public:
+    explicit TReservationProbeDecorator(IActor* actor)
+        : TDecorator(THolder<IActor>(actor))
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        if (ev->GetTypeRewrite() == TEvProbeBatchResume::EventType) {
+            IEventHandle* original = ev->Get<TEvProbeBatchResume>()->Original.Release();
+            ev.Reset(original);
+        }
+        const auto type = ev->GetTypeRewrite();
+        if (type == TEvControlGate::EventType) {
+            const auto& command = *ev->Get<TEvControlGate>();
+            if (command.Type) {
+                GateType = command.Type;
+            }
+            if (command.Broken) {
+                NDDisk::TDDiskActorTestPeer::EnterBroken(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()),
+                    "native gated interruption");
+            }
+            if (command.Release) {
+                GateType = command.Type;
+                for (auto& event : Held) {
+                    Released.insert(event.Get()); ctx.Send(event.Release());
+                }
+                Held.clear();
+            }
+            bool router = false;
+#if defined(__linux__)
+            router = NDDisk::TDDiskActorTestPeer::UsesRouter(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()));
+#endif
+            ctx.Send(ev->Sender, new TEvGateState(Held.size(), IoCompletions, router,
+                NDDisk::TDDiskActorTestPeer::ReservedChunks(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()))));
+            return false;
+        }
+        if (Released.erase(ev.Get())) {
+            return true;
+        }
+        const bool batchResume = type == TEvents::TEvResumeRunnable::EventType;
+        if (batchResume) {
+            ++IoCompletions;
+        }
+        if (type == GateType && (type != TEvents::TEvResumeRunnable::EventType || batchResume)
+                && (type != NPDisk::TEvLogResult::EventType
+                || ev->Get<NPDisk::TEvLogResult>()->Status == NKikimrProto::OK)) {
+            Held.emplace_back(ev.Release());
+            return false;
+        }
+        if (ev->GetTypeRewrite() != TEvProbeReservations::EventType) {
+            return true;
+        }
+        ctx.Send(ev->Sender, new TEvReservationsSettled(
+            NDDisk::TDDiskActorTestPeer::ReservationsSettled(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()))));
+        return false;
+    }
+};
+
+// Keep real PDisk reservations across DDisk-only restarts by losing best-effort
+// shutdown requests. Tracked startup repair still reaches the real PDisk.
+class TDropShutdownReleasesDecorator : public TDecorator {
+public:
+    explicit TDropShutdownReleasesDecorator(IActor* actor)
+        : TDecorator(THolder<IActor>(actor))
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+        return !(ev->GetTypeRewrite() == NPDisk::TEvChunkForget::EventType && ev->Cookie == 0);
+    }
+};
+
 class TTestContext {
     THolder<NActors::TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     TTempDir TempDir;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NDDisk::TDDiskConfig DDiskConfig;
+    TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
+    std::optional<NDDisk::TPersistentBufferFormat> CustomPBFormat;
+    bool ProbeReservations = false;
+    bool AbandonReservations = false;
+    NMonitoring::TDynamicCounters::TCounterPtr UncommittedChunkCount;
     NPDisk::TMainKey PDiskMainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
+    std::optional<ui32> PhysicalChunkSize;
 
 public:
     TActorId Edge;
@@ -78,10 +228,23 @@ public:
     ui32 NodeId = 0;
 
     explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR,
-            ui32 numDisks = 1) {
+            ui32 numDisks = 1, std::optional<ui32> physicalChunkSize = std::nullopt,
+            bool probeReservations = false, bool abandonReservations = false,
+            TIntrusivePtr<NPDisk::TSectorMap> sectorMap = nullptr,
+            std::optional<NDDisk::TPersistentBufferFormat> pbFormat = std::nullopt)
+        : SectorMap(std::move(sectorMap))
+        , CustomPBFormat(std::move(pbFormat))
+        , PhysicalChunkSize(physicalChunkSize)
+    {
+        Y_ENSURE(!SectorMap || numDisks == 1, "SectorMap supports exactly one PDisk");
         NActors::TTestActorRuntime::ResetFirstNodeId();
         Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         Runtime.Reset(new NActors::TTestActorRuntime(1, 1, true));
+        if (probeReservations) {
+            Runtime->SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->Executors[0].Reset(new TProbeBatchResumeExecutorPool);
+            };
+        }
 
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
@@ -95,6 +258,8 @@ public:
         Edge = Runtime->AllocateEdgeActor();
         NodeId = Runtime->GetNodeId(0);
         DDiskConfig = ddiskConfig;
+        ProbeReservations = probeReservations;
+        AbandonReservations = abandonReservations;
 
         for (ui32 d = 0; d < numDisks; ++d) {
             AddDisk();
@@ -106,25 +271,49 @@ public:
     // Formats a fresh on-disk file, registers a new PDisk actor for it, and returns its
     // index in PDisks. Does NOT attach a DDisk; use AddDDiskOnPDisk for that.
     ui32 AddPDisk() {
+        Y_ENSURE(!SectorMap || PDisks.empty(), "SectorMap supports exactly one PDisk");
         const ui32 p = static_cast<ui32>(PDisks.size());
         const ui32 pdiskId = PDiskId + p;
         const ui64 pdiskGuid = 12345 + p;
 
         TString path = TempDir() + "/pdisk_" + ToString(p) + ".dat";
-        {
+        if (!SectorMap) {
             TFile file(path.c_str(), OpenAlways | RdWr);
             file.Resize(DiskSize);
             file.Close();
         }
-        FormatDisk(path, pdiskGuid);
+        if (SectorMap) {
+            TFormatOptions options;
+            options.SectorMap = SectorMap;
+            options.EnableSectorEncryption = false;
+            options.PhysicalChunkSizeBytes = PhysicalChunkSize;
+            FormatPDisk(path, SectorMap->GetDeviceSize(), MinBlockSize, ChunkSize, pdiskGuid,
+                1, 2, 3, DefaultPDiskSequence, "pb_benchmark", options);
+        } else {
+            FormatDisk(path, pdiskGuid, PhysicalChunkSize);
+        }
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig(path, pdiskGuid, pdiskId, 0);
+        pdiskConfig->SectorMap = SectorMap;
+        if (SectorMap) {
+            pdiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(false);
+        }
         pdiskConfig->ChunkSize = ChunkSize;
+        pdiskConfig->PhysicalChunkSize = PhysicalChunkSize.value_or(0);
         pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
+        if (ProbeReservations && p == 0) {
+            UncommittedChunkCount = GetServiceCounters(Counters, "pdisks")
+                ->GetSubgroup("pdisk", Sprintf("%09u", pdiskId))
+                ->GetSubgroup("media", to_lower(pdiskConfig->PDiskCategory.TypeStrShort()))
+                ->GetSubgroup("subsystem", "chunks")->GetCounter("UncommitedDataChunks", false);
+        }
 
         IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), PDiskMainKey, Counters);
+        if (AbandonReservations) {
+            pdiskActor = new TDropShutdownReleasesDecorator(pdiskActor);
+        }
         TActorId pdiskActorId = Runtime->Register(pdiskActor);
 
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
@@ -189,10 +378,14 @@ public:
             ownerRound,
             "ddisk_pool");
 
-        NDDisk::TPersistentBufferFormat pbFormat{256, 4, ChunkSize, 8};
+        NDDisk::TPersistentBufferFormat pbFormat = CustomPBFormat.value_or(
+            NDDisk::TPersistentBufferFormat{256, 4, ChunkSize, 8});
         NDDisk::TDDiskConfig cfg = DDiskConfig;
         IActor* ddiskActor = NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), std::move(cfg), Counters);
+        if (ProbeReservations) {
+            ddiskActor = new TReservationProbeDecorator(ddiskActor);
+        }
 
         TActorId ddiskActorId = Runtime->Register(ddiskActor);
         TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
@@ -202,12 +395,14 @@ public:
     }
 
     void StopDDisk(ui32 diskIdx) {
+        const auto wardenEdge = Runtime->AllocateEdgeActor();
+        Runtime->RegisterService(MakeBlobStorageNodeWardenID(NodeId), wardenEdge);
         Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
             new TEvents::TEvPoison()));
-        Runtime->Send(new IEventHandle(Disks[diskIdx].DDiskServiceId, Edge,
-            new NDDisk::TEvRead(), IEventHandle::FlagTrackDelivery));
-        auto undelivered = Grab<TEvents::TEvUndelivered>();
-        Y_ABORT_UNLESS(undelivered);
+        // Router callbacks can keep the actor in Stopping after poison. Gone
+        // marks completed shutdown without racing it with a client probe.
+        auto gone = Runtime->GrabEdgeEventRethrow<TEvents::TEvGone>(wardenEdge, TDuration::Seconds(30));
+        UNIT_ASSERT(gone);
     }
 
     void RestartDDisk(ui32 diskIdx) {
@@ -243,9 +438,31 @@ public:
     // Real-thread runtime: DDisk/PDisk complete trailing chunk-reserve refills and
     // chunk-map log replies asynchronously after write replies return to the edge.
     // Wait a quiet window so RestartPDisk does not deliver INVALID_ROUND for those
-    // still-in-flight owner-stamped ops (which would Terminate the DDisk early).
+    // still-in-flight owner-stamped ops (which would stop the DDisk early).
     void QuiesceInFlightPDiskOps(TDuration quietWindow = TDuration::MilliSeconds(200)) {
         Sleep(quietWindow);
+    }
+
+    void WaitForReservationsSettled() {
+        UNIT_ASSERT(ProbeReservations);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!SendAndGrab<TEvReservationsSettled>(new TEvProbeReservations())->Get()->Settled) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "DDisk reservations did not settle");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+    ui64 UncommittedChunks() const {
+        UNIT_ASSERT(UncommittedChunkCount);
+        return UncommittedChunkCount->Val();
+    }
+
+    void WaitForReservationsReleased() {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (UncommittedChunks()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "PDisk reservations were not released");
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     void ForceCutLog(ui32 diskIdx) {
@@ -338,6 +555,27 @@ TString MakeDataWithTabletAndBlock(ui32 tabletId, ui32 blockIdx, ui32 size) {
     return data;
 }
 
+TString AssertReadResult(const NDDisk::TEvReadResult::TPtr& readResult, TStringBuf expected, bool checksums = true) {
+    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+
+    const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    UNIT_ASSERT_VALUES_EQUAL(expected.size() % NDDisk::IntegrityUnitSize, 0u);
+
+    const ui32 expectedChecksumCount = checksums ? expected.size() / NDDisk::IntegrityUnitSize : 0;
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        static_cast<ui32>(readResult->Get()->Record.ChecksumsSize()), expectedChecksumCount,
+        "checksum count mismatch");
+    for (ui32 i = 0; i < expectedChecksumCount; ++i) {
+        const ui64 expectedChecksum = NDDisk::CalculateRawChecksum(
+            expected.data() + i * NDDisk::IntegrityUnitSize, NDDisk::IntegrityUnitSize);
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Record.GetChecksums(i), expectedChecksum,
+            "checksum mismatch at block# " << i);
+    }
+
+    return actual;
+}
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generation) {
     NDDisk::TQueryCredentials creds;
     creds.TabletId = tabletId;
@@ -346,6 +584,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, ui64 tabletId, ui32 generat
     auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     return creds;
 }
@@ -358,6 +597,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     auto connectResult = ctx.SendToAndGrab<NDDisk::TEvConnectResult>(diskIdx, new NDDisk::TEvConnect(creds));
     AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
     creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     return creds;
 }
@@ -367,31 +607,67 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     NDDisk::TQueryCredentials creds = Connect(ctx, 30, 1);
 
     const TString payload = MakeData('Q', 2 * blockSize);
-    auto write = std::make_unique<NDDisk::TEvWrite>(creds,
-        NDDisk::TBlockSelector(7, blockSize, static_cast<ui32>(payload.size())), NDDisk::TWriteInstruction(0));
-    write->AddPayloadThenChecksum(MakeAlignedRope(payload));
-
-    auto writeResult = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
-    AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
+    auto writeRange = [&](ui32 offset, const TString& data) {
+        for (ui32 pos = 0; pos < data.size(); pos += 1u << 20) {
+            const ui32 size = Min<ui32>(1u << 20, data.size() - pos);
+            auto write = std::make_unique<NDDisk::TEvWrite>(creds,
+                NDDisk::TBlockSelector(7, offset + pos, size), NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(MakeAlignedRope(data.substr(pos, size)));
+            AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release()), TReplyStatus::OK);
+        }
+    };
+    writeRange(blockSize, payload);
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, blockSize, static_cast<ui32>(payload.size())}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
+    AssertReadResult(readResult, payload);
 
     const TString payload2 = MakeData('R', 2 * blockSize);
     const ui32 secondOffset = blockSize + static_cast<ui32>(payload.size());
-    auto write2 = std::make_unique<NDDisk::TEvWrite>(creds,
-        NDDisk::TBlockSelector(7, secondOffset, static_cast<ui32>(payload2.size())), NDDisk::TWriteInstruction(0));
-    write2->AddPayloadThenChecksum(MakeAlignedRope(payload2));
-
-    auto writeResult2 = ctx.SendAndGrab<NDDisk::TEvWriteResult>(write2.release());
-    AssertStatus<NDDisk::TEvWriteResult>(writeResult2, TReplyStatus::OK);
+    writeRange(secondOffset, payload2);
 
     auto readResult2 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {7, secondOffset, static_cast<ui32>(payload2.size())}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult2, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult2->Get()->GetPayload(0).ConvertToString(), payload2);
+    AssertReadResult(readResult2, payload2);
+}
+
+[[maybe_unused]] void TestWriteAndReadWithoutChecksums(
+        NDDisk::TDDiskConfig ddiskConfig) {
+    ddiskConfig.EnableChecksums = false;
+    TTestContext ctx(std::move(ddiskConfig));
+    NDDisk::TQueryCredentials creds = Connect(ctx, 31, 1);
+
+    const TString payload = MakeData('N', MinBlockSize);
+    auto write = std::make_unique<NDDisk::TEvWrite>(
+        creds,
+        NDDisk::TBlockSelector(8, MinBlockSize, MinBlockSize),
+        NDDisk::TWriteInstruction(0));
+    write->AddPayload(MakeAlignedRope(payload));
+    auto writeResult =
+        ctx.SendAndGrab<NDDisk::TEvWriteResult>(write.release());
+    AssertStatus<NDDisk::TEvWriteResult>(writeResult, TReplyStatus::OK);
+
+    auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(
+            creds,
+            {8, MinBlockSize, MinBlockSize},
+            {true}));
+    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(
+        readResult->Get()->GetPayload(0).ConvertToString(), payload);
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Record.ChecksumsSize(), 0u);
+
+    auto zeroReadResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(
+            creds,
+            {8, 2 * MinBlockSize, MinBlockSize},
+            {true}));
+    AssertStatus<NDDisk::TEvReadResult>(zeroReadResult, TReplyStatus::OK);
+    UNIT_ASSERT_VALUES_EQUAL(
+        zeroReadResult->Get()->GetPayload(0).ConvertToString(),
+        TString(MinBlockSize, '\0'));
+    UNIT_ASSERT_VALUES_EQUAL(
+        zeroReadResult->Get()->Record.ChecksumsSize(), 0u);
 }
 
 [[maybe_unused]] void TestCheckVChunksArePerTablet(NDDisk::TDDiskConfig ddiskConfig) {
@@ -412,8 +688,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload1);
+        AssertReadResult(readResult, payload1);
     }
 
     NDDisk::TQueryCredentials creds2 = Connect(ctx, 102, 1);
@@ -421,10 +696,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        const TString data = rr->Get()->GetPayload(0).ConvertToString();
-        UNIT_ASSERT_VALUES_EQUAL(data.size(), MinBlockSize);
-        UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+        AssertReadResult(rr, TString(MinBlockSize, '\0'));
     }
 
     {
@@ -438,15 +710,13 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload2);
+        AssertReadResult(readResult, payload2);
     }
 
     {
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload1);
+        AssertReadResult(readResult, payload1);
     }
 }
 
@@ -495,8 +765,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, offset, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expected);
+        AssertReadResult(readResult, expected);
     }
 }
 
@@ -520,8 +789,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), data2);
+    AssertReadResult(readResult, data2);
 }
 
 [[maybe_unused]] void TestReadUnallocatedChunk(NDDisk::TDDiskConfig ddiskConfig) {
@@ -530,11 +798,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
         new NDDisk::TEvRead(creds, {42, 0, 2 * MinBlockSize}, {true}));
-    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-    const TString data = readResult->Get()->GetPayload(0).ConvertToString();
-    UNIT_ASSERT_VALUES_EQUAL(data.size(), 2 * MinBlockSize);
-    UNIT_ASSERT(std::all_of(data.begin(), data.end(), [](char c) { return c == '\0'; }));
+    AssertReadResult(readResult, TString(2 * MinBlockSize, '\0'));
 }
 
 [[maybe_unused]] void TestManyVChunks(NDDisk::TDDiskConfig ddiskConfig) {
@@ -556,8 +820,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString expected = MakeDataWithIndex(i, MinBlockSize);
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {i, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), expected);
+        AssertReadResult(readResult, expected);
     }
 }
 
@@ -588,14 +851,12 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         TString expected1 = MakeDataWithIndex(i, MinBlockSize);
         auto rr1 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds1, {0, i * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr1, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr1->Get()->GetPayload(0).ConvertToString(), expected1);
+        AssertReadResult(rr1, expected1);
 
         TString expected2 = MakeDataWithIndex(i + 1000, MinBlockSize);
         auto rr2 = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds2, {0, i * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr2, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr2->Get()->GetPayload(0).ConvertToString(), expected2);
+        AssertReadResult(rr2, expected2);
     }
 }
 
@@ -714,14 +975,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
                     auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
                         new NDDisk::TEvRead(creds[t], {v, b * MinBlockSize, MinBlockSize}, {true}));
-                    AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-                    const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+                    const TString actual = AssertReadResult(readResult, expected);
                     ui32 readTabletId = 0;
                     std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
                     UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
                         "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
-                    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
                 }
             }
         }
@@ -758,14 +1016,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -831,14 +1086,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -897,8 +1149,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), dataB);
+        AssertReadResult(rr, dataB);
     }
 
     const TString dataC = MakeData('C', MinBlockSize);
@@ -912,8 +1163,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), dataC);
+        AssertReadResult(rr, dataC);
     }
 }
 
@@ -935,9 +1185,37 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     {
         auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-        UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data);
+        AssertReadResult(rr, data);
     }
+}
+
+[[maybe_unused]] void TestConnectionTokenAcrossRestart() {
+    TTestContext ctx;
+    NDDisk::TQueryCredentials creds = Connect(ctx, 702, 1);
+    const ui64 oldDDiskInstanceGuid = *creds.DDiskInstanceGuid;
+    const NDDisk::TConnectionToken oldToken = *creds.ConnectionToken;
+
+    ctx.RestartDDisk(0);
+
+    auto staleRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
+    AssertStatus<NDDisk::TEvReadResult>(staleRead, TReplyStatus::SESSION_MISMATCH);
+
+    auto connectResult = ctx.SendAndGrab<NDDisk::TEvConnectResult>(new NDDisk::TEvConnect(creds));
+    AssertStatus<NDDisk::TEvConnectResult>(connectResult, TReplyStatus::OK);
+
+    creds.DDiskInstanceGuid = connectResult->Get()->Record.GetDDiskInstanceGuid();
+    creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
+    UNIT_ASSERT_VALUES_UNEQUAL(*creds.DDiskInstanceGuid, oldDDiskInstanceGuid);
+    UNIT_ASSERT(*creds.ConnectionToken != oldToken);
+
+    auto currentRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(new NDDisk::TEvRead(creds, {0, 0, MinBlockSize}, {true}));
+    AssertReadResult(currentRead, TString(MinBlockSize, '\0'));
+
+    NDDisk::TQueryCredentials staleCreds = creds;
+    staleCreds.ConnectionToken = oldToken;
+    staleRead = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(staleCreds, {0, 0, MinBlockSize}, {true}));
+    AssertStatus<NDDisk::TEvReadResult>(staleRead, TReplyStatus::SESSION_MISMATCH);
 }
 
 [[maybe_unused]] void TestRestartAfterCutLog(NDDisk::TDDiskConfig ddiskConfig) {
@@ -963,14 +1241,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendAndGrab<NDDisk::TEvReadResult>(
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at tablet=" << tabletId << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds[numTablets];
@@ -1062,7 +1337,6 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     }
 
     // Phase 2: sync DDisk0 -> DDisk1
-    ui32 totalSyncs = 0;
     const auto srcDDiskId = std::make_tuple(ctx.NodeId, ctx.Disks[0].PDiskId, ctx.Disks[0].SlotId);
     for (ui32 t = 0; t < numTablets; ++t) {
         const ui64 srcGuid = *tablets[t].Src.DDiskInstanceGuid;
@@ -1081,13 +1355,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
                 syncEv->AddSegmentFromDDisk(srcDDiskId, srcGuid, NDDisk::TBlockSelector(v,
                     startBlock * MinBlockSize, (endBlock - startBlock) * MinBlockSize));
             }
-            ctx.SendTo(1, syncEv.release());
-            totalSyncs++;
+            auto syncResult = ctx.SendToAndGrab<NDDisk::TEvSyncResult>(1, syncEv.release());
+            AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
         }
-    }
-    for (ui32 i = 0; i < totalSyncs; ++i) {
-        auto syncResult = ctx.Grab<NDDisk::TEvSyncResult>();
-        AssertStatus<NDDisk::TEvSyncResult>(syncResult, TReplyStatus::OK);
     }
 
     // Phase 3: read from DDisk1 and verify
@@ -1100,14 +1370,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
                 auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(1,
                     new NDDisk::TEvRead(tablets[t].Dst, {v, b * MinBlockSize, MinBlockSize}, {true}));
-                AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-                const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+                const TString actual = AssertReadResult(readResult, expected);
                 ui32 readValue = 0;
                 std::memcpy(&readValue, actual.data(), sizeof(readValue));
                 UNIT_ASSERT_VALUES_EQUAL_C(readValue, tabletId,
                     "tablet id mismatch at tablet=" << tabletId << " vchunk=" << v << " block=" << b);
-                UNIT_ASSERT_VALUES_EQUAL(actual, expected);
             }
         }
     }
@@ -1120,26 +1387,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 // SAME PDisk 0 (different VDisk owner, different SlotId) and tablet 3 writes to it --
 // this proves the restarted PDisk is functional through a fresh owner.
 //
-// Before RestartPDisk we quiesce trailing owner-stamped PDisk traffic from phase 1
-// (chunk-reserve refill / chunk-map log). Otherwise those replies can arrive after
-// restart as INVALID_ROUND and Terminate the zombie DDisk before the page-1 writes
-// that this test expects to still succeed.
-//
-// Variant restartDDisk == false (zombie):
-//   The original DDisk slot 0 keeps running. Its OwnerRound is now stale, so the first
-//   reply it gets back from PDisk for any owner-stamped request will be INVALID_ROUND,
-//   and CheckPDiskReply switches it to StateFuncTerminate. From that point client
-//   requests are silently dropped (no reply). We attempt vchunk 0 page 1 writes first:
-//   the chunk is already committed, so uring bypasses PDisk and ChunkWriteRaw (PDisk
-//   fallback) does not enforce OwnerRound — both modes still get a reply. Then vchunk 1
-//   page 0 writes need a fresh chunk reservation that always goes through PDisk, so this
-//   is guaranteed to zombify and produce no reply in either mode. The test must NOT crash.
-//
-// Variant restartDDisk == true (warden-style recovery):
-//   After the PDisk restart we also restart DDisk slot 0; the new DDisk instance uses
-//   the next OwnerRound and rebuilds its chunk map from the on-disk log. Tablets 1 and
-//   2 reconnect, write fresh vchunks, and we read everything back to confirm pre- and
-//   post-restart data survived.
+// Before RestartPDisk we quiesce trailing owner-stamped traffic. A requested
+// production restart drains DDisks first; this fixture also exercises direct
+// PDisk restart with a stale DDisk. Its next allocation must fail, and further
+// requests must receive SESSION_MISMATCH instead of disappearing.
+// With restartDDisk=true the new owner recovers committed data and continues I/O.
 [[maybe_unused]] void TestPDiskRestartWithReservedChunks(NDDisk::TDDiskConfig ddiskConfig,
         bool restartDDisk) {
     constexpr ui32 baseTabletId = 901;
@@ -1171,15 +1423,12 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 
         auto readResult = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
             new NDDisk::TEvRead(creds, {vchunkIdx, blockInChunk * MinBlockSize, MinBlockSize}, {true}));
-        AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
-
-        const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
+        const TString actual = AssertReadResult(readResult, expected);
         ui32 readTabletId = 0;
         std::memcpy(&readTabletId, actual.data(), sizeof(readTabletId));
         UNIT_ASSERT_VALUES_EQUAL_C(readTabletId, tabletId,
             "tablet id mismatch at disk=" << diskIdx << " tablet=" << tabletId
             << " vchunk=" << vchunkIdx << " block=" << blockInChunk);
-        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     };
 
     NDDisk::TQueryCredentials creds1 = ConnectTo(ctx, 0, baseTabletId + 0, 1);
@@ -1191,7 +1440,7 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     writeBlock(0, creds2, baseTabletId + 1, 0, 0);
 
     // Finish trailing chunk-reserve refill / log replies from phase 1 before restarting
-    // PDisk, so the zombie path is not Terminated by INVALID_ROUND on those replies
+    // PDisk, so the zombie path has not begun stopping on INVALID_ROUND on those replies
     // before the page-1 writes below.
     ctx.QuiesceInFlightPDiskOps();
 
@@ -1211,6 +1460,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     const ui32 disk2Idx = ctx.AddDDiskOnPDisk(0);
     NDDisk::TQueryCredentials creds3 = ConnectTo(ctx, disk2Idx, baseTabletId + 2, 1);
     writeBlock(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+    // Prove the restarted PDisk is usable through a fresh owner before any
+    // zombie-slot I/O. Reserved chunks may already have been formatted
+    // (invariant 3: PDisk is not restarted separately from DDisk), so later
+    // zombie uring writes can land on those same physical offsets.
+    readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
 
     if (restartDDisk) {
         // Reconnect tablets 1 and 2 to the new DDisk slot 0 actor (their old credentials
@@ -1232,32 +1486,41 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         return;
     }
 
-    // Zombie variant: DDisk slot 0 is still the stale instance. Its OwnerRound is
-    // stale so any request that goes through PDisk (chunk reserve, log) gets
-    // INVALID_ROUND and CheckPDiskReply switches DDisk to StateFuncTerminate.
-    // After that the actor silently drops all further messages.
-    //
-    // Writes to vchunk 0 page 1 succeed in both modes: the chunk is already
-    // committed, so uring bypasses PDisk and ChunkWriteRaw does not enforce
-    // OwnerRound. QuiesceInFlightPDiskOps above ensures we are not already
-    // Terminated by a trailing phase-1 reserve/log reply.
-    writeBlock(0, creds1, baseTabletId + 0, 0, 1);
-    writeBlock(0, creds2, baseTabletId + 1, 0, 1);
+    // Force an owner-stamped allocation through the restarted PDisk. A stale
+    // router may reject its I/O first; either failure must stop the old actor.
+    auto stale = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
+        makeWrite(creds1, baseTabletId + 0, 1, 0).release());
+    UNIT_ASSERT(stale->Get()->Record.GetStatus() == TReplyStatus::ERROR
+        || stale->Get()->Record.GetStatus() == TReplyStatus::SESSION_MISMATCH);
+    auto rejected = ctx.SendToAndGrab<NDDisk::TEvWriteResult>(0,
+        makeWrite(creds2, baseTabletId + 1, 1, 0).release());
+    AssertStatus<NDDisk::TEvWriteResult>(rejected, TReplyStatus::SESSION_MISMATCH);
 
-    // Writes to vchunk 1 need a fresh chunk reservation that goes through PDisk,
-    // hits INVALID_ROUND, and DDisk zombifies -- no reply in either mode.
+}
 
-    ctx.DecreaseDispatchTimeout();
+// A PDisk formatted with an explicit physical chunk size gives DDisk exactly that much usable
+// space per chunk: the last block of the chunk is writable and one block past it is out of bounds.
+[[maybe_unused]] void TestPhysicalChunkSizeFullChunkIo(NDDisk::TDDiskConfig ddiskConfig) {
+    TTestContext ctx(std::move(ddiskConfig), NLog::PRI_ERROR, 1, ChunkSize);
+    NDDisk::TQueryCredentials creds = Connect(ctx, 1101, 1);
 
-    ctx.SendTo(0, makeWrite(creds1, baseTabletId + 0, 1, 0).release());
-    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
+    const TString data = MakeData('P', MinBlockSize);
+    const ui32 lastBlockOffset = ChunkSize - MinBlockSize;
 
-    ctx.SendTo(0, makeWrite(creds2, baseTabletId + 1, 1, 0).release());
-    ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
+    auto w = std::make_unique<NDDisk::TEvWrite>(creds,
+        NDDisk::TBlockSelector(0, lastBlockOffset, MinBlockSize), NDDisk::TWriteInstruction(0));
+    w->AddPayloadThenChecksum(MakeAlignedRope(data));
+    AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(w.release()), TReplyStatus::OK);
 
-    // Tablet 3's writes on the new DDisk slot are still readable -- proves the
-    // restarted PDisk is functional and the zombie DDisk slot didn't corrupt it.
-    readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+    auto rr = ctx.SendAndGrab<NDDisk::TEvReadResult>(
+        new NDDisk::TEvRead(creds, {0, lastBlockOffset, MinBlockSize}, {true}));
+    AssertReadResult(rr, data);
+
+    auto beyond = std::make_unique<NDDisk::TEvWrite>(creds,
+        NDDisk::TBlockSelector(0, ChunkSize, MinBlockSize), NDDisk::TWriteInstruction(0));
+    beyond->AddPayloadThenChecksum(MakeAlignedRope(data));
+    AssertStatus<NDDisk::TEvWriteResult>(ctx.SendAndGrab<NDDisk::TEvWriteResult>(beyond.release()),
+        TReplyStatus::INCORRECT_REQUEST);
 }
 
 // Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other
@@ -1303,15 +1566,13 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
         for (ui64 vchunk : {0u, 1u}) {
             auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
                 new NDDisk::TEvRead(c1, {vchunk, 0, MinBlockSize}, {true}));
-            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), data1);
+            AssertReadResult(rr, data1);
         }
         // Tablet2 should read zeroes from both VChunks (chunks were freed)
         for (ui64 vchunk : {0u, 1u}) {
             auto rr = ctx.SendToAndGrab<NDDisk::TEvReadResult>(diskIdx,
                 new NDDisk::TEvRead(c2, {vchunk, 0, MinBlockSize}, {true}));
-            AssertStatus<NDDisk::TEvReadResult>(rr, TReplyStatus::OK);
-            UNIT_ASSERT_VALUES_EQUAL(rr->Get()->GetPayload(0).ConvertToString(), zeroes);
+            AssertReadResult(rr, zeroes);
         }
     };
 

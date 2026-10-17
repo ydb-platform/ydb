@@ -30,7 +30,6 @@ public:
     {
     }
 
-public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
 

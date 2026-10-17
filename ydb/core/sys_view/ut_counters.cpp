@@ -1,6 +1,7 @@
 #include "ut_common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr {
@@ -78,6 +79,143 @@ void CreateTables(TTestEnv& env) {
 void CreateDatabasesAndTables(TTestEnv& env) {
     CreateDatabases(env);
     CreateTables(env);
+}
+
+void CreateDetailedDatabase(TTestEnv& env, const TString& databaseName) {
+    auto subdomain = GetSubDomainDeclareSettings(databaseName);
+    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+        env.GetClient().CreateExtSubdomain("/Root", subdomain));
+
+    env.GetTenants().Run("/Root/" + databaseName, 1);
+
+    auto subdomainSettings = GetSubDomainDefaultSettings(databaseName, env.GetPools());
+    subdomainSettings.SetExternalSysViewProcessor(true);
+    subdomainSettings.SetExternalSchemeShard(true);
+    subdomainSettings.SetTablesMetricsLevel(
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+    UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+        env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
+}
+
+void CreateDetailedTable(TTestEnv& env, const TString& databaseName, const TString& tableName) {
+    auto driverConfig = TDriverConfig()
+        .SetEndpoint(env.GetEndpoint())
+        .SetDiscoveryMode(EDiscoveryMode::Off);
+    auto driver = TDriver(driverConfig);
+
+    const TString databasePath = "/Root/" + databaseName;
+    const TString tablePath = databasePath + "/" + tableName;
+
+    TTableClient client(driver, TClientSettings().Database(databasePath));
+    auto session = client.CreateSession().GetValueSync().GetSession();
+    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(TStringBuilder() << R"(
+        CREATE TABLE `)" << tablePath << R"(` (
+            Key Uint64,
+            Value String,
+            PRIMARY KEY (Key)
+        );
+    )").GetValueSync());
+
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(TStringBuilder() << R"(
+        REPLACE INTO `)" << tablePath << R"(` (Key, Value) VALUES
+            (1u, "A"),
+            (2u, "B"),
+            (3u, "C");
+    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+}
+
+// The public ydb_detailed tree's fixed hops above table=: host="" always
+// (processor-move protection, mirrors ydb_serverless), then
+// monitoring_project_id=<value> (present only once the DB user attribute is
+// set), then database=<path>. Uses FindSubgroup (never GetSubgroup, which
+// would create the group and make the absence assertions vacuous).
+::NMonitoring::TDynamicCounterPtr FindDetailedTableGroup(
+    ::NMonitoring::TDynamicCounterPtr ydbDetailedRoot,
+    const TString& monitoringProjectId,
+    const TString& databasePath,
+    const TString& relativeTablePath)
+{
+    if (!ydbDetailedRoot) {
+        return nullptr;
+    }
+    auto hostGroup = ydbDetailedRoot->FindSubgroup("host", "");
+    if (!hostGroup) {
+        return nullptr;
+    }
+    auto projectGroup = hostGroup->FindSubgroup("monitoring_project_id", monitoringProjectId);
+    if (!projectGroup) {
+        return nullptr;
+    }
+    auto databaseGroup = projectGroup->FindSubgroup("database", databasePath);
+    if (!databaseGroup) {
+        return nullptr;
+    }
+    return databaseGroup->FindSubgroup("table", relativeTablePath);
+}
+
+// The first tablet_id=<id> child of a table= group, whichever id it turns
+// out to be (the test does not pin down DataShard's own choice of tablet id).
+::NMonitoring::TDynamicCounterPtr FindAnyTabletIdGroup(::NMonitoring::TDynamicCounterPtr tableGroup) {
+    TString tabletId;
+    tableGroup->EnumerateSubgroups([&](const TString& name, const TString& value) {
+        if (name == "tablet_id" && tabletId.empty()) {
+            tabletId = value;
+        }
+    });
+    if (tabletId.empty()) {
+        return nullptr;
+    }
+    return tableGroup->FindSubgroup("tablet_id", tabletId);
+}
+
+// The table= group of the public ydb_detailed tree that publishes
+// table.datashard.used_core_percents, on whichever node currently hosts the
+// SysView Processor, and the number of tablets across its buckets. The given
+// group (one of a previous SysView Processor incarnation, which lingers until
+// it is detached) is skipped. Returns nullptr if nothing is published yet.
+std::pair<::NMonitoring::TDynamicCounterPtr, ui64> FindUsedCorePercents(
+    TTestEnv& env,
+    const TString& databasePath,
+    const TString& relativeTablePath,
+    const ::NMonitoring::TDynamicCounterPtr& skippedGroup)
+{
+    auto* runtime = env.GetServer().GetRuntime();
+    for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+        auto counters = runtime->GetAppData(nodeId).Counters;
+        auto root = GetServiceCounters(counters, "ydb_detailed", false);
+
+        auto tableGroup = FindDetailedTableGroup(root, "proj1", databasePath, relativeTablePath);
+        if (!tableGroup || tableGroup == skippedGroup) {
+            continue;
+        }
+        auto histogram = tableGroup->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        if (!histogram) {
+            continue;
+        }
+        auto snapshot = histogram->Snapshot();
+        ui64 total = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            total += snapshot->Value(i);
+        }
+        Cerr << "node " << nodeId << ", used_core_percents total " << total << Endl;
+        return {tableGroup, total};
+    }
+    return {nullptr, 0};
+}
+
+// Kill the tablet, so that it restarts with an empty in-memory state. RebootTablet
+// needs a simulated runtime, and this environment runs real threads
+void KillTablet(TTestEnv& env, ui64 tabletId) {
+    auto* runtime = env.GetServer().GetRuntime();
+    const TActorId sender = runtime->AllocateEdgeActor();
+
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
+    UNIT_ASSERT(ev && ev->Get()->Tablet);
+    runtime->Send(new IEventHandle(ev->Get()->Tablet, sender, new TEvents::TEvPoisonPill()));
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
 }
 
 } // namespace
@@ -177,6 +315,206 @@ Y_UNIT_TEST_SUITE(DbCounters) {
             }
 
             if (checkDb1 && checkDb2) {
+                return;
+            }
+
+            Sleep(TDuration::Seconds(5));
+        }
+
+        UNIT_ASSERT_C(false, "out of iterations");
+    }
+
+    // Cross-node detailed per-table metrics, published by the SysView
+    // Processor into the public ydb_detailed group (step 13). host="" is
+    // always present (processor-move protection, mirrors ydb_serverless),
+    // monitoring_project_id=<value> comes from the DB user attribute of the
+    // same name (ATTR_MONITORING_PROJECT_ID) and is absent when unset.
+    Y_UNIT_TEST(DetailedTables) {
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+
+        CreateDetailedDatabase(env, "Database1");
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj1"}}));
+        CreateDetailedTable(env, "Database1", "Table1");
+
+        const TString databasePath = "/Root/Database1";
+        const TString relativeTablePath = "Table1";
+        const TString projectId = "proj1";
+
+        for (size_t iter = 0; iter < 30; ++iter) {
+            Cerr << "iteration " << iter << Endl;
+
+            bool isGood = false;
+
+            for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
+                auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
+                auto root = GetServiceCounters(counters, "ydb_detailed", false);
+
+                auto tableGroup = FindDetailedTableGroup(root, projectId, databasePath, relativeTablePath);
+                if (!tableGroup) {
+                    continue;
+                }
+
+                {
+                    TStringStream ss;
+                    tableGroup->OutputHtml(ss);
+                    Cerr << "node " << nodeId << ", table group:" << Endl << ss.Str() << Endl;
+                }
+
+                // A table-level metric present and > 0 directly on table=
+                auto rowCount = tableGroup->FindNamedCounter("name", "table.datashard.row_count");
+                if (!rowCount || rowCount->Val() <= 0) {
+                    continue;
+                }
+
+                // A partition leaf: some tablet_id=<id>/follower_id=0 carrying
+                // the metric under its partition-scope name
+                auto tabletGroup = FindAnyTabletIdGroup(tableGroup);
+                if (!tabletGroup) {
+                    continue;
+                }
+                auto followerGroup = tabletGroup->FindSubgroup("follower_id", "0");
+                if (!followerGroup) {
+                    continue;
+                }
+                auto leafRowCount = followerGroup->FindNamedCounter("name", "table.datashard.partition.row_count");
+                if (!leafRowCount) {
+                    continue;
+                }
+
+                // Neither a detailed_metrics= hop nor a replicas_only group is
+                // ever materialized in the public tree (decision S3)
+                UNIT_ASSERT(!tableGroup->FindSubgroup("detailed_metrics"));
+                UNIT_ASSERT(!tableGroup->FindSubgroup("follower_id", "replicas_only"));
+
+                isGood = true;
+                break;
+            }
+
+            if (isGood) {
+                return;
+            }
+
+            Sleep(TDuration::Seconds(5));
+        }
+
+        UNIT_ASSERT_C(false, "out of iterations");
+    }
+
+    // used_core_percents is a non-derivative histogram (tablets per CPU-% bucket) that
+    // goes up and down. Every node report carries its full current state, so
+    // the SysView Processor rebuilds it after a restart even though an idle
+    // tablet stays in the same bucket and its state never changes.
+    // A smoke check: it tells the fix apart only while the only tablet stays idle
+    // in one bucket; ProcessorRestartRestoresIdleTabletsFromNextReports in
+    // ydb/core/tablet/detailed_metrics covers the same case deterministically.
+    Y_UNIT_TEST(DetailedTablesUsedCorePercentsSurvivesProcessorRestart) {
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+
+        CreateDetailedDatabase(env, "Database1");
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj1"}}));
+        CreateDetailedTable(env, "Database1", "Table1");
+
+        const TString databasePath = "/Root/Database1";
+        const TString relativeTablePath = "Table1";
+
+        auto waitForHistogram = [&](const char* stage, const ::NMonitoring::TDynamicCounterPtr& skippedGroup) {
+            for (size_t iter = 0; iter < 30; ++iter) {
+                Cerr << stage << ", iteration " << iter << Endl;
+                auto [tableGroup, total] = FindUsedCorePercents(env, databasePath, relativeTablePath, skippedGroup);
+                // The table has a single tablet, neither lost nor counted twice
+                if (tableGroup && total == 1) {
+                    return tableGroup;
+                }
+                Sleep(TDuration::Seconds(5));
+            }
+            UNIT_ASSERT_C(false, TStringBuilder()
+                << "used_core_percents histogram does not hold the table's tablet " << stage << ", out of iterations");
+            return ::NMonitoring::TDynamicCounterPtr();
+        };
+
+        auto groupBeforeRestart = waitForHistogram("before SysView Processor restart", nullptr);
+
+        auto description = DescribePath(*env.GetServer().GetRuntime(), TString(databasePath));
+        const ui64 processorId = description.GetDomainDescription().GetProcessingParams().GetSysViewProcessor();
+        UNIT_ASSERT_C(processorId, "SysView Processor tablet id not found");
+        Cerr << "killing SysView Processor " << processorId << Endl;
+        KillTablet(env, processorId);
+
+        // The restarted SysView Processor publishes into a group of its own,
+        // rebuilt from the node reports that follow the restart alone
+        waitForHistogram("after SysView Processor restart", groupBeforeRestart);
+    }
+
+    // Changing the monitoring_project_id user attribute moves the whole
+    // per-database tree under the new value and leaves nothing behind under
+    // the old one.
+    Y_UNIT_TEST(DetailedTablesMonitoringProjectIdChange) {
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+
+        CreateDetailedDatabase(env, "Database1");
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj1"}}));
+        CreateDetailedTable(env, "Database1", "Table1");
+
+        const TString databasePath = "/Root/Database1";
+        const TString relativeTablePath = "Table1";
+
+        // Wait until the tree is visible under proj1, remembering which node
+        // (the one hosting Database1's SysView Processor) it showed up on
+        ui32 foundNodeId = Max<ui32>();
+        for (size_t iter = 0; iter < 30 && foundNodeId == Max<ui32>(); ++iter) {
+            Cerr << "iteration " << iter << " (waiting for proj1)" << Endl;
+
+            for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
+                auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
+                auto root = GetServiceCounters(counters, "ydb_detailed", false);
+
+                auto tableGroup = FindDetailedTableGroup(root, "proj1", databasePath, relativeTablePath);
+                if (tableGroup && tableGroup->FindNamedCounter("name", "table.datashard.row_count")) {
+                    foundNodeId = nodeId;
+                    break;
+                }
+            }
+
+            if (foundNodeId == Max<ui32>()) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+        UNIT_ASSERT_C(foundNodeId != Max<ui32>(), "out of iterations waiting for proj1");
+
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj2"}}));
+
+        for (size_t iter = 0; iter < 30; ++iter) {
+            Cerr << "iteration " << iter << " (waiting for the move to proj2)" << Endl;
+
+            auto counters = env.GetServer().GetRuntime()->GetAppData(foundNodeId).Counters;
+            auto root = GetServiceCounters(counters, "ydb_detailed", false);
+
+            auto newTableGroup = FindDetailedTableGroup(root, "proj2", databasePath, relativeTablePath);
+            bool moved = newTableGroup && newTableGroup->FindNamedCounter("name", "table.datashard.row_count");
+
+            // Nothing left behind under the old monitoring_project_id: either
+            // the group is gone entirely, or (if it survives empty) it holds
+            // no database= child anymore
+            bool leftBehind = false;
+            if (root) {
+                auto hostGroup = root->FindSubgroup("host", "");
+                if (hostGroup) {
+                    auto oldProjectGroup = hostGroup->FindSubgroup("monitoring_project_id", "proj1");
+                    if (oldProjectGroup && oldProjectGroup->FindSubgroup("database")) {
+                        leftBehind = true;
+                    }
+                }
+            }
+
+            if (moved && !leftBehind) {
                 return;
             }
 

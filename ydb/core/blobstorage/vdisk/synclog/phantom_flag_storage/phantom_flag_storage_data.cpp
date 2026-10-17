@@ -2,6 +2,8 @@
 
 #include <util/generic/overloaded.h>
 
+#include <cstddef>
+
 namespace NKikimr::NSyncLog {
 
 TPhantomFlagStorageItem TPhantomFlagStorageItem::CreateSkip(ui32 skipSize) {
@@ -75,7 +77,15 @@ void TPhantomFlagStorageItem::Serialize(TString* buffer) const {
         [&](const TThreshold& threshold) {
             constexpr static EPhantomFlagStorageItem type = EPhantomFlagStorageItem::Threshold;
             buffer->append(reinterpret_cast<const char*>(&type), sizeof(type));
-            buffer->append(reinterpret_cast<const char*>(&threshold), sizeof(threshold));
+            // Preserve the existing object-layout format while making its padding deterministic.
+            TString serialized(sizeof(threshold), '\0');
+            char* data = serialized.Detach();
+            WriteUnaligned<ui64>(data + offsetof(TThreshold, TabletId), threshold.TabletId);
+            WriteUnaligned<ui8>(data + offsetof(TThreshold, Channel), threshold.Channel);
+            WriteUnaligned<ui32>(data + offsetof(TThreshold, Generation), threshold.Generation);
+            WriteUnaligned<ui32>(data + offsetof(TThreshold, Step), threshold.Step);
+            WriteUnaligned<ui8>(data + offsetof(TThreshold, OrderNumber), threshold.OrderNumber);
+            buffer->append(serialized);
         },
     }, Data);
 }

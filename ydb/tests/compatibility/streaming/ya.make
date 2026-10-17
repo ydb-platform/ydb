@@ -1,4 +1,7 @@
 PY3TEST()
+
+STYLE_PYTHON()
+
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_TEST_FILES()
@@ -19,7 +22,6 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(
     ydb/tests/library/compatibility/binaries
-    ydb/tests/tools/pq_read
 )
 
 PEERDIR(

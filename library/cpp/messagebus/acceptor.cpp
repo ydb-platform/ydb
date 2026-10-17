@@ -9,6 +9,8 @@
 #include <util/system/error.h>
 #include <util/system/yassert.h>
 
+#include <memory>
+
 LWTRACE_USING(LWTRACE_MESSAGEBUS_PROVIDER)
 
 using namespace NActor;
@@ -58,7 +60,7 @@ void TAcceptor::Act(TDefaultTag) {
         return;
     }
 
-    THolder<TOpaqueAddr> addr(new TOpaqueAddr());
+    std::unique_ptr<TOpaqueAddr> addr(new TOpaqueAddr());
     SOCKET acceptedSocket = accept(Channel->GetSocket(), addr->MutableAddr(), addr->LenPtr());
 
     int acceptErrno = LastSystemError();
@@ -78,7 +80,7 @@ void TAcceptor::Act(TDefaultTag) {
             SetCloseOnExec(s, true);
             SetNonBlock(s, true);
             if (Session->Config.SocketToS >= 0) {
-                SetSocketToS(s, addr.Get(), Session->Config.SocketToS);
+                SetSocketToS(s, addr.get(), Session->Config.SocketToS);
             }
         } catch (...) {
             // It means that connection was reset just now
@@ -89,7 +91,7 @@ void TAcceptor::Act(TDefaultTag) {
         {
             TOnAccept onAccept;
             onAccept.s = s.Release();
-            onAccept.addr = TNetAddr(addr.Release());
+            onAccept.addr = TNetAddr(addr.release());
             onAccept.now = now;
 
             LWPROBE(Accepted, ToString(onAccept.addr));

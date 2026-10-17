@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
             TDuration::Seconds(0),
             errorsInfo.FromFirstError);
         UNIT_ASSERT_VALUES_EQUAL(
-            TDuration::Seconds(0),
+            TDuration::Seconds(2),
             errorsInfo.FromLastError);
         UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
     }

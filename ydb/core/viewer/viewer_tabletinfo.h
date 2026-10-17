@@ -89,6 +89,14 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        // node_id is normally validated by TBase::Bootstrap(), but this handler
+        // calls it at the very end. So the check is done up front.
+        if (TBase::IsStrictDatabaseOnlyRequest()) {
+            const auto nodeIds = GetNodeIdsFromParams();
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
+                return;
+            }
+        }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             TPathId domainRoot;
             if (AppData()) {
@@ -313,6 +321,9 @@ public:
                     if (domainDescription.GetProcessingParams().HasBackupController()) {
                         Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetBackupController()] = NKikimrTabletBase::TTabletTypes::BackupController;
                     }
+                    if (domainDescription.GetProcessingParams().HasWasmCompileController()) {
+                        Tablets[pathDescription.GetDomainDescription().GetProcessingParams().GetWasmCompileController()] = NKikimrTabletBase::TTabletTypes::WasmCompileController;
+                    }
                     TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
                     auto* domain = domains->GetDomain();
                     if (describeResult->GetRecord().GetPathOwnerId() == domain->SchemeRoot && describeResult->GetRecord().GetPathId() == 1) {
@@ -339,8 +350,12 @@ public:
         }
         if (!Tablets.empty()) {
             TBase::Bootstrap();
-            for (auto tablet : Tablets) {
-                Request->Record.AddFilterTabletId(tablet.first);
+            // TBase::Bootstrap() may reply and pass away without building the request,
+            // for example when nothing is left to ask after filtering the nodes by database
+            if (!ReplySent) {
+                for (const auto& [tabletId, tabletType] : Tablets) {
+                    Request->Record.AddFilterTabletId(tabletId);
+                }
             }
         }
         RequestDone();

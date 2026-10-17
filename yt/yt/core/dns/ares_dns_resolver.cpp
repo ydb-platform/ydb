@@ -19,9 +19,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
-#include <library/cpp/yt/threading/notification_handle.h>
-
 #include <library/cpp/yt/system/handle_eintr.h>
+#include <library/cpp/yt/system/notification_handle.h>
 
 #include <ares.h>
 
@@ -127,7 +126,7 @@ namespace {
 TError MakeCanceledError(TGuid requestId)
 {
     return TError(NYT::EErrorCode::Canceled, "Ares DNS resolver is stopped")
-        << TErrorAttribute("request_id", requestId);
+        .With("request_id", requestId);
 }
 
 } // namespace
@@ -206,7 +205,7 @@ private:
 #ifdef YT_DNS_RESOLVER_USE_EPOLL
     int EpollFD_ = -1;
 #endif
-    NThreading::TNotificationHandle WakeupHandle_;
+    TNotificationHandle WakeupHandle_;
 
     ares_channel Channel_;
     ares_options Options_;
@@ -741,9 +740,9 @@ private:
         return TError(
             "Ares DNS resolve failed for %Qv",
             request->HostName)
-            << TErrorAttribute("enable_ipv4", request->Options.EnableIPv4)
-            << TErrorAttribute("enable_ipv6", request->Options.EnableIPv6)
-            << TError(TRuntimeFormat(ares_strerror(status)));
+            .With("enable_ipv4", request->Options.EnableIPv4)
+            .With("enable_ipv6", request->Options.EnableIPv6)
+            .With(TError(TRuntimeFormat(ares_strerror(status))));
     }
 
     void FailRequest(

@@ -3,12 +3,15 @@
 #include "defs.h"
 #include "events.h"
 #include <ydb/core/protos/statestorage.pb.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/numerical_maybe.h>
 #include <ydb/library/actors/interconnect/event_filter.h>
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+
+namespace NKikimrConfig {
+    class TStateStorageConfig;
+}
 
 namespace NKikimr {
 

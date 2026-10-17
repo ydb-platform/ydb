@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -67,16 +68,23 @@ void WaitUntil(NActors::TTestActorRuntime& runtime, TCondition&& condition, TDur
     UNIT_ASSERT_C(runtime.DispatchEvents(opts, deadline), "WaitUntil condition not met before deadline");
 }
 
-TDriverConfig MakeAsyncDriverConfig(const TString& endpoint) {
+// With UseRealThreads=false the gRPC server is only served while DispatchEvents is
+// pumped, and SDK ListEndpoints (Sync/Async discovery) never completes — StreamRead
+// never opens and the read session hangs silently. EDiscoveryMode::Off routes RPCs
+// straight to the configured endpoint (like CreateSimpleWriter's
+// ClusterDiscoveryMode::Off), so StreamRead starts without any discovery round-trip.
+TDriverConfig MakeNoDiscoveryDriverConfig(const TString& endpoint) {
     TDriverConfig config;
     config.SetEndpoint(endpoint);
     config.SetDatabase("/Root");
     config.SetAuthToken("root@builtin");
-    config.SetDiscoveryMode(EDiscoveryMode::Async);
+    config.SetDiscoveryMode(EDiscoveryMode::Off);
     return config;
 }
 
-ui64 ResolvePqTabletId(::NPersQueue::TTestServer& server, const TString& topicPath, ui32 partition = 0) {
+NKikimrSchemeOp::TPersQueueGroupDescription NavigatePqGroup(
+        ::NPersQueue::TTestServer& server, const TString& topicPath)
+{
     auto& runtime = *server.CleverServer->GetRuntime();
     const auto edge = runtime.AllocateEdgeActor();
 
@@ -98,7 +106,12 @@ ui64 ResolvePqTabletId(::NPersQueue::TTestServer& server, const TString& topicPa
 
     auto& front = response->Request->ResultSet.front();
     UNIT_ASSERT(front.PQGroupInfo);
-    for (const auto& p : front.PQGroupInfo->Description.GetPartitions()) {
+    return front.PQGroupInfo->Description;
+}
+
+ui64 ResolvePqTabletId(::NPersQueue::TTestServer& server, const TString& topicPath, ui32 partition = 0) {
+    const auto& description = NavigatePqGroup(server, topicPath);
+    for (const auto& p : description.GetPartitions()) {
         if (p.GetPartitionId() == partition) {
             return p.GetTabletId();
         }
@@ -107,10 +120,17 @@ ui64 ResolvePqTabletId(::NPersQueue::TTestServer& server, const TString& topicPa
     return 0;
 }
 
+ui64 ResolvePqrbTabletId(::NPersQueue::TTestServer& server, const TString& topicPath) {
+    const ui64 tabletId = NavigatePqGroup(server, topicPath).GetBalancerTabletID();
+    UNIT_ASSERT_C(tabletId != 0, "balancer tablet id is zero");
+    return tabletId;
+}
+
 struct TDirectReadRestoreEnv {
     std::unique_ptr<::NPersQueue::TTestServer> Server;
     TString Endpoint;
     ui64 PqTabletId = 0;
+    ui64 PqrbTabletId = 0;
 
     // Drop restore Prepare/Publish responses to keep restore stuck in Prepare (Forget race).
     std::atomic<ui64> HoldRestorePreparePublish{0};
@@ -131,6 +151,28 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> HeldForgetResponses{0};
     TVector<THolder<IEventHandle>> HeldForgetEvents;
 
+    // Hold TEvRegisterDirectReadSession (PQ → dread cache) to model late Register after re-lock.
+    std::atomic<ui64> HoldRegisterDirectRead{0};
+    std::atomic<ui64> HeldRegisterDirectRead{0};
+    TVector<THolder<IEventHandle>> HeldRegisterDirectReadEvents;
+    // Stage/Publish toward cache while Register is held (buffered until Register).
+    std::atomic<ui64> StageOrPublishWhileRegisterHeld{0};
+    std::atomic<ui64> StageWhileRegisterHeld{0};
+    std::atomic<ui64> PublishWhileRegisterHeld{0};
+    std::atomic<ui32> LastStageGenWhileRegisterHeld{0};
+    std::atomic<ui32> LastPublishGenWhileRegisterHeld{0};
+
+    // Hold TEvStageDirectReadData after Stage(M) is buffered so Stage(N) cannot upgrade pending.
+    std::atomic<ui64> HoldStageDirectRead{0};
+    std::atomic<ui64> HeldStageDirectRead{0};
+    TVector<THolder<IEventHandle>> HeldStageDirectReadEvents;
+
+    // Hold TEvDeregisterDirectReadSession so Stage(M) is not wiped by MarkSessionRetired on PQ
+    // reboot before Publish(N) lands (delayed teardown vs new-gen Publish).
+    std::atomic<ui64> HoldDeregisterDirectRead{0};
+    std::atomic<ui64> HeldDeregisterDirectRead{0};
+    TVector<THolder<IEventHandle>> HeldDeregisterDirectReadEvents;
+
     // Any TEvCloseSession with ErrorCode != OK (ENSURE, empty-queue CloseSessionAndDie, bad ack, …).
     // Teardown DropHooks() clears the observer before gRPC cancel, so shutdown noise is ignored.
     std::atomic<ui64> ErrorCloseSession{0};
@@ -142,6 +184,8 @@ struct TDirectReadRestoreEnv {
     std::atomic<ui64> DirectReadResponseCount{0};
     // Control-path DirectReadAck delivered to partition actor.
     std::atomic<ui64> DirectReadAckCount{0};
+    // TEvPartitionReady delivered to read session actor (proves WaitForData was reset).
+    std::atomic<ui64> PartitionReadyCount{0};
 
     // Prepare/Publish delivered while Forget responses are held (late reply onto Forget stage).
     std::atomic<ui64> LateNonForgetReplyDuringForget{0};
@@ -203,7 +247,7 @@ struct TDirectReadRestoreEnv {
         });
 
         RunWithDispatch(runtime, [&] {
-            TDriver driver(MakeAsyncDriverConfig(Endpoint));
+            TDriver driver(MakeNoDiscoveryDriverConfig(Endpoint));
             TTopicClient client(driver);
             auto status = client.CreateTopic(
                 kTopic,
@@ -225,12 +269,32 @@ struct TDirectReadRestoreEnv {
         });
 
         PqTabletId = ResolvePqTabletId(*Server, kTopicPath);
+        PqrbTabletId = ResolvePqrbTabletId(*Server, kTopicPath);
     }
 
     void InstallHooks() {
         auto& runtime = Runtime();
 
         runtime.SetEventFilter([this](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (HoldRegisterDirectRead.load()
+                    && ev->CastAsLocal<TEvPQ::TEvRegisterDirectReadSession>()) {
+                ++HeldRegisterDirectRead;
+                HeldRegisterDirectReadEvents.emplace_back(ev.Release());
+                return true;
+            }
+            if (HoldStageDirectRead.load()
+                    && ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
+                ++HeldStageDirectRead;
+                HeldStageDirectReadEvents.emplace_back(ev.Release());
+                return true;
+            }
+            if (HoldDeregisterDirectRead.load()
+                    && ev->CastAsLocal<TEvPQ::TEvDeregisterDirectReadSession>()) {
+                ++HeldDeregisterDirectRead;
+                HeldDeregisterDirectReadEvents.emplace_back(ev.Release());
+                return true;
+            }
+
             auto* msg = ev->CastAsLocal<TEvPersQueue::TEvResponse>();
             if (!msg || !msg->Record.HasPartitionResponse()) {
                 return false;
@@ -285,6 +349,22 @@ struct TDirectReadRestoreEnv {
             if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvDirectReadAck>()) {
                 ++DirectReadAckCount;
             }
+            if (ev->CastAsLocal<NGRpcProxy::V1::TEvPQProxy::TEvPartitionReady>()) {
+                ++PartitionReadyCount;
+            }
+            // While Register is delayed, Stage/Publish still reach the cache and are buffered
+            // until Register — tablet DirectRead state may already have advanced.
+            if (HoldRegisterDirectRead.load() && !HeldRegisterDirectReadEvents.empty()) {
+                if (auto* stage = ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>()) {
+                    ++StageOrPublishWhileRegisterHeld;
+                    ++StageWhileRegisterHeld;
+                    LastStageGenWhileRegisterHeld.store(stage->TabletGeneration);
+                } else if (auto* publish = ev->CastAsLocal<TEvPQ::TEvPublishDirectRead>()) {
+                    ++StageOrPublishWhileRegisterHeld;
+                    ++PublishWhileRegisterHeld;
+                    LastPublishGenWhileRegisterHeld.store(publish->TabletGeneration);
+                }
+            }
             return TTestActorRuntime::EEventAction::PROCESS;
         });
     }
@@ -316,6 +396,53 @@ struct TDirectReadRestoreEnv {
         HeldForgetEvents.clear();
     }
 
+    void ReleaseHeldRegisterDirectRead() {
+        HoldRegisterDirectRead.store(0);
+        auto& runtime = Runtime();
+        for (auto& ev : HeldRegisterDirectReadEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldRegisterDirectReadEvents.clear();
+    }
+
+    // Release only max-generation Register so Flush sees pending Stage(M)+Publish(N>M)
+    // without first applying Stage via an older Register(M).
+    void ReleaseHeldRegisterDirectReadHighestGenOnly() {
+        HoldRegisterDirectRead.store(0);
+        auto& runtime = Runtime();
+        ui32 maxGen = 0;
+        for (const auto& ev : HeldRegisterDirectReadEvents) {
+            if (const auto* reg = ev->Get<TEvPQ::TEvRegisterDirectReadSession>()) {
+                maxGen = Max(maxGen, reg->Generation);
+            }
+        }
+        for (auto& ev : HeldRegisterDirectReadEvents) {
+            const auto* reg = ev->Get<TEvPQ::TEvRegisterDirectReadSession>();
+            if (reg && reg->Generation == maxGen) {
+                runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+            }
+        }
+        HeldRegisterDirectReadEvents.clear();
+    }
+
+    void ReleaseHeldStages() {
+        HoldStageDirectRead.store(0);
+        auto& runtime = Runtime();
+        for (auto& ev : HeldStageDirectReadEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldStageDirectReadEvents.clear();
+    }
+
+    void ReleaseHeldDeregisters() {
+        HoldDeregisterDirectRead.store(0);
+        auto& runtime = Runtime();
+        for (auto& ev : HeldDeregisterDirectReadEvents) {
+            runtime.Send(ev.Release(), /*senderNodeIndex=*/0, /*viaActorSystem=*/true);
+        }
+        HeldDeregisterDirectReadEvents.clear();
+    }
+
     void DropHooks() {
         auto& runtime = Runtime();
         runtime.SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
@@ -323,6 +450,9 @@ struct TDirectReadRestoreEnv {
         HeldPrepareEvents.clear();
         HeldPublishEvents.clear();
         HeldForgetEvents.clear();
+        HeldRegisterDirectReadEvents.clear();
+        HeldStageDirectReadEvents.clear();
+        HeldDeregisterDirectReadEvents.clear();
     }
 
     void RebootPqTablet() {
@@ -330,6 +460,12 @@ struct TDirectReadRestoreEnv {
         const auto edge = runtime.AllocateEdgeActor();
         RebootTablet(runtime, PqTabletId, edge);
         // Callers WaitUntil for restore progress; DispatchEvents advances RESTART_PIPE_DELAY_MS.
+    }
+
+    void RebootPqrbTablet() {
+        auto& runtime = Runtime();
+        const auto edge = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, PqrbTabletId, edge);
     }
 };
 
@@ -383,6 +519,15 @@ struct TGrpcDirectReadClient {
         });
     }
 
+    void SendReadRequest(NActors::TTestActorRuntime& runtime, ui64 bytesSize = 100_KB) {
+        RunWithDispatch(runtime, [&] {
+            StreamReadMessage::FromClient readReq;
+            readReq.mutable_read_request()->set_bytes_size(bytesSize);
+            DR_ENSURE(ControlStream->Write(readReq));
+            return true;
+        });
+    }
+
     void AcceptAssign(NActors::TTestActorRuntime& runtime) {
         RunWithDispatch(runtime, [&] {
             StreamReadMessage::FromServer resp;
@@ -421,12 +566,14 @@ struct TGrpcDirectReadClient {
         });
     }
 
-    void StartDirectReadPartition(NActors::TTestActorRuntime& runtime) {
+    void StartDirectReadPartition(NActors::TTestActorRuntime& runtime, ui64 generation) {
         RunWithDispatch(runtime, [&] {
             StreamDirectReadMessage::FromClient req;
             auto& start = *req.mutable_start_direct_read_partition_session_request();
             start.set_partition_session_id(AssignId);
-            start.set_generation(Generation);
+            start.set_generation(generation);
+            // last_direct_read_id=0 → client has not advanced; cache should start from direct_read_id=1.
+            start.set_last_direct_read_id(0);
             DR_ENSURE(DirectStream->Write(req));
 
             StreamDirectReadMessage::FromServer resp;
@@ -435,7 +582,50 @@ struct TGrpcDirectReadClient {
                     || resp.server_message_case() != StreamDirectReadMessage::FromServer::kStartDirectReadPartitionSessionResponse) {
                 ythrow yexception() << "start direct partition failed: " << resp.ShortDebugString();
             }
+            Generation = generation;
             return true;
+        });
+    }
+
+    void StartDirectReadPartition(NActors::TTestActorRuntime& runtime) {
+        StartDirectReadPartition(runtime, Generation);
+    }
+
+    // After tablet reboot, RegisterDirectReadSession(newGen) destroys the old cache client
+    // and dread cache sends StopDirectReadPartitionSession on the data stream.
+    void ExpectStopDirectRead(NActors::TTestActorRuntime& runtime) {
+        RunWithDispatch(runtime, [&] {
+            StreamDirectReadMessage::FromServer resp;
+            DR_ENSURE(DirectStream->Read(&resp));
+            if (resp.server_message_case() != StreamDirectReadMessage::FromServer::kStopDirectReadPartitionSession) {
+                ythrow yexception() << "expected StopDirectReadPartitionSession, got "
+                                    << resp.ShortDebugString();
+            }
+            if (resp.stop_direct_read_partition_session().partition_session_id()
+                    != static_cast<i64>(AssignId)) {
+                ythrow yexception() << "StopDirectRead for unexpected partition_session_id: "
+                                    << resp.ShortDebugString();
+            }
+            return true;
+        });
+    }
+
+    ui64 ReadUpdatePartitionSession(NActors::TTestActorRuntime& runtime) {
+        return RunWithDispatch(runtime, [&] {
+            StreamReadMessage::FromServer resp;
+            DR_ENSURE(ControlStream->Read(&resp));
+            if (resp.server_message_case() != StreamReadMessage::FromServer::kUpdatePartitionSession) {
+                ythrow yexception() << "expected UpdatePartitionSession, got "
+                                    << resp.ShortDebugString();
+            }
+            if (resp.update_partition_session().partition_session_id()
+                    != static_cast<i64>(AssignId)) {
+                ythrow yexception() << "UpdatePartitionSession for unexpected partition_session_id: "
+                                    << resp.ShortDebugString();
+            }
+            const ui64 newGen = resp.update_partition_session().partition_location().generation();
+            Generation = newGen;
+            return newGen;
         });
     }
 
@@ -453,6 +643,62 @@ struct TGrpcDirectReadClient {
         });
     }
 
+    // Same as ReadDataNoAck but accepts any direct_read_id (new partition session after re-lock
+    // may have already bumped the id while Register was delayed).
+    void ReadNextDataNoAck(NActors::TTestActorRuntime& runtime) {
+        RunWithDispatch(runtime, [&] {
+            StreamDirectReadMessage::FromServer resp;
+            DR_ENSURE(DirectStream->Read(&resp));
+            if (resp.status() != Ydb::StatusIds::SUCCESS
+                    || resp.server_message_case() != StreamDirectReadMessage::FromServer::kDirectReadResponse
+                    || resp.direct_read_response().partition_session_id() != static_cast<i64>(AssignId)
+                    || resp.direct_read_response().direct_read_id() < 1) {
+                ythrow yexception() << "unexpected DirectReadResponse: " << resp.ShortDebugString();
+            }
+            return true;
+        });
+    }
+
+    // Non-blocking-ish: pump until DirectReadResponse or deadline. Returns false on timeout.
+    // On timeout cancels the DirectRead stream and waits up to 20s for the async Read to finish
+    // so it does not leak a pool thread or touch DirectStream during fixture teardown.
+    // Async errors are rethrown (not masked as timeout).
+    bool TryReadNextDataNoAck(NActors::TTestActorRuntime& runtime, TDuration timeout) {
+        auto future = NThreading::Async([&] {
+            StreamDirectReadMessage::FromServer resp;
+            if (!DirectStream->Read(&resp)) {
+                return false;
+            }
+            return resp.status() == Ydb::StatusIds::SUCCESS
+                && resp.server_message_case() == StreamDirectReadMessage::FromServer::kDirectReadResponse
+                && resp.direct_read_response().partition_session_id() == static_cast<i64>(AssignId)
+                && resp.direct_read_response().direct_read_id() >= 1;
+        }, DispatchPool());
+
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && !future.HasValue() && !future.HasException()) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+        }
+        const bool timedOut = !future.HasValue() && !future.HasException();
+        if (timedOut) {
+            if (DirectContext) {
+                DirectContext->TryCancel();
+            }
+            const TInstant cancelDeadline = TInstant::Now() + TDuration::Seconds(20);
+            while (TInstant::Now() < cancelDeadline && !future.HasValue() && !future.HasException()) {
+                runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+            }
+            if (!future.HasValue() && !future.HasException()) {
+                ythrow yexception() << "DirectRead cancel did not finish within 20s";
+            }
+        }
+        future.TryRethrow();
+        if (timedOut) {
+            return false;
+        }
+        return future.GetValueSync();
+    }
+
     void SendDirectReadAckNoWait(NActors::TTestActorRuntime& runtime, ui64 directReadId) {
         RunWithDispatch(runtime, [&] {
             StreamReadMessage::FromClient req;
@@ -460,6 +706,63 @@ struct TGrpcDirectReadClient {
             ack.set_partition_session_id(AssignId);
             ack.set_direct_read_id(directReadId);
             DR_ENSURE(ControlStream->Write(req));
+            return true;
+        });
+    }
+
+    // After PQRB death ProcessBalancerDead sends forceful Stop (graceful=false) and drops the
+    // partition without waiting for the client ack.
+    void ExpectForcefulStopAndConfirm(NActors::TTestActorRuntime& runtime) {
+        RunWithDispatch(runtime, [&] {
+            StreamReadMessage::FromServer resp;
+            DR_ENSURE(ControlStream->Read(&resp));
+            if (resp.server_message_case()
+                    != StreamReadMessage::FromServer::kStopPartitionSessionRequest) {
+                ythrow yexception() << "expected StopPartitionSessionRequest, got "
+                                    << resp.ShortDebugString();
+            }
+            const auto& stop = resp.stop_partition_session_request();
+            if (stop.graceful()) {
+                ythrow yexception() << "expected forceful Stop (graceful=false), got "
+                                    << resp.ShortDebugString();
+            }
+            if (stop.partition_session_id() != static_cast<i64>(AssignId)) {
+                ythrow yexception() << "Stop for unexpected partition_session_id: "
+                                    << resp.ShortDebugString();
+            }
+
+            StreamReadMessage::FromClient req;
+            auto& reply = *req.mutable_stop_partition_session_response();
+            reply.set_partition_session_id(AssignId);
+            reply.set_graceful(false);
+            DR_ENSURE(ControlStream->Write(req));
+            return true;
+        });
+    }
+
+    // StartDirectRead while dread cache has no server session → BAD_REQUEST "Unknown session".
+    // Closes the DirectRead stream (same as prod SDK path that remaps to OVERLOADED and retries).
+    void StartDirectReadExpectUnknownSession(NActors::TTestActorRuntime& runtime) {
+        RunWithDispatch(runtime, [&] {
+            StreamDirectReadMessage::FromClient req;
+            auto& start = *req.mutable_start_direct_read_partition_session_request();
+            start.set_partition_session_id(AssignId);
+            start.set_generation(Generation);
+            start.set_last_direct_read_id(0);
+            DR_ENSURE(DirectStream->Write(req));
+
+            StreamDirectReadMessage::FromServer resp;
+            DR_ENSURE(DirectStream->Read(&resp));
+            if (resp.status() == Ydb::StatusIds::SUCCESS
+                    && resp.server_message_case()
+                        == StreamDirectReadMessage::FromServer::kStartDirectReadPartitionSessionResponse) {
+                ythrow yexception() << "expected Unknown session close, got success: "
+                                    << resp.ShortDebugString();
+            }
+            if (resp.status() != Ydb::StatusIds::BAD_REQUEST) {
+                ythrow yexception() << "expected BAD_REQUEST Unknown session, got "
+                                    << resp.ShortDebugString();
+            }
             return true;
         });
     }
@@ -521,7 +824,7 @@ protected:
     // 1. Produce one large message so DirectRead has data to restore.
     void WriteOneMessage() {
         RunWithDispatch(Runtime(), [&] {
-            TDriver driver(MakeAsyncDriverConfig(Env.Endpoint));
+            TDriver driver(MakeNoDiscoveryDriverConfig(Env.Endpoint));
             auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
             if (!writer->Write(TString(1_MB, 'x'))) {
                 ythrow yexception() << "write failed";
@@ -698,11 +1001,530 @@ protected:
         AssertUpdateSessionAdvanced(before,
             "restore must complete with TEvUpdateSession (not silent-hang)");
     }
+
+    // While restore is stuck: no UpdateSession, no new DirectRead publish, control stays alive.
+    // Models the client hang window after StopDirectRead and before UpdatePartitionSession.
+    void AssertHangWindowWhileRestoreStuck(ui64 updateBefore, ui64 directReadBefore, TDuration duration) {
+        const TInstant deadline = TInstant::Now() + duration;
+        while (TInstant::Now() < deadline) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+            UNIT_ASSERT_VALUES_EQUAL_C(Env.UpdateSessionCount.load(), updateBefore,
+                "UpdateSession must not arrive while restore Prepare is held");
+            UNIT_ASSERT_VALUES_EQUAL_C(Env.DirectReadResponseCount.load(), directReadBefore,
+                "no new DirectRead publish while restore Prepare is held");
+            AssertNoErrorClose("control session must stay alive while restore is stuck");
+        }
+    }
+
+    // After PQRB reboot with Register held: control stays up (client hang shape from the incident).
+    // Do not assert on DirectReadResponseCount — partition may still Publish toward the cache
+    // after CreateSession even while Register delivery is delayed.
+    void AssertHangWindowAfterPqrbUnknownSession(TDuration duration) {
+        const TInstant deadline = TInstant::Now() + duration;
+        while (TInstant::Now() < deadline) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
+            UNIT_ASSERT_C(Env.HoldRegisterDirectRead.load() != 0
+                    && !Env.HeldRegisterDirectReadEvents.empty(),
+                "RegisterDirectReadSession must stay held during the hang window");
+            AssertNoErrorClose(
+                "control session must stay alive after PQRB restart / Unknown session on DirectRead");
+        }
+    }
+
+    // Pump actor system until promise is set or timeout. UseRealThreads=false requires DispatchEvents.
+    bool WaitPromise(NThreading::TPromise<void>& promise, TDuration timeout) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            if (promise.HasValue()) {
+                return true;
+            }
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = [&] {
+                return promise.HasValue();
+            };
+            Runtime().DispatchEvents(opts, TDuration::MilliSeconds(50));
+        }
+        return promise.HasValue();
+    }
+
+    // Sparse pump + wall-clock sleep. Use when hanging is expected: avoids drowning in idle
+    // tablet timers while SDK threads still get occasional progress.
+    bool WaitPromiseSparse(NThreading::TPromise<void>& promise, TDuration timeout) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            if (promise.HasValue()) {
+                return true;
+            }
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        return promise.HasValue();
+    }
+
+    // Write under a reconnect storm without RunWithDispatch melting the actor queue.
+    void WriteOneMessageSparse() {
+        auto future = NThreading::Async([&] {
+            TDriver driver(MakeNoDiscoveryDriverConfig(Env.Endpoint));
+            auto writer = CreateSimpleWriter(driver, kTopicPath, "src", /*partitionGroup=*/{}, TString("raw"));
+            if (!writer->Write(TString(1_MB, 'x'))) {
+                ythrow yexception() << "sparse write failed";
+            }
+            writer->Close();
+            driver.Stop(true);
+            return true;
+        }, DispatchPool());
+
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline && !future.HasValue() && !future.HasException()) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(future.HasValue(), "sparse write did not finish in time");
+        future.GetValueSync();
+    }
+
+    // Sparse wait used by PQRB+Register hang tests under UseRealThreads=false.
+    void WaitHeldRegisterSparse(ui64 minHeld = 1, TDuration timeout = TDuration::Seconds(30)) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.HeldRegisterDirectRead.load() < minHeld) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.HeldRegisterDirectRead.load() >= minHeld,
+            "expected RegisterDirectReadSession after PQRB re-lock; held="
+                << Env.HeldRegisterDirectRead.load());
+    }
+
+    void WaitStageOrPublishWhileRegisterHeldAtLeast(
+            ui64 minCount, TDuration timeout = TDuration::Seconds(30))
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.StageOrPublishWhileRegisterHeld.load() < minCount) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() >= minCount,
+            "expected Stage/Publish to cache while Register held; got="
+                << Env.StageOrPublishWhileRegisterHeld.load());
+    }
+
+    void WaitStageOrPublishWhileRegisterHeldAbove(
+            ui64 exclusiveMin, TDuration timeout = TDuration::Seconds(30))
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline
+                && Env.StageOrPublishWhileRegisterHeld.load() <= exclusiveMin) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.StageOrPublishWhileRegisterHeld.load() > exclusiveMin,
+            "expected further Stage/Publish while Register held; before="
+                << exclusiveMin
+                << "; after=" << Env.StageOrPublishWhileRegisterHeld.load());
+    }
+
+    void AssertRegisterStillHeld(const TString& what) {
+        UNIT_ASSERT_C(Env.HoldRegisterDirectRead.load() != 0
+                && !Env.HeldRegisterDirectReadEvents.empty(),
+            what);
+    }
+
+    void AssertStageStillHeld(const TString& what) {
+        UNIT_ASSERT_C(Env.HoldStageDirectRead.load() != 0
+                && !Env.HeldStageDirectReadEvents.empty(),
+            what);
+    }
+
+    void WaitHeldStageSparse(ui64 minHeld = 1, TDuration timeout = TDuration::Seconds(30)) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.HeldStageDirectRead.load() < minHeld) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.HeldStageDirectRead.load() >= minHeld,
+            "expected Stage held while Register delayed; held="
+                << Env.HeldStageDirectRead.load());
+    }
+
+    void WaitStageBufferedWhileRegisterHeld(ui64 minCount = 1, TDuration timeout = TDuration::Seconds(30)) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline && Env.StageWhileRegisterHeld.load() < minCount) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.StageWhileRegisterHeld.load() >= minCount,
+            "expected Stage buffered while Register held; got="
+                << Env.StageWhileRegisterHeld.load());
+    }
+
+    void WaitHigherGenPublishWhileRegisterHeld(
+            ui32 minPublishGenExclusive, TDuration timeout = TDuration::Seconds(30))
+    {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            if (Env.PublishWhileRegisterHeld.load() >= 1
+                    && Env.LastPublishGenWhileRegisterHeld.load() > minPublishGenExclusive) {
+                return;
+            }
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(false,
+            "expected Publish with gen > " << minPublishGenExclusive
+                << " while Register held; publishCount="
+                << Env.PublishWhileRegisterHeld.load()
+                << "; lastPublishGen=" << Env.LastPublishGenWhileRegisterHeld.load()
+                << "; lastStageGen=" << Env.LastStageGenWhileRegisterHeld.load()
+                << "; heldDeregister=" << Env.HeldDeregisterDirectRead.load());
+    }
+
+    void StopSdkSparse(
+            std::shared_ptr<TDriver>& driver,
+            std::shared_ptr<NTopic::IReadSession>& reader)
+    {
+        if (!driver) {
+            return;
+        }
+        // Capture by value so Close/Stop outlive caller pointer resets.
+        const auto driverLocal = driver;
+        const auto readerLocal = reader;
+        auto stop = NThreading::Async([driverLocal, readerLocal] {
+            if (readerLocal) {
+                readerLocal->Close(TDuration::MilliSeconds(50));
+            }
+            driverLocal->Stop(true);
+            return true;
+        }, DispatchPool());
+        // ~20s window so WaitCallbacksDrained spin logs can show stuck InFlight count.
+        for (int i = 0; i < 400 && !stop.HasValue() && !stop.HasException(); ++i) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(stop.HasValue() || stop.HasException(),
+            "SDK sparse stop did not finish in time");
+        stop.TryRethrow();
+        stop.GetValueSync();
+        reader.reset();
+        driver.reset();
+    }
 };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE_F(TDirectReadRestoreRaceTest, TDirectReadRestoreFixture) {
+
+// LOGBROKER-10590 / cache-generation hang hypothesis:
+// tablet reboot → RegisterDirectReadSession(newGen) destroys old cache client →
+// StopDirectReadPartitionSession on data path; while restore Prepare is held,
+// UpdatePartitionSession does not arrive → data-path stays dead (client hang window).
+// Releasing Prepare completes restore → Update → Start(newGen) → DirectReadResponse.
+Y_UNIT_TEST(StopDirectReadOnGenerationBumpWhileRestoreStuck) {
+    WriteOneMessage();
+    OpenDirectReadSession(/*readDataNoAck=*/true);
+
+    const ui64 updateBefore = Env.UpdateSessionCount.load();
+    const ui64 directReadBefore = Env.DirectReadResponseCount.load();
+    const ui64 oldGen = Client.Generation;
+    UNIT_ASSERT_C(oldGen > 0, "expected non-zero partition generation after assign");
+
+    RebootAndWaitHeldPrepares(/*minHeld=*/1);
+
+    // Hypothesis A: dread cache kills the old client binding on generation bump.
+    Client.ExpectStopDirectRead(Runtime());
+
+    // Hypothesis B: without UpdatePartitionSession the data path stays silent.
+    AssertHangWindowWhileRestoreStuck(updateBefore, directReadBefore, TDuration::Seconds(2));
+
+    // Recovery: finish restore → UpdatePartitionSession with new generation → rebind.
+    ReleaseAndWaitUpdateSession(
+        [&] { Env.ReleaseHeldPrepares(); },
+        "releasing Prepare after StopDirectRead hang window must complete restore");
+
+    const ui64 newGen = Client.ReadUpdatePartitionSession(Runtime());
+    UNIT_ASSERT_C(newGen > oldGen,
+        "UpdatePartitionSession generation must advance after tablet reboot"
+            << "; oldGen=" << oldGen << "; newGen=" << newGen);
+
+    Client.StartDirectReadPartition(Runtime(), newGen);
+    Client.ReadDataNoAck(Runtime(), /*expectedDirectReadId=*/1);
+}
+
+// PQRB restart hang (prod: control alive, DirectRead Unknown session / BytesRead=0):
+// ProcessBalancerDead force-stops partitions and re-locks; CreateSession fires
+// RegisterDirectReadSession to dread cache before Start reaches the client.
+// If Register is delayed, partition still Stage/Publish and advances inFlight DirectRead;
+// client StartDirectRead → Unknown session while Register is held.
+// Without buffering, dropped Stage/Publish left tablet inFlight without cache data → durable
+// hang after Register and re-init. With buffering, FlushPending on Register restores data.
+Y_UNIT_TEST(UnknownSessionAfterPqrbRestartWhileRegisterHeld) {
+    WriteOneMessage();
+    OpenDirectReadSession(/*readDataNoAck=*/true);
+
+    const ui64 oldAssignId = Client.AssignId;
+
+    // Hold only new Registers after re-lock; the first session is already in the cache.
+    Env.HoldRegisterDirectRead.store(1);
+    Env.RebootPqrbTablet();
+
+    Client.ExpectForcefulStopAndConfirm(Runtime());
+
+    // Old DirectRead binding is destroyed with the dropped partition (Deregister).
+    Client.ExpectStopDirectRead(Runtime());
+
+    WaitUntil(Runtime(), [&] {
+        return Env.HeldRegisterDirectRead.load() >= 1
+            || Env.ErrorCloseSession.load() > 0;
+    });
+    AssertNoErrorClose("PQRB restart must re-lock and CreateSession without killing control");
+    UNIT_ASSERT_C(Env.HeldRegisterDirectRead.load() >= 1,
+        "expected RegisterDirectReadSession after PQRB re-lock; held="
+            << Env.HeldRegisterDirectRead.load());
+
+    // New Start can arrive while Register is still held (Register is fire-and-forget from PQ).
+    Client.AcceptAssign(Runtime());
+    UNIT_ASSERT_C(Client.AssignId != oldAssignId,
+        "expected a new partition_session_id after PQRB re-lock"
+            << "; old=" << oldAssignId << "; new=" << Client.AssignId);
+
+    Client.StartDirectReadExpectUnknownSession(Runtime());
+
+    AssertHangWindowAfterPqrbUnknownSession(TDuration::Seconds(2));
+
+    Env.ReleaseHeldRegisterDirectRead();
+
+    // Unknown session closed the DirectRead stream; re-init like SDK Reconnect + Init.
+    Client.SendReadRequest(Runtime());
+    Client.InitDirectSession(Runtime());
+    Client.StartDirectReadPartition(Runtime());
+    WriteOneMessage();
+
+    // After Register + re-init, buffered Stage/Publish must be visible (or fail fast on hang).
+    UNIT_ASSERT_C(
+        Client.TryReadNextDataNoAck(Runtime(), TDuration::Seconds(15)),
+        "DirectRead hung after PQRB restart: Register was delayed, cache returned Unknown session, "
+        "partition already published/inFlight DirectRead that the client never saw; "
+        "control stayed alive but further DirectRead did not recover");
+}
+
+// Same scenario as UnknownSessionAfterPqrbRestartWhileRegisterHeld via Topic SDK
+// (UseRealThreads=false): no Commit on first DataReceived; hold Register after PQRB reboot until
+// Stage/Publish are buffered; write a second message while Register is held (unread topic data);
+// release Register so SDK Start succeeds. Without buffering this hung (no further DataReceived);
+// with FlushPending on Register, DataReceived must resume.
+Y_UNIT_TEST(SdkHangAfterPqrbRestartWhileRegisterHeld) {
+    Runtime().SetScheduledLimit(10'000'000);
+
+    WriteOneMessage();
+
+    auto gotFirstMessage = NThreading::NewPromise<void>();
+    auto gotDataAfterRestart = NThreading::NewPromise<void>();
+    std::atomic<ui64> messagesReceived{0};
+    std::atomic<ui64> messagesAtRestart{0};
+    std::atomic<bool> pastRestart{false};
+    std::atomic<bool> sessionClosed{false};
+
+    std::shared_ptr<TDriver> driver;
+    std::shared_ptr<NTopic::IReadSession> reader;
+
+    RunWithDispatch(Runtime(), [&] {
+        driver = std::make_shared<TDriver>(MakeNoDiscoveryDriverConfig(Env.Endpoint));
+        TTopicClient topicClient(*driver);
+
+        auto settings = TReadSessionSettings()
+            .ConsumerName(kConsumer)
+            .AppendTopics(TTopicReadSettings(std::string(kTopicPath)))
+            .DirectRead(true);
+
+        settings.EventHandlers_
+            .DataReceivedHandler([&](NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
+                // Do not Commit — leave DirectRead in flight like raw readDataNoAck=true.
+                const ui64 n = messagesReceived.fetch_add(ev.GetMessages().size()) + ev.GetMessages().size();
+                if (n >= 1) {
+                    gotFirstMessage.TrySetValue();
+                }
+                if (pastRestart.load() && n > messagesAtRestart.load()) {
+                    gotDataAfterRestart.TrySetValue();
+                }
+            })
+            .StartPartitionSessionHandler([&](NTopic::TReadSessionEvent::TStartPartitionSessionEvent& ev) {
+                ev.Confirm();
+            })
+            .StopPartitionSessionHandler([&](NTopic::TReadSessionEvent::TStopPartitionSessionEvent& ev) {
+                ev.Confirm();
+            })
+            .SessionClosedHandler([&](const NTopic::TSessionClosedEvent&) {
+                sessionClosed.store(true);
+            });
+
+        reader = topicClient.CreateReadSession(settings);
+        return true;
+    });
+
+    UNIT_ASSERT_C(WaitPromise(gotFirstMessage, TDuration::Seconds(30)),
+        "SDK DirectRead did not receive the first message before PQRB restart");
+    messagesAtRestart.store(messagesReceived.load());
+    pastRestart.store(true);
+
+    Env.HoldRegisterDirectRead.store(1);
+    Env.RebootPqrbTablet();
+
+    WaitHeldRegisterSparse();
+    AssertNoErrorClose("PQRB restart must not kill the read proxy control session");
+    UNIT_ASSERT_C(!sessionClosed.load(),
+        "SDK read session closed during PQRB restart; expected control to stay alive");
+
+    // Wait until PQ Stage/Publish reaches cache while Register is still held (buffered
+    // until Register) — regression precondition for the unbuffered hang.
+    WaitStageOrPublishWhileRegisterHeldAtLeast(1);
+    AssertRegisterStillHeld("Register must still be held after buffered Stage/Publish");
+
+    // Second message while Register is still held — topic has unread data after release, so a
+    // silent wait cannot be explained by an empty partition. Stage/Publish for the new data
+    // is also buffered until Register (do not write after release: that can deliver a later
+    // DirectReadId and trip SDK VERIFY on NextDirectReadId gap).
+    const ui64 stageBeforeSecondWrite = Env.StageOrPublishWhileRegisterHeld.load();
+    WriteOneMessageSparse();
+    WaitStageOrPublishWhileRegisterHeldAbove(stageBeforeSecondWrite);
+    AssertRegisterStillHeld("Register must still be held after second write");
+
+    // Register lands; FlushPending applies buffered Stage/Publish; SDK retry should deliver data.
+    Env.ReleaseHeldRegisterDirectRead();
+
+    const bool gotAfter = WaitPromiseSparse(gotDataAfterRestart, TDuration::Seconds(5));
+    const bool closed = sessionClosed.load();
+
+    // Soft stop without RunWithDispatch: dense pump melts under DirectRead reconnects.
+    StopSdkSparse(driver, reader);
+
+    UNIT_ASSERT_C(!closed,
+        "SDK read session closed after PQRB restart; expected control/session to stay alive");
+    UNIT_ASSERT_C(gotAfter,
+        "SDK DirectRead durable hang after PQRB restart: Register was delayed, Stage/Publish "
+        "buffered until Register (including second write while Register held), then Register "
+        "was released and Start could succeed, but inFlight DirectRead never reached the "
+        "client; session stayed open and topic had unread data, no further DataReceived");
+}
+
+// Reviewer Flush race: pending Stage(readId, gen=M) + Publish(readId, gen=N) with M < N.
+// Flush(gen=N) drops Stage(M), PublishToSession finds no staged payload → hang.
+// Sequence: Hold Register after PQRB → buffer Stage(M) → hold further Stage + Deregister →
+// reboot PQ (gen bump) → Publish(N) while Stage(M) still pending → release Register then Stage.
+// Hold Deregister models delayed teardown so MarkSessionRetired does not wipe Stage(M) before
+// Publish(N) (without it, Deregister(M) clears pending Stage before the higher-gen Publish).
+Y_UNIT_TEST(SdkHangWhenPublishFlushedBeforeMatchingStage) {
+    Runtime().SetScheduledLimit(10'000'000);
+
+    WriteOneMessage();
+
+    auto gotFirstMessage = NThreading::NewPromise<void>();
+    auto gotDataAfterRestart = NThreading::NewPromise<void>();
+    std::atomic<ui64> messagesReceived{0};
+    std::atomic<ui64> messagesAtRestart{0};
+    std::atomic<bool> pastRestart{false};
+    std::atomic<bool> sessionClosed{false};
+
+    std::shared_ptr<TDriver> driver;
+    std::shared_ptr<NTopic::IReadSession> reader;
+
+    RunWithDispatch(Runtime(), [&] {
+        driver = std::make_shared<TDriver>(MakeNoDiscoveryDriverConfig(Env.Endpoint));
+        TTopicClient topicClient(*driver);
+
+        auto settings = TReadSessionSettings()
+            .ConsumerName(kConsumer)
+            .AppendTopics(TTopicReadSettings(std::string(kTopicPath)))
+            .DirectRead(true);
+
+        settings.EventHandlers_
+            .DataReceivedHandler([&](NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
+                const ui64 n = messagesReceived.fetch_add(ev.GetMessages().size()) + ev.GetMessages().size();
+                if (n >= 1) {
+                    gotFirstMessage.TrySetValue();
+                }
+                if (pastRestart.load() && n > messagesAtRestart.load()) {
+                    gotDataAfterRestart.TrySetValue();
+                }
+            })
+            .StartPartitionSessionHandler([&](NTopic::TReadSessionEvent::TStartPartitionSessionEvent& ev) {
+                ev.Confirm();
+            })
+            .StopPartitionSessionHandler([&](NTopic::TReadSessionEvent::TStopPartitionSessionEvent& ev) {
+                ev.Confirm();
+            })
+            .SessionClosedHandler([&](const NTopic::TSessionClosedEvent&) {
+                sessionClosed.store(true);
+            });
+
+        reader = topicClient.CreateReadSession(settings);
+        return true;
+    });
+
+    UNIT_ASSERT_C(WaitPromise(gotFirstMessage, TDuration::Seconds(30)),
+        "SDK DirectRead did not receive the first message before PQRB restart");
+    messagesAtRestart.store(messagesReceived.load());
+    pastRestart.store(true);
+
+    Env.HoldRegisterDirectRead.store(1);
+    Env.RebootPqrbTablet();
+
+    WaitHeldRegisterSparse();
+    WaitStageBufferedWhileRegisterHeld();
+    AssertNoErrorClose("PQRB restart must not kill the read proxy control session");
+    UNIT_ASSERT_C(!sessionClosed.load(),
+        "SDK read session closed during PQRB restart; expected control to stay alive");
+
+    const ui32 stageGenM = Env.LastStageGenWhileRegisterHeld.load();
+    UNIT_ASSERT_C(stageGenM > 0, "expected non-zero Stage generation buffered while Register held");
+
+    // Keep Stage(M) in pending: block Stage(N) upgrade and Deregister(M) retired cleanup.
+    Env.HoldStageDirectRead.store(1);
+    Env.HoldDeregisterDirectRead.store(1);
+    Env.RebootPqTablet();
+
+    WaitHigherGenPublishWhileRegisterHeld(stageGenM);
+    AssertRegisterStillHeld("Register must still be held after higher-gen Publish");
+    UNIT_ASSERT_C(Env.LastPublishGenWhileRegisterHeld.load() > stageGenM,
+        "expected Publish gen > Stage gen; stageGen=" << stageGenM
+            << "; publishGen=" << Env.LastPublishGenWhileRegisterHeld.load());
+    UNIT_ASSERT_C(Env.HeldDeregisterDirectRead.load() >= 1,
+        "expected Deregister held so Stage(M) was not retired before Publish(N)");
+
+    // Unread data after release so silence cannot be explained by an empty partition.
+    const ui64 publishBeforeSecondWrite = Env.PublishWhileRegisterHeld.load();
+    WriteOneMessageSparse();
+    {
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline
+                && Env.PublishWhileRegisterHeld.load() <= publishBeforeSecondWrite) {
+            Runtime().DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT_C(Env.PublishWhileRegisterHeld.load() > publishBeforeSecondWrite,
+            "expected further Publish while Register held after second write; before="
+                << publishBeforeSecondWrite
+                << "; after=" << Env.PublishWhileRegisterHeld.load());
+    }
+    AssertRegisterStillHeld("Register must still be held after second write");
+
+    // Flush(gen=N): drops Stage(M), PublishToSession fails without staged payload.
+    // Only the newest Register — older Register(M) would consume Stage(M) first.
+    Env.ReleaseHeldRegisterDirectReadHighestGenOnly();
+    Env.ReleaseHeldStages();
+    Env.ReleaseHeldDeregisters();
+
+    const bool gotAfter = WaitPromiseSparse(gotDataAfterRestart, TDuration::Seconds(5));
+    const bool closed = sessionClosed.load();
+
+    UNIT_ASSERT_C(!closed,
+        "SDK read session closed after PQRB/PQ restart; expected control/session to stay alive");
+    UNIT_ASSERT_C(gotAfter,
+        "SDK DirectRead durable hang: pending Stage(gen=M) + Publish(gen=N>M); Flush dropped "
+        "Stage(M) and failed Publish with no staged payload; later Stage left the read "
+        "staged/unpublished; session stayed open with unread topic data but no further DataReceived");
+
+    // Repro Stop hang (InFlight drain investigation): keep StopSdkSparse.
+    StopSdkSparse(driver, reader);
+}
 
 // LOGBROKER-10590: forget-first after nested pipe restart with RestoredDirectReadId==0
 // must not kill the partition actor (Forget stage must tolerate RestoredDirectReadId==0).
@@ -808,6 +1630,82 @@ Y_UNIT_TEST(HasCmdForgetReadResultOnPublishDuringForgetRestore) {
     ReleaseAndWaitUpdateSession(
         [&] { Env.ReleaseHeldForgets(); },
         "releasing Forget after late Publish must not kill partition actor");
+}
+
+// Regression test (LOGBROKER-10609): ResendRecentRequests() must reset WaitForData when data is available
+// after pipe restart. Without the fix, WaitForData stays true forever when ReadTimestampMs
+// or MaxTimeLagMs is set and ReadOffset < EndOffset (data available), causing the client
+// to hang waiting for data that is already there.
+Y_UNIT_TEST(ResendRecentRequestsResetsWaitForDataWhenDataAvailable) {
+    WriteOneMessage();
+
+    // Open a non-DirectRead session with max_lag set so WaitForData becomes true.
+    // max_lag triggers the same code path as ReadTimestampMs in InitStartReading.
+    Client.Connect(Env.Endpoint);
+
+    auto& runtime = Runtime();
+
+    // Init control session with max_lag set per-topic to trigger WaitForData = true.
+    RunWithDispatch(runtime, [&] {
+        Client.ControlContext = MakeHolder<grpc::ClientContext>();
+        Client.ControlStream = Client.Stub->StreamRead(Client.ControlContext.Get());
+        DR_ENSURE(Client.ControlStream);
+
+        StreamReadMessage::FromClient req;
+        auto* topicSettings = req.mutable_init_request()->add_topics_read_settings();
+        topicSettings->set_path(kTopicPath);
+        topicSettings->mutable_max_lag()->set_seconds(3600); // 1 hour lag → WaitForData = true
+        req.mutable_init_request()->set_consumer(kConsumer);
+        DR_ENSURE(Client.ControlStream->Write(req));
+
+        StreamReadMessage::FromServer resp;
+        DR_ENSURE(Client.ControlStream->Read(&resp));
+        if (resp.server_message_case() != StreamReadMessage::FromServer::kInitResponse) {
+            ythrow yexception() << "expected InitResponse, got " << resp.ShortDebugString();
+        }
+
+        // Send read request to start the session.
+        StreamReadMessage::FromClient readReq;
+        readReq.mutable_read_request()->set_bytes_size(100_KB);
+        DR_ENSURE(Client.ControlStream->Write(readReq));
+        return true;
+    });
+
+    // Wait for partition assign and confirm.
+    RunWithDispatch(runtime, [&] {
+        StreamReadMessage::FromServer resp;
+        DR_ENSURE(Client.ControlStream->Read(&resp));
+        if (resp.server_message_case() != StreamReadMessage::FromServer::kStartPartitionSessionRequest) {
+            ythrow yexception() << "expected StartPartitionSessionRequest, got " << resp.ShortDebugString();
+        }
+        const ui64 assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+        StreamReadMessage::FromClient req;
+        req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+        DR_ENSURE(Client.ControlStream->Write(req));
+        return true;
+    });
+
+    // Record PartitionReady count before reboot.
+    const ui64 partitionReadyBefore = Env.PartitionReadyCount.load();
+
+    // Reboot PQ tablet → pipe dies → ResendRecentRequests() is called.
+    // With the fix: WaitForData is reset and SendPartitionReady is called because
+    // data is available (ReadOffset < EndOffset).
+    // Without the fix: WaitForData stays true, no PartitionReady, client hangs.
+    Env.RebootPqTablet();
+
+    // Wait for PartitionReady to be delivered (proves WaitForData was reset).
+    WaitUntil(runtime, [&] {
+        return Env.PartitionReadyCount.load() > partitionReadyBefore
+            || Env.ErrorCloseSession.load() > 0;
+    }, TDuration::Seconds(10));
+
+    UNIT_ASSERT_C(Env.ErrorCloseSession.load() == 0,
+        "session must not close; reason=" << Env.ErrorCloseReason);
+    UNIT_ASSERT_C(Env.PartitionReadyCount.load() > partitionReadyBefore,
+        "TEvPartitionReady must be delivered after pipe restart when data is available; "
+        "this proves ResendRecentRequests reset WaitForData and called SendPartitionReady");
 }
 
 } // Y_UNIT_TEST_SUITE_F(TDirectReadRestoreRaceTest)

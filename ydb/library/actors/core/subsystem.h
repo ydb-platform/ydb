@@ -13,6 +13,7 @@
 namespace NActors {
     class TActorSystem;
     class ISubSystem;
+    struct TThreadContext;
 
     using TSubSystemTypeId = size_t;
 
@@ -130,6 +131,16 @@ namespace NActors {
         // Called once at actor-system start with the selected DNF alternative.
         // Dependencies preserve their declaration order.
         virtual void OnDependenciesResolved(const TResolvedSubSystemDependencies&) {}
+
+        // Called by the startup thread during pool preparation, before any
+        // executor starts and without installing the executor TLS context.
+        virtual void OnExecutorThreadPrepare(TThreadContext*) {}
+
+        // Called on each executor thread while its TLS context is installed.
+        // Initialization follows dependency order; cleanup reverses it.
+        // Each subsystem owns any per-thread state it needs.
+        virtual void OnExecutorThreadStart(TThreadContext*) {}
+        virtual void OnExecutorThreadStop(TThreadContext*) {}
 
         virtual void OnBeforeStart(TActorSystem&) {}
         virtual void OnAfterStart(TActorSystem&) {}

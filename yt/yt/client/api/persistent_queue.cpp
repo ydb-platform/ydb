@@ -149,7 +149,7 @@ private:
     struct TState
         : public TRefCounted
     {
-        YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock);
+        YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock);
         std::deque<TPromise<IPersistentQueueRowsetPtr>> Promises;
         std::deque<TBatch> Batches;
         int BatchesRowCount = 0;
@@ -229,7 +229,7 @@ private:
     const NLogging::TLogger Logger;
     const IInvokerPtr Invoker_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     TStatePtr State_;
 
     std::vector<TPeriodicExecutorPtr> PollExecutors_;
@@ -516,7 +516,7 @@ private:
     }
 
 
-    void TryFulfillPromises(const TStatePtr& state, TGuard<NThreading::TSpinLock>* guard)
+    void TryFulfillPromises(const TStatePtr& state, TGuard<TSpinLock>* guard)
     {
         if (state->Failed) {
             return;
@@ -609,7 +609,7 @@ private:
                     }
                     OnStateFailed(state);
                     THROW_ERROR_EXCEPTION("Some of the offered rows were already consumed")
-                        << TErrorAttribute("consumed_row_indexes", rowIndexes);
+                        .With("consumed_row_indexes", rowIndexes);
                 }
             }
 
@@ -641,7 +641,7 @@ private:
                     if (rowIndex >= batch.BeginRowIndex) {
                         OnStateFailed(state);
                         THROW_ERROR_EXCEPTION("Some of the offered rows were already trimmed")
-                            << TErrorAttribute("trimmed_row_index", rowIndex);
+                            .With("trimmed_row_index", rowIndex);
                     }
                 }
             }
@@ -677,14 +677,14 @@ private:
                 .With("TransactionId", transaction->GetId());
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error confirming persistent queue rows")
-                << TErrorAttribute("poller_id", PollerId_)
-                << TErrorAttribute("transaction_id", transaction->GetId())
-                << TErrorAttribute("tablet_index", batch.TabletIndex)
-                << TErrorAttribute("begin_row_index", batch.BeginRowIndex)
-                << TErrorAttribute("end_row_index", batch.EndRowIndex)
-                << TErrorAttribute("data_table_path", DataTablePath_)
-                << TErrorAttribute("state_table_path", StateTablePath_)
-                << ex;
+                .With("poller_id", PollerId_)
+                .With("transaction_id", transaction->GetId())
+                .With("tablet_index", batch.TabletIndex)
+                .With("begin_row_index", batch.BeginRowIndex)
+                .With("end_row_index", batch.EndRowIndex)
+                .With("data_table_path", DataTablePath_)
+                .With("state_table_path", StateTablePath_)
+                .With(ex);
         }
     }
 

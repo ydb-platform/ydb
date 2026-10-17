@@ -1,0 +1,1 @@
+{"_yql_row_spec"={"Type"=["StructType";[["msk_supply_created_dttm";["DataType";"Datetime";];];["partner_id";["DataType";"Int64";];];["ssku";["DataType";"String";];];]]}}

@@ -1,0 +1,4 @@
+/* custom error: Cannot add different decimals. */
+SELECT
+    Decimal('10', 10, 3) + Decimal('10', 10, 2)
+;

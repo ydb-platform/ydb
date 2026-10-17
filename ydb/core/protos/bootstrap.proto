@@ -40,6 +40,8 @@ message TBootstrap {
         TENANT_SLOT_BROKER = 53;
         CONSOLE = 54;
 
+        DBS_CONTROLLER = 60;
+
         FAKE_DATASHARD = 700;
     }
 

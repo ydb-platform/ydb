@@ -1,4 +1,5 @@
 #include "kqp_opt_impl.h"
+#include "kqp_opt_generated_columns.h"
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -41,6 +42,40 @@ std::pair<const TTypeAnnotationNode*, TCoAtomList> BuildReturningType(const TCoA
     };
 }
 
+// Builds a TDqSink that writes into a Kikimr table.
+static TDqSink BuildTableSink(TExprContext& ctx, TPositionHandle pos, const TKqpTable& table,
+        const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
+        const TStringBuf mode, const bool isIndexImplTable, const TCoAtomList& defaultColumns,
+        const TCoNameValueTupleList& settingsNode, const i64 order) {
+    return Build<TDqSink>(ctx, pos)
+        .DataSink<TKqpTableSink>()
+            .Category(ctx.NewAtom(pos, NYql::KqpTableSinkName))
+            .Cluster(ctx.NewAtom(pos, "db"))
+            .Build()
+        .Index().Value("0").Build()
+        .Settings<TKqpTableSinkSettings>()
+            .Table(table)
+            .InconsistentWrite(allowInconsistentWrites
+                ? ctx.NewAtom(pos, "true")
+                : ctx.NewAtom(pos, "false"))
+            .StreamWrite(enableStreamWrite
+                ? ctx.NewAtom(pos, "true")
+                : ctx.NewAtom(pos, "false"))
+            .Mode(ctx.NewAtom(pos, mode))
+            .Priority(ctx.NewAtom(pos, ToString(order)))
+            .IsBatch(isBatch
+                ? ctx.NewAtom(pos, "true")
+                : ctx.NewAtom(pos, "false"))
+            .IsIndexImplTable(isIndexImplTable
+                ? ctx.NewAtom(pos, "true")
+                : ctx.NewAtom(pos, "false"))
+            .DefaultColumns(defaultColumns)
+            .ReturningColumns(ctx.NewList(pos, {}))
+            .Settings(settingsNode)
+            .Build()
+        .Done();
+}
+
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
         const TStringBuf mode, const bool isIndexImplTable, const TCoAtomList& defaultColumns,
@@ -60,33 +95,8 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
                 .Build()
             .Build()
         .Outputs<TDqStageOutputsList>()
-            .Add<TDqSink>()
-                .DataSink<TKqpTableSink>()
-                    .Category(ctx.NewAtom(expr.Pos(), NYql::KqpTableSinkName))
-                    .Cluster(ctx.NewAtom(expr.Pos(), "db"))
-                    .Build()
-                .Index().Value("0").Build()
-                .Settings<TKqpTableSinkSettings>()
-                    .Table(table)
-                    .InconsistentWrite(allowInconsistentWrites
-                        ? ctx.NewAtom(expr.Pos(), "true")
-                        : ctx.NewAtom(expr.Pos(), "false"))
-                    .StreamWrite(enableStreamWrite
-                        ? ctx.NewAtom(expr.Pos(), "true")
-                        : ctx.NewAtom(expr.Pos(), "false"))
-                    .Mode(ctx.NewAtom(expr.Pos(), mode))
-                    .Priority(ctx.NewAtom(expr.Pos(), ToString(order)))
-                    .IsBatch(isBatch
-                        ? ctx.NewAtom(expr.Pos(), "true")
-                        : ctx.NewAtom(expr.Pos(), "false"))
-                    .IsIndexImplTable(isIndexImplTable
-                        ? ctx.NewAtom(expr.Pos(), "true")
-                        : ctx.NewAtom(expr.Pos(), "false"))
-                    .DefaultColumns(defaultColumns)
-                    .ReturningColumns(ctx.NewList(expr.Pos(), {}))
-                    .Settings(settingsNode)
-                    .Build()
-                .Build()
+            .Add(BuildTableSink(ctx, expr.Pos(), table, allowInconsistentWrites, enableStreamWrite,
+                isBatch, mode, isIndexImplTable, defaultColumns, settingsNode, order))
             .Build()
         .Settings().Build()
         .Done();
@@ -159,11 +169,61 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
     return stage;
 }
 
+static TExprNode::TPtr BuildCsWriteAffinitySinkStage(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TExprNode::TPtr transformStage,
+    const TMaybeNode<TCoAtomList>& shardingColumns,
+    TExprNode::TPtr sinkNode)
+{
+    TVector<TCoAtom> keyColumnAtoms;
+    if (shardingColumns.IsValid()) {
+        for (const auto& col : shardingColumns.Cast()) {
+            keyColumnAtoms.emplace_back(Build<TCoAtom>(ctx, pos).Value(col.Value()).Done());
+        }
+    }
+
+    auto sinkInput = Build<TDqCnHashShuffle>(ctx, pos)
+        .Output<TDqOutput>()
+            .Stage(transformStage)
+            .Index().Build("0")
+            .Build()
+        .KeyColumns()
+            .Add(keyColumnAtoms)
+        .Build()
+        .UseSpilling().Build(false)
+        .HashFunc().Build("ColumnShardHashV1")
+        .Done();
+
+    const auto sinkRowArgument = Build<TCoArgument>(ctx, pos)
+        .Name("sinkRow")
+        .Done();
+
+    auto sinkStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(sinkInput)
+            .Build()
+        .Program()
+            .Args({sinkRowArgument})
+            .Body<TCoToFlow>()
+                .Input(sinkRowArgument)
+                .Build()
+            .Build()
+        .Outputs<TDqStageOutputsList>()
+            .Add(sinkNode)
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return sinkStage.Ptr();
+}
+
 bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     TMaybeNode<TExprBase>& effect, const i64 order)
 {
     const i64 priority = 0;
     AFL_ENSURE(order == 0);
+    const bool csWriteAffinity = node.CtasShardingColumns().IsValid();
 
     const TKqpTable table = Build<TKqpTable>(ctx, node.Pos())
         .Path(node.Table())
@@ -180,16 +240,42 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Done());
 
     if (IsDqPureExpr(node.Input())) {
-        auto stageInput = RebuildPureStageWithSink(
-            node.Input(), table,
-            /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
-            /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
-            Build<TCoAtomList>(ctx, node.Pos()).Done(), settings,
-            priority, ctx);
-        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Ptr())
-            .SinkIndex().Build("0")
-            .Done();
+        if (csWriteAffinity) {
+            auto sink = BuildTableSink(ctx, node.Pos(), table,
+                /* allowInconsistentWrites */ true, /* enableStreamWrite */ true,
+                /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
+                Build<TCoAtomList>(ctx, node.Pos()).Done(),
+                Build<TCoNameValueTupleList>(ctx, node.Pos()).Add(settings).Done(), priority);
+
+            auto transformStage = Build<TDqStage>(ctx, node.Pos())
+                .Inputs()
+                    .Build()  // No inputs — pure stage
+                .Program()
+                    .Args({})
+                    .Body<TCoToFlow>()
+                        .Input(node.Input())
+                        .Build()
+                    .Build()
+                .Settings().Build()
+                .Done();
+
+            effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+                .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), transformStage.Ptr(), node.CtasShardingColumns(), sink.Ptr()))
+                .SinkIndex().Build("0")
+                .Done();
+            return true;
+        } else {
+            auto stageInput = RebuildPureStageWithSink(
+                node.Input(), table,
+                /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
+                /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
+                Build<TCoAtomList>(ctx, node.Pos()).Done(), settings,
+                priority, ctx);
+            effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+                .Stage(stageInput.Ptr())
+                .SinkIndex().Build("0")
+                .Done();
+        }
         return true;
     }
 
@@ -206,53 +292,58 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     auto program = stage.Program();
     auto input = program.Body();
 
-    auto sink = Build<TDqSink>(ctx, node.Pos())
-        .DataSink<TKqpTableSink>()
-            .Category(ctx.NewAtom(node.Pos(), NYql::KqpTableSinkName))
-            .Cluster(ctx.NewAtom(node.Pos(), "db"))
-            .Build()
-        .Index().Value("0").Build()
-        .Settings<TKqpTableSinkSettings>()
-            .Table(table)
-            .InconsistentWrite(ctx.NewAtom(node.Pos(), "true"))
-            .StreamWrite(ctx.NewAtom(node.Pos(), "true"))
-            .Mode(ctx.NewAtom(node.Pos(), "fill_table"))
-            .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
-            .IsBatch(ctx.NewAtom(node.Pos(), "false"))
-            .IsIndexImplTable(ctx.NewAtom(node.Pos(), "false"))
-            .DefaultColumns<TCoAtomList>().Build()
-            .ReturningColumns(ctx.NewList(node.Pos(), {}))
-            .Settings(settingsNode)
-            .Build()
-        .Done();
+    auto sink = BuildTableSink(ctx, node.Pos(), table,
+        /* allowInconsistentWrites */ true, /* enableStreamWrite */ true,
+        /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
+        Build<TCoAtomList>(ctx, node.Pos()).Done(), settingsNode, priority);
 
     const auto rowArgument = Build<TCoArgument>(ctx, node.Pos())
         .Name("row")
         .Done();
 
     auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
-        .Output(dqUnion.Output())
-        .Done();
-    auto stageInput = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(mapCn)
-            .Build()
-        .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>()
-                .Input(rowArgument)
+            .Output(dqUnion.Output())
+            .Done();
+    if (csWriteAffinity) {
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
                 .Build()
-            .Build()
-        .Outputs<TDqStageOutputsList>()
-            .Add(sink)
-            .Build()
-        .Settings().Build()
-        .Done();
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
 
-    effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(stageInput.Ptr())
-        .SinkIndex().Build("0")
-        .Done();
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(BuildCsWriteAffinitySinkStage(ctx, node.Pos(), stageInput.Ptr(), node.CtasShardingColumns(), sink.Ptr()))
+            .SinkIndex().Build("0")
+            .Done();
+    } else {
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(stageInput.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    }
 
     return true;
 }
@@ -688,7 +779,13 @@ template <bool GroupEffectsByTable>
 TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx)
 {
-    TNodeMap<size_t> returningEffectsMap;
+    struct TReturningEffectInfo {
+        TExprNode::TPtr Effect;
+        size_t ResultIndex;
+        TExprNode::TPtr ReturningList;
+    };
+
+    TVector<TReturningEffectInfo> returningEffects;
     for (size_t index = 0; index < query.Results().Size(); ++index) {
         const auto& result = query.Results().Item(index);
         VisitExpr(
@@ -708,7 +805,10 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
                     }
                 }();
 
-                AFL_ENSURE((returningEffectsMap.emplace(effect.Raw(), index)).second);
+                AFL_ENSURE(std::none_of(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
+                    return info.Effect.Get() == effect.Raw();
+                }));
+                returningEffects.push_back({effect.Ptr(), index, returning.Cast().Ptr()});
                 return false;
             });
     }
@@ -749,7 +849,62 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
 
                 if (returning) {
                     AFL_ENSURE(kqpCtx.Config->GetEnableIndexStreamWrite());
-                    newReturning.emplace(returningEffectsMap[effect.Raw()], returning);
+                    auto returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), [&](const auto& info) {
+                        return info.Effect.Get() == effect.Raw();
+                    });
+
+                    if (returningInfo == returningEffects.end()) {
+                        // Specialized index rewrites may independently rebuild the effect subtree in
+                        // Effects and in ReturningList. Match those equivalent copies by statement.
+                        const auto tableEffect = effect.Cast<TKqlTableEffect>();
+                        const auto matchesStatement = [&](const auto& info) {
+                            const auto candidate = TExprBase(info.Effect).Maybe<TKqlTableEffect>();
+                            return candidate
+                                && info.Effect->Content() == effect.Ref().Content()
+                                && info.Effect->Pos() == effect.Pos()
+                                && candidate.Cast().Table().Path().Value() == tableEffect.Table().Path().Value();
+                        };
+
+                        returningInfo = std::find_if(returningEffects.begin(), returningEffects.end(), matchesStatement);
+                        AFL_ENSURE(returningInfo == returningEffects.end()
+                            || std::find_if(returningInfo + 1, returningEffects.end(), matchesStatement) == returningEffects.end());
+                    }
+
+                    AFL_ENSURE(returningInfo != returningEffects.end());
+                    const auto resultIndex = returningInfo->ResultIndex;
+                    const auto returningList = TKqlReturningList(returningInfo->ReturningList);
+                    const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returningList.Table().Path());
+                    auto resultValue = BuildVirtualGeneratedColumnProjection(
+                        TExprBase(returning), query.Results().Item(resultIndex).ColumnHints(),
+                        table, returningList.Pos(), ctx).Ptr();
+
+                    if (resultValue.Get() != returning.Get()) {
+                        AFL_ENSURE(TDqCnUnionAll::Match(returning.Get()));
+
+                        auto rows = Build<TCoArgument>(ctx, resultValue->Pos())
+                            .Name("returning_rows")
+                            .Done();
+                        auto program = ctx.ReplaceNode(TExprNode::TPtr(resultValue), *returning, rows.Ptr());
+                        auto projectionStage = Build<TDqStage>(ctx, resultValue->Pos())
+                            .Inputs()
+                                .Add(TDqCnUnionAll(returning))
+                                .Build()
+                            .Program()
+                                .Args({rows})
+                                .Body(program)
+                                .Build()
+                            .Settings().Build()
+                            .Done();
+
+                        resultValue = Build<TDqCnUnionAll>(ctx, resultValue->Pos())
+                            .Output()
+                                .Stage(projectionStage)
+                                .Index().Build("0")
+                                .Build()
+                            .Done().Ptr();
+                    }
+
+                    newReturning.emplace(resultIndex, TExprBase(resultValue));
                 }
                 
                 return true;

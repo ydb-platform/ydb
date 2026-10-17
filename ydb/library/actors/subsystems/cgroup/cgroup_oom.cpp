@@ -433,7 +433,50 @@ namespace NActors {
 
     } // namespace NDetail
 
-    TCGroupOomSubSystem::TCGroupOomSubSystem(TCGroupOomConfig config)
+    namespace {
+
+        class TCGroupOomSubSystemImpl final : public TCGroupOomSubSystem {
+        public:
+            explicit TCGroupOomSubSystemImpl(TCGroupOomConfig config);
+
+            const TCGroupOomConfig& GetConfig() const override {
+                return Config;
+            }
+
+            TSubSystemDependencies GetDependencies() const override;
+            void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override;
+
+            void Subscribe(const TActorId& actorId) override;
+            void Unsubscribe(const TActorId& actorId) override;
+            void ReadTrend(
+                const TActorId& recipient,
+                ECGroupOomTrendWindow window,
+                ui64 cookie) const override;
+            void SubscribeToTrend(
+                const TActorId& actorId,
+                ECGroupOomTrendWindow window,
+                TDuration timeToOomThreshold) override;
+            void UnsubscribeFromTrend(const TActorId& actorId) override;
+
+            void OnAfterStart(TActorSystem& actorSystem) override;
+            void OnBeforeStop(TActorSystem& actorSystem) override;
+
+        private:
+            void ValidateTrendWindow(ECGroupOomTrendWindow window) const;
+            void ValidateTrendSubscription(
+                ECGroupOomTrendWindow window,
+                TDuration timeToOomThreshold) const;
+
+        private:
+            const TCGroupOomConfig Config;
+            TVector<const ICGroupMemoryStatsProvider*> Providers;
+            TActorSystem* ActorSystem = nullptr;
+            TActorId MonitorActorId;
+        };
+
+    } // namespace
+
+    TCGroupOomSubSystemImpl::TCGroupOomSubSystemImpl(TCGroupOomConfig config)
         : Config(std::move(config))
     {
         Y_ABORT_UNLESS(Config.PollPeriod > TDuration::Zero(),
@@ -471,7 +514,7 @@ namespace NActors {
             "cgroup OOM short trend window must be shorter than the long trend window");
     }
 
-    TSubSystemDependencies TCGroupOomSubSystem::GetDependencies() const {
+    TSubSystemDependencies TCGroupOomSubSystemImpl::GetDependencies() const {
         // Prefer both providers so the monitor can fall back when the first
         // registered hierarchy is present but has no memory controller.
         return (DependsOn<TCGroupV2StatsSubSystem>() && DependsOn<TCGroupV1StatsSubSystem>()) ||
@@ -479,7 +522,7 @@ namespace NActors {
             DependsOn<TCGroupV1StatsSubSystem>();
     }
 
-    void TCGroupOomSubSystem::OnDependenciesResolved(
+    void TCGroupOomSubSystemImpl::OnDependenciesResolved(
             const TResolvedSubSystemDependencies& dependencies) {
         Providers.clear();
         Providers.reserve(dependencies.size());
@@ -488,7 +531,7 @@ namespace NActors {
         }
     }
 
-    void TCGroupOomSubSystem::Subscribe(const TActorId& actorId) {
+    void TCGroupOomSubSystemImpl::Subscribe(const TActorId& actorId) {
         Y_ABORT_UNLESS(actorId, "cannot subscribe an empty actor id to cgroup OOM alerts");
 
         Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
@@ -496,13 +539,13 @@ namespace NActors {
         ActorSystem->Send(MonitorActorId, new NDetail::TEvSubscribeActor(actorId));
     }
 
-    void TCGroupOomSubSystem::Unsubscribe(const TActorId& actorId) {
+    void TCGroupOomSubSystemImpl::Unsubscribe(const TActorId& actorId) {
         Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
 
         ActorSystem->Send(MonitorActorId, new NDetail::TEvUnsubscribeActor(actorId));
     }
 
-    void TCGroupOomSubSystem::ReadTrend(
+    void TCGroupOomSubSystemImpl::ReadTrend(
             const TActorId& recipient,
             ECGroupOomTrendWindow window,
             ui64 cookie) const {
@@ -515,7 +558,7 @@ namespace NActors {
             new NDetail::TEvReadTrend(recipient, window, cookie));
     }
 
-    void TCGroupOomSubSystem::SubscribeToTrend(
+    void TCGroupOomSubSystemImpl::SubscribeToTrend(
             const TActorId& actorId,
             ECGroupOomTrendWindow window,
             TDuration timeToOomThreshold) {
@@ -533,7 +576,7 @@ namespace NActors {
                 timeToOomThreshold));
     }
 
-    void TCGroupOomSubSystem::UnsubscribeFromTrend(const TActorId& actorId) {
+    void TCGroupOomSubSystemImpl::UnsubscribeFromTrend(const TActorId& actorId) {
         Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
 
         ActorSystem->Send(
@@ -541,13 +584,13 @@ namespace NActors {
             new NDetail::TEvUnsubscribeTrendActor(actorId));
     }
 
-    void TCGroupOomSubSystem::ValidateTrendWindow(ECGroupOomTrendWindow window) const {
+    void TCGroupOomSubSystemImpl::ValidateTrendWindow(ECGroupOomTrendWindow window) const {
         Y_ABORT_UNLESS(
             Config.TrendWindows.Find(window),
             "cgroup OOM trend window is not configured");
     }
 
-    void TCGroupOomSubSystem::ValidateTrendSubscription(
+    void TCGroupOomSubSystemImpl::ValidateTrendSubscription(
             ECGroupOomTrendWindow window,
             TDuration timeToOomThreshold) const {
         ValidateTrendWindow(window);
@@ -556,7 +599,7 @@ namespace NActors {
             "cgroup OOM trend time threshold must be positive");
     }
 
-    void TCGroupOomSubSystem::OnAfterStart(TActorSystem& actorSystem) {
+    void TCGroupOomSubSystemImpl::OnAfterStart(TActorSystem& actorSystem) {
         const TActorId monitorActorId = actorSystem.Register(
             new NDetail::TCGroupOomActor(Providers, Config),
             TMailboxType::Simple,
@@ -566,12 +609,12 @@ namespace NActors {
         ActorSystem = &actorSystem;
     }
 
-    void TCGroupOomSubSystem::OnBeforeStop(TActorSystem& actorSystem) {
+    void TCGroupOomSubSystemImpl::OnBeforeStop(TActorSystem& actorSystem) {
         actorSystem.Send(MonitorActorId, new TEvents::TEvPoison());
     }
 
     std::unique_ptr<TCGroupOomSubSystem> MakeCGroupOomSubSystem(TCGroupOomConfig config) {
-        return std::make_unique<TCGroupOomSubSystem>(std::move(config));
+        return std::make_unique<TCGroupOomSubSystemImpl>(std::move(config));
     }
 
     TCGroupOomSubSystem& GetCGroupOomSubSystem(TActorSystem& actorSystem) {

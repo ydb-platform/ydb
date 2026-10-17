@@ -266,8 +266,7 @@ void TYqlJobBase::Init() {
 
     FunctionRegistry.Reset(funcRegistry.Release());
 
-    Alloc.Reset(new TScopedAlloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
-        FunctionRegistry->SupportsSizedAllocators()));
+    Alloc.Reset(new TScopedAlloc(__LOCATION__));
     Env.Reset(new TTypeEnvironment(*Alloc));
     CodecCtx.Reset(new NCommon::TCodecContext(*Env, *FunctionRegistry));
     if (NeedWriteStats() && !GetEnv(TString("YQL_SUPPRESS_JOB_STATISTIC"))) {
@@ -295,7 +294,8 @@ void TYqlJobBase::Save(IOutputStream& s) const {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings)
+        NYql::SerializeRuntimeSettingsToString(*RuntimeSettings),
+        BridgeMode
     );
 }
 
@@ -309,7 +309,8 @@ void TYqlJobBase::Load(IInputStream& s) {
         TableNames,
         RuntimeLogLevel,
         LangVer,
-        serializedRuntimeSettings
+        serializedRuntimeSettings,
+        BridgeMode
     );
     RuntimeSettings = NYql::CreateRuntimeSettingsFromString(serializedRuntimeSettings);
 }

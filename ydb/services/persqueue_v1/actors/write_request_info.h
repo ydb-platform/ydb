@@ -2,8 +2,9 @@
 
 #include "helpers.h"
 
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/persqueue/deferred_publish/constants.h>
+#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

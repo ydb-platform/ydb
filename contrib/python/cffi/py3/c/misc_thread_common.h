@@ -224,9 +224,14 @@ thread_canary_register(PyThreadState *tstate)
        the reference) and in 'tls->local_thread_canary' (which doesn't). */
     assert(Py_REFCNT(canary) == 1);
     tls->local_thread_canary = canary;
-    tstate->gilstate_counter++;
-    /* ^^^ this means 'tstate' will never be automatically freed by
-           PyGILState_Release() */
+    {
+        /* this extra PyGILState_Ensure() is deliberately never paired
+           with a PyGILState_Release(), so 'tstate' is never
+           automatically freed by PyGILState_Release() */
+        PyGILState_STATE state = PyGILState_Ensure();
+        assert(state == PyGILState_LOCKED);
+        (void)state;
+    }
     //fprintf(stderr, "CANARY: ready, tstate=%p, tls=%p, canary=%p\n", tstate, tls, canary);
     return;
 
@@ -313,52 +318,16 @@ static void restore_errno_only(void)
 #endif
 
 
-/* MESS.  We can't use PyThreadState_GET(), because that calls
-   PyThreadState_Get() which fails an assert if the result is NULL.
-
-   * in Python 2.7 and <= 3.4, the variable _PyThreadState_Current
-     is directly available, so use that.
-
-   * in Python 3.5, the variable is available too, but it might be
-     the case that the headers don't define it (this changed in 3.5.1).
-     In case we're compiling with 3.5.x with x >= 1, we need to
-     manually define this variable.
-
-   * in Python >= 3.6 there is _PyThreadState_UncheckedGet().
-     It was added in 3.5.2 but should never be used in 3.5.x
-     because it is not available in 3.5.0 or 3.5.1.
-*/
-static PyThreadState *get_current_ts(void)
-{
-#if PY_VERSION_HEX >= 0x030D0000
-    return PyThreadState_GetUnchecked();
-#else
-    return _PyThreadState_UncheckedGet();
-#endif
-}
-
 static PyGILState_STATE gil_ensure(void)
 {
-    /* Called at the start of a callback.  Replacement for
-       PyGILState_Ensure().
-    */
+    /* Called at the start of a callback. */
     PyGILState_STATE result;
     PyThreadState *ts = PyGILState_GetThisThreadState();
     //fprintf(stderr, "%p: gil_ensure(), tstate=%p, tls=%p\n", get_cffi_tls(), ts, get_cffi_tls());
 
     if (ts != NULL) {
-        ts->gilstate_counter++;
-        if (ts != get_current_ts()) {
-            /* common case: 'ts' is our non-current thread state and
-               we have to make it current and acquire the GIL */
-            PyEval_RestoreThread(ts);
-            //fprintf(stderr, "%p: gil_ensure(), tstate=%p MADE CURRENT\n", get_cffi_tls(), ts);
-            return PyGILState_UNLOCKED;
-        }
-        else {
-            //fprintf(stderr, "%p: gil_ensure(), tstate=%p ALREADY CURRENT\n", get_cffi_tls(), ts);
-            return PyGILState_LOCKED;
-        }
+        /* common case: this thread already has a thread state */
+        return PyGILState_Ensure();
     }
     else {
         /* no thread state here so far. */
@@ -368,8 +337,6 @@ static PyGILState_STATE gil_ensure(void)
         ts = PyGILState_GetThisThreadState();
         //fprintf(stderr, "%p: gil_ensure(), made a new tstate=%p\n", get_cffi_tls(), ts);
         assert(ts != NULL);
-        assert(ts == get_current_ts());
-        assert(ts->gilstate_counter >= 1);
 
         /* Use the ThreadCanary mechanism to keep 'ts' alive until the
            thread really shuts down */

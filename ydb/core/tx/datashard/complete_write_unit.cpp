@@ -89,7 +89,7 @@ void TCompleteWriteUnit::CompleteWrite(TOperation::TPtr op, const TActorContext&
 
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId())) {
             result->SetOrbit(std::move(op->Orbit));
-            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId());
+            DataShard.SendWriteResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId(), op->GetTraceId(), op->GetCookie());
         }
 
         if (!op->IsImmediate() && !op->IsReadOnly()) {
@@ -143,3 +143,7 @@ THolder<TExecutionUnit> CreateCompleteWriteUnit(TDataShard &dataShard, TPipeline
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

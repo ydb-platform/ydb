@@ -150,6 +150,7 @@ public:
 
         hFunc(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated);
+        IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
     )
 
 private:

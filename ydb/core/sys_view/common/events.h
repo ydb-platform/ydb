@@ -4,7 +4,6 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/core/protos/sys_view.pb.h>
-#include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/sys_view/common/db_counters.h>
 #include <ydb/core/sys_view/common/utils.h>
 
@@ -17,6 +16,12 @@ class IDbCounters : public virtual TThrRefBase {
 public:
     virtual void ToProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;
     virtual void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;
+};
+
+class IDbDetailedCounters : public virtual TThrRefBase {
+public:
+    virtual void Pack(
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };
 
 struct TEvSysView {
@@ -78,6 +83,9 @@ struct TEvSysView {
         EvCalculateStorageStatsResponse,
 
         EvRosterUpdateFinished,
+
+        EvRegisterDbDetailedCounters,
+        EvUnregisterDbDetailedCounters,
 
         EvEnd,
     };
@@ -411,6 +419,38 @@ struct TEvSysView {
         EvGetTopPartitionsResponse>
     {};
 
+    struct TEvRegisterDbDetailedCounters : public TEventLocal<
+        TEvRegisterDbDetailedCounters,
+        EvRegisterDbDetailedCounters>
+    {
+        TString Database;
+        NKikimrSysView::EDbCountersService Service;
+        TIntrusivePtr<IDbDetailedCounters> Counters;
+
+        TEvRegisterDbDetailedCounters(
+            const TString& database,
+            NKikimrSysView::EDbCountersService service,
+            TIntrusivePtr<IDbDetailedCounters> counters)
+            : Database(database)
+            , Service(service)
+            , Counters(counters)
+        {}
+    };
+
+    struct TEvUnregisterDbDetailedCounters : public TEventLocal<
+        TEvUnregisterDbDetailedCounters,
+        EvUnregisterDbDetailedCounters>
+    {
+        TString Database;
+        NKikimrSysView::EDbCountersService Service;
+
+        TEvUnregisterDbDetailedCounters(
+            const TString& database,
+            NKikimrSysView::EDbCountersService service)
+            : Database(database)
+            , Service(service)
+        {}
+    };
 
     struct TEvInitPartitionStatsCollector : public TEventLocal<
         TEvInitPartitionStatsCollector,

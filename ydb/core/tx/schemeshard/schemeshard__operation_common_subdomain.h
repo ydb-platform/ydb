@@ -79,11 +79,8 @@ class TConfigureParts: public TSubOperationState {
 private:
     TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TConfigureParts"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 public:
     TConfigureParts(TOperationId id);
 
@@ -96,11 +93,7 @@ class TPropose: public TSubOperationState {
 private:
     const TOperationId OperationId;
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "NSubDomainState::TPropose"
-                << " operationId# " << OperationId;
-    }
+    virtual const char* Name() const override final { return "TPropose"; }
 
 public:
     TPropose(TOperationId id);

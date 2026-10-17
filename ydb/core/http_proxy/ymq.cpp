@@ -6,9 +6,9 @@
 #include "utils.h"
 
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -24,8 +24,6 @@
 
 #include <expected>
 #include <functional>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
@@ -57,9 +55,10 @@ namespace NKikimr::NHttpProxy {
         }
 
     private:
-        class TYmqHttpRequestActor : public NActors::TActorBootstrapped<TYmqHttpRequestActor> {
+        class TYmqHttpRequestActor : public NPQ::TBaseActor<TYmqHttpRequestActor>
+                                     , public NPQ::TConstantLogPrefix {
         public:
-            using TBase = NActors::TActorBootstrapped<TYmqHttpRequestActor>;
+            using TBase = NPQ::TBaseActor<TYmqHttpRequestActor>;
 
             TYmqHttpRequestActor(
                     THttpRequestContext&& httpContext,
@@ -67,7 +66,8 @@ namespace NKikimr::NHttpProxy {
                     TProtoCall protoCall,
                     const TString& method,
                     std::function<TString(TProtoRequest&)> queueUrlExtractor)
-                : HttpContext(std::move(httpContext))
+                : TBase(NKikimrServices::HTTP_PROXY)
+                , HttpContext(std::move(httpContext))
                 , Signature(std::move(signature))
                 , ProtoCall(protoCall)
                 , Method(method)
@@ -75,7 +75,7 @@ namespace NKikimr::NHttpProxy {
             {
             }
 
-            TStringBuilder LogPrefix() const {
+            NPQ::TStructuredMessage BuildLogPrefix() const override {
                 return HttpContext.LogPrefix();
             }
 
@@ -93,8 +93,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
-                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Sending grpc request to database: iam token",
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -196,7 +195,7 @@ namespace NKikimr::NHttpProxy {
 
             void DoMetering(const THttpResponseData& data, THolder<THashMap<TString, TString>>&& queueTags, const TActorContext& ctx) {
                 if (!IamAuthenticated) {
-                    YDB_LOG_DEBUG_CTX(ctx, "Skip metering event due to IAM auth failure");
+                    LOG_D("Skip metering event due to IAM auth failure");
                     return;
                 }
                 if (HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
@@ -219,8 +218,7 @@ namespace NKikimr::NHttpProxy {
                         }
                     }
 
-                    YDB_LOG_DEBUG_CTX(ctx, "Send metering event",
-                        {"logPrefix", LogPrefix()},
+                    LOG_D("Send metering event",
                         {"httpStatusCode", requestAttributes.HttpStatusCode},
                         {"isFifo", requestAttributes.IsFifo},
                         {"folderId", requestAttributes.FolderId},
@@ -245,8 +243,7 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    YDB_LOG_DEBUG_CTX(ctx, "Got succesfult GRPC response",
-                        {"logPrefix", LogPrefix()});
+                    LOG_D("Got succesfult GRPC response");
 
                     ReplyToHttpContext({
                         .HttpCode = 200,
@@ -262,8 +259,7 @@ namespace NKikimr::NHttpProxy {
                     switch (retryClass) {
                     case ERetryErrorClass::ShortRetry:
                     case ERetryErrorClass::LongRetry:
-                        YDB_LOG_DEBUG_CTX(ctx, "Retrying failed GRPC response",
-                            {"logPrefix", LogPrefix()});
+                        LOG_D("Retrying failed GRPC response");
                         RetryCounter.Click();
                         if (RetryCounter.HasAttemps()) {
                             return SendGrpcRequestNoDriver(ctx);
@@ -283,8 +279,7 @@ namespace NKikimr::NHttpProxy {
                                 NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
-                        YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
-                            {"logPrefix", LogPrefix()},
+                        LOG_D("Not retrying GRPC response",
                             {"code", get<1>(errorAndCode)},
                             {"error", get<0>(errorAndCode)});
 
@@ -306,8 +301,7 @@ namespace NKikimr::NHttpProxy {
 
             void HandleYmqCloudAuthorizationResponse(TEvYmqCloudAuthResponse::TPtr ev, const TActorContext& ctx) {
                 if (ev->Get()->IsSuccess) {
-                    YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
-                        {"logPrefix", LogPrefix()},
+                    LOG_D("Got cloud auth response",
                         {"folderId", ev->Get()->FolderId},
                         {"cloudId", ev->Get()->CloudId},
                         {"userSid", ev->Get()->Sid});
@@ -317,8 +311,7 @@ namespace NKikimr::NHttpProxy {
                     IamAuthenticated = true;
                     SendGrpcRequestNoDriver(ctx);
                 } else {
-                    YDB_LOG_DEBUG_CTX(ctx, "Got cloud auth response",
-                        {"logPrefix", LogPrefix()},
+                    LOG_D("Got cloud auth response",
                         {"httpStatusCode", ev->Get()->Error->HttpStatusCode},
                         {"errorCode", ev->Get()->Error->ErrorCode},
                         {"message", ev->Get()->Error->Message});
@@ -358,8 +351,7 @@ namespace NKikimr::NHttpProxy {
                     }
                     return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json",
-                        {"logPrefix", LogPrefix()},
+                    LOG_W("Got new request with incorrect json",
                         {"sourceAddress", HttpContext.SourceAddress});
                     return ReplyWithError(
                         ctx,
@@ -369,8 +361,7 @@ namespace NKikimr::NHttpProxy {
                     );
                 }
 
-                YDB_LOG_INFO_CTX(ctx, "Got new request",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Got new request",
                     {"sourceAddress", HttpContext.SourceAddress});
 
                 if (!HttpContext.ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {

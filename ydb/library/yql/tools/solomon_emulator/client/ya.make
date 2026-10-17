@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+STYLE_PYTHON()
+
 PEERDIR(
     contrib/python/requests
     contrib/python/retry

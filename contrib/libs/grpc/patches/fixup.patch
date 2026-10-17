@@ -1,14 +1,3 @@
---- a/src/core/lib/event_engine/cf_engine/cfstream_endpoint.cc	(index)
-+++ b/src/core/lib/event_engine/cf_engine/cfstream_endpoint.cc	(working tree)
-@@ -21,6 +21,8 @@ namespace grpc_ruby_generator {
- #include "src/core/lib/event_engine/cf_engine/cfstream_endpoint.h"
- #include "src/core/lib/event_engine/trace.h"
- #include "src/core/lib/gprpp/strerror.h"
-+#include <util/generic/string.h>
-+#include "y_absl/strings/str_cat.h"
- 
- namespace grpc_event_engine {
- namespace experimental {
 --- a/src/compiler/ruby_generator_string-inl.h	(index)
 +++ b/src/compiler/ruby_generator_string-inl.h	(working tree)
 @@ -36,9 +36,9 @@ namespace grpc_ruby_generator {
@@ -23,13 +12,3 @@
    }
    return *elems;
  }
---- a/src/core/lib/gprpp/windows/directory_reader.cc    (index)
-+++ b/src/core/lib/gprpp/windows/directory_reader.cc    (working tree)
-@@ -29,6 +29,7 @@
- 
- #include "y_absl/status/statusor.h"
- #include "y_absl/strings/string_view.h"
-+#include "y_absl/strings/str_cat.h"
- 
- #include <grpc/support/log.h>
- 

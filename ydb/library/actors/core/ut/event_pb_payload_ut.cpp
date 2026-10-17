@@ -2,6 +2,7 @@
 #include "events.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
 
 using namespace NActors;
@@ -82,6 +83,39 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         }
     }
 
+    Y_UNIT_TEST(CoroutineSerializerAbortDuringPayload) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("record after payload");
+        msg.AddPayload(MakeStringRope(TString(1024, 'x')));
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        // Stop inside the payload count, rope size, and rope body respectively.
+        for (size_t feedSize : {1, 2, 64}) {
+            TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&msg, true, false);
+            char buffer[64];
+            auto chunks = chunker.FeedBuf(buffer, feedSize);
+            TString prefix;
+            for (const auto& chunk : chunks) {
+                prefix.append(chunk.Buf, chunk.Size);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(prefix, expected.substr(0, feedSize));
+            UNIT_ASSERT(!chunker.IsComplete());
+            UNIT_ASSERT_VALUES_EQUAL(chunker.GetCurrentEvent(), &msg);
+            chunker.Abort();
+            UNIT_ASSERT(chunker.IsComplete());
+            UNIT_ASSERT(!chunker.IsSuccessfull());
+            UNIT_ASSERT_VALUES_EQUAL(chunker.ByteCount(), feedSize);
+            TString afterAbort;
+            for (const auto& chunk : chunks) {
+                afterAbort.append(chunk.Buf, chunk.Size);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(afterAbort, prefix);
+        }
+    }
+
     Y_UNIT_TEST(CoroutineSerializerChunkSizesAroundSlopBoundary) {
         TEvMessageWithPayload msg;
         msg.Record.SetMeta("hello, world!");
@@ -106,6 +140,131 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
             UNIT_ASSERT(chunker.IsSuccessfull());
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "chunkSize# " << chunkSize);
         }
+    }
+
+    Y_UNIT_TEST(CoroutineSerializerCopiesAliasedDataToBuffer) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(1024, 'x'))));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg, true, false);
+
+        TString actual;
+        char buffer[4096];
+        while (!chunker.IsComplete()) {
+            for (const auto& chunk : chunker.FeedBuf(buffer, sizeof(buffer),
+                    TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer)) {
+                UNIT_ASSERT(!chunk.MemRegion);
+                UNIT_ASSERT(buffer <= chunk.Buf);
+                UNIT_ASSERT(chunk.Buf + chunk.Size <= std::end(buffer));
+                actual.append(chunk.Buf, chunk.Size);
+            }
+        }
+
+        UNIT_ASSERT(chunker.IsSuccessfull());
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
+    Y_UNIT_TEST(CoroutineSerializerPreservesRdmaAliasedData) {
+        constexpr size_t payloadSize = 1024;
+
+        const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto rdmaBuffer = memPool->AllocRcBuf(payloadSize, 0).value();
+        memset(rdmaBuffer.GetDataMut(), 'x', payloadSize);
+
+        const char* payloadData = rdmaBuffer.GetData();
+        const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(rdmaBuffer);
+        UNIT_ASSERT(!memRegion.Empty());
+
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(TRope(std::move(rdmaBuffer))));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg, true, false);
+
+        TString actual;
+        bool foundRdmaPayload = false;
+        char buffer[4096];
+        while (!chunker.IsComplete()) {
+            for (const auto& chunk : chunker.FeedBuf(buffer, sizeof(buffer),
+                    TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer)) {
+                if (chunk.MemRegion) {
+                    UNIT_ASSERT(!foundRdmaPayload);
+                    UNIT_ASSERT(chunk.MemRegion == memRegion.GetMemRegion());
+                    UNIT_ASSERT(chunk.Buf == payloadData);
+                    UNIT_ASSERT_VALUES_EQUAL(chunk.Size, payloadSize);
+                    foundRdmaPayload = true;
+                } else {
+                    UNIT_ASSERT(buffer <= chunk.Buf);
+                    UNIT_ASSERT(chunk.Buf + chunk.Size <= std::end(buffer));
+                }
+                actual.append(chunk.Buf, chunk.Size);
+            }
+        }
+
+        UNIT_ASSERT(chunker.IsSuccessfull());
+        UNIT_ASSERT(foundRdmaPayload);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
+    // Verifies that an RDMA-backed aliased payload remains zero-copy while a regular
+    // aliased payload is copied into the serializer's RDMA buffer.
+    Y_UNIT_TEST(CoroutineSerializerHandlesMixedAliasedData) {
+        constexpr size_t payloadSize = 1024;
+
+        const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto rdmaBuffer = memPool->AllocRcBuf(payloadSize, 0).value();
+        memset(rdmaBuffer.GetDataMut(), 'r', payloadSize);
+
+        const char* rdmaPayloadData = rdmaBuffer.GetData();
+        const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(rdmaBuffer);
+        UNIT_ASSERT(!memRegion.Empty());
+
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(payloadSize, 't'))));
+        msg.Record.AddPayloadId(msg.AddPayload(TRope(std::move(rdmaBuffer))));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg, true, false);
+
+        TString actual;
+        bool foundRdmaPayload = false;
+        char buffer[4096];
+        while (!chunker.IsComplete()) {
+            for (const auto& chunk : chunker.FeedBuf(buffer, sizeof(buffer),
+                    TCoroutineChunkSerializer::EAliasedMode::CopyToBuffer)) {
+                if (chunk.MemRegion) {
+                    UNIT_ASSERT(!foundRdmaPayload);
+                    UNIT_ASSERT(chunk.MemRegion == memRegion.GetMemRegion());
+                    UNIT_ASSERT(chunk.Buf == rdmaPayloadData);
+                    UNIT_ASSERT_VALUES_EQUAL(chunk.Size, payloadSize);
+                    foundRdmaPayload = true;
+                } else {
+                    UNIT_ASSERT(buffer <= chunk.Buf);
+                    UNIT_ASSERT(chunk.Buf + chunk.Size <= std::end(buffer));
+                }
+                actual.append(chunk.Buf, chunk.Size);
+            }
+        }
+
+        UNIT_ASSERT(chunker.IsSuccessfull());
+        UNIT_ASSERT(foundRdmaPayload);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 
 #if (!defined(_tsan_enabled_))

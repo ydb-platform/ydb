@@ -29,6 +29,7 @@ message TRspPassCall
     optional string user_tag = 2;
     required NYT.NProto.TGuid mutation_id = 3;
     required bool retry = 4;
+    optional int64 start_time = 5;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -241,6 +242,17 @@ message TReqServerNotWriting
 }
 
 message TRspServerNotWriting
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqStreamingStatistics
+{
+    required int32 block_count = 1;
+}
+
+message TRspStreamingStatistics
 {
 }
 

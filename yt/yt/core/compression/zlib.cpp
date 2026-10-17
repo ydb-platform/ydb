@@ -131,7 +131,7 @@ void ZlibDecompress(TSource* source, TBlob* output)
         result = inflate(&stream, flush);
         if (result != Z_OK && result != Z_STREAM_END) {
             THROW_ERROR_EXCEPTION("Zlib compression failed: inflate returned an error")
-                << TErrorAttribute("error", result);
+                .With("error", result);
         }
 
         source->Skip(inputAvailable - stream.avail_in);
@@ -141,12 +141,12 @@ void ZlibDecompress(TSource* source, TBlob* output)
 
     if (source->Available() != 0) {
         THROW_ERROR_EXCEPTION("Zlib compression failed: input stream is not fully consumed")
-            << TErrorAttribute("remaining_size", source->Available());
+            .With("remaining_size", source->Available());
     }
     if (output->Size() != totalUncompressedSize) {
         THROW_ERROR_EXCEPTION("Zlib decompression failed: output size mismatch")
-            << TErrorAttribute("expected_size", totalUncompressedSize)
-            << TErrorAttribute("actual_size", output->Size());
+            .With("expected_size", totalUncompressedSize)
+            .With("actual_size", output->Size());
     }
 }
 

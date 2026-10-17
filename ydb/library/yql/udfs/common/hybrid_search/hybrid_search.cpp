@@ -1,5 +1,7 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 
+#include <cmath>
+
 using namespace NYql;
 using namespace NYql::NUdf;
 
@@ -21,6 +23,9 @@ using namespace NYql::NUdf;
 SIMPLE_STRICT_UDF(TRRF, double(TListType<ui64>, TListType<double>, double)) {
     Y_UNUSED(valueBuilder);
     const double k = args[2].Get<double>();
+    if (!std::isfinite(k)) {
+        UdfTerminate("HybridSearch::RRF requires a finite K");
+    }
 
     // Collect per-branch weights up front so ranks can be indexed against them.
     TVector<double, TStdAllocatorForUdf<double>> weights;
@@ -41,7 +46,17 @@ SIMPLE_STRICT_UDF(TRRF, double(TListType<ui64>, TListType<double>, double)) {
     ui64 i = 0;
     const auto accumulate = [&](ui64 rank) {
         const double weight = (i < weights.size()) ? weights[i] : 1.0;
-        score += weight / (k + static_cast<double>(rank));
+        if (!std::isfinite(weight)) {
+            UdfTerminate("HybridSearch::RRF requires finite weights");
+        }
+        const double denominator = k + static_cast<double>(rank);
+        if (!std::isfinite(denominator) || denominator == 0.0) {
+            UdfTerminate("HybridSearch::RRF requires a finite non-zero K + rank");
+        }
+        score += weight / denominator;
+        if (!std::isfinite(score)) {
+            UdfTerminate("HybridSearch::RRF produced a non-finite result");
+        }
         ++i;
     };
     if (const auto elems = args[0].GetElements()) {
@@ -124,10 +139,16 @@ SIMPLE_STRICT_UDF(TLinearFuse, double(TListType<double>, TListType<double>, TLis
         const double mx = (i < maxs.size()) ? maxs[i] : 0.0;
         const double weight = (i < weights.size()) ? weights[i] : 1.0;
         const bool isSimilarity = (i < similarities.size()) ? similarities[i] : true;
+        if (!std::isfinite(score) || !std::isfinite(mn) || !std::isfinite(mx) || !std::isfinite(weight)) {
+            UdfTerminate("HybridSearch::LinearFuse requires finite scores, bounds and weights");
+        }
 
         double norm;
         if (normalize) {
             const double span = mx - mn;
+            if (!std::isfinite(span)) {
+                UdfTerminate("HybridSearch::LinearFuse requires a finite normalization span");
+            }
             if (span <= 0.0) {
                 norm = 0.0;
             } else {
@@ -137,7 +158,13 @@ SIMPLE_STRICT_UDF(TLinearFuse, double(TListType<double>, TListType<double>, TLis
         } else {
             norm = isSimilarity ? score : -score;  // distance negated so a larger fused score is better
         }
+        if (!std::isfinite(norm) || !std::isfinite(weight * norm)) {
+            UdfTerminate("HybridSearch::LinearFuse produced a non-finite contribution");
+        }
         fused += weight * norm;
+        if (!std::isfinite(fused)) {
+            UdfTerminate("HybridSearch::LinearFuse produced a non-finite result");
+        }
     }
     return TUnboxedValuePod(fused);
 }

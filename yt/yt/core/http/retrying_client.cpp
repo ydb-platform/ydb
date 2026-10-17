@@ -71,7 +71,7 @@ public:
             Json_ = builder->EndTree();
         } catch (const std::exception& ex) {
             return TError("Error parsing response")
-                << ex;
+                .With(ex);
         }
 
         if (!Json_) {
@@ -205,15 +205,15 @@ private:
 
         const auto shouldRetry = [&] (const TError& error) {
             const auto isRetriableError = responseChecker->IsRetriableError(error);
-            auto attemptError = TError("Request attempt %v failed", attempt)
-                << error
-                << TErrorAttribute("attempt", attempt);
+            auto attemptError = TError("Request to %v failed", sanitizedUrl)
+                .With(error)
+                .With("attempt", attempt);
 
             YT_TLOG_WARNING("Request attempt failed")
                 .With("Url", sanitizedUrl)
                 .With("Attempt", attempt)
                 .With("Retriable", isRetriableError)
-                .With(attemptError);
+                .With(error);
 
             accumulatedErrors.push_back(std::move(attemptError));
             return isRetriableError && TInstant::Now() < deadline && attempt < Config_->MaxAttemptCount;
@@ -245,10 +245,10 @@ private:
         }
 
         THROW_ERROR_EXCEPTION("HTTP request failed")
-            << std::move(accumulatedErrors)
-            << TErrorAttribute("url", sanitizedUrl)
-            << TErrorAttribute("attempt_count", attempt)
-            << TErrorAttribute("max_attempt_count", Config_->MaxAttemptCount);
+            .With(std::move(accumulatedErrors))
+            .With("url", sanitizedUrl)
+            .With("attempt_count", attempt)
+            .With("max_attempt_count", Config_->MaxAttemptCount);
     }
 };
 

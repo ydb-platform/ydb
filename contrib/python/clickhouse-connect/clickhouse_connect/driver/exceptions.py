@@ -8,6 +8,14 @@ import re
 
 _error_name_re = re.compile(r"\(([A-Z][A-Z0-9_]+)\)")
 
+# Trailing "(version 26.2.4.23)" or "(version 26.2.4.23 (official build))" /
+# Altinity-style "(version 22.8.15.25.altinitystable)". Nested parentheses in
+# the trailer are allowed; the match is anchored to the end of the message so
+# a coincidental "(version ...)" mid-text is left alone.
+_version_trailer_re = re.compile(r"\s*\(version\s+(?:[^()]|\([^()]*\))*\)\s*$")
+
+GENERIC_CLICKHOUSE_ERROR = "The ClickHouse server returned an error"
+
 
 def error_code_from_header(header_value: str | None) -> int | None:
     """Parse the numeric ClickHouse error code from the exception header value."""
@@ -23,6 +31,14 @@ def error_name_from_body(body: str | None) -> str | None:
     """Extract the symbolic ClickHouse error name (e.g. UNKNOWN_TABLE) from a response body."""
     matches = _error_name_re.findall(body or "")
     return matches[-1] if matches else None
+
+
+def scrub_error_details(msg: str) -> str:
+    """Remove the trailing ClickHouse server version trailer from an error message.
+
+    Leaves the SQL exception text and symbolic name (e.g. UNKNOWN_TABLE) intact.
+    """
+    return _version_trailer_re.sub("", msg).rstrip()
 
 
 class ClickHouseError(Exception):

@@ -129,16 +129,11 @@ public:
                 }
             } else {
                 if (Disabled_.load(std::memory_order::acquire)) {
-                    try {
-                        // Reinitialize all descriptors.
-                        Reload();
+                    // Reinitialize all descriptors.
+                    Reload();
+                    if (!Disabled_.load(std::memory_order::acquire)) {
                         YT_TLOG_INFO("Log file enabled: space check passed")
                             .With("FileName", BaseFileName_);
-                        Disabled_ = false;
-                    } catch (const std::exception& ex) {
-                        YT_TLOG_ERROR("Log file disabled: reload failed")
-                            .With("FileName", BaseFileName_)
-                            .With(TError(ex));
                     }
                 }
             }
@@ -146,7 +141,7 @@ public:
             Disabled_ = true;
             YT_TLOG_ERROR("Log file disabled: space check failed")
                 .With("FileName", BaseFileName_)
-                .With(TError(ex));
+                .With(ex);
 
             Close();
         }
@@ -166,7 +161,7 @@ protected:
         Disabled_ = true;
         YT_TLOG_ERROR("Disabled log file")
             .With("FileName", BaseFileName_)
-            .With(TError(ex));
+            .With(ex);
 
         Close();
     }
@@ -268,7 +263,7 @@ private:
             Disabled_ = true;
             YT_TLOG_ERROR("Failed to open log file")
                 .With("FileName", FileName_)
-                .With(TError(ex));
+                .With(ex);
 
             Close();
         } catch (...) {
@@ -291,7 +286,7 @@ private:
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to close log file; ignored")
                 .With("FileName", FileName_)
-                .With(TError(ex));
+                .With(ex);
         } catch (...) {
             YT_ABORT();
         }
@@ -313,7 +308,7 @@ private:
             RenameFiles(fileNames);
         } catch (const std::exception& ex) {
             YT_TLOG_ERROR("Failed to rotate log files")
-                .With(TError(ex));
+                .With(ex);
         } catch (...) {
             YT_ABORT();
         }

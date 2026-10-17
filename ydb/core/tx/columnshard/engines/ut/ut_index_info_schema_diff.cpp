@@ -9,12 +9,6 @@ namespace NKikimr::NOlap::NTest {
 
 namespace {
 
-void FillSchemaOptions(NKikimrSchemeOp::TColumnTableSchema& proto) {
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
-}
-
 NKikimrSchemeOp::TColumnTableSchema MakeSchemaV1() {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
@@ -27,7 +21,6 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV1() {
     *proto.MutableColumns()->Add() = columns[2].CreateColumn(3);
     proto.AddKeyColumnNames("timestamp");
     proto.SetVersion(1);
-    FillSchemaOptions(proto);
     return proto;
 }
 
@@ -43,7 +36,6 @@ NKikimrSchemeOp::TColumnTableSchema MakeSchemaV2AfterDropAndAdd() {
     *proto.MutableColumns()->Add() = columns[2].CreateColumn(4);
     proto.AddKeyColumnNames("timestamp");
     proto.SetVersion(2);
-    FillSchemaOptions(proto);
     return proto;
 }
 

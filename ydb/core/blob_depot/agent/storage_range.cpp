@@ -56,6 +56,7 @@ namespace NKikimr::NBlobDepot {
                 range->SetReverse(Reverse);
                 item->SetTabletId(Request.TabletId);
                 item->SetMustRestoreFirst(Request.MustRestoreFirst);
+                resolve.SetDataKind(Request.DataKind);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
             }
@@ -112,6 +113,7 @@ namespace NKikimr::NBlobDepot {
                             tag,
                             {},
                             key.GetKey(),
+                            Request.DataKind,
                         };
                         ++ReadsInFlight;
                         TString error;

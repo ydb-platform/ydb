@@ -46,9 +46,14 @@ public:
     void Stop() {
         Y_ABORT_UNLESS(SelfContext);
 
+        IQueueClientContextPtr toCancel;
         {
             std::lock_guard guard(Lock);
             Stopping = true;
+            toCancel = std::move(DumpCountersContext);
+        }
+        if (toCancel) {
+            toCancel->Cancel();
         }
 
         // Log final counters.

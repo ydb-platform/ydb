@@ -11,6 +11,12 @@ struct TAtom {
     std::string Sql;
     std::function<void(NYdb::TParamsBuilder&)> AddParams;
     bool IsJsonIndexable = true;
+    bool ExpectBothPathError = false;
+    std::string ExpectedBothPathErrorSubstr;
+    std::string ExpectedIndexErrorSubstr;
+    std::optional<EJsonShape> JsonParameterShape;
+    EJsonParameterFunction JsonParameterFunction = EJsonParameterFunction::None;
+    bool IsJsonParameterComposition = false;
 };
 
 class TPredicateBatchGenerator {
@@ -40,6 +46,10 @@ public:
 
         if (Opts.EnableSqlParameters) {
             GenerateSqlParameters();
+        }
+
+        if (Opts.EnableJsonParameters) {
+            GenerateJsonParameters();
         }
 
         if (Opts.EnableRangeComparisons) {
@@ -88,6 +98,8 @@ public:
 private:
     void FillKeyPools() {
         for (const auto& row : Rows) {
+            RowsByShape[static_cast<size_t>(row.Shape)].push_back(&row);
+
             switch (row.Shape) {
                 case EJsonShape::Scalar:
                     switch (row.Key % 6) {
@@ -221,14 +233,34 @@ private:
         return TAtom{
             .Sql = "(" + a.Sql + ") AND (" + b.Sql + ")",
             .AddParams = MergeAdd(a.AddParams, b.AddParams),
-            .IsJsonIndexable = a.IsJsonIndexable || b.IsJsonIndexable};
+            .IsJsonIndexable = a.IsJsonIndexable || b.IsJsonIndexable,
+            .ExpectBothPathError = a.ExpectBothPathError || b.ExpectBothPathError,
+            .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedBothPathErrorSubstr
+                : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
+            .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
+                || a.JsonParameterFunction != EJsonParameterFunction::None
+                || b.JsonParameterFunction != EJsonParameterFunction::None};
     }
 
     TAtom OrAtom(const TAtom& a, const TAtom& b) {
         return TAtom{
             .Sql = "(" + a.Sql + ") OR (" + b.Sql + ")",
             .AddParams = MergeAdd(a.AddParams, b.AddParams),
-            .IsJsonIndexable = a.IsJsonIndexable && b.IsJsonIndexable};
+            .IsJsonIndexable = a.IsJsonIndexable && b.IsJsonIndexable,
+            .ExpectBothPathError = a.ExpectBothPathError || b.ExpectBothPathError,
+            .ExpectedBothPathErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedBothPathErrorSubstr
+                : b.ExpectedBothPathErrorSubstr,
+            .ExpectedIndexErrorSubstr = a.ExpectBothPathError
+                ? a.ExpectedIndexErrorSubstr
+                : b.ExpectedIndexErrorSubstr,
+            .IsJsonParameterComposition = a.IsJsonParameterComposition || b.IsJsonParameterComposition
+                || a.JsonParameterFunction != EJsonParameterFunction::None
+                || b.JsonParameterFunction != EJsonParameterFunction::None};
     }
 
     void AddJ(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP = nullptr) {
@@ -245,9 +277,32 @@ private:
             .IsJsonIndexable = false});
     }
 
+    void AddJsonParameter(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP,
+        EJsonParameterFunction function, std::optional<EJsonShape> shape = std::nullopt)
+    {
+        JsonParameterAtoms.push_back(TAtom{
+            .Sql = std::move(sql),
+            .AddParams = std::move(addP),
+            .IsJsonIndexable = true,
+            .JsonParameterShape = shape,
+            .JsonParameterFunction = function});
+    }
+
+    void AddJBothPathErr(std::string sql, std::function<void(NYdb::TParamsBuilder&)> addP,
+        std::string errorSubstr, std::string indexErrorSubstr = {})
+    {
+        ExecutionErrorAtoms.push_back(TAtom{
+            .Sql = std::move(sql),
+            .AddParams = std::move(addP),
+            .IsJsonIndexable = true,
+            .ExpectBothPathError = true,
+            .ExpectedBothPathErrorSubstr = std::move(errorSubstr),
+            .ExpectedIndexErrorSubstr = std::move(indexErrorSubstr)});
+    }
+
     void GenerateJsonExists() {
         // Root key
-        AddJ(fmt::format("JSON_EXISTS(Text, '{} $')", Mode));
+        AddJErr(fmt::format("JSON_EXISTS(Text, '{} $')", Mode));
 
         // Member access
         {
@@ -262,7 +317,7 @@ private:
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.shared')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.shared') = true", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.nope_xyz')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $.*')", Mode));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.*')", Mode));
 
             for (int j = 0; j < 5; ++j) {
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.g5_{}')", Mode, j));
@@ -293,16 +348,15 @@ private:
         // Equality and inequality with literals
         {
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == null)')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != null)')", Mode));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != null)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == true)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == false)')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != null)')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != true)')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != false)')", Mode));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != true)')", Mode));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != false)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == {})')", Mode, PickFrom(KeysWithScalarNumber)));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != {})')", Mode, PickFrom(KeysWithScalarNumber)));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != {})')", Mode, PickFrom(KeysWithScalarNumber)));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == {})')", Mode, PickFrom(KeysWithScalarString)));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != {})')", Mode, PickFrom(KeysWithScalarString)));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != {})')", Mode, PickFrom(KeysWithScalarString)));
         }
 
         // Equality with member access
@@ -327,7 +381,7 @@ private:
 
             for (size_t i = 0; i < 3; ++i) {
                 const ui64 k = PickFrom(KeysWithIntUVal);
-                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.* ? (@ == {1})')", Mode, k));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.* ? (@ == {1})')", Mode, k));
             }
         }
 
@@ -379,7 +433,7 @@ private:
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = PickFrom(KeysWithBothSharedAndU);
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} || @.* == "shared_v")'))", Mode, k));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} == {1} || @.* == "shared_v")'))", Mode, k));
             }
         }
 
@@ -537,7 +591,7 @@ private:
         // Member access
         {
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared' RETURNING Utf8) = \"shared_v\"u", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $.*' RETURNING Utf8) = \"shared_v\"u", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $.*' RETURNING Utf8) = \"shared_v\"u", Mode));
 
             for (size_t i = 0; i < 4; ++i) {
                 const ui64 k = PickFrom(KeysWithStrUVal);
@@ -691,25 +745,25 @@ private:
         // Equality and inequality with literals
         {
             AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ == null)' RETURNING Bool)", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != null)' RETURNING Bool)", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != null)' RETURNING Bool)", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ == true)' RETURNING Bool)", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ == false)' RETURNING Bool)", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != true)' RETURNING Bool)", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != false)' RETURNING Bool)", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != true)' RETURNING Bool)", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != false)' RETURNING Bool)", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Bool)", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Bool) == true", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Bool) != false", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ == {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarNumber)));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarNumber)));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarNumber)));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int32) == {}", Mode, PickFrom(KeysWithScalarNumber)));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int32) != {}", Mode, PickFrom(KeysWithScalarNumber)));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int32) != {}", Mode, PickFrom(KeysWithScalarNumber)));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ == {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarString)));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarString)));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? (@ != {})' RETURNING Bool)", Mode, PickFrom(KeysWithScalarString)));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Utf8) == \"{}\"u", Mode, PickFrom(KeysWithScalarString)));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Utf8) != \"{}\"u", Mode, PickFrom(KeysWithScalarString)));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Utf8) != \"{}\"u", Mode, PickFrom(KeysWithScalarString)));
         }
 
         // JV op JV
@@ -831,22 +885,22 @@ private:
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.ceiling() ? (@ == 10)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.floor() ? (@ != -1)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ != 1)')", Mode));
-            AddJ(fmt::format("JSON_EXISTS(Text, '{} $.*.abs() ? (@ != 1)')", Mode));
+            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.*.abs() ? (@ != 1)')", Mode));
 
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.abs().ceiling() ? (@ == 10)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.floor().abs() ? (@ != -1)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.ceiling().abs() ? (@ == 10)')", Mode));
 
-            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "shared" && @.value == "shared_v")'))", Mode));
-            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value != null)'))", Mode));
+            AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "shared" && @.value == "shared_v")'))", Mode));
+            AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value != null)'))", Mode));
 
             if (!KeysWithFlatObj.empty()) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "object")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "object")'))", Mode));
             }
 
             if (!KeysWithUArr.empty()) {
                 AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.u_{1}.size() ? (@ == 3)')", Mode, PickFrom(KeysWithUArr)));
-                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.*.size() ? (@ == 3)')", Mode, PickFrom(KeysWithUArr)));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.*.size() ? (@ == 3)')", Mode, PickFrom(KeysWithUArr)));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.u_{1}.size().abs() ? (@ == 3)')", Mode, PickFrom(KeysWithUArr)));
             }
 
@@ -870,13 +924,13 @@ private:
             }
 
             if (!KeysWithArrayOfArrays.empty()) {
-                AddJ(fmt::format("JSON_EXISTS(Text, '{} $.size() ? (@ == 3)')", Mode));
-                AddJ(fmt::format("JSON_EXISTS(Text, '{} $[0].size() ? (@ == 2)')", Mode));
-                AddJ(fmt::format("JSON_EXISTS(Text, '{} $[2].size() ? (@ == 0)')", Mode));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.size() ? (@ == 3)')", Mode));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{} $[0].size() ? (@ == 2)')", Mode));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{} $[2].size() ? (@ == 0)')", Mode));
             }
 
             if (!KeysWithArrayLiterals.empty() || !KeysWithArrayOfArrays.empty()) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "array")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.type() ? (@ == "array")'))", Mode));
             }
 
             if (!KeysWithScalarNull.empty() || !KeysWithFullMix.empty()) {
@@ -906,7 +960,7 @@ private:
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.floor() ? (@ >= 10)')", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ < 45)')", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.rank.abs() ? (@ <= 40)')", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value >= 0)'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == "rank" && @.value >= 0)'))", Mode));
 
                 if (Opts.EnablePassingVariables) {
                     AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num))", Mode));
@@ -922,10 +976,10 @@ private:
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $s.double().abs())' PASSING "10.0"u AS s))", Mode));
 
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.rank ? (@ == $num.double())' PASSING "10.0"u AS num))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.* ? (@ == $num.double())' PASSING "10.0"u AS num))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.* ? (@ == $num.double())' PASSING "10.0"u AS num))", Mode));
 
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.items.size() ? (@ == $sz)' PASSING 2 AS sz))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == $field)' PASSING "shared"u AS field))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == $field)' PASSING "shared"u AS field))", Mode));
 
                 if (Opts.EnableSqlParameters) {
                     auto pNum = NewPname();
@@ -940,33 +994,33 @@ private:
 
                     auto pField = NewPname();
                     auto vField = pField.substr(1);
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == ${1})' PASSING {2} AS {1})", Mode, vField, pField),
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.keyvalue() ? (@.name == ${1})' PASSING {2} AS {1})", Mode, vField, pField),
                         [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
                 }
             }
         }
 
         if (Opts.EnableJsonValue) {
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "null"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "boolean"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "number"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "string"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "array"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "object"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "null"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "boolean"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "number"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "string"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "array"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = "object"u)", Mode));
 
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.shared_arr.type()' RETURNING Utf8) = "array"u)", Mode));
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.shared_null.type()' RETURNING Utf8) = "null"u)", Mode));
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.shared_b.type()' RETURNING Utf8) = "boolean"u)", Mode));
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.rank.type()' RETURNING Utf8) = "number"u)", Mode));
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.shared.type()' RETURNING Utf8) = "string"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.*.type()' RETURNING Utf8) = "string"u)", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.*.type()' RETURNING Utf8) = "string"u)", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_arr.size()' RETURNING Int64) = 4", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $.*.size()' RETURNING Int64) = 4", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $.*.size()' RETURNING Int64) = 4", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.items.size()' RETURNING Int64) = 2", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared.size()' RETURNING Int64) = 1", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $[2].size()' RETURNING Int64) = 0", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $[2].size()' RETURNING Int64) = 0", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.rank.ceiling()' RETURNING Int64) = 10", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.rank.floor()' RETURNING Int64) <> -1", Mode));
@@ -974,14 +1028,14 @@ private:
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.ceiling()' RETURNING Int64) = 10", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) <> -1", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <> 1", Mode));
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <> 1", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <> 1", Mode));
 
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.rank.abs().ceiling()' RETURNING Int64) <> -1", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.rank.floor().abs()' RETURNING Int64) <> -1", Mode));
             AddJ(fmt::format("JSON_VALUE(Text, '{} $.rank.ceiling().abs()' RETURNING Int64) = 10", Mode));
 
-            AddJ(fmt::format("JSON_VALUE(Text, '{} $.keyvalue() ? (@.name == \"rank\").value' RETURNING Int64) <> -1", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == "shared").value.type()' RETURNING Utf8) = "string"u)", Mode));
+            AddJErr(fmt::format("JSON_VALUE(Text, '{} $.keyvalue() ? (@.name == \"rank\").value' RETURNING Int64) <> -1", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == "shared").value.type()' RETURNING Utf8) = "string"u)", Mode));
 
             if (!KeysWithFullMix.empty()) {
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.abs().ceiling()' RETURNING Int64) = 10", Mode));
@@ -994,7 +1048,7 @@ private:
 
             if (!KeysWithUArr.empty()) {
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}.size()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*.size()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*.size()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}.size().abs()' RETURNING Int64) = 3", Mode, PickFrom(KeysWithUArr)));
             }
 
@@ -1007,11 +1061,11 @@ private:
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.floor()' RETURNING Int64) >= 10", Mode));
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) < 45", Mode));
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $.shared_n.abs()' RETURNING Int64) <= 40", Mode));
-                AddJ(fmt::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <= 40", Mode));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{} $.*.abs()' RETURNING Int64) <= 40", Mode));
 
                 if (Opts.EnablePassingVariables) {
                     AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.rank ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", Mode));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", Mode));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? (@ > $num.double())' PASSING "9.5"u AS num RETURNING Int64) <> -1)", Mode));
                 }
             }
 
@@ -1033,7 +1087,7 @@ private:
 
                     auto pField = NewPname();
                     auto vField = pField.substr(1);
-                    AddJ(fmt::format("JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == ${1}).value.type()' PASSING {2} AS {1} RETURNING Utf8) = \"string\"u", Mode, vField, pField),
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.keyvalue() ? (@.name == ${1}).value.type()' PASSING {2} AS {1} RETURNING Utf8) = \"string\"u", Mode, vField, pField),
                         [pField](NYdb::TParamsBuilder& bld) { bld.AddParam(pField).Utf8("shared").Build(); });
                 }
             }
@@ -1042,7 +1096,7 @@ private:
                 for (size_t i = 0; i < 2; ++i) {
                     auto pn = NewPname();
                     std::string pv = (i == 0) ? "number" : "string";
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = {1})", Mode, pn),
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.type()' RETURNING Utf8) = {1})", Mode, pn),
                         [pn, pv](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8(pv).Build(); });
                 }
             }
@@ -1060,7 +1114,7 @@ private:
             }
 
             for (size_t i = 0; i < 2; ++i) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == $var)' PASSING "shared_v"u AS var))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == $var)' PASSING "shared_v"u AS var))", Mode));
             }
 
             for (size_t i = 0; i < 2; ++i) {
@@ -1197,7 +1251,7 @@ private:
                 {
                     auto pn = NewPname();
                     auto vn = pn.substr(1);
-                    AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == {1})' PASSING {1} AS {2}))", Mode, pn, vn),
+                    AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.* == {1})' PASSING {1} AS {2}))", Mode, pn, vn),
                         [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
                 }
 
@@ -1405,13 +1459,198 @@ private:
         }
     }
 
+    void GenerateJsonParameters() {
+        const auto addJsonParam = [](NYdb::TParamsBuilder& builder, const std::string& name, const TString& json) {
+            builder.AddParam(name).Json(json).Build();
+        };
+
+        for (size_t shape = 0; shape < kJsonCorpusNumShapes; ++shape) {
+            const auto& rows = RowsByShape[shape];
+            if (rows.empty()) {
+                continue;
+            }
+
+            const auto& row = *rows[Rng.Uniform(rows.size())];
+            if (!row.JsonText) {
+                continue;
+            }
+
+            if (Opts.EnableJsonExists) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_EXISTS(Text, '{0} $ ? (@ == ${1})' PASSING {2} AS {1})",
+                    Mode, vn, pn),
+                    [pn, json = *row.JsonText, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonExists, row.Shape);
+            }
+
+            if (Opts.EnableJsonValue) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_VALUE(Text, '{0} exists($ ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                    Mode, vn, pn),
+                    [pn, json = *row.JsonText, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonValue, row.Shape);
+            }
+        }
+
+        const std::array<TString, 4> edgeValues = {
+            "[]",
+            "{}",
+            R"([1, 1, true, null, "shared_v"])",
+            R"({"outer": [{"inner": 1}, [], {}], "flag": true})",
+        };
+        for (const auto& json : edgeValues) {
+            if (Opts.EnableJsonExists) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_EXISTS(Text, '{0} $[*] ? (@ == ${1})' PASSING {2} AS {1})",
+                    Mode, vn, pn),
+                    [pn, json, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonExists);
+            }
+
+            if (Opts.EnableJsonValue) {
+                auto pn = NewPname();
+                auto vn = pn.substr(1);
+                AddJsonParameter(fmt::format(
+                    "JSON_VALUE(Text, '{0} exists($[*] ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                    Mode, vn, pn),
+                    [pn, json, addJsonParam](NYdb::TParamsBuilder& bld) {
+                        addJsonParam(bld, pn, json);
+                    },
+                    EJsonParameterFunction::JsonValue);
+            }
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto p1 = NewPname();
+            auto p2 = NewPname();
+            auto v1 = p1.substr(1);
+            auto v2 = p2.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@.shared_n == ${1} && @.shared_s == ${2})' PASSING {3} AS {1}, {4} AS {2})",
+                Mode, v1, v2, p1, p2),
+                [p1, p2, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, p1, R"([1, 2, 3])");
+                    addJsonParam(bld, p2, R"(["shared_v", "missing"])");
+                },
+                EJsonParameterFunction::JsonExists);
+
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@.shared_n == ${1} && @.shared_b == true)' PASSING {2} AS {1})",
+                Mode, vn, pn),
+                [pn, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, pn, R"([1, 2, 3])");
+                },
+                EJsonParameterFunction::JsonExists);
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto p1 = NewPname();
+            auto p2 = NewPname();
+            auto v1 = p1.substr(1);
+            auto v2 = p2.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@.shared_n == ${1} || @.shared_s == ${2}))' PASSING {3} AS {1}, {4} AS {2} RETURNING Bool)",
+                Mode, v1, v2, p1, p2),
+                [p1, p2, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, p1, R"([1, 2, 3])");
+                    addJsonParam(bld, p2, R"(["shared_v", "missing"])");
+                },
+                EJsonParameterFunction::JsonValue);
+
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJsonParameter(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@.shared_n == ${1} && @.shared_b == true))' PASSING {2} AS {1} RETURNING Bool)",
+                Mode, vn, pn),
+                [pn, addJsonParam](NYdb::TParamsBuilder& bld) {
+                    addJsonParam(bld, pn, R"([1, 2, 3])");
+                },
+                EJsonParameterFunction::JsonValue);
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_EXISTS(Text, '{0} $ ? (@ == ${1})' PASSING {2} AS {1})",
+                Mode, vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"({"broken": )").Build();
+                },
+                "Invalid Json value");
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, '{0} exists($ ? (@ == ${1}))' PASSING {2} AS {1} RETURNING Bool)",
+                Mode, vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"({"broken": )").Build();
+                },
+                "Invalid Json value");
+        }
+
+        if (Opts.EnableJsonExists) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_EXISTS(Text, 'strict $.shared ? (@ == ${0})' PASSING {1} AS {0} ERROR ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"(["v"])").Build();
+                },
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+        }
+
+        if (Opts.EnableJsonValue) {
+            auto pn = NewPname();
+            auto vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, 'strict $.shared ? (@ == ${0})' PASSING {1} AS {0} RETURNING Bool ERROR ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json(R"(["v"])").Build();
+                },
+                "Error executing jsonpath",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+
+            pn = NewPname();
+            vn = pn.substr(1);
+            AddJBothPathErr(fmt::format(
+                "JSON_VALUE(Text, 'lax $.missing ? (@ == ${0})' PASSING {1} AS {0} RETURNING Bool ERROR ON EMPTY NULL ON ERROR)",
+                vn, pn),
+                [pn](NYdb::TParamsBuilder& bld) {
+                    bld.AddParam(pn).Json("[]").Build();
+                },
+                "",
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters");
+        }
+    }
+
     void GenerateSqlParameters() {
         if (Opts.EnableJsonValue) {
             for (size_t i = 0; i < 2; ++i) {
                 auto pn = NewPname();
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.shared' RETURNING Utf8) = {1}", Mode, pn),
                     [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Utf8) = {1}", Mode, pn),
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Utf8) = {1}", Mode, pn),
                     [pn](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Utf8("shared_v").Build(); });
             }
 
@@ -1446,7 +1685,7 @@ private:
                         bld.AddParam(plo).Int64(k - 1).Build();
                         bld.AddParam(phi).Int64(k + 1).Build();
                     });
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, plo, phi),
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, plo, phi),
                     [plo, phi, k](NYdb::TParamsBuilder& bld) {
                         bld.AddParam(plo).Int64(k - 1).Build();
                         bld.AddParam(phi).Int64(k + 1).Build();
@@ -1489,7 +1728,7 @@ private:
                 {
                     const ui64 k = PickFrom(KeysWithNestedObj);
                     auto pn = NewPname();
-                    AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*.u_{1}' RETURNING Int64) > {2}", Mode, k, pn),
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*.u_{1}' RETURNING Int64) > {2}", Mode, k, pn),
                         [pn, k](NYdb::TParamsBuilder& bld) { bld.AddParam(pn).Int64(k - 1).Build(); });
                 }
 
@@ -1844,7 +2083,7 @@ private:
             }
 
             for (size_t i = 0; i < 2; ++i) {
-                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.* ? (@ <= {1})')", Mode, PickFrom(KeysWithIntUVal)));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.* ? (@ <= {1})')", Mode, PickFrom(KeysWithIntUVal)));
             }
 
             for (int lo : {10, 25}) {
@@ -1924,7 +2163,7 @@ private:
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = PickFrom(KeysWithIntUVal);
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) < {2}", Mode, k, k + 1));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) < {1}", Mode, k + 1));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) < {1}", Mode, k + 1));
             }
 
             for (int lo : {5, 10, 15, 20, 25, 30}) {
@@ -1944,7 +2183,7 @@ private:
                 const ui64 k = PickFrom(KeysWithUArr);
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) > {2}", Mode, k, k - 1));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) <= {1}", Mode, PickFrom(KeysWithUArr)));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) <= {1}", Mode, PickFrom(KeysWithUArr)));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) <= {1}", Mode, PickFrom(KeysWithUArr)));
             }
 
             for (size_t i = 0; i < 2; ++i) {
@@ -2066,14 +2305,14 @@ private:
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = PickFrom(KeysWithIntUVal);
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, k - 1, k + 1));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) BETWEEN {1} AND {2}", Mode, k - 1, k + 1));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*' RETURNING Int64) BETWEEN {1} AND {2}", Mode, k - 1, k + 1));
             }
 
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = PickFrom(KeysWithUArr);
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, k - 1, k + 1));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) NOT BETWEEN {2} AND {3}", Mode, k, k + 2, k + 10));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, k - 1, k + 1));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) BETWEEN {2} AND {3}", Mode, k, k - 1, k + 1));
             }
 
             for (size_t i = 0; i < 2; ++i) {
@@ -2143,7 +2382,7 @@ private:
     void GenerateInList() {
         if (Opts.EnableJsonValue) {
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared' RETURNING Utf8) IN ("shared_v"u, "other"u))", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.*' RETURNING Utf8) IN ("shared_v"u, "other"u))", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.*' RETURNING Utf8) IN ("shared_v"u, "other"u))", Mode));
 
             AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.shared' RETURNING Utf8) NOT IN ("shared_v"u, "other"u))", Mode));
             AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.*' RETURNING Utf8) NOT IN ("shared_v"u, "other"u))", Mode));
@@ -2203,7 +2442,7 @@ private:
             for (size_t i = 0; i < 2; ++i) {
                 const ui64 k = PickFrom(KeysWithUArr);
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.u_{1}[0]' RETURNING Int64) IN ({1}, {2}, {3})", Mode, k, k + 1, k + 2));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) IN ({1}, {2}, {3})", Mode, k + 1, k + 2, k + 3));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*[0]' RETURNING Int64) IN ({1}, {2}, {3})", Mode, k + 1, k + 2, k + 3));
             }
 
             {
@@ -2438,12 +2677,12 @@ private:
         if (Opts.EnableJsonExists) {
             AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared")'))", Mode));
             AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ starts with "shared_v")'))", Mode));
-            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ starts with "shared_v")'))", Mode));
+            AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ starts with "shared_v")'))", Mode));
 
             AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "shared.*")'))", Mode));
             AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "^shared_v$")'))", Mode));
             AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")'))", Mode));
-            AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ like_regex "SHARED.*" flag "i")'))", Mode));
+            AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? (@ like_regex "SHARED.*" flag "i")'))", Mode));
 
             for (size_t i = 0; i < 2; ++i) {
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@.u_{1} starts with "u_v")'))", Mode, PickFrom(KeysWithStrUVal)));
@@ -2460,10 +2699,10 @@ private:
             if (!KeysWithItems.empty()) {
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "u_v")'))", Mode));
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ starts with "shared")'))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ starts with "shared")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ starts with "shared")'))", Mode));
 
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.items[*].name ? (@ like_regex "u_v_.*")'))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ like_regex "u_v_.*")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.*[*].name ? (@ like_regex "u_v_.*")'))", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.id))')", Mode));
                 AddJ(fmt::format("JSON_EXISTS(Text, '{} $.items[*] ? (exists(@.name))')", Mode));
 
@@ -2477,11 +2716,11 @@ private:
             }
 
             if (!KeysWithScalarString.empty()) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ like_regex "u_v_[0-9]+")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ like_regex "u_v_[0-9]+")'))", Mode));
             }
 
             if (!KeysWithScalarNumber.empty()) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@.type() == "number" && @ < 0)'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@.type() == "number" && @ < 0)'))", Mode));
             }
 
             if (!KeysWithHeteroArr.empty()) {
@@ -2496,8 +2735,8 @@ private:
             }
 
             if (!KeysWithArrayLiterals.empty()) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $[*] ? (@.type() == "string" && @ starts with "u_v")'))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $[*] ? (@.type() == "string" && @ like_regex "shared.*")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $[*] ? (@.type() == "string" && @ starts with "u_v")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $[*] ? (@.type() == "string" && @ like_regex "shared.*")'))", Mode));
             }
 
             if (!KeysWithUArr.empty()) {
@@ -2527,7 +2766,7 @@ private:
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = PickFrom(KeysWithFlatObj);
                     AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? ((@.u_{} == {}) is unknown)')", Mode, k, k));
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $.* ? ((@ == {}) is unknown)')", Mode, k));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.* ? ((@ == {}) is unknown)')", Mode, k));
                 }
             }
 
@@ -2535,7 +2774,7 @@ private:
                 for (size_t i = 0; i < 2; ++i) {
                     const ui64 k = PickFrom(KeysWithNestedObj);
                     AddJ(fmt::format("JSON_EXISTS(Text, '{} $.shared ? (exists(@.u_{}))')", Mode, k));
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $.* ? (exists(@.u_{}))')", Mode, k));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.* ? (exists(@.u_{}))')", Mode, k));
                 }
             }
 
@@ -2574,16 +2813,16 @@ private:
 
         if (Opts.EnableJsonValue) {
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared starts with "shared"' RETURNING Bool))", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.* starts with "shared"' RETURNING Bool))", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.* starts with "shared"' RETURNING Bool))", Mode));
 
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "shared.*")' RETURNING Utf8) = "shared_v"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "shared.*"' RETURNING Bool))", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "shared.*"' RETURNING Bool))", Mode));
 
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "^shared_v$")' RETURNING Utf8) = "shared_v"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "^shared_v$"' RETURNING Bool))", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "^shared_v$"' RETURNING Bool))", Mode));
 
             AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared ? (@ like_regex "SHARED.*" flag "i")' RETURNING Utf8) = "shared_v"u)", Mode));
-            AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "SHARED.*" flag "i"' RETURNING Bool))", Mode));
+            AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.* like_regex "SHARED.*" flag "i"' RETURNING Bool))", Mode));
 
             AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.shared ? ((@ == "shared_v") is unknown)' RETURNING Utf8) = "shared_v"u)", Mode));
             AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} ($.shared == "shared_v") is unknown' RETURNING Bool))", Mode));
@@ -2603,18 +2842,18 @@ private:
 
             if (!KeysWithScalarString.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $ ? (@ starts with "u_v")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithScalarString)));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $ starts with "u_v"' RETURNING Bool))", Mode, PickFrom(KeysWithScalarString)));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.* starts with "u_v"' RETURNING Bool))", Mode, PickFrom(KeysWithScalarString)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $ ? (@ starts with "u_v")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithScalarString)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $ starts with "u_v"' RETURNING Bool))", Mode, PickFrom(KeysWithScalarString)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.* starts with "u_v"' RETURNING Bool))", Mode, PickFrom(KeysWithScalarString)));
 
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $ ? (@ like_regex "u_v_[0-9]+")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithScalarString)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $ ? (@ like_regex "u_v_[0-9]+")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithScalarString)));
                 }
             }
 
             if (!KeysWithFullMix.empty()) {
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared_s ? (@ starts with "u_v")' RETURNING Utf8) <> "nope"u)", Mode));
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared_s starts with "u_v"' RETURNING Bool))", Mode));
-                AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.* starts with "u_v"' RETURNING Bool))", Mode));
+                AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.* starts with "u_v"' RETURNING Bool))", Mode));
 
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared_s ? (@ like_regex "u_v_.*")' RETURNING Utf8) <> "nope"u)", Mode));
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.shared_s like_regex "u_v_.*"' RETURNING Bool))", Mode));
@@ -2638,11 +2877,11 @@ private:
             if (!KeysWithHeteroArr.empty()) {
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $[*].k_b ? (@ like_regex "u_v_[0-9]+")' RETURNING Utf8) <> "nope"u)", Mode));
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $[*].k_b like_regex "u_v_[0-9]+"' RETURNING Bool))", Mode));
-                AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $[*].* like_regex "u_v_[0-9]+"' RETURNING Bool))", Mode));
+                AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $[*].* like_regex "u_v_[0-9]+"' RETURNING Bool))", Mode));
             }
 
             if (!KeysWithScalarNumber.empty()) {
-                AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $ ? (@.type() == "number" && @ < 0)' RETURNING Bool))", Mode));
+                AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $ ? (@.type() == "number" && @ < 0)' RETURNING Bool))", Mode));
             }
 
             if (!KeysWithHomoArr.empty()) {
@@ -2651,7 +2890,7 @@ private:
             }
 
             if (!KeysWithArrayLiterals.empty()) {
-                AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $[*] ? (@.type() == "string" && @ like_regex "shared.*")' RETURNING Utf8) <> "nope"u)", Mode));
+                AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $[*] ? (@.type() == "string" && @ like_regex "shared.*")' RETURNING Utf8) <> "nope"u)", Mode));
             }
 
             if (!KeysWithUArr.empty()) {
@@ -2668,7 +2907,7 @@ private:
 
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank)).rank' RETURNING Int64) <> -1", Mode));
                 AddJ(fmt::format("JSON_VALUE(Text, '{} exists($.rank)' RETURNING Bool)", Mode));
-                AddJ(fmt::format("JSON_VALUE(Text, '{} $.* ? (exists(@.rank))' RETURNING Bool)", Mode));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{} $.* ? (exists(@.rank))' RETURNING Bool)", Mode));
 
                 AddJ(fmt::format("JSON_VALUE(Text, '{} $ ? (exists(@.rank) && @.rank != -1).rank' RETURNING Int64) <> -1", Mode));
                 AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared) && @.shared == "shared_v").shared' RETURNING Utf8) = "shared_v"u)", Mode));
@@ -2677,14 +2916,14 @@ private:
                 {
                     const ui64 k = PickFrom(KeysWithFlatObj);
                     AddJErr(fmt::format("JSON_VALUE(Text, '{} $ ? ((@.u_{} == {}) is unknown).u_{}' RETURNING Int64) = 0", Mode, k, k, k));
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $.* ? ((@ == {}) is unknown).u_{}' RETURNING Int64) = 0", Mode, k, k));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $.* ? ((@ == {}) is unknown).u_{}' RETURNING Int64) = 0", Mode, k, k));
                 }
             }
 
             if (!KeysWithNestedObj.empty()) {
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1})).u_{1}' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithNestedObj)));
                 AddJ(fmt::format("JSON_VALUE(Text, '{0} exists($.shared.u_{1})' RETURNING Bool)", Mode, PickFrom(KeysWithNestedObj)));
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.* ? (exists(@.u_{1}))' RETURNING Bool)", Mode, PickFrom(KeysWithNestedObj)));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.* ? (exists(@.u_{1}))' RETURNING Bool)", Mode, PickFrom(KeysWithNestedObj)));
             }
 
             if (Opts.EnableRangeComparisons) {
@@ -2727,13 +2966,13 @@ private:
             if (!KeysWithNestedObj.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
                     AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.shared ? (exists(@.u_{1}) && @.u_{1} == {1})')", Mode, PickFrom(KeysWithNestedObj)));
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.*.* ? (@ == {1})')", Mode, PickFrom(KeysWithNestedObj)));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.*.* ? (@ == {1})')", Mode, PickFrom(KeysWithNestedObj)));
                 }
             }
 
             if (!KeysWithHeteroArr.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
-                    AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $[*].* ? (@ == "u_v_{1}")'))", Mode, PickFrom(KeysWithHeteroArr)));
+                    AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{0} $[*].* ? (@ == "u_v_{1}")'))", Mode, PickFrom(KeysWithHeteroArr)));
                 }
             }
 
@@ -2744,7 +2983,7 @@ private:
 
             if (Opts.EnableRangeComparisons) {
                 if (!KeysWithItems.empty()) {
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $.*[*] ? (@.id > 0)')", Mode));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.*[*] ? (@.id > 0)')", Mode));
                 }
             }
 
@@ -2762,9 +3001,9 @@ private:
             }
 
             if (Opts.EnableJsonPathPredicates) {
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with "x") is unknown)'))", Mode));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ like_regex "x") is unknown)'))", Mode));
-                AddJ(fmt::format("JSON_EXISTS(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)')", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with "x") is unknown)'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ like_regex "x") is unknown)'))", Mode));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)')", Mode));
 
                 if (!KeysWithHomoArr.empty()) {
                     const ui64 k = PickFrom(KeysWithHomoArr);
@@ -2783,7 +3022,7 @@ private:
                 }
 
                 if (!KeysWithItems.empty()) {
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.*[*] ? (exists(@.id) && @.id == {1})')", Mode, PickFrom(KeysWithItems)));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $.*[*] ? (exists(@.id) && @.id == {1})')", Mode, PickFrom(KeysWithItems)));
 
                     if (Opts.EnableRangeComparisons) {
                         AddJ(fmt::format("JSON_EXISTS(Text, '{} $.items[*] ? (@.id > 0 && exists(@.name))')", Mode));
@@ -2799,7 +3038,7 @@ private:
                 }
 
                 if (Opts.EnablePassingVariables) {
-                    AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with $pfx) is unknown)' PASSING "x"u AS pfx))", Mode));
+                    AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $.* ? ((@ starts with $pfx) is unknown)' PASSING "x"u AS pfx))", Mode));
 
                     if (!KeysWithNestedObj.empty()) {
                         AddJ(fmt::format("JSON_EXISTS(Text, '{0} $.shared ? (exists(@.u_{1}) && @.u_{1} == $val)' PASSING {1} AS val)", Mode, PickFrom(KeysWithNestedObj)));
@@ -2822,19 +3061,19 @@ private:
 
         if (Opts.EnableJsonValue) {
             if (!KeysWithItems.empty()) {
-                AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*[*] ? (@.id == {1}).id' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithItems)));
-                AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $.*[*] ? (@.id > 0).name' RETURNING Utf8) <> "nope"u)", Mode));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*[*] ? (@.id == {1}).id' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithItems)));
+                AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $.*[*] ? (@.id > 0).name' RETURNING Utf8) <> "nope"u)", Mode));
             }
 
             if (!KeysWithNestedObj.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
-                    AddJ(fmt::format("JSON_VALUE(Text, '{0} $.*.* ? (@ == {1})' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithNestedObj)));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{0} $.*.* ? (@ == {1})' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithNestedObj)));
                 }
             }
 
             if (!KeysWithHeteroArr.empty()) {
                 for (size_t i = 0; i < 2; ++i) {
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $[*].* ? (@ == "u_v_{1}")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithHeteroArr)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $[*].* ? (@ == "u_v_{1}")' RETURNING Utf8) = "u_v_{1}"u)", Mode, PickFrom(KeysWithHeteroArr)));
                 }
             }
 
@@ -2864,7 +3103,7 @@ private:
             }
 
             if (Opts.EnableJsonPathPredicates) {
-                AddJ(fmt::format("JSON_VALUE(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)' RETURNING Bool)", Mode));
+                AddJErr(fmt::format("JSON_VALUE(Text, '{} $.* ? ((exists(@.nope_xyz)) is unknown)' RETURNING Bool)", Mode));
 
                 if (!KeysWithFlatObj.empty()) {
                     AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $ ? (exists(@.shared) && @.shared == "shared_v").shared' RETURNING Utf8) = "shared_v"u)", Mode));
@@ -2900,8 +3139,8 @@ private:
                         AddJ(fmt::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1}) && @.u_{1} == {1}).u_{1}' RETURNING Int64) = {1}", Mode, PickFrom(KeysWithNestedObj)));
                     }
 
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with "x") is unknown).u_{1}' RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ like_regex "x") is unknown).u_{1}' RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with "x") is unknown).u_{1}' RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ like_regex "x") is unknown).u_{1}' RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
                 }
 
                 if (!KeysWithMixed.empty()) {
@@ -2913,7 +3152,7 @@ private:
                 if (Opts.EnablePassingVariables) {
                     if (!KeysWithNestedObj.empty()) {
                         AddJ(fmt::format("JSON_VALUE(Text, '{0} $.shared ? (exists(@.u_{1}) && @.u_{1} == $val).u_{1}' PASSING {1} AS val RETURNING Int64) = {1}", Mode, PickFrom(KeysWithNestedObj)));
-                        AddJ(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with $pfx) is unknown).u_{1}' PASSING "x"u AS pfx RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
+                        AddJErr(fmt::format(R"(JSON_VALUE(Text, '{0} $.* ? ((@ starts with $pfx) is unknown).u_{1}' PASSING "x"u AS pfx RETURNING Int64) = {1})", Mode, PickFrom(KeysWithNestedObj)));
                     }
 
                     if (Opts.EnableRangeComparisons) {
@@ -2934,7 +3173,7 @@ private:
 
             if (!KeysWithScalarString.empty()) {
                 AddJ(fmt::format(R"(JSON_EXISTS(Text, '{0} $ ? (@ == "u_v_{1}")'))", Mode, PickFrom(KeysWithScalarString)));
-                AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ != "nope")'))", Mode));
+                AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ != "nope")'))", Mode));
             }
 
             if (!KeysWithScalarNumber.empty()) {
@@ -2949,24 +3188,24 @@ private:
 
             if (Opts.EnableRangeComparisons) {
                 if (!KeysWithScalarInt.empty()) {
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ > {})')", Mode, PickFrom(KeysWithScalarInt) - 1));
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ <= {})')", Mode, PickFrom(KeysWithScalarInt)));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ > {})')", Mode, PickFrom(KeysWithScalarInt) - 1));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ <= {})')", Mode, PickFrom(KeysWithScalarInt)));
                 }
 
                 if (!KeysWithScalarString.empty()) {
-                    AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ >= "u_v")'))", Mode));
+                    AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ >= "u_v")'))", Mode));
                 }
 
                 if (!KeysWithScalarDouble.empty()) {
                     const ui64 k = PickFrom(KeysWithScalarDouble);
                     const double dv = -static_cast<double>(k) - 0.5;
-                    AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ < {})')", Mode, dv + 1.0));
+                    AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ < {})')", Mode, dv + 1.0));
                 }
             }
 
             if (Opts.EnableJsonPathPredicates) {
                 if (!KeysWithScalarString.empty()) {
-                    AddJ(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ starts with "u_v")'))", Mode));
+                    AddJErr(fmt::format(R"(JSON_EXISTS(Text, '{} $ ? (@ starts with "u_v")'))", Mode));
                 }
             }
 
@@ -3033,39 +3272,39 @@ private:
 
             if (Opts.EnableRangeComparisons) {
                 if (!KeysWithScalarString.empty()) {
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) >= "u_v"u)", Mode));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) < "u_w"u)", Mode));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) >= "u_v"u)", Mode));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) < "u_w"u)", Mode));
                 }
 
                 if (!KeysWithScalarInt.empty()) {
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) > {}", Mode, PickFrom(KeysWithScalarInt) - 1));
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) <= {}", Mode, PickFrom(KeysWithScalarInt)));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) > {}", Mode, PickFrom(KeysWithScalarInt) - 1));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) <= {}", Mode, PickFrom(KeysWithScalarInt)));
                 }
 
                 if (!KeysWithScalarDouble.empty()) {
                     const ui64 k = PickFrom(KeysWithScalarDouble);
                     const double dv = -static_cast<double>(k) - 0.5;
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) > {}", Mode, dv - 1.0));
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) <= {}", Mode, dv + 1.0));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) > {}", Mode, dv - 1.0));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) <= {}", Mode, dv + 1.0));
                 }
             }
 
             if (Opts.EnableBetween) {
                 if (!KeysWithScalarString.empty()) {
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) BETWEEN "u_v"u AND "u_w"u)", Mode));
-                    AddJ(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) NOT BETWEEN "a"u AND "b"u)", Mode));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) BETWEEN "u_v"u AND "u_w"u)", Mode));
+                    AddJErr(fmt::format(R"(JSON_VALUE(Text, '{} $' RETURNING Utf8) NOT BETWEEN "a"u AND "b"u)", Mode));
                 }
 
                 if (!KeysWithScalarInt.empty()) {
                     const ui64 k = PickFrom(KeysWithScalarInt);
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", Mode, k - 1, k + 1));
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) NOT BETWEEN {} AND {}", Mode, k + 1, k + 10));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", Mode, k - 1, k + 1));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) NOT BETWEEN {} AND {}", Mode, k + 1, k + 10));
                 }
 
                 if (!KeysWithScalarDouble.empty()) {
                     const ui64 k = PickFrom(KeysWithScalarDouble);
                     const double dv = -static_cast<double>(k) - 0.5;
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) BETWEEN {} AND {}", Mode, dv - 1.0, dv + 1.0));
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Double) BETWEEN {} AND {}", Mode, dv - 1.0, dv + 1.0));
                 }
             }
 
@@ -3107,7 +3346,7 @@ private:
                     const ui64 kBetween = PickFrom(KeysWithScalarInt);
                     auto plo = NewPname();
                     auto phi = NewPname();
-                    AddJ(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", Mode, plo, phi),
+                    AddJErr(fmt::format("JSON_VALUE(Text, '{} $' RETURNING Int64) BETWEEN {} AND {}", Mode, plo, phi),
                         [plo, phi, kBetween](NYdb::TParamsBuilder& bld) {
                             bld.AddParam(plo).Int64(kBetween - 1).Build();
                             bld.AddParam(phi).Int64(kBetween + 1).Build();
@@ -3129,8 +3368,8 @@ private:
         if (Opts.EnableJsonExists) {
             if (!KeysWithScalarInt.empty()) {
                 const ui64 k = PickFrom(KeysWithScalarInt);
-                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $ ? (-$ == {1})')", Mode, -(int64_t)k));
-                AddJ(fmt::format("JSON_EXISTS(Text, '{0} $ ? (+$ == {1})')", Mode, (int64_t)k));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $ ? (-$ == {1})')", Mode, -(int64_t)k));
+                AddJErr(fmt::format("JSON_EXISTS(Text, '{0} $ ? (+$ == {1})')", Mode, (int64_t)k));
             }
 
             if (!KeysWithFlatObj.empty()) {
@@ -3589,6 +3828,12 @@ private:
             TBuiltPredicate p;
             p.Sql = a.Sql;
             p.ExpectExtractError = !a.IsJsonIndexable;
+            p.ExpectBothPathError = a.ExpectBothPathError;
+            p.ExpectedBothPathErrorSubstr = a.ExpectedBothPathErrorSubstr;
+            p.ExpectedIndexErrorSubstr = a.ExpectedIndexErrorSubstr;
+            p.JsonParameterShape = a.JsonParameterShape;
+            p.JsonParameterFunction = a.JsonParameterFunction;
+            p.IsJsonParameterComposition = a.IsJsonParameterComposition;
             if (a.AddParams) {
                 NYdb::TParamsBuilder builder;
                 a.AddParams(builder);
@@ -3597,6 +3842,26 @@ private:
 
             result.push_back(std::move(p));
         };
+
+        for (const auto& atom : ExecutionErrorAtoms) {
+            pushAtom(atom);
+        }
+
+        for (const auto& atom : JsonParameterAtoms) {
+            pushAtom(atom);
+        }
+
+        if (JsonParameterAtoms.size() >= 2) {
+            if (Opts.EnableAndCombinations) {
+                pushAtom(AndAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]));
+            }
+            if (Opts.EnableOrCombinations) {
+                pushAtom(OrAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]));
+            }
+        }
+        if (JsonParameterAtoms.size() >= 3 && Opts.EnableAndCombinations && Opts.EnableOrCombinations) {
+            pushAtom(OrAtom(AndAtom(JsonParameterAtoms[0], JsonParameterAtoms[1]), JsonParameterAtoms[2]));
+        }
 
         {
             std::vector<size_t> idx(JsonAtoms.size());
@@ -3818,8 +4083,12 @@ private:
     const std::vector<TGeneratedRow>& Rows;
 
     std::vector<TAtom> JsonAtoms;
+    std::vector<TAtom> JsonParameterAtoms;
     std::vector<TAtom> FilterAtoms;
+    std::vector<TAtom> ExecutionErrorAtoms;
     size_t ParamCount = 0;
+
+    std::array<std::vector<const TGeneratedRow*>, kJsonCorpusNumShapes> RowsByShape;
 
     std::vector<ui64> KeysWithUKey;
     std::vector<ui64> KeysWithIntUVal;

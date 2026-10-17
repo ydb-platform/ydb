@@ -18,6 +18,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
+#include <util/stream/output.h>
 
 namespace NSQLComplete {
 
@@ -255,47 +256,7 @@ ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
 
 } // namespace NSQLComplete
 
-template <>
-void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandidateKind value) {
-    switch (value) {
-        case NSQLComplete::ECandidateKind::Keyword:
-            out << "Keyword";
-            break;
-        case NSQLComplete::ECandidateKind::PragmaName:
-            out << "PragmaName";
-            break;
-        case NSQLComplete::ECandidateKind::TypeName:
-            out << "TypeName";
-            break;
-        case NSQLComplete::ECandidateKind::FunctionName:
-            out << "FunctionName";
-            break;
-        case NSQLComplete::ECandidateKind::HintName:
-            out << "HintName";
-            break;
-        case NSQLComplete::ECandidateKind::FolderName:
-            out << "FolderName";
-            break;
-        case NSQLComplete::ECandidateKind::TableName:
-            out << "TableName";
-            break;
-        case NSQLComplete::ECandidateKind::ClusterName:
-            out << "ClusterName";
-            break;
-        case NSQLComplete::ECandidateKind::BindingName:
-            out << "BindingName";
-            break;
-        case NSQLComplete::ECandidateKind::ColumnName:
-            out << "ColumnName";
-            break;
-        case NSQLComplete::ECandidateKind::UnknownName:
-            out << "UnknownName";
-            break;
-    }
-}
-
-template <>
-void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& value) {
+Y_DECLARE_OUT_SPEC(, NSQLComplete::TCandidate, out, value) {
     out << "{" << value.Kind << ", \"" << value.Content << "\"";
     if (value.CursorShift != 0) {
         out << ", " << value.CursorShift;

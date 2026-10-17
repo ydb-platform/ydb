@@ -391,7 +391,6 @@ private:
                     .Build();
     }
 
-private:
     BuildFuncType BuildFunc_;
 
     TMaybeNode<TExprBase> Body_;

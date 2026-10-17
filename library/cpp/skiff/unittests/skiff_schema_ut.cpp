@@ -92,7 +92,21 @@ Y_UNIT_TEST_SUITE(TSkiffSchemaTestSuite) {
         schema4->SetName("kek");
         hashes.insert(THash<NSkiff::TSkiffSchema>()(*schema4));
 
-        UNIT_ASSERT_VALUES_EQUAL(hashes.size(), 8);
+        hashes.insert(THash<NSkiff::TSkiffSchema>()(*CreateStringFixedSchema(3)));
+        hashes.insert(THash<NSkiff::TSkiffSchema>()(*CreateStringFixedSchema(4)));
+
+        UNIT_ASSERT_VALUES_EQUAL(hashes.size(), 10);
+    }
+
+    Y_UNIT_TEST(TestStringFixedEqual)
+    {
+        std::shared_ptr<TSkiffSchema> schema1 = CreateStringFixedSchema(3);
+        std::shared_ptr<TSkiffSchema> schema2 = CreateStringFixedSchema(3);
+        UNIT_ASSERT_VALUES_EQUAL(*schema1, *schema2);
+        UNIT_ASSERT_VALUES_EQUAL(GetShortDebugString(schema1), "string_fixed(3)");
+
+        schema1->SetName("schema");
+        UNIT_ASSERT_VALUES_UNEQUAL(*schema1, *schema2);
     }
 
     Y_UNIT_TEST(TestDifferent)
@@ -136,6 +150,9 @@ Y_UNIT_TEST_SUITE(TSkiffSchemaTestSuite) {
             schema2,
         });
         schemas.push_back(schema6);
+
+        schemas.push_back(CreateStringFixedSchema(3));
+        schemas.push_back(CreateStringFixedSchema(4));
 
         for (size_t i = 0; i < schemas.size(); ++i) {
             for (size_t j = i + 1; j < schemas.size(); ++j) {

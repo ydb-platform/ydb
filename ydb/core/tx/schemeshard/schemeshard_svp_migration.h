@@ -12,6 +12,7 @@ struct TMigrationInfo {
     bool CreateSVP = false;
     bool CreateSA = false;
     bool CreateBCT = false;
+    bool CreateWCC = false;
 };
 
 THolder<NActors::IActor> CreateTabletMigrator(ui64 ssTabletId, NActors::TActorId ssActorId,

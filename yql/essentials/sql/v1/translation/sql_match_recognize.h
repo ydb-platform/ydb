@@ -31,7 +31,6 @@ private:
     TNamedFunction ParseOneDefinition(const TRule_row_pattern_definition& node);
     TVector<TNamedFunction> ParseDefinitions(const TRule_row_pattern_definition_list& node);
 
-private:
     THashSet<TString> PatternVarNames_;
     TNodePtr PatternVars_;
 };

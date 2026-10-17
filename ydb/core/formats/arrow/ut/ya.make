@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/formats/arrow)
 SIZE(SMALL)
 
 PEERDIR(
+    yql/essentials/types/binary_json
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
@@ -10,6 +11,7 @@ PEERDIR(
     ydb/core/formats/arrow/hash
     ydb/core/formats/arrow/printer
     ydb/core/formats/arrow/program
+    ydb/core/formats/arrow/program/ascii_contains
     ydb/core/formats/arrow/reader
     ydb/core/formats/arrow/serializer
     ydb/core/base

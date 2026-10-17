@@ -129,7 +129,7 @@ private:
         if (auto ipOrError = TNetworkAddress::TryParse(host); ipOrError.IsOK()) {
             address = ipOrError.Value();
         } else {
-            auto asyncAddress = TAddressResolver::Get()->Resolve(ToString(host));
+            auto asyncAddress = TAddressResolver::Get()->Resolve(host, Config_->DnsResolveOptions);
             address = WaitFor(asyncAddress)
                 .ValueOrThrow();
         }
@@ -204,8 +204,8 @@ private:
                 return action();
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("HTTP request failed")
-                    << TErrorAttribute("url", SanitizeUrl(url))
-                    << ex;
+                    .With("url", SanitizeUrl(url))
+                    .With(ex);
             }
         })
             .AsyncVia(Invoker_)

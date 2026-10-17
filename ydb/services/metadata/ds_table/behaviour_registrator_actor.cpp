@@ -2,23 +2,28 @@
 
 #include <ydb/services/metadata/initializer/accessor_init.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 class TBehaviourRegistrator::TInternalController: public NInitializer::IInitializerOutput, public ISchemeDescribeController {
 private:
     const NActors::TActorIdentity ActorId;
+
 public:
     TInternalController(const NActors::TActorIdentity& actorId)
-        : ActorId(actorId) {
-
+        : ActorId(actorId)
+    {
     }
 
     virtual void OnInitializationFinished(const TString& id) const override {
         ActorId.Send(ActorId, new NInitializer::TEvInitializationFinished(id));
     }
+
     virtual void OnDescriptionFailed(const TString& errorMessage, const TString& requestId) override {
         ActorId.Send(ActorId, new TEvTableDescriptionFailed(errorMessage, requestId));
     }
+
     virtual void OnDescriptionSuccess(TTableInfo&& result, const TString& requestId) override {
         ActorId.Send(ActorId, new TEvTableDescriptionSuccess(std::move(result->Columns), requestId));
     }
@@ -37,13 +42,14 @@ void TBehaviourRegistrator::Handle(TEvTableDescriptionSuccess::TPtr& ev) {
 void TBehaviourRegistrator::Handle(TEvTableDescriptionFailed::TPtr& ev) {
     const TString& initId = Behaviour->GetTypeId();
     Y_ABORT_UNLESS(initId == ev->Get()->GetRequestId());
-    ALS_INFO(NKikimrServices::METADATA_PROVIDER) << "metadata service cannot receive table description for " << initId << Endl;
+    YDB_LOG_INFO("Metadata service cannot receive table description",
+        {"initId", initId});
     Schedule(TDuration::Seconds(1), new TEvStartRegistration());
 }
 
 void TBehaviourRegistrator::Handle(TEvStartRegistration::TPtr& /*ev*/) {
-    NInitializer::TDSAccessorInitialized::Execute(ReqConfig,
-        Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetSnapshotOwner());
+    NInitializer::TDSAccessorInitialized::Execute(
+        ReqConfig, Behaviour->GetTypeId(), Behaviour->GetInitializer(), InternalController, RegistrationData->GetSnapshotOwner());
 }
 
 void TBehaviourRegistrator::Handle(NInitializer::TEvInitializationFinished::TPtr& ev) {
@@ -66,4 +72,4 @@ void TBehaviourRegistrator::Bootstrap() {
     TBase::Sender<TEvStartRegistration>().SendTo(SelfId());
 }
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

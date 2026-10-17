@@ -309,6 +309,18 @@ size_t union_uint32(const uint32_t *set_1, size_t size_1, const uint32_t *set_2,
 uint32_t union_vector16(const uint16_t *set_1, uint32_t size_1,
                         const uint16_t *set_2, uint32_t size_2,
                         uint16_t *buffer);
+
+#if CROARING_COMPILER_SUPPORTS_AVX512
+/**
+ * AVX-512 union of two sorted uint16 arrays, using a Batcher bitonic merge
+ * network over 32 lanes. Same contract as union_vector16: `buffer` must have
+ * room for size_1 + size_2 values.
+ */
+uint32_t avx512_union_uint16(const uint16_t *set_1, uint32_t size_1,
+                             const uint16_t *set_2, uint32_t size_2,
+                             uint16_t *buffer);
+#endif  // CROARING_COMPILER_SUPPORTS_AVX512
+
 /**
  * A fast SSE-based XOR function.
  */

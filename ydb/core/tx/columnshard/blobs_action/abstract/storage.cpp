@@ -58,7 +58,7 @@ void IBlobsStorageOperator::Stop() {
     Stopped = true;
 }
 
-const NSplitter::TSplitSettings& IBlobsStorageOperator::GetBlobSplitSettings() const {
+NSplitter::TSplitSettings IBlobsStorageOperator::GetBlobSplitSettings() const {
     return NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(DoGetBlobSplitSettings());
 }
 

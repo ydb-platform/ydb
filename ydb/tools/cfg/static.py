@@ -4,6 +4,7 @@ import copy
 import base64
 import collections
 import itertools
+import json
 import logging
 import subprocess
 import tempfile
@@ -30,6 +31,7 @@ from ydb.tools.cfg import base, types, utils
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,
     kikimr_cfg_for_dynamic_node,
+    kikimr_cfg_for_dynamic_node_new_style,
     kikimr_cfg_for_dynamic_slot,
     kikimr_cfg_for_static_node,
     kikimr_cfg_for_static_node_new_style,
@@ -57,6 +59,7 @@ class StaticConfigGenerator(object):
         local_binary_path=None,
         skip_location=False,
         schema_validator=None,
+        grpcs_port=None,
         **kwargs
     ):
         self.__proto_configs = {}
@@ -82,6 +85,7 @@ class StaticConfigGenerator(object):
         self._skip_location = skip_location
         self.__node_broker_port = node_broker_port
         self.__grpc_port = grpc_port
+        self.__grpcs_port = grpcs_port
         self.__ic_port = ic_port
         self.__mon_port = mon_port
         self.__kikimr_home = cfg_home
@@ -214,7 +218,16 @@ class StaticConfigGenerator(object):
 
     @property
     def grpc_txt(self):
-        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, self.__cluster_details.grpc_config)
+        grpc_config = copy.deepcopy(self.__cluster_details.grpc_config)
+        bootstrap = grpc_config.get("xds_bootstrap", {})
+        node = bootstrap.get("node", {})
+        if isinstance(node.get("meta"), dict):
+            node["meta"] = json.dumps(node["meta"])
+        for server in bootstrap.get("xds_servers", []):
+            for credentials in server.get("channel_creds", []):
+                if isinstance(credentials.get("config"), dict):
+                    credentials["config"] = json.dumps(credentials["config"])
+        return self.__proto_config("grpc.txt", config_pb2.TGRpcConfig, grpc_config)
 
     @property
     def dyn_ns_txt(self):
@@ -568,6 +581,24 @@ class StaticConfigGenerator(object):
     @property
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
+            if self.__cluster_details.use_new_style_kikimr_cfg:
+                return kikimr_cfg_for_dynamic_node_new_style(
+                    self.__node_broker_port,
+                    self._database,
+                    self.__ic_port,
+                    self.__grpc_port,
+                    self.__mon_port,
+                    self.__kikimr_home,
+                    self._enable_cores,
+                    self.__cluster_details.default_log_level,
+                    kikimr_binaries_base_path='/Berkanavt/kikimr',
+                    mon_address=self.__cluster_details.monitor_address,
+                    cert_params=self.__cluster_details.ic_cert_params,
+                    use_auth_token_file=self._use_auth_token_file,
+                    dynamic_node=self.__cluster_details.get_service("dynamic_node"),
+                    grpcs_port=self.__grpcs_port,
+                )
+
             return kikimr_cfg_for_dynamic_node(
                 self.__node_broker_port,
                 self._database,
@@ -585,6 +616,7 @@ class StaticConfigGenerator(object):
                 audit_txt_enabled=self.audit_txt_enabled,
                 fq_txt_enabled=self.fq_txt_enabled,
                 use_auth_token_file=self._use_auth_token_file,
+                grpc_port=self.__grpc_port,
             )
 
         if self.__cluster_details.use_new_style_kikimr_cfg:
@@ -1194,7 +1226,7 @@ class StaticConfigGenerator(object):
         boot_config = self.__proto_configs["boot.txt"]
         tablet_name = tablet_type.name
         tablet_config = self._tablet_config(tablet_name, index)
-        if not tablet_config.get("enabled", True):
+        if not tablet_config.get("enabled", not tablet_type.is_optional):
             return
 
         tablet_id = tablet_type.tablet_id_for(index)
@@ -1250,6 +1282,7 @@ class StaticConfigGenerator(object):
                 (tablet_types.NODE_BROKER, 1),
                 (tablet_types.TENANT_SLOT_BROKER, 1),
                 (tablet_types.CONSOLE, 1),
+                (tablet_types.DBS_CONTROLLER, 1),
             ]
         return all_tablets
 

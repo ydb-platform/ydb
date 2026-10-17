@@ -12,7 +12,7 @@
 
 #include <library/cpp/yt/mpl/type_traits.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream.h>
@@ -41,7 +41,7 @@ i32 CheckedCastToI32(ui64 length)
 {
     if (length >= std::numeric_limits<i32>::max()) {
         THROW_ERROR_EXCEPTION("Protobuf message size exceeds 2GB")
-            << TErrorAttribute("length", length);
+            .With("length", length);
     }
     return static_cast<i32>(length);
 }
@@ -352,7 +352,7 @@ private:
     };
 
     std::atomic<EState> State_ = EState::Uninitialized;
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, InitializationLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, InitializationLock_);
     std::vector<TRegisterAction> RegisterActions_;
 
     THashMap<int, TProtobufExtensionDescriptor> ExtensionTagToExtensionDescriptor_;

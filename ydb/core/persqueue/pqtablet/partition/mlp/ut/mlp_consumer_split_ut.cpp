@@ -29,33 +29,35 @@ namespace {
             Offset.fetch_add(duration.MicroSeconds());
         }
 
-        std::atomic<i64> Offset = 0;
-    };
-
-    // Install before actor system start; restore the previous provider after actors
-    // are stopped (declare this before setup so dtor runs after setup). Avoids
-    // TSAN data race on TAppData::TimeProvider swap vs concurrent actor reads
-    // (#40339 / #47065).
-    class TScopedLeapTimeProvider: TNonCopyable {
-    public:
-        TScopedLeapTimeProvider()
-            : Leap_(MakeIntrusive<TLeapTimeProvider>())
-            , Previous_(Leap_)
-        {
-            DoSwap(TAppData::TimeProvider, Previous_);
-        }
-
-        ~TScopedLeapTimeProvider() {
-            DoSwap(TAppData::TimeProvider, Previous_);
-        }
-
-        TLeapTimeProvider* operator->() const {
-            return Leap_.Get();
+        void Reset() {
+            Offset.store(0);
         }
 
     private:
-        TIntrusivePtr<TLeapTimeProvider> Leap_;
-        TIntrusivePtr<ITimeProvider> Previous_;
+        std::atomic<i64> Offset = 0;
+    };
+
+    // TAppData::TimeProvider is process-global; actor threads read it unsynchronized.
+    // Install once before CreateSetup() and never reassign (YDBBUGS-508 / #40339).
+    class TScopedLeapTimeProvider: TNonCopyable {
+    public:
+        TScopedLeapTimeProvider() {
+            Leap()->Reset();
+        }
+
+        TLeapTimeProvider* operator->() const {
+            return Leap();
+        }
+
+    private:
+        static TLeapTimeProvider* Leap() {
+            static TIntrusivePtr<TLeapTimeProvider> leap = [] {
+                auto p = MakeIntrusive<TLeapTimeProvider>();
+                TAppData::TimeProvider = p;
+                return p;
+            }();
+            return leap.Get();
+        }
     };
 
     class TBufferedCerr: TNonCopyable {

@@ -53,6 +53,26 @@ VALUES
 
 Мы рекомендуем применять `raw string` и способ экранирования с помощью `\"`, так как он более нагляден.
 
+### Как обновить JSON в таблице? {#update-json}
+
+Частичное обновление JSON-поля не поддерживается, поэтому необходимо сконструировать новое значение из частей старого и новых данных. Для этого используется [`Yson` UDF](../../yql/reference/udf/list/yson.md) в комбинации с функциями для работы со [словарями](../../yql/reference/builtins/dict.md).
+
+В примере ниже к JSON-объекту из колонки `column` добавляется новое поле `new_field`:
+
+```yql
+UPDATE table
+SET column = Yson::SerializeJson(
+    Yson::From(
+        SetUnion(
+            Yson::ConvertTo(Yson::ParseJson(column), Dict<String, Yson>),
+            {'new_field': Yson('"value"')},
+            ($K, $v1, $v2) -> { RETURN COALESCE($v2, $v1); }
+        )
+    )
+)
+WHERE id = 1;
+```
+
 ### Как обновить только те значения, ключей которых нет в таблице? {#update-non-existent}
 
 Можно использовать операцию `LEFT JOIN`, чтобы пометить отсутствующие в таблице ключи, после чего обновить их значения:

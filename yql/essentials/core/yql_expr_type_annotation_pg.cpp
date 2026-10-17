@@ -29,7 +29,6 @@ TVector<TExprNode::TPtr> ApplyInputTransforms(
 }
 } // namespace
 
-
 bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
     if (toTypeId == fromTypeId) {
         return false;
@@ -41,6 +40,7 @@ bool IsCastRequired(ui32 fromTypeId, ui32 toTypeId) {
 }
 
 TExprNodePtr WrapWithPgCast(TExprNodePtr node, ui32 targetTypeId, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("PgCast")
             .Add(0, std::move(node))
@@ -49,6 +49,7 @@ TExprNodePtr WrapWithPgCast(TExprNodePtr node, ui32 targetTypeId, TExprContext& 
                 .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TPgCallResolutionResult ResolvePgCall(
@@ -60,53 +61,52 @@ TPgCallResolutionResult ResolvePgCall(
     const auto procOrType = NPg::LookupProcWithCasts(name, argTypes);
 
     return std::visit(TOverloaded{
-        [&](const NPg::TProcDesc* procPtr) -> TPgCallResolutionResult {
-            const auto& proc = *procPtr;
-            TPgCallResolutionResult::TProc result;
-            result.Proc = &proc;
+                          [&](const NPg::TProcDesc* procPtr) -> TPgCallResolutionResult {
+                              const auto& proc = *procPtr;
+                              TPgCallResolutionResult::TProc result;
+                              result.Proc = &proc;
 
-            const auto& fargTypes = proc.ArgTypes;
-            for (size_t i = 0; i < argTypes.size(); ++i) {
-                auto targetType = (i >= fargTypes.size()) ? proc.VariadicType : fargTypes[i];
-                if (IsCastRequired(argTypes[i], targetType)) {
-                    auto arg = ctx.NewArgument(pos, "from");
-                    auto body = WrapWithPgCast(arg, targetType, ctx);
-                    auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {arg}), std::move(body));
-                    result.InputTransforms.push_back(TNodeTransform(std::move(lambda)));
-                } else {
-                    result.InputTransforms.push_back(Nothing());
-                }
-            }
+                              const auto& fargTypes = proc.ArgTypes;
+                              for (size_t i = 0; i < argTypes.size(); ++i) {
+                                  auto targetType = (i >= fargTypes.size()) ? proc.VariadicType : fargTypes[i];
+                                  if (IsCastRequired(argTypes[i], targetType)) {
+                                      auto arg = ctx.NewArgument(pos, "from");
+                                      auto body = WrapWithPgCast(arg, targetType, ctx);
+                                      auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {arg}), std::move(body));
+                                      result.InputTransforms.push_back(TNodeTransform(std::move(lambda)));
+                                  } else {
+                                      result.InputTransforms.push_back(Nothing());
+                                  }
+                              }
 
-            if (argTypes.size() < fargTypes.size()) {
-                YQL_ENSURE(fargTypes.size() - argTypes.size() <= proc.DefaultArgs.size());
-                for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
-                    const auto& value = proc.DefaultArgs[i + proc.DefaultArgs.size() - fargTypes.size()];
-                    TExprNode::TPtr defNode;
-                    if (!value) {
-                        defNode = ctx.NewCallable(pos, "Null", {});
-                    } else {
-                        // clang-format off
-                        defNode = ctx.Builder(pos)
-                            .Callable("PgConst")
-                                .Atom(0, *value)
-                                .Callable(1, "PgType")
-                                    .Atom(0, NPg::LookupType(fargTypes[i]).Name)
-                                    .Seal()
-                                .Seal()
-                            .Build();
-                        // clang-format on
-                    }
-                    result.DefaultArgs.push_back(std::move(defNode));
-                }
-            }
+                              if (argTypes.size() < fargTypes.size()) {
+                                  YQL_ENSURE(fargTypes.size() - argTypes.size() <= proc.DefaultArgs.size());
+                                  for (size_t i = argTypes.size(); i < fargTypes.size(); ++i) {
+                                      const auto& value = proc.DefaultArgs[i + proc.DefaultArgs.size() - fargTypes.size()];
+                                      TExprNode::TPtr defNode;
+                                      if (!value) {
+                                          defNode = ctx.NewCallable(pos, "Null", {});
+                                      } else {
+                                          // clang-format off
+                                          defNode = ctx.Builder(pos)
+                                              .Callable("PgConst")
+                                                  .Atom(0, *value)
+                                                  .Callable(1, "PgType")
+                                                      .Atom(0, NPg::LookupType(fargTypes[i]).Name)
+                                                      .Seal()
+                                                  .Seal()
+                                              .Build();
+                                          // clang-format on
+                                      }
+                                      result.DefaultArgs.push_back(std::move(defNode));
+                                  }
+                              }
 
-            return TPgCallResolutionResult{std::move(result)};
-        },
-        [&](const NPg::TTypeDesc* typePtr) -> TPgCallResolutionResult {
-            return TPgCallResolutionResult{typePtr};
-        }
-    }, procOrType);
+                              return TPgCallResolutionResult{std::move(result)};
+                          },
+                          [&](const NPg::TTypeDesc* typePtr) -> TPgCallResolutionResult {
+                              return TPgCallResolutionResult{typePtr};
+                          }}, procOrType);
 }
 
 TVector<TExprNode::TPtr> TPgCallResolutionResult::TProc::BuildArgs(

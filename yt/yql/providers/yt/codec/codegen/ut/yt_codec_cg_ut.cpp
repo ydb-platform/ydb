@@ -704,6 +704,37 @@ Y_UNIT_TEST_SUITE(TYtCodegenCodec) {
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[2].AsStringRef()), "[1,2]");
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuf(items[3].AsStringRef()), "{foo=bar}");
     }
+
+    Y_UNIT_TEST(TestSkipDataRowDyNumber) {
+        auto codegen = ICodegen::Make(ETarget::Native);
+        codegen->LoadBitCode(GetYtCodecBitCode(), "YtCodecFuncs");
+        TMemoryUsageInfo memInfo("test");
+        TScopedAlloc alloc(__LOCATION__);
+        THolderFactory holderFactory(alloc.Ref(), memInfo);
+
+        auto reader = MakeYtCodecCgReader(codegen, holderFactory);
+        TTypeEnvironment env(alloc);
+        auto dyNumberType = TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, env);
+        auto uint64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
+
+        reader->SkipField(dyNumberType, false);
+        reader->AddField(uint64Type, {}, false);
+
+        auto func = reader->Build();
+        codegen->Verify();
+        YtCodecAddMappings(*codegen);
+        codegen->Compile();
+
+        NUdf::TUnboxedValue* items;
+        NUdf::TUnboxedValue row = holderFactory.CreateDirectArrayHolder(2, items);
+        typedef void(*TFunc)(NUdf::TUnboxedValue*, TInputBuf&);
+        auto funcPtr = (TFunc)codegen->GetPointerToFunction(func);
+
+        TTestReader testReader("\3\0\0\0foo\x2A\0\0\0\0\0\0\0"sv);
+        TInputBuf buf(testReader, nullptr);
+        funcPtr(items, buf);
+        UNIT_ASSERT_VALUES_EQUAL(items[1].Get<ui64>(), 42);
+    }
 #ifndef _win_
     Y_UNIT_TEST(TestReadDataRowDecimal) {
         auto codegen = ICodegen::Make(ETarget::Native);

@@ -8,12 +8,15 @@ Y_UNIT_TEST_SUITE(TYqlOptUtils) {
 
 Y_UNIT_TEST(HasOnlyJoinType) {
     TExprContext ctx;
+    // clang-format off
     auto node1 = ctx.Builder(TPositionHandle())
                      .Atom("Atom")
                      .Build();
+    // clang-format on
 
     UNIT_ASSERT(HasOnlyOneJoinType(*node1, "Cross"));
 
+    // clang-format off
     auto node2 = ctx.Builder(TPositionHandle())
                      .List()
                      .Atom(0, "Cross")
@@ -29,10 +32,12 @@ Y_UNIT_TEST(HasOnlyJoinType) {
                      .Seal()
                      .Seal()
                      .Build();
+    // clang-format on
 
     UNIT_ASSERT(HasOnlyOneJoinType(*node2, "Cross"));
     UNIT_ASSERT(!HasOnlyOneJoinType(*node2, "Inner"));
 
+    // clang-format off
     auto node3 = ctx.Builder(TPositionHandle())
                      .List()
                      .Atom(0, "Cross")
@@ -48,10 +53,12 @@ Y_UNIT_TEST(HasOnlyJoinType) {
                      .Seal()
                      .Seal()
                      .Build();
+    // clang-format on
 
     UNIT_ASSERT(!HasOnlyOneJoinType(*node3, "Cross"));
     UNIT_ASSERT(!HasOnlyOneJoinType(*node3, "Inner"));
 
+    // clang-format off
     auto node4 = ctx.Builder(TPositionHandle())
                      .List()
                      .Atom(0, "Inner")
@@ -67,6 +74,7 @@ Y_UNIT_TEST(HasOnlyJoinType) {
                      .Seal()
                      .Seal()
                      .Build();
+    // clang-format on
 
     UNIT_ASSERT(HasOnlyOneJoinType(*node4, "Inner"));
     UNIT_ASSERT(!HasOnlyOneJoinType(*node4, "Cross"));

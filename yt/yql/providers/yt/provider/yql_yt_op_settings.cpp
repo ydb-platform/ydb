@@ -100,6 +100,95 @@ const THashSet<TStringBuf> SYS_COLUMNS = {
 
 } // unnamed
 
+bool ParseWritePrimaryKey(TExprNode& setting, TVector<TString>& keyColumns, TExprContext& ctx) {
+    keyColumns.clear();
+
+    if (!EnsureTupleSize(setting, 2, ctx)) {
+        return false;
+    }
+
+    const auto* primaryKeyNode = setting.Child(1);
+
+    if (!EnsureAtom(*primaryKeyNode, ctx)) {
+        return false;
+    }
+
+    NYT::TNode keyColumnsNode;
+    try {
+        keyColumnsNode = NYT::NodeFromYsonString(primaryKeyNode->Content());
+    } catch (const std::exception& ex) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Failed to parse setting "
+                << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " as YSON: " << ex.what()));
+
+        return false;
+    }
+
+    if (!keyColumnsNode.IsList()) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " requires a YSON list of strings"));
+
+        return false;
+    }
+
+    if (keyColumnsNode.AsList().empty()) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " requires at least one column"));
+
+        return false;
+    }
+
+    THashSet<TString> seenKeyColumns;
+
+    for (const auto& keyColumnNode : keyColumnsNode.AsList()) {
+        if (!keyColumnNode.IsString()) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(primaryKeyNode->Pos()),
+                TStringBuilder()
+                    << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " requires a YSON list of strings"));
+
+            return false;
+        }
+
+        const auto& keyColumn = keyColumnNode.AsString();
+
+        if (keyColumn.empty()) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(setting.Pos()),
+                TStringBuilder()
+                    << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " requires non-empty column names"));
+
+            return false;
+        }
+
+        if (!seenKeyColumns.insert(keyColumn).second) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(setting.Pos()),
+                TStringBuilder()
+                    << "Duplicate column in "
+                    << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " setting: " << keyColumn.Quote()));
+
+            return false;
+        }
+
+        keyColumns.emplace_back(keyColumn);
+    }
+
+    return true;
+}
+
 bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, TExprContext& ctx) {
     TMaybe<TVector<TString>> sortBy;
     TMaybe<TVector<TString>> reduceBy;
@@ -486,6 +575,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::Pruned:
         case EYtSettingType::Transparent:
         case EYtSettingType::PruneUnusedColumns:
+        case EYtSettingType::ForceApplyMaxJobCount:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
@@ -795,28 +885,31 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
             }
-            if (!EnsureAtom(setting->Tail(), ctx)) {
-                return false;
-            }
-            NYT::TNode mapNode;
-            try {
-                mapNode = NYT::NodeFromYsonString(setting->Tail().Content());
-            } catch (const std::exception& e) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Failed to parse Yson: " << e.what()));
-                return false;
-            }
-            if (!mapNode.IsMap()) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                    << "Expected Yson map, got: " << mapNode.GetType()));
-                return false;
-            }
-            const auto& map = mapNode.AsMap();
-            for (auto it = map.cbegin(); it != map.cend(); ++it) {
-                if (!it->second.HasValue()) {
+            if (setting->Tail().IsAtom()) {
+                NYT::TNode mapNode;
+                try {
+                    mapNode = NYT::NodeFromYsonString(setting->Tail().Content());
+                } catch (const std::exception& e) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Expected Yson map key having value: "
-                        << it->first.Quote()));
+                        << "Failed to parse Yson: " << e.what()));
+                    return false;
+                }
+                if (!mapNode.IsMap()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                        << "Expected Yson map, got: " << mapNode.GetType()));
+                    return false;
+                }
+                const auto& map = mapNode.AsMap();
+                for (auto it = map.cbegin(); it != map.cend(); ++it) {
+                    if (!it->second.HasValue()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                            << "Expected Yson map key having value: "
+                            << it->first.Quote()));
+                        return false;
+                    }
+                }
+            } else {
+                if (!EnsureSpecificDataType(*setting->Child(1), EDataSlot::String, ctx, true)) {
                     return false;
                 }
             }
@@ -983,6 +1076,14 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
                 << "Feature '" << nameNode->Content() << "' isn't supported."));
             return false;
+        }
+        case EYtSettingType::PrimaryKey: {
+            TVector<TString> keyColumns;
+            if (!ParseWritePrimaryKey(*setting, keyColumns, ctx)) {
+                return false;
+            }
+
+            break;
         }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");

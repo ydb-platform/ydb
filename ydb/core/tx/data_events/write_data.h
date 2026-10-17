@@ -13,6 +13,8 @@
 #include <ydb/library/formats/arrow/modifier/subset.h>
 #include <ydb/library/signals/object_counter.h>
 
+#include <library/cpp/lwtrace/all.h>
+
 #include <util/generic/guid.h>
 
 namespace NKikimr::NOlap {
@@ -49,13 +51,22 @@ private:
 
     YDB_ACCESSOR(EModificationType, ModificationType, EModificationType::Replace);
     YDB_READONLY(TMonotonic, WriteStartInstant, TMonotonic::Now());
+    YDB_READONLY(TMonotonic, OrbitStartInstant, TMonotonic::Now());
+    YDB_READONLY(ui64, TabletId, 0);
+    YDB_READONLY(ui64, Cookie, 0);
+    YDB_READONLY(ui64, TxId, 0);
     const std::shared_ptr<TWriteFlowCounters> Counters;
     mutable NOlap::NCounters::TStateSignalsOperator<NEvWrite::EWriteStage>::TGuard StateGuard;
+    std::shared_ptr<NLWTrace::TOrbit> Orbit;
 
     YDB_FLAG_ACCESSOR(Bulk, false);
 
 public:
     void OnStage(const EWriteStage stage) const;
+
+    const std::shared_ptr<NLWTrace::TOrbit>& GetOrbit() const {
+        return Orbit;
+    }
 
     ~TWriteMeta() {
         if (StateGuard.GetStage() != EWriteStage::Finished) {
@@ -79,14 +90,21 @@ public:
     }
 
     TWriteMeta(const ui64 writeId, const NColumnShard::TUnifiedPathId& pathId, const NActors::TActorId& source,
-        const std::optional<ui32> granuleShardingVersion, const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
+        const std::optional<ui32> granuleShardingVersion, const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters,
+        std::shared_ptr<NLWTrace::TOrbit> orbit = nullptr, const ui64 tabletId = 0, const ui64 cookie = 0, const ui64 txId = 0,
+        const TMonotonic orbitStartInstant = TMonotonic::Now())
         : WriteId(writeId)
         , PathId(pathId)
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)
+        , OrbitStartInstant(orbitStartInstant)
+        , TabletId(tabletId)
+        , Cookie(cookie)
+        , TxId(txId)
         , Counters(counters)
-        , StateGuard(Counters->MutableTracing().BuildGuard(NEvWrite::EWriteStage::Created)) {
+        , StateGuard(Counters->MutableTracing().BuildGuard(NEvWrite::EWriteStage::Created))
+        , Orbit(std::move(orbit)) {
     }
 };
 

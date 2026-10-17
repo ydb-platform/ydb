@@ -13,38 +13,42 @@ except ImportError:
 
 
 # C++ is only supported on Python 3.6 and newer
-TEST_CPP = (sys.version_info >= (3, 6))
+TEST_CXX = (sys.version_info >= (3, 6))
 
 SRC_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), '..'))
 
 # Windows uses MSVC compiler
 MSVC = (os.name == "nt")
 
-# C compiler flags for GCC and clang
 COMMON_FLAGS = [
-    # Treat warnings as error
-    '-Werror',
-    # Enable all warnings
-    '-Wall', '-Wextra',
-    # Extra warnings
-    '-Wconversion',
-    # /usr/lib64/pypy3.7/include/pyport.h:68:20: error: redefinition of typedef
-    # 'Py_hash_t' is a C11 feature
-    "-Wno-typedef-redefinition",
+    '-I' + SRC_DIR,
 ]
-CFLAGS = COMMON_FLAGS + [
-    # Use C99 for pythoncapi_compat.c which initializes PyModuleDef with a
-    # mixture of designated and non-designated initializers
-    '-std=c99',
-]
-CPPFLAGS = list(COMMON_FLAGS)
-# FIXME: _Py_CAST() emits C++ compilers on Python 3.12.
-# See: https://github.com/python/cpython/issues/94731
-if 0:
-    CPPFLAGS.extend((
-        '-Wold-style-cast',
-        '-Wzero-as-null-pointer-constant',
+if not MSVC:
+    # C compiler flags for GCC and clang
+    COMMON_FLAGS.extend((
+        # Treat warnings as error
+        '-Werror',
+        # Enable all warnings
+        '-Wall', '-Wextra',
+        # Extra warnings
+        '-Wconversion',
+        # /usr/lib64/pypy3.7/include/pyport.h:68:20: error: redefinition of typedef
+        # 'Py_hash_t' is a C11 feature
+        "-Wno-typedef-redefinition",
     ))
+    CFLAGS = COMMON_FLAGS + [
+        # Use C99 for pythoncapi_compat.c which initializes PyModuleDef with a
+        # mixture of designated and non-designated initializers
+        '-std=c99',
+    ]
+else:
+    # C compiler flags for MSVC
+    COMMON_FLAGS.extend((
+        # Treat all compiler warnings as compiler errors
+        '/WX',
+    ))
+    CFLAGS = list(COMMON_FLAGS)
+CXXFLAGS = list(COMMON_FLAGS)
 
 
 def main():
@@ -66,34 +70,31 @@ def main():
         # CC env var overrides sysconfig CC variable in setuptools
         os.environ['CC'] = cmd
 
-    cflags = ['-I' + SRC_DIR]
-    cppflags = list(cflags)
-    if not MSVC:
-        cflags.extend(CFLAGS)
-        cppflags.extend(CPPFLAGS)
-
     # C extension
     c_ext = Extension(
         'test_pythoncapi_compat_cext',
         sources=['test_pythoncapi_compat_cext.c'],
-        extra_compile_args=cflags)
+        extra_compile_args=CFLAGS)
     extensions = [c_ext]
 
-    if TEST_CPP:
+    if TEST_CXX:
         # C++ extension
 
         # MSVC has /std flag but doesn't support /std:c++11
         if not MSVC:
             versions = [
-                ('test_pythoncapi_compat_cpp03ext', '-std=c++03'),
-                ('test_pythoncapi_compat_cpp11ext', '-std=c++11'),
+                ('test_pythoncapi_compat_cpp03ext', ['-std=c++03']),
+                ('test_pythoncapi_compat_cpp11ext', ['-std=c++11']),
             ]
         else:
-            versions = [('test_pythoncapi_compat_cppext', None)]
-        for name, flag in versions:
-            flags = list(cppflags)
-            if flag is not None:
-                flags.append(flag)
+            versions = [
+                ('test_pythoncapi_compat_cppext', None),
+                ('test_pythoncapi_compat_cpp14ext', ['/std:c++14', '/Zc:__cplusplus']),
+            ]
+        for name, std_flags in versions:
+            flags = list(CXXFLAGS)
+            if std_flags is not None:
+                flags.extend(std_flags)
             cpp_ext = Extension(
                 name,
                 sources=['test_pythoncapi_compat_cppext.cpp'],

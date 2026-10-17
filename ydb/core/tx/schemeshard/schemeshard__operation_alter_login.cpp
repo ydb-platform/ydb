@@ -9,16 +9,23 @@
 
 #include <ydb/library/security/util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAlterLogin: public TSubOperationBase {
+    virtual const char* Name() const override final { return "TAlterLogin"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
 public:
     using TSubOperationBase::TSubOperationBase;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
         NIceDb::TNiceDb db(context.GetTxc().DB); // do not track is there are direct writes happen
         TTabletId ssId = context.SS->SelfTabletId();
         const auto txId = OperationId.GetTxId();
@@ -226,7 +233,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterLogin");
     }
 
@@ -347,3 +354,5 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state) 
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

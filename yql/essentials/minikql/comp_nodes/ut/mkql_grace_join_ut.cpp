@@ -197,9 +197,9 @@ Y_UNIT_TEST_TWIN(TestTryToPreallocateMemoryForJoin, EXCEPTION) {
                                       (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
     std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     const ui64 TupleSize = 1024;
 
@@ -259,9 +259,9 @@ Y_UNIT_TEST_LLVM(TestImp1) {
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -340,8 +340,8 @@ Y_UNIT_TEST_LLVM(TestImp1) {
     std::vector<char*> strVals2;
     std::vector<ui32> strSizes1;
     std::vector<ui32> strSizes2;
-    GraceJoin::TupleData td1;
-    GraceJoin::TupleData td2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -429,9 +429,9 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
     CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -514,8 +514,8 @@ Y_UNIT_TEST_LLVM(TestImp1Batch) {
     std::vector<char*> strVals2;
     std::vector<ui32> strSizes1;
     std::vector<ui32> strSizes2;
-    GraceJoin::TupleData td1;
-    GraceJoin::TupleData td2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -607,9 +607,9 @@ Y_UNIT_TEST_LLVM(TestImp2) {
                                       (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
     std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/true);
 
     std::mt19937_64 rng;
     std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -660,8 +660,8 @@ Y_UNIT_TEST_LLVM(TestImp2) {
     std::vector<char*> strVals2;
     std::vector<ui32> strSizes1;
     std::vector<ui32> strSizes2;
-    GraceJoin::TupleData td1;
-    GraceJoin::TupleData td2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -745,9 +745,9 @@ Y_UNIT_TEST_LLVM(TestImp3) {
                                       (char*)"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"};
     std::array<ui32, 2> bigStrSize = {151, 151};
 
-    GraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
-    GraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
-    GraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    NGraceJoin::TTable bigTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    NGraceJoin::TTable smallTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
+    NGraceJoin::TTable joinTable(nullptr, 0, 1, 1, 1, 1, 0, 0, 1, /*colInterfaces=*/nullptr, /*isAny=*/false);
 
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -796,8 +796,8 @@ Y_UNIT_TEST_LLVM(TestImp3) {
     std::vector<char*> strVals2;
     std::vector<ui32> strSizes1;
     std::vector<ui32> strSizes2;
-    GraceJoin::TupleData td1;
-    GraceJoin::TupleData td2;
+    NGraceJoin::TupleData td1;
+    NGraceJoin::TupleData td2;
     vals1.resize(100);
     vals2.resize(100);
     strVals1.resize(100);
@@ -2109,7 +2109,6 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-    private:
         TComputationContext& CompCtx_;
         TTestStreamParams& Params_;
         ui64 TotalFetches_ = 0;
@@ -2170,14 +2169,14 @@ void RunGraceJoinEmptyCaseTest(EJoinKind joinKind, bool emptyLeft, bool emptyRig
 
     if (emptyLeft) {
         leftStreamSize = 0;
-        if (GraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
+        if (NGraceJoin::ShouldSkipRightIfLeftEmpty(joinKind)) {
             maxExpectedFetchesFromRightStream = 1;
         }
     }
 
     if (emptyRight) {
         rightStreamSize = 0;
-        if (GraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
+        if (NGraceJoin::ShouldSkipLeftIfRightEmpty(joinKind)) {
             maxExpectedFetchesFromLeftStream = 1;
         }
     }

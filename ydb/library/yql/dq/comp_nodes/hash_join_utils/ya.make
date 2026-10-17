@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
@@ -9,6 +9,13 @@ PEERDIR(
     library/cpp/digest/crc32c
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
 )
+
+IF (ARCH_X86_64 AND OS_LINUX)
+    PEERDIR(
+        ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/packing/avx2
+        ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/packing/sse42
+    )
+ENDIF()
 
 SRCS(
     tuple.cpp
@@ -22,17 +29,6 @@ SRCS(
     join_defs.cpp
     print_unboxed_value.cpp
 )
-
-IF (ARCH_X86_64 AND OS_LINUX)
-
-CFLAGS(
-    -mprfchw
-    -mavx2
-)
-
-ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

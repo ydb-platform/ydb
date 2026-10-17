@@ -17,9 +17,11 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors/lookup_actor
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
@@ -30,9 +32,12 @@ PEERDIR(
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/generic/actors
+    ydb/library/yql/providers/ydb_external/actors
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/s3/actors_factory
     ydb/library/yql/providers/solomon/actors
+    ydb/library/yql/providers/yt/async_io
+    ydb/services/udf_store/wasm
     yql/essentials/public/issue
 )
 

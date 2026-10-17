@@ -6,12 +6,14 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 #include <library/cpp/yt/assert/assert.h>
 
 #include <library/cpp/yt/memory/ref_counted.h>
 #include <library/cpp/yt/memory/new.h>
+
+#include <library/cpp/yt/misc/immortal.h>
 
 #include <util/generic/hash.h>
 
@@ -126,11 +128,11 @@ private:
     std::atomic<size_t> UndumpableSize_ = 0;
     std::atomic<size_t> UndumpableFootprint_ = 0;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkListsLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, MarkListsLock_);
     TUndumpableMark* AllMarksHead_ = nullptr;
     TUndumpableMark* FreeMarksHead_ = nullptr;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MarkTableLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, MarkTableLock_);
     std::optional<THashMap<void*, TUndumpableMark*>> MarkTable_;
 
     TUndumpableMark* GetFreeMark()
@@ -156,43 +158,43 @@ private:
     }
 };
 
-static constinit TUndumpableMemoryManager UndumpableMemoryManager;
+static constinit TImmortal<TUndumpableMemoryManager> UndumpableMemoryManager;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TUndumpableMark* MarkUndumpable(void* ptr, size_t size)
 {
-    return UndumpableMemoryManager.MarkUndumpable(ptr, size);
+    return UndumpableMemoryManager->MarkUndumpable(ptr, size);
 }
 
 void UnmarkUndumpable(TUndumpableMark* mark)
 {
-    UndumpableMemoryManager.UnmarkUndumpable(mark);
+    UndumpableMemoryManager->UnmarkUndumpable(mark);
 }
 
 void MarkUndumpableOob(void* ptr, size_t size)
 {
-    UndumpableMemoryManager.MarkUndumpableOob(ptr, size);
+    UndumpableMemoryManager->MarkUndumpableOob(ptr, size);
 }
 
 void UnmarkUndumpableOob(void* ptr)
 {
-    UndumpableMemoryManager.UnmarkUndumpableOob(ptr);
+    UndumpableMemoryManager->UnmarkUndumpableOob(ptr);
 }
 
 size_t GetUndumpableMemorySize()
 {
-    return UndumpableMemoryManager.GetUndumpableMemorySize();
+    return UndumpableMemoryManager->GetUndumpableMemorySize();
 }
 
 size_t GetUndumpableMemoryFootprint()
 {
-    return UndumpableMemoryManager.GetUndumpableMemoryFootprint();
+    return UndumpableMemoryManager->GetUndumpableMemoryFootprint();
 }
 
 TCutBlocksInfo CutUndumpableRegionsFromCoredump()
 {
-    return UndumpableMemoryManager.CutUndumpableRegionsFromCoredump();
+    return UndumpableMemoryManager->CutUndumpableRegionsFromCoredump();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

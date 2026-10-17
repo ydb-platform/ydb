@@ -1,10 +1,11 @@
 #include "fq_local_grpc_events.h"
 #include "rpc_base.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class ExplainDataQueryRPC
-    : public TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse> {
+class ExplainDataQueryRPC: public TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse> {
 public:
     using TBase = TRpcBase<ExplainDataQueryRPC, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse>;
     static constexpr std::string_view RpcName = "ExplainDataQuery";
@@ -21,14 +22,17 @@ public:
     }
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
-        SRC_LOG_T(result.query_id(), "created query");
+        YDB_LOG_TRACE_CTX(ctx, "Created query",
+            {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query_id()})});
 
         WaitForTermination(result.query_id(), ctx);
     }
 
     // WaitForTermination
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
-        SRC_LOG_I(queryId, "finished query execution with status " << FederatedQuery::QueryMeta::ComputeStatus_Name(status));
+        YDB_LOG_INFO_CTX(ctx, "Finished query execution",
+            {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either AST and statistics or for issues
@@ -39,9 +43,12 @@ public:
     void Handle(const FederatedQuery::DescribeQueryResult& result, const TActorContext& ctx) {
         auto status = result.query().meta().status();
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
-            TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
-                " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            SRC_LOG_I(result.query().meta().common().id(), "error: " << errorMsg);
+            TString errorMsg =
+                TStringBuilder{} << "created query " << result.query().meta().common().id()
+                                 << " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
+            YDB_LOG_INFO_CTX(ctx, "Query finished with non-success status",
+                {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})},
+                {"error", errorMsg});
 
             NYql::TIssues issues;
             issues.AddIssue(std::move(errorMsg));
@@ -63,4 +70,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
         f.RegisterActor(new ExplainDataQueryRPC(p.release(), grpcProxyId));
     };
 }
-}
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

@@ -27,33 +27,36 @@ public:
 
     // IO uring callbacks
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept override final;
-    virtual void OnDrop() noexcept override final;
+    virtual void OnDrop(NActors::TActorSystem* actorSystem) noexcept override final;
 
     // reply should not access raw uring result field – use just status and data if status OK
     virtual void Reply(
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
+    ui32 RetryCount = 0;
+    static constexpr ui32 MaxResubmissions = 20;
+    virtual bool IsRestoreIo() const noexcept { return false; }
+    virtual bool IsCriticalDDiskIo() const noexcept {
+        return false;
+    }
 
     virtual void ClearForRecycle() noexcept;
 
     void PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
     void PrepareRead(size_t size, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset);
 
-    void Reinit(const IEventHandle* ev = nullptr);
-
-    void SetSpan(NWilson::TSpan&& span) { Span = std::move(span); }
-    NWilson::TSpan& GetSpan() { return Span; }
+    void Reinit();
 
     void SetCookie(ui64 cookie) { Cookie = cookie; }
     ui64 GetCookie() const { return Cookie; }
-
     const TActorId& GetDDiskId() const { return DDiskId; }
-    const TActorId& GetOriginalRequester() const { return OriginalRequester; }
-    const TActorId& GetInterconnectSession() const { return InterconnectSession; }
 
     TRope ExtractData();
+    TReadPayload ExtractReadPayload();
 
     double TimePassed() const;
+
+    TOpCountersBase& GetCounters() const;
 
 public:
     // methods to use when we fallback to PDisk instead of direct I/O
@@ -63,19 +66,21 @@ public:
 
     using NPDisk::TUringOperationBase::SetResult;
 
-    void SetResult(i32 result, TRope&& data);
+    void SetResult(i64 result, TRope&& data);
 
 protected:
     TDDiskActor& Actor;
     const TActorId DDiskId;
 
     virtual void SelfRecycle() noexcept { delete this; }
+    bool PrepareRetry() noexcept;
+
 
 private:
-    NHPTimer::STime StartTs;
+    class TCompletionGuard;
+    void AccountShortIo() noexcept;
 
-    TActorId OriginalRequester;
-    TActorId InterconnectSession;
+    NHPTimer::STime StartTs;
 
     ui64 Cookie = 0;
 
@@ -83,16 +88,17 @@ private:
     TChunkIdx ChunkIdx = 0;
     ui32 ChunkOffsetInBytes = 0;
 
-    NWilson::TSpan Span;
-
     TRcBuf AlignedDataHolder;
     std::optional<TRope> Data;
+
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDDiskActor::TDDiskIoOp
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// Data-path operation of one read, write, or metadata read. The shared callback
+// owns its result slots even when forced teardown destroys the requesting frame.
 class TDDiskActor::TDDiskIoOp final : public TDDiskActor::TDirectIoOpBase {
 public:
     explicit TDDiskIoOp(TDDiskActor& actor)
@@ -103,7 +109,39 @@ public:
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept override;
 
+    void ClearForRecycle() noexcept override;
     void SelfRecycle() noexcept override;
+
+    void Reinit() {
+        TDirectIoOpBase::Reinit();
+        Callback.reset();
+        MetadataIndex.reset();
+        Critical = false;
+    }
+
+    // Bound by the batch when it submits the operation, not when it is prepared.
+    void SetCallback(std::shared_ptr<TBatchedIOAwaiter> callback) {
+        Callback = std::move(callback);
+    }
+
+    // Routes the completion to that MetadataResults slot; client data has no index.
+    void SetMetadataIndex(size_t metadataIndex) {
+        MetadataIndex = metadataIndex;
+    }
+
+    // Metadata reads/writes and zero formatting share the critical retry policy.
+    void SetCritical() {
+        Critical = true;
+    }
+
+    bool IsCriticalDDiskIo() const noexcept override {
+        return Critical;
+    }
+
+private:
+    std::shared_ptr<TBatchedIOAwaiter> Callback;
+    std::optional<size_t> MetadataIndex;
+    bool Critical = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -131,6 +169,8 @@ public:
         IsErase = isErase;
     }
 
+    bool IsRestoreIo() const noexcept override { return IsRestore; }
+
     void SetIsRestore(bool isRestore) {
         IsRestore = isRestore;
     }
@@ -139,39 +179,6 @@ private:
     ui64 PartCookie = 0;
     bool IsErase = false;
     bool IsRestore = false;
-};
-
-class TDDiskActor::TInternalSyncWriteOp final : public TDDiskActor::TDirectIoOpBase {
-public:
-    explicit TInternalSyncWriteOp(TDDiskActor& actor)
-        : TDirectIoOpBase(actor)
-    {}
-
-    void Reply(
-        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-        TString reason = {}) noexcept override;
-
-    void ClearForRecycle() noexcept override;
-    void SelfRecycle() noexcept override;
-
-    void SetRequestId(ui64 requestId) {
-        RequestId = requestId;
-    }
-
-    void SetSegment(ui64 begin, ui64 end) {
-        SegmentBegin = begin;
-        SegmentEnd = end;
-    }
-
-    void SetSyncId(ui64 syncId) {
-        SyncId = syncId;
-    }
-
-private:
-    ui64 SyncId = 0;
-    ui64 RequestId = 0;
-    ui64 SegmentBegin = 0;
-    ui64 SegmentEnd = 0;
 };
 
 } // namespace NKikimr::NDDisk

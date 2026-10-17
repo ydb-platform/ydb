@@ -8,6 +8,7 @@
 ## Список функций
 
 * `Digest::Crc32c(String{Flags::AutoMap}) -> Uint32`
+* `Digest::Crc32(String{Flags::AutoMap}) -> Uint32` Добавлено в версии [2026.03](../../changelog/2026.03.md)
 * `Digest::Crc64(String{Flags::AutoMap}) -> Uint64`
 * `Digest::Fnv32(String{Flags::AutoMap}) -> Uint32`
 * `Digest::Fnv64(String{Flags::AutoMap}) -> Uint64`
@@ -113,7 +114,9 @@ SELECT Digest::FarmHashFingerprint128("Who set this ancient quarrel new abroach?
 
 * `Digest::SuperFastHash(String{Flags:AutoMap}) -> Uint32`
 * `Digest::Sha1(String{Flags:AutoMap}) -> String`
+* `Digest::Sha224(String{Flags:AutoMap}) -> String` - добавлена в версии [2026.03](../../changelog/2026.03.md)
 * `Digest::Sha256(String{Flags:AutoMap}) -> String`
+* `Digest::Sha384(String{Flags:AutoMap}) -> String` - добавлена в версии [2026.03](../../changelog/2026.03.md)
 * `Digest::Sha512(String{Flags:AutoMap}) -> String` - добавлена в версии [2025.03](../../changelog/2025.03.md)
 * `Digest::IntHash64(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::XXH3(String{Flags:AutoMap}) -> Uint64`

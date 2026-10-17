@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/minikql
@@ -10,8 +10,6 @@ PEERDIR(
     ydb/core/formats
     ydb/core/protos
 )
-
-YQL_LAST_ABI_VERSION()
 
 SRCS(
     sharding.cpp

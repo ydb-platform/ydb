@@ -76,14 +76,16 @@ void WriteMessage(TTaggedPayloadWriter* writer, TStringBuf message)
 
 void WriteTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginWellKnownTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendWellKnownTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -279,7 +281,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -295,7 +297,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -329,7 +331,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message1");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -341,7 +343,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
 
     WaitForPredicate([&] {
         std::string message("Message2");
-        YT_LOG_INFO(message);
+        YT_TLOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
 
@@ -503,9 +505,9 @@ TEST_F(TLoggingTest, LogManager)
         };
     })", errorFile.Name(), infoFile.Name()));
 
-    YT_LOG_DEBUG("Debug message");
-    YT_LOG_INFO("Info message");
-    YT_LOG_ERROR("Error message");
+    YT_TLOG_DEBUG("Debug message");
+    YT_TLOG_INFO("Info message");
+    YT_TLOG_ERROR("Error message");
 
     TLogManager::Get()->Synchronize();
 
@@ -539,11 +541,11 @@ TEST_F(TLoggingTest, ThreadMinLogLevel)
         };
     })", debugFile.Name()));
 
-    YT_LOG_DEBUG("Debug message 1");
+    YT_TLOG_DEBUG("Debug message 1");
 
     SetThreadMinLogLevel(ELogLevel::Info);
-    YT_LOG_DEBUG("Debug message 2");
-    YT_LOG_INFO("Info message 1");
+    YT_TLOG_DEBUG("Debug message 2");
+    YT_TLOG_INFO("Info message 1");
 
     TLogManager::Get()->Synchronize();
 
@@ -562,6 +564,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
         .Payload = MakeTaggedPayloadFromMessage("test_message"),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
         .SourceFile = "a/b.cpp",
         .SourceLine = 123,
     };
@@ -592,6 +595,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
             EXPECT_EQ(message->GetChildOrThrow("fiber_id")->AsString()->GetValue(), "1f");
             EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+            EXPECT_EQ(message->FindChild("span_id"), nullptr);
 
             if (enableSourceLocation) {
                 EXPECT_EQ(message->GetChildOrThrow("source_file")->AsString()->GetValue(), "b.cpp:123");
@@ -599,6 +603,42 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
                 EXPECT_EQ(message->FindChild("source_file"), nullptr);
             }
         }
+    }
+}
+
+TEST_F(TLoggingTest, StructuredFormatterSpanIdField)
+{
+    TLogEvent event{
+        .Category = Logger().GetCategory(),
+        .Level = ELogLevel::Debug,
+        .Family = ELogFamily::PlainText,
+        .Payload = MakeTaggedPayloadFromMessage("test_message"),
+        .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
+    };
+
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+
+        auto writerConfig = New<TFileLogWriterConfig>();
+        writerConfig->FileName = logFile.Name();
+
+        auto writer = CreateFileLogWriter(
+            std::make_unique<TStructuredLogFormatter>(TStructuredLogFormatterOptions{.Format = format, .EnableSpanIdField = true}),
+            CreateDefaultSystemLogEventProvider(writerConfig),
+            "test_writer",
+            writerConfig,
+            this);
+
+        WriteEvent(writer, event);
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("trace_id")->AsString()->GetValue(), "4-3-2-1");
+        EXPECT_EQ(message->GetChildOrThrow("span_id")->AsString()->GetValue(), "000000001234abcd");
     }
 }
 
@@ -613,6 +653,7 @@ TEST_F(TLoggingTest, StructuredLogging)
             .Finish()),
         .FiberId = 31,
         .TraceId = TTraceId(1, 2, 3, 4),
+        .SpanId = 0x1234abcd,
     };
 
     for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
@@ -641,6 +682,7 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         EXPECT_EQ(message->FindChild("fiber_id"), nullptr);
         EXPECT_EQ(message->FindChild("trace_id"), nullptr);
+        EXPECT_EQ(message->FindChild("span_id"), nullptr);
     }
 }
 
@@ -1078,27 +1120,27 @@ TEST_F(TLoggingTest, WithMinLevel)
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Trace);
 
-        YT_LOG_TRACE("Message 1");
-        YT_LOG_DEBUG("Message 2");
-        YT_LOG_INFO("Message 3");
+        YT_TLOG_TRACE("Message 1");
+        YT_TLOG_DEBUG("Message 2");
+        YT_TLOG_INFO("Message 3");
         ASSERT_EQ(getNewLogLinesCount(), 3);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Debug);
 
-        YT_LOG_TRACE("Message 4");
-        YT_LOG_DEBUG("Message 5");
-        YT_LOG_INFO("Message 6");
+        YT_TLOG_TRACE("Message 4");
+        YT_TLOG_DEBUG("Message 5");
+        YT_TLOG_INFO("Message 6");
         ASSERT_EQ(getNewLogLinesCount(), 2);
     }
 
     {
         auto Logger = TLogger("Test").WithMinLevel(ELogLevel::Info);
 
-        YT_LOG_TRACE("Message 7");
-        YT_LOG_DEBUG("Message 8");
-        YT_LOG_INFO("Message 9");
+        YT_TLOG_TRACE("Message 7");
+        YT_TLOG_DEBUG("Message 8");
+        YT_TLOG_INFO("Message 9");
         ASSERT_EQ(getNewLogLinesCount(), 1);
     }
 }
@@ -1172,7 +1214,7 @@ TEST_P(TBuiltinRotationTest, All)
         Cerr << "[RotationTest] Waiting for message in file (Iter: " << index << ")" << Endl;
         // Wait until the message hits the file.
         WaitForPredicate([&] {
-            YT_LOG_INFO(message);
+            YT_TLOG_INFO(message);
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             if (files.empty()) {
                 return false;
@@ -1441,15 +1483,16 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     struct TCoreDumper
         : public ICoreDumper
     {
         bool SafeCoreDumped = false;
 
-        // TODO(babenko): migrate to std::string
-        TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
+        TCoreDump WriteCoreDump(
+            const std::vector<std::string>& /*notes*/,
+            TStringBuf /*reason*/) override
         {
             SafeCoreDumped = true;
             return TCoreDump{
@@ -1526,12 +1569,12 @@ TEST_F(TLoggingTest, SupressedRequests)
         traceContext->SetRequestId(requestId);
         NTracing::TTraceContextGuard guard(traceContext);
 
-        YT_LOG_INFO("Traced message");
+        YT_TLOG_INFO("Traced message");
 
         TLogManager::Get()->SuppressRequest(requestId);
     }
 
-    YT_LOG_INFO("Info message");
+    YT_TLOG_INFO("Info message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1561,9 +1604,9 @@ TEST_F(TLoggingTest, SuppressedMessages)
         suppressed_messages = ["Suppressed message"];
     })", logFile.Name()));
 
-    YT_LOG_INFO("Suppressed message 1");
-    YT_LOG_INFO("Suppressed message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Suppressed message 1");
+    YT_TLOG_INFO("Suppressed message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1594,9 +1637,9 @@ TEST_F(TLoggingTest, MessageLevelOverride)
         };
     })", logFile.Name()));
 
-    YT_LOG_INFO("Overridden message 1");
-    YT_LOG_TRACE("Overridden message 2");
-    YT_LOG_INFO("Good message");
+    YT_TLOG_INFO("Overridden message 1");
+    YT_TLOG_TRACE("Overridden message 2");
+    YT_TLOG_INFO("Good message");
 
     TLogManager::Get()->Synchronize();
 
@@ -1714,7 +1757,8 @@ protected:
     void LogLongMessages()
     {
         for (int i = 0; i < N; ++i) {
-            YT_LOG_INFO("%v", TRange(Chunks_.data(), Chunks_.data() + i));
+            YT_TLOG_INFO("Long message")
+                .With("Chunks", TRange(Chunks_.data(), Chunks_.data() + i));
         }
     }
 
@@ -1913,6 +1957,38 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
         "Expected >= 0, found -10");
 }
 
+TEST_F(TCustomWriterTest, UnknownWriterInDynamicRule)
+{
+    auto config = ConvertTo<TLogManagerConfigPtr>(TYsonString(Format(R"({
+        rules = [{min_level = info; writers = [custom];}];
+        writers = {custom = {type = "%v"; padding = 0;};};
+    })", CustomWriterType)));
+    auto* logManager = TLogManager::Get();
+    auto dynamicConfig = New<TLogManagerDynamicConfig>();
+    auto unknownWriterRule = New<TRuleConfig>();
+    unknownWriterRule->Writers = {"debug"};
+    auto mixedWriterRule = New<TRuleConfig>();
+    mixedWriterRule->Writers = {"custom", "debug"};
+    mixedWriterRule->MaxLevel = ELogLevel::Debug;
+    dynamicConfig->Rules = std::vector<TRuleConfigPtr>{
+        unknownWriterRule,
+        mixedWriterRule,
+        config->Rules.front(),
+    };
+    logManager->Configure(config->ApplyDynamic(dynamicConfig), /*sync*/ true);
+    auto writer = WriterFactory_->GetWriter();
+
+    SetThreadMinLogLevel(ELogLevel::Minimum);
+    YT_TLOG_DEBUG("Valid writer in a mixed rule still works");
+    YT_TLOG_INFO("Valid logging rule still works");
+    logManager->Synchronize();
+
+    const auto& messages = writer->GetMessages();
+    ASSERT_EQ(2, std::ssize(messages));
+    EXPECT_EQ("Valid writer in a mixed rule still works", messages[0]);
+    EXPECT_EQ("Valid logging rule still works", messages[1]);
+}
+
 TEST_F(TCustomWriterTest, Write)
 {
     Configure(Format(R"({
@@ -1930,9 +2006,9 @@ TEST_F(TCustomWriterTest, Write)
         };
     })", CustomWriterType));
 
-    YT_LOG_INFO("first");
-    YT_LOG_INFO("second");
-    YT_LOG_INFO("third");
+    YT_TLOG_INFO("first");
+    YT_TLOG_INFO("second");
+    YT_TLOG_INFO("third");
 
     TLogManager::Get()->Synchronize();
 

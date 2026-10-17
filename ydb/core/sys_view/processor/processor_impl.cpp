@@ -2,13 +2,27 @@
 
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 
 namespace NKikimr {
 namespace NSysView {
+
+namespace {
+
+NMonitoring::TDynamicCounterPtr CreateDetailedCounterGroup(
+    NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public)
+{
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+    return MakeIntrusive<NMonitoring::TDynamicCounters>(visibility);
+}
+
+} // namespace
 
 TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
@@ -17,6 +31,7 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
+    , DetailedGroup(CreateDetailedCounterGroup())
 {
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;
@@ -26,6 +41,7 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
 void TSysViewProcessor::OnDetach(const TActorContext& ctx) {
     DetachExternalCounters();
     DetachInternalCounters();
+    DetachDetailedCounters();
 
     Die(ctx);
 }
@@ -33,12 +49,14 @@ void TSysViewProcessor::OnDetach(const TActorContext& ctx) {
 void TSysViewProcessor::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext& ctx) {
     DetachExternalCounters();
     DetachInternalCounters();
+    DetachDetailedCounters();
 
     Die(ctx);
 }
 
 void TSysViewProcessor::OnActivateExecutor(const TActorContext& ctx) {
-    SVLOG_I("[" << TabletID() << "] OnActivateExecutor");
+    YDB_LOG_INFO("TSysViewProcessor::OnActivateExecutor",
+        {"tabletId", TabletID()});
 
     // TODO: tablet counters
     Execute(CreateTxInitSchema(), ctx);
@@ -49,7 +67,8 @@ void TSysViewProcessor::DefaultSignalTabletActive(const TActorContext& ctx) {
 }
 
 void TSysViewProcessor::Handle(TEvPrivate::TEvSendRequests::TPtr&) {
-    SVLOG_D("[" << TabletID() << "] Handle TEvPrivate::TEvSendRequests");
+    YDB_LOG_DEBUG("Handle TEvPrivate::TEvSendRequests: sending interval metrics requests",
+        {"tabletId", TabletID()});
     SendRequests();
 }
 
@@ -70,6 +89,38 @@ void TSysViewProcessor::PersistStage(NIceDb::TNiceDb& db) {
 void TSysViewProcessor::PersistIntervalEnd(NIceDb::TNiceDb& db) {
     ui64 intervalEndUs = IntervalEnd.MicroSeconds();
     PersistSysParam(db, Schema::SysParam_IntervalEnd, ToString(intervalEndUs));
+}
+
+void TSysViewProcessor::PersistLastFinalizedQueryMetricsIntervalEnd(
+    NIceDb::TNiceDb& db, TInstant intervalEnd)
+{
+    PersistSysParam(db, Schema::SysParam_LastMergedQueryMetricsIntervalEnd,
+        ToString(intervalEnd.MicroSeconds()));
+}
+
+void TSysViewProcessor::CompleteIntervalMetricsRequest(
+    NIceDb::TNiceDb& db, ui64 requestId, EIntervalMetricsResult result)
+{
+    auto request = RequestsInFlight.find(requestId);
+    if (request == RequestsInFlight.end()) {
+        return;
+    }
+
+    const bool requestedQueryMetrics = !request->second.Hashes.empty();
+    db.Table<Schema::NodesToRequest>().Key(request->second.NodeId).Delete();
+    RequestsInFlight.erase(request);
+
+    if (requestedQueryMetrics) {
+        if (result == EIntervalMetricsResult::Responded) {
+            ++QueryMetricsCoverage.RespondedNodes;
+        } else if (result == EIntervalMetricsResult::Failed) {
+            ++QueryMetricsCoverage.FailedNodes;
+        }
+    }
+
+    if (RequestsInFlight.empty() && NodesToRequest.empty()) {
+        PersistQueryResults(db);
+    }
 }
 
 template <typename TSchema>
@@ -98,28 +149,53 @@ void TSysViewProcessor::PersistQueryTopResults(NIceDb::TNiceDb& db,
         }
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistQueryTopResults: "
-        << "table id# " << TSchema::TableId
-        << ", interval end# " << intervalEnd
-        << ", query count# " << top.size()
-        << ", persisted# " << rank);
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistQueryTopResults: persisting query top results",
+        {"tabletId", TabletID()},
+        {"tableId", TSchema::TableId},
+        {"intervalEnd", intervalEnd},
+        {"topSize", top.size()},
+        {"persistedCount", rank});
 }
 
-void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
-    std::vector<std::pair<ui64, TQueryHash>> sorted;
-    sorted.reserve(QueryMetrics.size());
+TSysViewProcessor::TRankedQueryMetrics TSysViewProcessor::RankMinuteQueryMetrics() const {
+    TRankedQueryMetrics result;
+    result.reserve(QueryMetrics.size());
     for (const auto& [queryHash, metrics] : QueryMetrics) {
-        sorted.emplace_back(metrics.Metrics.GetCpuTimeUs().GetSum(), queryHash);
+        if (metrics.Metrics.GetCount()) {
+            result.emplace_back(metrics.Metrics.GetCpuTimeUs().GetSum(), queryHash);
+        }
     }
-    std::sort(sorted.begin(), sorted.end(), [] (auto& l, auto& r) { return l.first > r.first; });
+    const auto topCount = std::min(result.size(), NQueryMetricsLimits::OneMinuteResultCount);
+    std::partial_sort(result.begin(), result.begin() + topCount, result.end(), QueryMetricsRankCompare);
+    result.resize(topCount);
+    return result;
+}
 
+TSysViewProcessor::TRankedQueryMetrics TSysViewProcessor::RankCurrentHourQueryMetrics() const {
+    TRankedQueryMetrics result;
+    result.reserve(CurrentHourMetrics.size());
+    for (const auto& [queryHash, metrics] : CurrentHourMetrics) {
+        result.emplace_back(metrics.GetCpuTimeUs().GetSum(), queryHash);
+    }
+    const auto topCount = std::min(result.size(), NQueryMetricsLimits::OneHourResultCount);
+    std::partial_sort(result.begin(), result.begin() + topCount, result.end(), QueryMetricsRankCompare);
+    result.resize(topCount);
+    return result;
+}
+
+ui32 TSysViewProcessor::PersistMinuteQueryMetrics(NIceDb::TNiceDb& db,
+    const TRankedQueryMetrics& rankedMetrics)
+{
     ui64 intervalEndUs = IntervalEnd.MicroSeconds();
     ui32 rank = 0;
 
-    for (const auto& entry : sorted) {
+    for (const auto& entry : rankedMetrics) {
+        if (rank == NQueryMetricsLimits::OneMinuteResultCount) {
+            break;
+        }
         auto key = std::make_pair(intervalEndUs, ++rank);
 
-        auto& queryMetrics = QueryMetrics[entry.second];
+        const auto& queryMetrics = QueryMetrics.at(entry.second);
         auto& resultMetrics = MetricsOneMinute[key];
         resultMetrics.Text = queryMetrics.Text;
         resultMetrics.Metrics = queryMetrics.Metrics;
@@ -131,11 +207,147 @@ void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
             NIceDb::TUpdate<Schema::MetricsOneMinute::Data>(serialized));
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistQueryResults: "
-        << "interval end# " << IntervalEnd
-        << ", query count# " << sorted.size());
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistQueryResults: persisting query results",
+        {"tabletId", TabletID()},
+        {"intervalEnd", IntervalEnd},
+        {"queryCount", rankedMetrics.size()},
+        {"persistedCount", rank});
 
-    // TODO: metrics one hour?
+    return rank;
+}
+
+void TSysViewProcessor::MergeCurrentHourQueryMetrics(NIceDb::TNiceDb& db, TInstant hourEnd) {
+    const ui64 hourEndUs = hourEnd.MicroSeconds();
+    if (CurrentHourEnd != hourEnd) {
+        CurrentHourMetrics.clear();
+        CurrentHourEnd = hourEnd;
+    }
+
+    for (const auto& [queryHash, queryMetrics] : QueryMetrics) {
+        const auto& minuteMetrics = queryMetrics.Metrics;
+        if (!minuteMetrics.GetCount()) {
+            continue;
+        }
+        auto& hourMetrics = CurrentHourMetrics[queryHash];
+        if (!hourMetrics.GetCount()) {
+            hourMetrics.CopyFrom(minuteMetrics);
+        } else {
+            Aggregate(hourMetrics, minuteMetrics);
+        }
+
+        TString serialized;
+        Y_PROTOBUF_SUPPRESS_NODISCARD hourMetrics.SerializeToString(&serialized);
+        db.Table<Schema::IntervalMetricsOneHour>().Key(hourEndUs, queryHash).Update(
+            NIceDb::TUpdate<Schema::IntervalMetricsOneHour::Data>(serialized));
+    }
+}
+
+ui32 TSysViewProcessor::PersistCurrentHourQueryMetrics(NIceDb::TNiceDb& db,
+    TInstant hourEnd, const TRankedQueryMetrics& rankedMetrics)
+{
+    const ui64 hourEndUs = hourEnd.MicroSeconds();
+    std::unordered_map<TQueryHash, TString> previousTexts;
+    auto previous = MetricsOneHour.lower_bound(std::make_pair(hourEndUs, 0));
+    while (previous != MetricsOneHour.end() && previous->first.first == hourEndUs) {
+        previousTexts.emplace(previous->second.Metrics.GetQueryTextHash(), previous->second.Text);
+        ++previous;
+    }
+
+    ui32 hourRank = 0;
+    for (const auto& [_, queryHash] : rankedMetrics) {
+        if (hourRank == NQueryMetricsLimits::OneHourResultCount) {
+            break;
+        }
+
+        auto key = std::make_pair(hourEndUs, ++hourRank);
+        auto& result = MetricsOneHour[key];
+        result.Metrics = CurrentHourMetrics.at(queryHash);
+
+        if (auto it = QueryMetrics.find(queryHash);
+            it != QueryMetrics.end() && !it->second.Text.empty())
+        {
+            result.Text = it->second.Text;
+        } else if (auto it = previousTexts.find(queryHash); it != previousTexts.end()) {
+            result.Text = it->second;
+        } else {
+            result.Text.clear();
+        }
+
+        TString serialized;
+        Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.SerializeToString(&serialized);
+        db.Table<Schema::MetricsOneHour>().Key(key).Update(
+            NIceDb::TUpdate<Schema::MetricsOneHour::Text>(result.Text),
+            NIceDb::TUpdate<Schema::MetricsOneHour::Data>(serialized));
+    }
+
+    auto stale = MetricsOneHour.upper_bound(std::make_pair(hourEndUs, hourRank));
+    while (stale != MetricsOneHour.end() && stale->first.first == hourEndUs) {
+        db.Table<Schema::MetricsOneHour>().Key(stale->first).Delete();
+        stale = MetricsOneHour.erase(stale);
+    }
+
+    return hourRank;
+}
+
+void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
+    TInstant hourEnd, ui32 persistedHourMetrics)
+{
+    ui64 receivedCpuTimeUs = 0;
+    for (const auto& [_, metrics] : QueryMetrics) {
+        receivedCpuTimeUs += metrics.Metrics.GetCpuTimeUs().GetSum();
+    }
+
+    ui64 timedOutNodes = 0;
+    for (const auto& node : NodesToRequest) {
+        timedOutNodes += !node.Hashes.empty();
+    }
+    for (const auto& [_, node] : RequestsInFlight) {
+        timedOutNodes += !node.Hashes.empty();
+    }
+
+    YDB_LOG_DEBUG("Persist hour query metrics",
+        {"tabletId", TabletID()},
+        {"hourEnd", hourEnd},
+        {"accumulatorSize", CurrentHourMetrics.size()},
+        {"persistedCount", persistedHourMetrics},
+        {"summaryNodes", QueryMetricsCoverage.SummaryNodes},
+        {"coverageNodes", QueryMetricsCoverage.Nodes},
+        {"requestedNodes", QueryMetricsCoverage.RequestedNodes},
+        {"respondedNodes", QueryMetricsCoverage.RespondedNodes},
+        {"failedNodes", QueryMetricsCoverage.FailedNodes},
+        {"timedOutNodes", timedOutNodes},
+        {"totalCpuTimeUs", QueryMetricsCoverage.TotalCpuTimeUs},
+        {"nodeRetainedCpuTimeUs", QueryMetricsCoverage.NodeRetainedCpuTimeUs},
+        {"processorRetainedCpuTimeUs", QueryMetricsCoverage.ProcessorRetainedCpuTimeUs},
+        {"receivedCpuTimeUs", receivedCpuTimeUs});
+}
+
+void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
+    if (IntervalEnd <= LastFinalizedQueryMetricsIntervalEnd) {
+        return;
+    }
+
+    const auto minuteMetrics = RankMinuteQueryMetrics();
+    PersistMinuteQueryMetrics(db, minuteMetrics);
+
+    if (AppData()->FeatureFlags.GetCollectHourMetric()) {
+        const auto hourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
+        MergeCurrentHourQueryMetrics(db, hourEnd);
+
+        const auto hourMetrics = RankCurrentHourQueryMetrics();
+        const ui32 persistedHourMetrics =
+            PersistCurrentHourQueryMetrics(db, hourEnd, hourMetrics);
+
+        UpdateAndLogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
+    }
+
+    LastFinalizedQueryMetricsIntervalEnd = IntervalEnd;
+    PersistLastFinalizedQueryMetricsIntervalEnd(
+        db, LastFinalizedQueryMetricsIntervalEnd);
+}
+
+void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
+    FinalizeQueryMetricsInterval(db);
 
     PersistQueryTopResults<Schema::TopByDurationOneMinute>(
         db, ByDurationMinute, TopByDurationOneMinute, IntervalEnd);
@@ -146,7 +358,7 @@ void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
     PersistQueryTopResults<Schema::TopByRequestUnitsOneMinute>(
         db, ByRequestUnitsMinute, TopByRequestUnitsOneMinute, IntervalEnd);
 
-    auto hourEnd = EndOfHourInterval(IntervalEnd);
+    auto hourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
 
     PersistQueryTopResults<Schema::TopByDurationOneHour>(
         db, ByDurationHour, TopByDurationOneHour, hourEnd);
@@ -176,10 +388,11 @@ void TSysViewProcessor::PersistPartitionTopResults(NIceDb::TNiceDb& db,
             NIceDb::TUpdate<typename TSchema::Data>(data));
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistPartitionTopResults: "
-        << "table id# " << TSchema::TableId
-        << ", partition interval end# " << intervalEnd
-        << ", partition count# " << top.size());
+    YDB_LOG_DEBUG("TSysViewProcessor::PersistPartitionTopResults: persisting partition top results",
+        {"tabletId", TabletID()},
+        {"tableId", TSchema::TableId},
+        {"intervalEnd", intervalEnd},
+        {"partitionCount", top.size()});
 }
 
 void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
@@ -190,7 +403,7 @@ void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
     PersistPartitionTopResults<Schema::TopPartitionsByTliOneMinute>(
         db, PartitionTopByTliMinute, TopPartitionsByTliOneMinute, intervalEnd);
 
-    auto hourEnd = EndOfHourInterval(intervalEnd);
+    auto hourEnd = EndOfQueryMetricsHourInterval(intervalEnd);
 
     PersistPartitionTopResults<Schema::TopPartitionsOneHour>(
         db, PartitionTopByCpuHour, TopPartitionsByCpuOneHour, hourEnd);
@@ -229,6 +442,13 @@ void TSysViewProcessor::ScheduleSendNavigate() {
     Schedule(SendNavigateInterval, new TEvPrivate::TEvSendNavigate);
 }
 
+void TSysViewProcessor::ScheduleCleanupHourMetrics() {
+    if (!HourMetricsCleanupInFlight) {
+        HourMetricsCleanupInFlight = true;
+        Schedule(TDuration::Zero(), new TEvPrivate::TEvCleanupHourMetrics);
+    }
+}
+
 template <typename TSchema, typename TMap>
 void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize) {
     auto past = IntervalEnd - historySize;
@@ -241,15 +461,6 @@ void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration
         db.Table<TSchema>().Key(it->first).Delete();
     }
     results.erase(results.begin(), bound);
-}
-
-TInstant TSysViewProcessor::EndOfHourInterval(TInstant intervalEnd) {
-    auto hourUs = ONE_HOUR_BUCKET_SIZE.MicroSeconds();
-    auto hourEndUs = intervalEnd.MicroSeconds() / hourUs * hourUs;
-    if (hourEndUs != intervalEnd.MicroSeconds()) {
-        hourEndUs += hourUs;
-    }
-    return TInstant::MicroSeconds(hourEndUs);
 }
 
 void TSysViewProcessor::ClearIntervalSummaries(NIceDb::TNiceDb& db) {
@@ -275,8 +486,13 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     for (const auto& node : NodesToRequest) {
         db.Table<Schema::NodesToRequest>().Key(node.NodeId).Delete();
     }
+    for (const auto& [_, request] : RequestsInFlight) {
+        db.Table<Schema::NodesToRequest>().Key(request.NodeId).Delete();
+    }
     NodesToRequest.clear();
-    NodesInFlight.clear();
+    RequestsInFlight.clear();
+
+    QueryMetricsCoverage = {};
 
     auto clearQueryTop = [&] (NKikimrSysView::EStatsType type, TQueryTop& top) {
         for (const auto& query : top) {
@@ -306,8 +522,8 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CurrentStage = COLLECT;
     PersistStage(db);
 
-    auto oldHourEnd = EndOfHourInterval(IntervalEnd);
-    auto partitionOldHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
+    auto oldHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
+    auto partitionOldHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd + TotalInterval);
 
     auto now = ctx.Now();
     auto intervalSize = TotalInterval.MicroSeconds();
@@ -315,10 +531,14 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     IntervalEnd = TInstant::MicroSeconds(rounded);
     PersistIntervalEnd(db);
 
-    auto newHourEnd = EndOfHourInterval(IntervalEnd);
-    auto partitionNewHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
+    auto newHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd);
+    auto partitionNewHourEnd = EndOfQueryMetricsHourInterval(IntervalEnd + TotalInterval);
 
     if (oldHourEnd != newHourEnd) {
+        CurrentHourMetrics.clear();
+        CurrentHourEnd = newHourEnd;
+        ScheduleCleanupHourMetrics();
+
         clearQueryTop(NKikimrSysView::TOP_DURATION_ONE_HOUR, ByDurationHour);
         clearQueryTop(NKikimrSysView::TOP_READ_BYTES_ONE_HOUR, ByReadBytesHour);
         clearQueryTop(NKikimrSysView::TOP_CPU_TIME_ONE_HOUR, ByCpuTimeHour);
@@ -330,7 +550,9 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
         clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR, PartitionTopByTliHour);
     }
 
-    SVLOG_D("[" << TabletID() << "] Reset: interval end# " << IntervalEnd);
+    YDB_LOG_DEBUG("TSysViewProcessor::Reset: resetting interval state",
+        {"tabletId", TabletID()},
+        {"intervalEnd", IntervalEnd});
 
     const auto minuteHistorySize = TotalInterval * ONE_MINUTE_BUCKET_COUNT;
     const auto hourHistorySize = ONE_HOUR_BUCKET_SIZE * ONE_HOUR_BUCKET_COUNT;
@@ -351,10 +573,11 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     CutHistory<Schema::TopPartitionsOneHour>(db, TopPartitionsByCpuOneHour, hourHistorySize);
     CutHistory<Schema::TopPartitionsByTliOneMinute>(db, TopPartitionsByTliOneMinute, minuteHistorySize);
     CutHistory<Schema::TopPartitionsByTliOneHour>(db, TopPartitionsByTliOneHour, hourHistorySize);
+
 }
 
 void TSysViewProcessor::SendRequests() {
-    while (!NodesToRequest.empty() && NodesInFlight.size() < MaxInFlightRequests) {
+    while (!NodesToRequest.empty() && RequestsInFlight.size() < MaxInFlightRequests) {
         auto& req = NodesToRequest.back();
 
         auto request = MakeHolder<TEvSysView::TEvGetIntervalMetricsRequest>();
@@ -376,39 +599,47 @@ void TSysViewProcessor::SendRequests() {
         fillHashes(req.ByCpuTime, *record.MutableTopByCpuTime());
         fillHashes(req.ByRequestUnits, *record.MutableTopByRequestUnits());
 
-        SVLOG_D("[" << TabletID() << "] Send TEvGetIntervalMetricsRequest: "
-            << "node id# " << req.NodeId
-            << ", hashes# " << req.Hashes.size()
-            << ", texts# " << req.TextsToGet.size()
-            << ", by duration# " << req.ByDuration.size()
-            << ", by read bytes# " << req.ByReadBytes.size()
-            << ", by cpu time# " << req.ByCpuTime.size()
-            << ", by request units# " << req.ByRequestUnits.size());
+        YDB_LOG_DEBUG("TSysViewProcessor::SendRequests: sending TEvGetIntervalMetricsRequest",
+            {"tabletId", TabletID()},
+            {"nodeId", req.NodeId},
+            {"metricsHashCount", req.Hashes.size()},
+            {"queryTextCount", req.TextsToGet.size()},
+            {"topByDurationCount", req.ByDuration.size()},
+            {"topByReadBytesCount", req.ByReadBytes.size()},
+            {"topByCpuTimeCount", req.ByCpuTime.size()},
+            {"topByRequestUnitsCount", req.ByRequestUnits.size()});
 
+        const ui64 requestId = ++NextMetricsRequestId;
         Send(MakeSysViewServiceID(req.NodeId),
             std::move(request),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
-            req.NodeId);
+            requestId);
 
-        NodesInFlight[req.NodeId] = std::move(req);
+        RequestsInFlight.emplace(requestId, std::move(req));
         NodesToRequest.pop_back();
     }
 }
 
-void TSysViewProcessor::IgnoreFailure(TNodeId nodeId) {
-    NodesInFlight.erase(nodeId);
-}
-
 void TSysViewProcessor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
-    auto nodeId = (TNodeId)ev.Get()->Cookie;
-    SVLOG_W("[" << TabletID() << "] TEvUndelivered: node id# " << nodeId);
-    IgnoreFailure(nodeId);
+    if (ev->Get()->SourceType != TEvSysView::TEvGetIntervalMetricsRequest::EventType) {
+        return;
+    }
+    YDB_LOG_WARN("Handle TEvents::TEvUndelivered: interval metrics request undelivered",
+        {"tabletId", TabletID()},
+        {"requestId", ev->Cookie});
+    HandleIntervalMetricsFailure(ev->Cookie);
 }
 
 void TSysViewProcessor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     auto nodeId = ev->Get()->NodeId;
-    SVLOG_W("[" << TabletID() << "] TEvNodeDisconnected: node id# " << nodeId);
-    IgnoreFailure(nodeId);
+    YDB_LOG_WARN("Handle TEvInterconnect::TEvNodeDisconnected: node disconnected during metrics request",
+        {"tabletId", TabletID()},
+        {"nodeId", nodeId},
+        {"requestId", ev->Cookie});
+    auto request = RequestsInFlight.find(ev->Cookie);
+    if (request != RequestsInFlight.end() && request->second.NodeId == nodeId) {
+        HandleIntervalMetricsFailure(ev->Cookie);
+    }
 }
 
 void TSysViewProcessor::Handle(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
@@ -527,7 +758,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopPartitionsByTliOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -540,7 +773,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &MetricsOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -571,7 +806,9 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
                 entries = &TopByRequestUnitsOneHour;
                 break;
             default:
-                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                YDB_LOG_CRIT("TSysViewProcessor::Reply: unexpected stats type",
+                    {"tabletId", TabletID()},
+                    {"statsType", static_cast<size_t>(record.GetType())});
                 Send(ev->Sender, std::move(response));
                 return;
         }
@@ -634,11 +871,12 @@ void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
         next.PrintToString(response->Record.GetNext(), &nextStr);
     }
 
-    SVLOG_D("[" << TabletID() << "] Reply batch: "
-        << "range# " << rangeStr
-        << ", rows# " << count
-        << ", bytes# " << size
-        << ", next# " << nextStr);
+    YDB_LOG_DEBUG("TSysViewProcessor::Reply: sending response batch",
+        {"tabletId", TabletID()},
+        {"range", rangeStr},
+        {"rowCount", count},
+        {"byteSize", size},
+        {"next", nextStr});
 
     Send(ev->Sender, std::move(response));
 }
@@ -721,8 +959,8 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     dumpNode(node);
                 }
                 str << Endl;
-                str << "NodesInFlight" << Endl;
-                for (const auto& [_, node] : NodesInFlight) {
+                str << "RequestsInFlight" << Endl;
+                for (const auto& [_, node] : RequestsInFlight) {
                     dumpNode(node);
                 }
                 str << Endl;
@@ -765,6 +1003,10 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "  Count: " << MetricsOneMinute.size() << Endl << Endl;
                 str << "MetricsOneHour" << Endl
                     << "  Count: " << MetricsOneHour.size() << Endl << Endl;
+                str << "CurrentHourMetrics" << Endl
+                    << "  HourEnd: " << CurrentHourEnd << Endl
+                    << "  Count: " << CurrentHourMetrics.size() << Endl
+                    << "  LastFinalizedIntervalEnd: " << LastFinalizedQueryMetricsIntervalEnd << Endl << Endl;
                 str << "TopByDurationOneMinute" << Endl
                     << "  Count: " << TopByDurationOneMinute.size() << Endl << Endl;
                 str << "TopByDurationOneHour" << Endl
@@ -799,4 +1041,3 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 
 } // NSysView
 } // NKikimr
-

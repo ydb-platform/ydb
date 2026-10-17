@@ -4,11 +4,12 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/security/ticket_parser_impl.h>
 #include <ydb/core/tx/scheme_board/cache.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
@@ -16,25 +17,20 @@
 
 #include <util/stream/file.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
-
 namespace NKikimr::NHttpProxy {
-    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, bool enableV2Interface)
+    NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint)
     {
-        NCloud::TAccessServiceSettings asSettings;
-        asSettings.Endpoint = config.GetHttpConfig().GetAccessServiceEndpoint();
-
+        NCloud::TAccessServiceSettings asSettings(config.GetHttpConfig().GetAccessServiceEndpoint(), userAgentHint);
         if (config.GetCaCert()) {
             TString certificate = TFileInput(config.GetCaCert()).ReadAll();
             asSettings.CertificateRootCA = certificate;
         }
-        return NCloud::CreateAccessServiceWithCache(asSettings, enableV2Interface);
+        return NCloud::CreateAccessServiceWithCache(asSettings);
     }
 
-    NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config)
+    NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint)
     {
-        NCloud::TIamTokenServiceSettings tsSettings;
-        tsSettings.Endpoint = config.GetHttpConfig().GetIamTokenServiceEndpoint();
+        NCloud::TIamTokenServiceSettings tsSettings(config.GetHttpConfig().GetIamTokenServiceEndpoint(), userAgentHint);
         if (config.GetCaCert()) {
             TString certificate = TFileInput(config.GetCaCert()).ReadAll();
             tsSettings.CertificateRootCA = certificate;
@@ -42,13 +38,15 @@ namespace NKikimr::NHttpProxy {
         return NCloud::CreateIamTokenService(tsSettings);
     }
 
-    class THttpAuthActor: public NActors::TActorBootstrapped<THttpAuthActor> {
+    class THttpAuthActor: public NPQ::TBaseActor<THttpAuthActor>
+                         , public NPQ::TConstantLogPrefix {
     public:
-        using TBase = NActors::TActorBootstrapped<THttpAuthActor>;
+        using TBase = NPQ::TBaseActor<THttpAuthActor>;
 
         THttpAuthActor(const TActorId sender, THttpRequestContext& context,
                        THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
-            : Sender(sender)
+            : TBase(NKikimrServices::HTTP_PROXY)
+            , Sender(sender)
             , Prefix(context.LogPrefix())
             , ServiceAccountId(context.ServiceAccountId)
             , ServiceAccountCredentialsProvider(context.ServiceAccountCredentialsProvider)
@@ -62,8 +60,10 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << Prefix << " [auth] ";
+        NPQ::TStructuredMessage BuildLogPrefix() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                Prefix,
+                {"component", "auth"});
         }
 
     private:
@@ -72,7 +72,6 @@ namespace NKikimr::NHttpProxy {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
-                HFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
                 HFunc(NCloud::TEvIamTokenService::TEvCreateResponse, HandleServiceAccountIamToken);
                 HFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParser);
                 HFunc(TEvents::TEvPoisonPill, HandlePoison);
@@ -137,8 +136,7 @@ namespace NKikimr::NHttpProxy {
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
-            YDB_LOG_DEBUG_CTX(ctx, "Authorized successfully",
-                {"logPrefix", LogPrefix()});
+            LOG_D("Authorized successfully");
 
             TBase::Die(ctx);
         }
@@ -181,6 +179,12 @@ namespace NKikimr::NHttpProxy {
                                           "Access key id should be provided",
                                           NYds::EErrorCodes::MISSING_AUTHENTICATION_TOKEN);
                 }
+
+                if (Signature->GetService().empty()) {
+                    return ReplyWithError(ctx, NYdb::EStatus::UNAUTHORIZED,
+                                          "Service name should be provided",
+                                          NYds::EErrorCodes::INCOMPLETE_SIGNATURE);
+                }
             }
 
             if (Authorize) {
@@ -190,64 +194,66 @@ namespace NKikimr::NHttpProxy {
                     signature.AccessKeyId = Signature->GetAccessKeyId();
                     signature.StringToSign = Signature->GetStringToSign();
                     signature.Signature = Signature->GetParsedSignature();
-                    signature.Service = "kinesis";
+                    signature.Service = Signature->GetService();
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Signature = std::move(signature),
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
-                                                                                                     .Entries = entries}));
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                                .Signature = std::move(signature),
+                                .Database = DatabasePath,
+                                .TraceContext = {SourceAddress, RequestId},
+                                .Entries = entries
+                            }
+                        )
+                    );
                 } else {
-                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({.Ticket = IamToken,
-                                                                                                     .Database = DatabasePath,
-                                                                                                     .PeerName = SourceAddress,
-                                                                                                     .Entries = entries}));
+                    ctx.Send(
+                        MakeTicketParserID(),
+                        new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                                .Ticket = IamToken,
+                                .Database = DatabasePath,
+                                .TraceContext = {SourceAddress, RequestId},
+                                .Entries = entries
+                            }
+                        )
+                    );
                 }
                 return;
             }
 
-            const auto setupRequest = [&](auto& request) {
-                request->RequestId = RequestId;
+            auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+            request->RequestId = RequestId;
 
-                auto& signature = *request->Request.mutable_signature();
-                signature.set_access_key_id(Signature->GetAccessKeyId());
-                signature.set_string_to_sign(Signature->GetStringToSign());
-                signature.set_signature(Signature->GetParsedSignature());
+            auto& signature = *request->Request.mutable_signature();
+            signature.set_access_key_id(Signature->GetAccessKeyId());
+            signature.set_string_to_sign(Signature->GetStringToSign());
+            signature.set_signature(Signature->GetParsedSignature());
 
-                auto& v4params = *signature.mutable_v4_parameters();
-                v4params.set_service("kinesis");
-                v4params.set_region(Signature->GetRegion());
+            auto& v4params = *signature.mutable_v4_parameters();
+            v4params.set_service(Signature->GetService());
+            v4params.set_region(Signature->GetRegion());
 
-                const ui64 nanos = signedAt.NanoSeconds();
-                const ui64 seconds = nanos / 1'000'000'000ull;
-                const ui64 nanos_left = nanos % 1'000'000'000ull;
+            const ui64 nanos = signedAt.NanoSeconds();
+            const ui64 seconds = nanos / 1'000'000'000ull;
+            const ui64 nanos_left = nanos % 1'000'000'000ull;
 
-                v4params.mutable_signed_at()->set_seconds(seconds);
-                v4params.mutable_signed_at()->set_nanos(nanos_left);
-            };
+            v4params.mutable_signed_at()->set_seconds(seconds);
+            v4params.mutable_signed_at()->set_nanos(nanos_left);
 
-            if (EnableAccessServiceV2Interface) {
-                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
-                setupRequest(request);
-                ctx.Send(MakeAccessServiceID(), std::move(request));
-            } else {
-                auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-                setupRequest(request);
-                ctx.Send(MakeAccessServiceID(), std::move(request));
-            }
+            ctx.Send(MakeAccessServiceID(), std::move(request));
         }
 
         void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev) {
             Y_UNUSED(ev);
         }
 
-        template <typename TEvResponse>
-        void HandleAuthenticationResultImpl(typename TEvResponse::TPtr& ev, const TActorContext& ctx) {
+        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
+                                        const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                YDB_LOG_INFO_CTX(ctx, "Retry can not authenticate service account",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Retry can not authenticate service account",
                     {"attempN", RetryCounter.AttempN()},
                     {"user", ev->Get()->Status.Msg});
                 if (RetryCounter.HasAttemps()) {
@@ -265,20 +271,9 @@ namespace NKikimr::NHttpProxy {
             RetryCounter.Void();
 
             ServiceAccountId = ev->Get()->Response.subject().service_account().id();
-            YDB_LOG_INFO_CTX(ctx, "Authenticated",
-                {"logPrefix", LogPrefix()},
+            LOG_I("Authenticated",
                 {"serviceAccountId", ServiceAccountId});
             SendIamTokenRequest(ctx);
-        }
-
-        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev,
-                                        const TActorContext& ctx) {
-            HandleAuthenticationResultImpl<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev, ctx);
-        }
-
-        void HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev,
-                                        const TActorContext& ctx) {
-            HandleAuthenticationResultImpl<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev, ctx);
         }
 
         void SendIamTokenRequest(const TActorContext& ctx) {
@@ -300,8 +295,7 @@ namespace NKikimr::NHttpProxy {
                                           const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                YDB_LOG_INFO_CTX(ctx, "Retry IAM token issue",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Retry IAM token issue",
                     {"attempN", RetryCounter.AttempN()},
                     {"error", ev->Get()->Status.Msg});
 
@@ -319,16 +313,13 @@ namespace NKikimr::NHttpProxy {
             ctx.Send(Sender,
                      new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));
 
-            YDB_LOG_DEBUG_CTX(ctx, "IAM token generated",
-                {"logPrefix", LogPrefix()});
+            LOG_D("IAM token generated");
 
             TBase::Die(ctx);
         }
 
     public:
         void Bootstrap(const TActorContext& ctx) {
-            EnableAccessServiceV2Interface = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
-
             TBase::Become(&THttpAuthActor::StateWork);
 
             if (Authorize) {
@@ -344,7 +335,7 @@ namespace NKikimr::NHttpProxy {
 
     private:
         const TActorId Sender;
-        const TString Prefix;
+        const NActors::NStructuredLog::TStructuredMessage Prefix;
         TString ServiceAccountId;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         const TString RequestId;
@@ -358,7 +349,6 @@ namespace NKikimr::NHttpProxy {
         TString DatabaseId;
         TString DatabasePath;
         TString SourceAddress;
-        bool EnableAccessServiceV2Interface{false};
     };
 
     NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature)

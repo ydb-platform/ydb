@@ -61,6 +61,9 @@ namespace NKikimr {
 
     void SetupBSNodeWarden(TTestActorRuntime& runtime, ui32 nodeIndex, TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig)
     {
+        if (const auto& poolIds = runtime.GetBlobStorageExecutorPoolIds(); !poolIds.empty()) {
+            nodeWardenConfig->BlobStorageExecutorPoolIds = poolIds;
+        }
         runtime.AddLocalService(MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
             TActorSetupCmd(CreateBSNodeWarden(nodeWardenConfig), TMailboxType::Revolving, 0),
             nodeIndex);
@@ -183,11 +186,12 @@ namespace NKikimr {
             TActorSetupCmd(actor, TMailboxType::ReadAsFilled, 0), nodeIndex);
     }
 
-    void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
+    void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TBlobCacheConfig& config)
     {
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
             TActorSetupCmd(
-                NBlobCache::CreateBlobCache(std::nullopt, runtime.GetDynamicCounters(nodeIndex)->GetSubgroup("type", "BLOB_CACHE")),
+                NBlobCache::CreateBlobCache(NBlobCache::TBlobCacheSettings::FromProto(config),
+                    runtime.GetDynamicCounters(nodeIndex)->GetSubgroup("type", "BLOB_CACHE")),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);
@@ -482,7 +486,7 @@ namespace NKikimr {
             SetupTabletPipePerNodeCaches(runtime, nodeIndex, forceFollowers);
             SetupResourceBroker(runtime, nodeIndex, app.ResourceBrokerConfig);
             SetupSharedPageCache(runtime, nodeIndex, sharedCacheConfig ? *sharedCacheConfig : defaultSharedCacheConfig);
-            SetupBlobCache(runtime, nodeIndex);
+            SetupBlobCache(runtime, nodeIndex, app.BlobCacheConfig);
             SetupCSMetadataCache(runtime, nodeIndex);
             SetupCSColumnDataCache(runtime, nodeIndex);
             SetupSysViewService(runtime, nodeIndex);

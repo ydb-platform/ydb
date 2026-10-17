@@ -33,10 +33,11 @@ static int
 npyiter_iternext_itflags0_dims1_iters1(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = 0;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -44,16 +45,8 @@ npyiter_iternext_itflags0_dims1_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -62,114 +55,60 @@ npyiter_iternext_itflags0_dims1_iters1(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -180,10 +119,11 @@ static int
 npyiter_iternext_itflags0_dims1_iters2(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = 0;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -191,16 +131,8 @@ npyiter_iternext_itflags0_dims1_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -209,114 +141,60 @@ npyiter_iternext_itflags0_dims1_iters2(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -327,10 +205,11 @@ static int
 npyiter_iternext_itflags0_dims1_itersANY(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = 0;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -338,16 +217,8 @@ npyiter_iternext_itflags0_dims1_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -356,114 +227,60 @@ npyiter_iternext_itflags0_dims1_itersANY(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -476,10 +293,11 @@ static int
 npyiter_iternext_itflags0_dims2_iters1(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = 0;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -487,16 +305,8 @@ npyiter_iternext_itflags0_dims2_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -505,114 +315,60 @@ npyiter_iternext_itflags0_dims2_iters1(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -623,10 +379,11 @@ static int
 npyiter_iternext_itflags0_dims2_iters2(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = 0;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -634,16 +391,8 @@ npyiter_iternext_itflags0_dims2_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -652,114 +401,60 @@ npyiter_iternext_itflags0_dims2_iters2(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -770,10 +465,11 @@ static int
 npyiter_iternext_itflags0_dims2_itersANY(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = 0;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -781,16 +477,8 @@ npyiter_iternext_itflags0_dims2_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -799,114 +487,60 @@ npyiter_iternext_itflags0_dims2_itersANY(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -919,10 +553,11 @@ static int
 npyiter_iternext_itflags0_dimsANY_iters1(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = 0;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -930,16 +565,8 @@ npyiter_iternext_itflags0_dimsANY_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -948,114 +575,60 @@ npyiter_iternext_itflags0_dimsANY_iters1(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1066,10 +639,11 @@ static int
 npyiter_iternext_itflags0_dimsANY_iters2(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = 0;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -1077,16 +651,8 @@ npyiter_iternext_itflags0_dimsANY_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1095,114 +661,60 @@ npyiter_iternext_itflags0_dimsANY_iters2(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1213,10 +725,11 @@ static int
 npyiter_iternext_itflags0_dimsANY_itersANY(
                                                       NpyIter *iter)
 {
-#if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = 0;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -1224,16 +737,8 @@ npyiter_iternext_itflags0_dimsANY_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (0&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1242,114 +747,60 @@ npyiter_iternext_itflags0_dimsANY_itersANY(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(0&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if 0&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(0&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (0&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1364,10 +815,11 @@ static int
 npyiter_iternext_itflagsIND_dims1_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -1375,16 +827,8 @@ npyiter_iternext_itflagsIND_dims1_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1393,114 +837,60 @@ npyiter_iternext_itflagsIND_dims1_iters1(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1511,10 +901,11 @@ static int
 npyiter_iternext_itflagsIND_dims1_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -1522,16 +913,8 @@ npyiter_iternext_itflagsIND_dims1_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1540,114 +923,60 @@ npyiter_iternext_itflagsIND_dims1_iters2(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1658,10 +987,11 @@ static int
 npyiter_iternext_itflagsIND_dims1_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -1669,16 +999,8 @@ npyiter_iternext_itflagsIND_dims1_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1687,114 +1009,60 @@ npyiter_iternext_itflagsIND_dims1_itersANY(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1807,10 +1075,11 @@ static int
 npyiter_iternext_itflagsIND_dims2_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -1818,16 +1087,8 @@ npyiter_iternext_itflagsIND_dims2_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1836,114 +1097,60 @@ npyiter_iternext_itflagsIND_dims2_iters1(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -1954,10 +1161,11 @@ static int
 npyiter_iternext_itflagsIND_dims2_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -1965,16 +1173,8 @@ npyiter_iternext_itflagsIND_dims2_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -1983,114 +1183,60 @@ npyiter_iternext_itflagsIND_dims2_iters2(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2101,10 +1247,11 @@ static int
 npyiter_iternext_itflagsIND_dims2_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -2112,16 +1259,8 @@ npyiter_iternext_itflagsIND_dims2_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2130,114 +1269,60 @@ npyiter_iternext_itflagsIND_dims2_itersANY(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2250,10 +1335,11 @@ static int
 npyiter_iternext_itflagsIND_dimsANY_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -2261,16 +1347,8 @@ npyiter_iternext_itflagsIND_dimsANY_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2279,114 +1357,60 @@ npyiter_iternext_itflagsIND_dimsANY_iters1(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2397,10 +1421,11 @@ static int
 npyiter_iternext_itflagsIND_dimsANY_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -2408,16 +1433,8 @@ npyiter_iternext_itflagsIND_dimsANY_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2426,114 +1443,60 @@ npyiter_iternext_itflagsIND_dimsANY_iters2(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2544,10 +1507,11 @@ static int
 npyiter_iternext_itflagsIND_dimsANY_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -2555,16 +1519,8 @@ npyiter_iternext_itflagsIND_dimsANY_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2573,114 +1529,60 @@ npyiter_iternext_itflagsIND_dimsANY_itersANY(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2695,10 +1597,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims1_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -2706,16 +1609,8 @@ npyiter_iternext_itflagsNOINN_dims1_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2724,114 +1619,60 @@ npyiter_iternext_itflagsNOINN_dims1_iters1(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2842,10 +1683,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims1_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -2853,16 +1695,8 @@ npyiter_iternext_itflagsNOINN_dims1_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -2871,114 +1705,60 @@ npyiter_iternext_itflagsNOINN_dims1_iters2(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -2989,10 +1769,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims1_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -3000,16 +1781,8 @@ npyiter_iternext_itflagsNOINN_dims1_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3018,114 +1791,60 @@ npyiter_iternext_itflagsNOINN_dims1_itersANY(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3138,10 +1857,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims2_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -3149,16 +1869,8 @@ npyiter_iternext_itflagsNOINN_dims2_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3167,114 +1879,60 @@ npyiter_iternext_itflagsNOINN_dims2_iters1(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3285,10 +1943,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims2_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -3296,16 +1955,8 @@ npyiter_iternext_itflagsNOINN_dims2_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3314,114 +1965,60 @@ npyiter_iternext_itflagsNOINN_dims2_iters2(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3432,10 +2029,11 @@ static int
 npyiter_iternext_itflagsNOINN_dims2_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -3443,16 +2041,8 @@ npyiter_iternext_itflagsNOINN_dims2_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3461,114 +2051,60 @@ npyiter_iternext_itflagsNOINN_dims2_itersANY(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3581,10 +2117,11 @@ static int
 npyiter_iternext_itflagsNOINN_dimsANY_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -3592,16 +2129,8 @@ npyiter_iternext_itflagsNOINN_dimsANY_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3610,114 +2139,60 @@ npyiter_iternext_itflagsNOINN_dimsANY_iters1(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3728,10 +2203,11 @@ static int
 npyiter_iternext_itflagsNOINN_dimsANY_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -3739,16 +2215,8 @@ npyiter_iternext_itflagsNOINN_dimsANY_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3757,114 +2225,60 @@ npyiter_iternext_itflagsNOINN_dimsANY_iters2(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -3875,10 +2289,11 @@ static int
 npyiter_iternext_itflagsNOINN_dimsANY_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_EXLOOP;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -3886,16 +2301,8 @@ npyiter_iternext_itflagsNOINN_dimsANY_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -3904,114 +2311,60 @@ npyiter_iternext_itflagsNOINN_dimsANY_itersANY(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_EXLOOP&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4026,10 +2379,11 @@ static int
 npyiter_iternext_itflagsRNG_dims1_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -4037,16 +2391,8 @@ npyiter_iternext_itflagsRNG_dims1_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4055,114 +2401,60 @@ npyiter_iternext_itflagsRNG_dims1_iters1(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4173,10 +2465,11 @@ static int
 npyiter_iternext_itflagsRNG_dims1_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -4184,16 +2477,8 @@ npyiter_iternext_itflagsRNG_dims1_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4202,114 +2487,60 @@ npyiter_iternext_itflagsRNG_dims1_iters2(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4320,10 +2551,11 @@ static int
 npyiter_iternext_itflagsRNG_dims1_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -4331,16 +2563,8 @@ npyiter_iternext_itflagsRNG_dims1_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4349,114 +2573,60 @@ npyiter_iternext_itflagsRNG_dims1_itersANY(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4469,10 +2639,11 @@ static int
 npyiter_iternext_itflagsRNG_dims2_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -4480,16 +2651,8 @@ npyiter_iternext_itflagsRNG_dims2_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4498,114 +2661,60 @@ npyiter_iternext_itflagsRNG_dims2_iters1(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4616,10 +2725,11 @@ static int
 npyiter_iternext_itflagsRNG_dims2_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -4627,16 +2737,8 @@ npyiter_iternext_itflagsRNG_dims2_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4645,114 +2747,60 @@ npyiter_iternext_itflagsRNG_dims2_iters2(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4763,10 +2811,11 @@ static int
 npyiter_iternext_itflagsRNG_dims2_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -4774,16 +2823,8 @@ npyiter_iternext_itflagsRNG_dims2_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4792,114 +2833,60 @@ npyiter_iternext_itflagsRNG_dims2_itersANY(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -4912,10 +2899,11 @@ static int
 npyiter_iternext_itflagsRNG_dimsANY_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -4923,16 +2911,8 @@ npyiter_iternext_itflagsRNG_dimsANY_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -4941,114 +2921,60 @@ npyiter_iternext_itflagsRNG_dimsANY_iters1(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5059,10 +2985,11 @@ static int
 npyiter_iternext_itflagsRNG_dimsANY_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -5070,16 +2997,8 @@ npyiter_iternext_itflagsRNG_dimsANY_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5088,114 +3007,60 @@ npyiter_iternext_itflagsRNG_dimsANY_iters2(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5206,10 +3071,11 @@ static int
 npyiter_iternext_itflagsRNG_dimsANY_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -5217,16 +3083,8 @@ npyiter_iternext_itflagsRNG_dimsANY_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5235,114 +3093,60 @@ npyiter_iternext_itflagsRNG_dimsANY_itersANY(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5357,10 +3161,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims1_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -5368,16 +3173,8 @@ npyiter_iternext_itflagsRNGuIND_dims1_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5386,114 +3183,60 @@ npyiter_iternext_itflagsRNGuIND_dims1_iters1(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5504,10 +3247,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims1_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -5515,16 +3259,8 @@ npyiter_iternext_itflagsRNGuIND_dims1_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5533,114 +3269,60 @@ npyiter_iternext_itflagsRNGuIND_dims1_iters2(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5651,10 +3333,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims1_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 1 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 1 <= 2
+    int ndim = 1;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -5662,16 +3345,8 @@ npyiter_iternext_itflagsRNGuIND_dims1_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 1 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 1 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5680,114 +3355,60 @@ npyiter_iternext_itflagsRNGuIND_dims1_itersANY(
     }
 #endif
 
-#if 1 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (1 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 1 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 1 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5800,10 +3421,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims2_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -5811,16 +3433,8 @@ npyiter_iternext_itflagsRNGuIND_dims2_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5829,114 +3443,60 @@ npyiter_iternext_itflagsRNGuIND_dims2_iters1(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -5947,10 +3507,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims2_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -5958,16 +3519,8 @@ npyiter_iternext_itflagsRNGuIND_dims2_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -5976,114 +3529,60 @@ npyiter_iternext_itflagsRNGuIND_dims2_iters2(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -6094,10 +3593,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dims2_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if 2 >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if 2 <= 2
+    int ndim = 2;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -6105,16 +3605,8 @@ npyiter_iternext_itflagsRNGuIND_dims2_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if 2 > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if 2 > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -6123,114 +3615,60 @@ npyiter_iternext_itflagsRNGuIND_dims2_itersANY(
     }
 #endif
 
-#if 2 > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (2 > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if 2 == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if 2 == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -6243,10 +3681,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dimsANY_iters1(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 1 < NPY_MAXDIMS
     const int nop = 1;
@@ -6254,16 +3693,8 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_iters1(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -6272,114 +3703,60 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_iters1(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -6390,10 +3767,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dimsANY_iters2(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if 2 < NPY_MAXDIMS
     const int nop = 2;
@@ -6401,16 +3779,8 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_iters2(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -6419,114 +3789,60 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_iters2(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -6537,10 +3853,11 @@ static int
 npyiter_iternext_itflagsRNGuIND_dimsANY_itersANY(
                                                       NpyIter *iter)
 {
-#if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
     const npy_uint32 itflags = NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX;
-#  if NPY_MAXDIMS >= NPY_MAXDIMS
-    int idim, ndim = NIT_NDIM(iter);
+#  if NPY_MAXDIMS <= 2
+    int ndim = NPY_MAXDIMS;
+#  else
+    int ndim = NIT_NDIM(iter);
 #  endif
 #  if NPY_MAXDIMS < NPY_MAXDIMS
     const int nop = NPY_MAXDIMS;
@@ -6548,16 +3865,8 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_itersANY(
     int nop = NIT_NOP(iter);
 #  endif
 
-    NpyIter_AxisData *axisdata0;
+    NpyIter_AxisData *axisdata;
     npy_intp istrides, nstrides = NAD_NSTRIDES();
-#endif
-#if NPY_MAXDIMS > 1
-    NpyIter_AxisData *axisdata1;
-    npy_intp sizeof_axisdata;
-#endif
-#if NPY_MAXDIMS > 2
-    NpyIter_AxisData *axisdata2;
-#endif
 
 #if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_RANGE)
     /* When ranged iteration is enabled, use the iterindex */
@@ -6566,114 +3875,60 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_itersANY(
     }
 #endif
 
-#if NPY_MAXDIMS > 1
-    sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
-#endif
+    npy_intp sizeof_axisdata = NIT_AXISDATA_SIZEOF(itflags, ndim, nop);
+    char **ptrs = NIT_DATAPTRS(iter);
+    axisdata = NIT_AXISDATA(iter);
 
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP) || (NPY_MAXDIMS > 1)
-    axisdata0 = NIT_AXISDATA(iter);
+#  if NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP
+    /* If an external loop is used, the first dimension never changes. */
+    NIT_ADVANCE_AXISDATA(axisdata, 1);
+    ndim--;
 #  endif
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Increment index 0 */
-    NAD_INDEX(axisdata0)++;
-    /* Increment pointer 0 */
+
+    /*
+     * Unroll the first dimension.
+     */
+    NAD_INDEX(axisdata) += 1;
     for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata0)[istrides] += NAD_STRIDES(axisdata0)[istrides];
-    }
+        ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+        NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
 #  endif
-
-#if NPY_MAXDIMS == 1
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    /* Finished when the index equals the shape */
-    return NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0);
-#  else
-    return 0;
-#  endif
-
-#else
-
-#  if !(NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
-    if (NAD_INDEX(axisdata0) < NAD_SHAPE(axisdata0)) {
-        return 1;
-    }
-#  endif
-
-    axisdata1 = NIT_INDEX_AXISDATA(axisdata0, 1);
-    /* Increment index 1 */
-    NAD_INDEX(axisdata1)++;
-    /* Increment pointer 1 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata1)[istrides] += NAD_STRIDES(axisdata1)[istrides];
     }
 
-    if (NAD_INDEX(axisdata1) < NAD_SHAPE(axisdata1)) {
-        /* Reset the 1st index to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        /* Reset the 1st pointer to the value of the 2nd */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata1)[istrides];
-        }
+    if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
         return 1;
     }
 
-# if NPY_MAXDIMS == 2
-    return 0;
-# else
-
-    axisdata2 = NIT_INDEX_AXISDATA(axisdata1, 1);
-    /* Increment index 2 */
-    NAD_INDEX(axisdata2)++;
-    /* Increment pointer 2 */
-    for (istrides = 0; istrides < nstrides; ++istrides) {
-        NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
-    }
-
-    if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-        /* Reset the 1st and 2nd indices to 0 */
-        NAD_INDEX(axisdata0) = 0;
-        NAD_INDEX(axisdata1) = 0;
-        /* Reset the 1st and 2nd pointers to the value of the 3rd */
+    /*
+     * Now continue (with resetting)
+     */
+    for (int idim = 1; idim < ndim; idim++) {
+        /* reset index and pointers on this dimension to 0 */
+        NAD_INDEX(axisdata) = 0;
         for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata0)[istrides] = NAD_PTRS(axisdata2)[istrides];
-            NAD_PTRS(axisdata1)[istrides] = NAD_PTRS(axisdata2)[istrides];
-        }
-        return 1;
-    }
-
-    for (idim = 3; idim < ndim; ++idim) {
-        NIT_ADVANCE_AXISDATA(axisdata2, 1);
-        /* Increment the index */
-        NAD_INDEX(axisdata2)++;
-        /* Increment the pointer */
-        for (istrides = 0; istrides < nstrides; ++istrides) {
-            NAD_PTRS(axisdata2)[istrides] += NAD_STRIDES(axisdata2)[istrides];
+            ptrs[istrides] -= NAD_SHAPE(axisdata) * NAD_STRIDES(axisdata)[istrides];
         }
 
+        /* And continue with the next dimension. */
+        NIT_ADVANCE_AXISDATA(axisdata, 1);
 
-        if (NAD_INDEX(axisdata2) < NAD_SHAPE(axisdata2)) {
-            /* Reset the indices and pointers of all previous axisdatas */
-            axisdata1 = axisdata2;
-            do {
-                NIT_ADVANCE_AXISDATA(axisdata1, -1);
-                /* Reset the index to 0 */
-                NAD_INDEX(axisdata1) = 0;
-                /* Reset the pointer to the updated value */
-                for (istrides = 0; istrides < nstrides; ++istrides) {
-                    NAD_PTRS(axisdata1)[istrides] =
-                                        NAD_PTRS(axisdata2)[istrides];
-                }
-            } while (axisdata1 != axisdata0);
+        /* Increment index and pointers */
+        NAD_INDEX(axisdata) += 1;
+        for (istrides = 0; istrides < nstrides; ++istrides) {
+            ptrs[istrides] += NAD_STRIDES(axisdata)[istrides];
+#  if (NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX&NPY_ITFLAG_EXLOOP)
+            NIT_USERPTRS(iter)[istrides] = ptrs[istrides];
+#  endif
+        }
 
+        if (NAD_INDEX(axisdata) < NAD_SHAPE(axisdata)) {
             return 1;
         }
     }
+    /* If the loop terminated, ran out of dimensions (end of array) */
 
     return 0;
-
-# endif /* ndim != 2 */
-
-#endif /* ndim != 1 */
 }
 
 
@@ -6681,7 +3936,7 @@ npyiter_iternext_itflagsRNGuIND_dimsANY_itersANY(
 
 
 
-#line 187
+#line 126
 
 /*
  * Iternext function that handles the reduction buffering part.  This
@@ -6700,12 +3955,10 @@ npyiter_buffered_reduce_iternext_iters1(NpyIter *iter)
 
     int iop;
 
-    NpyIter_AxisData *axisdata;
     NpyIter_BufferData *bufferdata = NIT_BUFFERDATA(iter);
     char **ptrs;
-    char *prev_dataptrs[NPY_MAXARGS];
 
-    ptrs = NBF_PTRS(bufferdata);
+    ptrs = NIT_USERPTRS(iter);
 
     /*
      * If the iterator handles the inner loop, need to increment all
@@ -6742,9 +3995,8 @@ npyiter_buffered_reduce_iternext_iters1(NpyIter *iter)
         return 1;
     }
 
-    /* Save the previously used data pointers */
-    axisdata = NIT_AXISDATA(iter);
-    memcpy(prev_dataptrs, NAD_PTRS(axisdata), NPY_SIZEOF_INTP*nop);
+    /* Save the previously used data pointers in the user pointers */
+    memcpy(ptrs, NIT_DATAPTRS(iter), NPY_SIZEOF_INTP*nop);
 
     /* Write back to the arrays */
     if (npyiter_copy_from_buffers(iter) < 0) {
@@ -6763,7 +4015,7 @@ npyiter_buffered_reduce_iternext_iters1(NpyIter *iter)
     }
 
     /* Prepare the next buffers and set iterend/size */
-    if (npyiter_copy_to_buffers(iter, prev_dataptrs) < 0) {
+    if (npyiter_copy_to_buffers(iter, ptrs) < 0) {
         npyiter_clear_buffers(iter);
         return 0;
     }
@@ -6772,7 +4024,7 @@ npyiter_buffered_reduce_iternext_iters1(NpyIter *iter)
 }
 
 
-#line 187
+#line 126
 
 /*
  * Iternext function that handles the reduction buffering part.  This
@@ -6791,12 +4043,10 @@ npyiter_buffered_reduce_iternext_iters2(NpyIter *iter)
 
     int iop;
 
-    NpyIter_AxisData *axisdata;
     NpyIter_BufferData *bufferdata = NIT_BUFFERDATA(iter);
     char **ptrs;
-    char *prev_dataptrs[NPY_MAXARGS];
 
-    ptrs = NBF_PTRS(bufferdata);
+    ptrs = NIT_USERPTRS(iter);
 
     /*
      * If the iterator handles the inner loop, need to increment all
@@ -6833,9 +4083,8 @@ npyiter_buffered_reduce_iternext_iters2(NpyIter *iter)
         return 1;
     }
 
-    /* Save the previously used data pointers */
-    axisdata = NIT_AXISDATA(iter);
-    memcpy(prev_dataptrs, NAD_PTRS(axisdata), NPY_SIZEOF_INTP*nop);
+    /* Save the previously used data pointers in the user pointers */
+    memcpy(ptrs, NIT_DATAPTRS(iter), NPY_SIZEOF_INTP*nop);
 
     /* Write back to the arrays */
     if (npyiter_copy_from_buffers(iter) < 0) {
@@ -6854,7 +4103,7 @@ npyiter_buffered_reduce_iternext_iters2(NpyIter *iter)
     }
 
     /* Prepare the next buffers and set iterend/size */
-    if (npyiter_copy_to_buffers(iter, prev_dataptrs) < 0) {
+    if (npyiter_copy_to_buffers(iter, ptrs) < 0) {
         npyiter_clear_buffers(iter);
         return 0;
     }
@@ -6863,7 +4112,7 @@ npyiter_buffered_reduce_iternext_iters2(NpyIter *iter)
 }
 
 
-#line 187
+#line 126
 
 /*
  * Iternext function that handles the reduction buffering part.  This
@@ -6882,12 +4131,10 @@ npyiter_buffered_reduce_iternext_iters3(NpyIter *iter)
 
     int iop;
 
-    NpyIter_AxisData *axisdata;
     NpyIter_BufferData *bufferdata = NIT_BUFFERDATA(iter);
     char **ptrs;
-    char *prev_dataptrs[NPY_MAXARGS];
 
-    ptrs = NBF_PTRS(bufferdata);
+    ptrs = NIT_USERPTRS(iter);
 
     /*
      * If the iterator handles the inner loop, need to increment all
@@ -6924,9 +4171,8 @@ npyiter_buffered_reduce_iternext_iters3(NpyIter *iter)
         return 1;
     }
 
-    /* Save the previously used data pointers */
-    axisdata = NIT_AXISDATA(iter);
-    memcpy(prev_dataptrs, NAD_PTRS(axisdata), NPY_SIZEOF_INTP*nop);
+    /* Save the previously used data pointers in the user pointers */
+    memcpy(ptrs, NIT_DATAPTRS(iter), NPY_SIZEOF_INTP*nop);
 
     /* Write back to the arrays */
     if (npyiter_copy_from_buffers(iter) < 0) {
@@ -6945,7 +4191,7 @@ npyiter_buffered_reduce_iternext_iters3(NpyIter *iter)
     }
 
     /* Prepare the next buffers and set iterend/size */
-    if (npyiter_copy_to_buffers(iter, prev_dataptrs) < 0) {
+    if (npyiter_copy_to_buffers(iter, ptrs) < 0) {
         npyiter_clear_buffers(iter);
         return 0;
     }
@@ -6954,7 +4200,7 @@ npyiter_buffered_reduce_iternext_iters3(NpyIter *iter)
 }
 
 
-#line 187
+#line 126
 
 /*
  * Iternext function that handles the reduction buffering part.  This
@@ -6973,12 +4219,10 @@ npyiter_buffered_reduce_iternext_iters4(NpyIter *iter)
 
     int iop;
 
-    NpyIter_AxisData *axisdata;
     NpyIter_BufferData *bufferdata = NIT_BUFFERDATA(iter);
     char **ptrs;
-    char *prev_dataptrs[NPY_MAXARGS];
 
-    ptrs = NBF_PTRS(bufferdata);
+    ptrs = NIT_USERPTRS(iter);
 
     /*
      * If the iterator handles the inner loop, need to increment all
@@ -7015,9 +4259,8 @@ npyiter_buffered_reduce_iternext_iters4(NpyIter *iter)
         return 1;
     }
 
-    /* Save the previously used data pointers */
-    axisdata = NIT_AXISDATA(iter);
-    memcpy(prev_dataptrs, NAD_PTRS(axisdata), NPY_SIZEOF_INTP*nop);
+    /* Save the previously used data pointers in the user pointers */
+    memcpy(ptrs, NIT_DATAPTRS(iter), NPY_SIZEOF_INTP*nop);
 
     /* Write back to the arrays */
     if (npyiter_copy_from_buffers(iter) < 0) {
@@ -7036,7 +4279,7 @@ npyiter_buffered_reduce_iternext_iters4(NpyIter *iter)
     }
 
     /* Prepare the next buffers and set iterend/size */
-    if (npyiter_copy_to_buffers(iter, prev_dataptrs) < 0) {
+    if (npyiter_copy_to_buffers(iter, ptrs) < 0) {
         npyiter_clear_buffers(iter);
         return 0;
     }
@@ -7045,7 +4288,7 @@ npyiter_buffered_reduce_iternext_iters4(NpyIter *iter)
 }
 
 
-#line 187
+#line 126
 
 /*
  * Iternext function that handles the reduction buffering part.  This
@@ -7064,12 +4307,10 @@ npyiter_buffered_reduce_iternext_itersANY(NpyIter *iter)
 
     int iop;
 
-    NpyIter_AxisData *axisdata;
     NpyIter_BufferData *bufferdata = NIT_BUFFERDATA(iter);
     char **ptrs;
-    char *prev_dataptrs[NPY_MAXARGS];
 
-    ptrs = NBF_PTRS(bufferdata);
+    ptrs = NIT_USERPTRS(iter);
 
     /*
      * If the iterator handles the inner loop, need to increment all
@@ -7106,9 +4347,8 @@ npyiter_buffered_reduce_iternext_itersANY(NpyIter *iter)
         return 1;
     }
 
-    /* Save the previously used data pointers */
-    axisdata = NIT_AXISDATA(iter);
-    memcpy(prev_dataptrs, NAD_PTRS(axisdata), NPY_SIZEOF_INTP*nop);
+    /* Save the previously used data pointers in the user pointers */
+    memcpy(ptrs, NIT_DATAPTRS(iter), NPY_SIZEOF_INTP*nop);
 
     /* Write back to the arrays */
     if (npyiter_copy_from_buffers(iter) < 0) {
@@ -7127,7 +4367,7 @@ npyiter_buffered_reduce_iternext_itersANY(NpyIter *iter)
     }
 
     /* Prepare the next buffers and set iterend/size */
-    if (npyiter_copy_to_buffers(iter, prev_dataptrs) < 0) {
+    if (npyiter_copy_to_buffers(iter, ptrs) < 0) {
         npyiter_clear_buffers(iter);
         return 0;
     }
@@ -7159,7 +4399,7 @@ npyiter_buffered_iternext(NpyIter *iter)
             char **ptrs;
 
             strides = NBF_STRIDES(bufferdata);
-            ptrs = NBF_PTRS(bufferdata);
+            ptrs = NIT_USERPTRS(iter);
             for (iop = 0; iop < nop; ++iop) {
                 ptrs[iop] += strides[iop];
             }
@@ -7275,17 +4515,17 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
      * The combinations HASINDEX|EXLOOP and RANGE|EXLOOP are excluded
      * by the New functions
      */
-#line 424
+#line 360
         case 0:
             switch (ndim) {
-#line 430
+#line 366
                 case 1:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflags0_dims1_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflags0_dims1_iters2;
 
@@ -7294,14 +4534,14 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                             return &npyiter_iternext_itflags0_dims1_itersANY;
                     }
 
-#line 430
+#line 366
                 case 2:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflags0_dims2_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflags0_dims2_iters2;
 
@@ -7313,11 +4553,11 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                 /* Not specialized on ndim */
                 default:
                     switch (nop) {
-#line 451
+#line 387
                         case 1:
                             return &npyiter_iternext_itflags0_dimsANY_iters1;
 
-#line 451
+#line 387
                         case 2:
                             return &npyiter_iternext_itflags0_dimsANY_iters2;
 
@@ -7327,17 +4567,17 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                     }
             }
 
-#line 424
+#line 360
         case NPY_ITFLAG_HASINDEX:
             switch (ndim) {
-#line 430
+#line 366
                 case 1:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsIND_dims1_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsIND_dims1_iters2;
 
@@ -7346,14 +4586,14 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                             return &npyiter_iternext_itflagsIND_dims1_itersANY;
                     }
 
-#line 430
+#line 366
                 case 2:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsIND_dims2_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsIND_dims2_iters2;
 
@@ -7365,11 +4605,11 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                 /* Not specialized on ndim */
                 default:
                     switch (nop) {
-#line 451
+#line 387
                         case 1:
                             return &npyiter_iternext_itflagsIND_dimsANY_iters1;
 
-#line 451
+#line 387
                         case 2:
                             return &npyiter_iternext_itflagsIND_dimsANY_iters2;
 
@@ -7379,17 +4619,17 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                     }
             }
 
-#line 424
+#line 360
         case NPY_ITFLAG_EXLOOP:
             switch (ndim) {
-#line 430
+#line 366
                 case 1:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsNOINN_dims1_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsNOINN_dims1_iters2;
 
@@ -7398,14 +4638,14 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                             return &npyiter_iternext_itflagsNOINN_dims1_itersANY;
                     }
 
-#line 430
+#line 366
                 case 2:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsNOINN_dims2_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsNOINN_dims2_iters2;
 
@@ -7417,11 +4657,11 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                 /* Not specialized on ndim */
                 default:
                     switch (nop) {
-#line 451
+#line 387
                         case 1:
                             return &npyiter_iternext_itflagsNOINN_dimsANY_iters1;
 
-#line 451
+#line 387
                         case 2:
                             return &npyiter_iternext_itflagsNOINN_dimsANY_iters2;
 
@@ -7431,17 +4671,17 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                     }
             }
 
-#line 424
+#line 360
         case NPY_ITFLAG_RANGE:
             switch (ndim) {
-#line 430
+#line 366
                 case 1:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsRNG_dims1_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsRNG_dims1_iters2;
 
@@ -7450,14 +4690,14 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                             return &npyiter_iternext_itflagsRNG_dims1_itersANY;
                     }
 
-#line 430
+#line 366
                 case 2:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsRNG_dims2_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsRNG_dims2_iters2;
 
@@ -7469,11 +4709,11 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                 /* Not specialized on ndim */
                 default:
                     switch (nop) {
-#line 451
+#line 387
                         case 1:
                             return &npyiter_iternext_itflagsRNG_dimsANY_iters1;
 
-#line 451
+#line 387
                         case 2:
                             return &npyiter_iternext_itflagsRNG_dimsANY_iters2;
 
@@ -7483,17 +4723,17 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                     }
             }
 
-#line 424
+#line 360
         case NPY_ITFLAG_RANGE|NPY_ITFLAG_HASINDEX:
             switch (ndim) {
-#line 430
+#line 366
                 case 1:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsRNGuIND_dims1_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsRNGuIND_dims1_iters2;
 
@@ -7502,14 +4742,14 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                             return &npyiter_iternext_itflagsRNGuIND_dims1_itersANY;
                     }
 
-#line 430
+#line 366
                 case 2:
                     switch (nop) {
-#line 436
+#line 372
                         case 1:
                             return &npyiter_iternext_itflagsRNGuIND_dims2_iters1;
 
-#line 436
+#line 372
                         case 2:
                             return &npyiter_iternext_itflagsRNGuIND_dims2_iters2;
 
@@ -7521,11 +4761,11 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
                 /* Not specialized on ndim */
                 default:
                     switch (nop) {
-#line 451
+#line 387
                         case 1:
                             return &npyiter_iternext_itflagsRNGuIND_dimsANY_iters1;
 
-#line 451
+#line 387
                         case 2:
                             return &npyiter_iternext_itflagsRNGuIND_dimsANY_iters2;
 
@@ -7553,7 +4793,7 @@ NpyIter_GetIterNext(NpyIter *iter, char **errmsg)
 
 /* SPECIALIZED getindex functions */
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflags0(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7595,7 +4835,7 @@ npyiter_get_multi_index_itflags0(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsIND(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7637,7 +4877,7 @@ npyiter_get_multi_index_itflagsIND(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsIDP(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7679,7 +4919,7 @@ npyiter_get_multi_index_itflagsIDP(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsINDuIDP(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7721,7 +4961,7 @@ npyiter_get_multi_index_itflagsINDuIDP(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsNEGP(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7763,7 +5003,7 @@ npyiter_get_multi_index_itflagsNEGP(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsINDuNEGP(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7805,7 +5045,7 @@ npyiter_get_multi_index_itflagsINDuNEGP(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7847,7 +5087,7 @@ npyiter_get_multi_index_itflagsBUF(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsINDuBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7889,7 +5129,7 @@ npyiter_get_multi_index_itflagsINDuBUF(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsIDPuBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7931,7 +5171,7 @@ npyiter_get_multi_index_itflagsIDPuBUF(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsINDuIDPuBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -7973,7 +5213,7 @@ npyiter_get_multi_index_itflagsINDuIDPuBUF(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsNEGPuBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -8015,7 +5255,7 @@ npyiter_get_multi_index_itflagsNEGPuBUF(
 #endif /* not ident perm */
 }
 
-#line 494
+#line 430
 static void
 npyiter_get_multi_index_itflagsINDuNEGPuBUF(
                         NpyIter *iter, npy_intp *out_multi_index)
@@ -8114,51 +5354,51 @@ NpyIter_GetGetMultiIndex(NpyIter *iter, char **errmsg)
                 NPY_ITFLAG_BUFFER);
 
     switch (itflags) {
-#line 608
+#line 544
         case 0:
             return npyiter_get_multi_index_itflags0;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX:
             return npyiter_get_multi_index_itflagsIND;
 
-#line 608
+#line 544
         case NPY_ITFLAG_IDENTPERM:
             return npyiter_get_multi_index_itflagsIDP;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX|NPY_ITFLAG_IDENTPERM:
             return npyiter_get_multi_index_itflagsINDuIDP;
 
-#line 608
+#line 544
         case NPY_ITFLAG_NEGPERM:
             return npyiter_get_multi_index_itflagsNEGP;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX|NPY_ITFLAG_NEGPERM:
             return npyiter_get_multi_index_itflagsINDuNEGP;
 
-#line 608
+#line 544
         case NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsBUF;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX|NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsINDuBUF;
 
-#line 608
+#line 544
         case NPY_ITFLAG_IDENTPERM|NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsIDPuBUF;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX|NPY_ITFLAG_IDENTPERM|NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsINDuIDPuBUF;
 
-#line 608
+#line 544
         case NPY_ITFLAG_NEGPERM|NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsNEGPuBUF;
 
-#line 608
+#line 544
         case NPY_ITFLAG_HASINDEX|NPY_ITFLAG_NEGPERM|NPY_ITFLAG_BUFFER:
             return npyiter_get_multi_index_itflagsINDuNEGPuBUF;
 

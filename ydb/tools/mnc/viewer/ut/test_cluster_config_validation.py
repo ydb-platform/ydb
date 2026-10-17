@@ -314,6 +314,39 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(request.do_not_init)
         self.assertTrue(request.ignore_failed_stop)
 
+    async def test_install_binary_path_refresh_preserves_override(self):
+        app = Viewer()
+        app._mnc_config = {"git_ydb_root": "/repo"}
+        app._state.selected_cluster_config = SelectedClusterConfig(
+            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
+            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
+        )
+
+        async with app.run_test() as pilot:
+            await app.run_action("open_operation('install')")
+            await pilot.pause()
+            pane = app.query_one(OperationsPane)
+            binary_input = pane.query_one("#operations-bin-path", Input)
+            self.assertEqual(binary_input.placeholder, "/repo/ydb/apps/ydbd/ydbd")
+            self.assertEqual(binary_input.value, "")
+            self.assertIsNone(pane._request().bin_path)
+
+            binary_input.value = "/tmp/custom-ydb"
+            app._mnc_config["git_ydb_root"] = "/other-repo"
+            app._refresh_mnc_config_status()
+            await pilot.pause()
+            self.assertEqual(binary_input.placeholder, "/other-repo/ydb/apps/ydbd/ydbd")
+            self.assertEqual(binary_input.value, "/tmp/custom-ydb")
+            self.assertEqual(pane._request().bin_path, "/tmp/custom-ydb")
+
+            binary_input.value = ""
+            self.assertIsNone(pane._request().bin_path)
+            app._mnc_config["git_ydb_root"] = ""
+            with mock.patch.object(viewer_main, "MNC_CONFIG_PATH", "/settings/mnc.yaml"):
+                app._refresh_mnc_config_status()
+                await pilot.pause()
+                self.assertEqual(binary_input.placeholder, "Set git_ydb_root in /settings/mnc.yaml")
+
     async def test_operations_install_arguments_arrow_navigation(self):
         app = Viewer()
         app._state.selected_cluster_config = SelectedClusterConfig(
@@ -427,50 +460,6 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("final output", output)
 
-    async def test_operations_tab_renders_task_result_panel_after_completion(self):
-        app = Viewer()
-        app._state.selected_cluster_config = SelectedClusterConfig(
-            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
-            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
-        )
-
-        async def act(
-            hosts,
-            config,
-            waiting=None,
-            bin_path=None,
-            do_not_init=None,
-            ignore_failed_stop=None,
-            console=None,
-        ):
-            with progress.MyProgress(console=console) as pbar:
-                task = await pbar.get_hidden_task().add_subtask("Install", total=1)
-                await task.update(advance=1)
-            return progress.TaskResult(
-                level=progress.TaskResultLevel.ERROR,
-                step_title="Install",
-                message="failed step",
-            )
-
-        with mock.patch("ydb.tools.mnc.viewer.main.install_command.act", act):
-            async with app.run_test() as pilot:
-                await app.run_action("open_operation('install')")
-                await pilot.pause()
-
-                pane = app.query_one(OperationsPane)
-                pane.query_one("#operations-run", Button).press()
-                await self._wait_for_operation_status(pilot, app, "FAIL")
-
-                self.assertFalse(pane.query_one("#operations-live").display)
-                self.assertIsNotNone(app._state.operation.result_renderable)
-                console = rich.console.Console(record=True)
-                console.print(pane._operation_output())
-
-        output = console.export_text()
-        self.assertIn("ERROR:", output)
-        self.assertIn("Install", output)
-        self.assertIn("failed step", output)
-
     def test_operation_result_renderable_shows_successful_steps(self):
         app = Viewer()
         result = progress.TaskResult(
@@ -573,6 +562,7 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
             ignore_failed_stop=None,
             console=None,
         ):
+            self.assertIsNone(bin_path)
             contexts.append(
                 {
                     "path_to_bin": deploy_ctx.path_to_bin,
@@ -591,6 +581,8 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
 
                 pane = app.query_one(OperationsPane)
+                binary_input = pane.query_one("#operations-bin-path", Input)
+                self.assertEqual(binary_input.placeholder, "/repo/ydb/apps/ydbd/ydbd")
                 pane.query_one("#operations-run", Button).press()
                 await self._wait_for_operation_status(pilot, app, "OK")
 

@@ -17,4 +17,4 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(const TExprNode& lambda);
 IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExprContext& ctx, const TArrayRef<const TConstraintNode::TListType>& constraints);
 IGraphTransformer::TStatus UpdateAllChildLambdasConstraints(const TExprNode& node);
 
-}
+} // namespace NYql

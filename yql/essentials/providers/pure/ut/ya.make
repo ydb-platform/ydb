@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     yql/essentials/core/facade
+    yql/essentials/core/qplayer/storage/memory
     yql/essentials/public/result_format
     yql/essentials/minikql/invoke_builtins
     yql/essentials/minikql

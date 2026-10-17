@@ -34,7 +34,7 @@ public:
 std::any CreateSafeAssertionGuard(
     NCoreDump::ICoreDumperPtr coreDumper,
     NConcurrency::TAsyncSemaphorePtr coreSemaphore,
-    std::vector<TString> coreNotes = {});
+    std::vector<std::string> coreNotes = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

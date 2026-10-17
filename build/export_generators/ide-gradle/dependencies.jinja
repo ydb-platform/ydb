@@ -103,8 +103,18 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+{#- Without build_contribs every dependency carries its own exclude block, and a big module
+    overflows the 64 KiB JVM method limit on the lambda of a single dependencies {} block.
+    Several blocks in a row mean several lambdas, so the limit is never reached. -#}
+{%- set DEPENDENCIES_PER_BLOCK = 200 -%}
+
 {%- macro AddNonFileDeps(libraries, file_classpaths, implementationFunc, apiFunc) -%}
 {%-     for library in libraries -%}
+{%-         if not build_contribs and loop.index0 > 0 and loop.index0 % DEPENDENCIES_PER_BLOCK == 0 %}
+}
+
+dependencies {
+{%-         endif -%}
 {%-         set classpath = library.classpath -%}
 {%-         if library.type == "ejlibrary" or library.type == "swigdll" %}
 {#-             External java library or DLL_JAVA #}
@@ -121,8 +131,13 @@
 {%-                 if library.type != "contrib" -%}
 {%-                     if library.testdep -%}
 {%-                         set classpath = '":' + library.testdep | replace("/", ":") + '"' -%}
-{%-                         include "[generator]/patch_classpath.jinja" %}
-    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "testArtifacts"))
+{%-                         include "[generator]/patch_classpath.jinja" -%}
+{#-                         Named configurations are created by test.jinja only with named_tests -#}
+{%-                         if named_tests and named_test_artifacts %}
+    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "{{ TestArtifactsName(library.testdep, library.jar) }}"))
+{%-                         else %}
+    {{ implementationFunc }}(project(path = {{ classpath }}, configuration = "{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}"))
+{%-                         endif -%}
 {%-                     else %}
     {{ implementationFunc }}({{ classpath }})
 {%-                     endif -%}

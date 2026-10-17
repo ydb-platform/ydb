@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -30,20 +31,20 @@ TRegion::TRegion(
     const TDiskDescription& diskDescription,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
-    const TVChunkConfigByIndex& vChunkConfigs,
+    const TVChunkConfigs& vChunkConfigs,
+    TRegionVChunks touchedVChunks,
+    const TDirtyMapStateProtos& dirtyMapStates,
     ui32 syncRequestsBatchSize,
-    ui64 vChunkSize,
-    NMonitoring::TDynamicCounterPtr counters)
+    ui32 blockSize,
+    ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , DiskDescription(diskDescription)
 {
-    const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
-    for (size_t i = 0; i < vChunksPerRegionCount; i++) {
-        const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
-        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
-
-        NMonitoring::TDynamicCounterPtr vChunkCounters =
-            counters->GetSubgroup("vchunk", ToString(vChunkIndex));
+    for (size_t i = 0; i < VChunkPerRegionCount; i++) {
+        const size_t vChunkIndex = GetVChunkIndex(regionIndex, i);
+        const size_t dbgIndex = GetDirectBlockGroupIndex(
+            vChunkIndex,
+            DefaultVolumeDirectBlockGroupCount);
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
         auto vChunkConfig = persisted ? *persisted
@@ -55,16 +56,19 @@ TRegion::TRegion(
         Y_ABORT_UNLESS(vChunkConfig.IsValid());
         Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 
+        const auto* dirtyMapState = dirtyMapStates.FindPtr(vChunkIndex);
         auto vChunk = std::make_shared<TVChunk>(
             ActorSystem,
             traceService,
             partitionDirectService,
             DiskDescription,
             vChunkConfig,
+            touchedVChunks[i],
+            dirtyMapState ? *dirtyMapState : TDirtyMapStateProto(),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
-            vChunkSize,
-            vChunkCounters);
+            blockSize,
+            vChunkSize);
         VChunks.push_back(std::move(vChunk));
     }
 }

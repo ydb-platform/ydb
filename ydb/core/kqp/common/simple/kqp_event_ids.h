@@ -54,6 +54,9 @@ struct TKqpEvents {
         EvListCompileCacheQueriesResponse,
         EvWarmupComplete,
         EvStartWarmup,
+        EvCurrentQueryStats,
+        EvKillSessionRequest,
+        EvKillSessionResponse,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -70,7 +73,9 @@ struct TKqpExecuterEvents {
         EvStreamDataAck,
         EvTableResolveStatus,
         EvShardsResolveStatus,
-        EvDelayedExecution
+        EvDelayedExecution,
+        EvPqTopicResolveStatus,
+        EvCurrentExecutionStats,
     };
 };
 
@@ -100,6 +105,7 @@ struct TKqpComputeEvents {
         EvRemoteScanData,
         EvRemoteScanDataAck,
         EvScanPing,
+        EvScanWarning,
     };
 
     static_assert(Unused0 == EventSpaceBegin(TKikimrEvents::ES_KQP) + 200);

@@ -19,7 +19,7 @@ WHERE
     i_current_price BETWEEN 22 AND (22 + 30)
     AND inv_item_sk == i_item_sk
     AND d_date_sk == inv_date_sk
-    AND d_date BETWEEN CAST('2001-06-02' AS Date) AND (
+    AND CAST(d_date AS Date) BETWEEN CAST('2001-06-02' AS Date) AND (
         CAST('2001-06-02' AS Date) + DateTime::IntervalFromDays(60)
     )
     AND i_manufact_id IN (678, 964, 918, 849)

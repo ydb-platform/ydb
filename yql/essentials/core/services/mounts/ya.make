@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_mounts.h
@@ -18,8 +18,6 @@ PEERDIR(
     yql/essentials/sql/v1/translation
 )
 
-YQL_LAST_ABI_VERSION()
-
 RESOURCE(
     yql/essentials/mount/lib/yql/aggregate.yqls /lib/yql/aggregate.yqls
     yql/essentials/mount/lib/yql/window.yqls /lib/yql/window.yqls
@@ -27,6 +25,7 @@ RESOURCE(
     yql/essentials/mount/lib/yql/sqr.yqls /lib/yql/sqr.yqls
     yql/essentials/mount/lib/yql/core.yqls /lib/yql/core.yqls
     yql/essentials/mount/lib/yql/walk_folders.yqls /lib/yql/walk_folders.yqls
+    yql/essentials/mount/lib/yql/spark.yqls /lib/yql/spark.yqls
 )
 
 END()

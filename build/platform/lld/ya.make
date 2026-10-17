@@ -38,6 +38,9 @@ IF (OS_ANDROID)
         # See: https://developer.android.com/guide/practices/page-sizes
         LDFLAGS(-Wl,-z,max-page-size=16384)
     ENDIF()
+ELSEIF (OS_ZEPHYR)
+    DISABLE(PROVIDE_LLD_FROM_RESOURCE)  # Use LLD shipped with Zephyr SDK.
+    LDFLAGS(-fuse-ld=lld)
 ELSEIF (OS_LINUX)
     ENABLE(PROVIDE_LLD_FROM_RESOURCE)
     LDFLAGS(
@@ -74,7 +77,9 @@ ENDIF()
 IF (PROVIDE_LLD_FROM_RESOURCE)
     # There is no backward compatibility between LLVM IR versions 16 and 18.
     # So, we need to select lld18 when using clang18 to compile src in LTO mode.
-    IF (LLD_VERSION == 20)
+    IF (LLD_VERSION == 22)
+        DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld22.json)
+    ELSEIF (LLD_VERSION == 20)
         DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld20.json)
     ELSEIF (LLD_VERSION == 18)
         DECLARE_EXTERNAL_HOST_RESOURCES_BUNDLE_BY_JSON(LLD_ROOT lld18.json)

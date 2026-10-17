@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include "string_transform.h"
 #include "name_generator.h"
 #include "unknown_fields_collector.h"

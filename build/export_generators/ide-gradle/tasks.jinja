@@ -1,6 +1,9 @@
 {#- empty line #}
 tasks.withType<Jar>() {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
+{%- if zip64 %}
+    isZip64 = true
+{%- endif %}
 }
 
 tasks.withType<Copy>() {

@@ -1,5 +1,11 @@
 ### FAMILY <family_name> (column setting)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 Specifies the belonging of this column to the specified group of columns. For more details, see the section [{#T}](../create_table/family.md).
 
 ### DEFAULT <default_value>
@@ -25,7 +31,7 @@ This column can contain `NULL` values (by default).
 
 This column does not accept `NULL` values.
 
-### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
+### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -40,7 +46,7 @@ The following compression parameters can be set for columns:
 
 If `COMPRESSION()` is specified without parameters, the default compression is used for the column. Currently, it is `lz4`; in future versions, it will be possible to configure the default compression at the cluster or table level.
 
-### ENCODING([OFF|DICT])
+### ENCODING([OFF|DICT]) {#encoding}
 
 {% if oss == true and backend_name == "YDB" %}
 

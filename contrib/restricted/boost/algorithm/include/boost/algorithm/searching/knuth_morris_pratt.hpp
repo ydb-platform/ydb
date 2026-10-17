@@ -62,12 +62,11 @@ namespace boost { namespace algorithm {
             
         ~knuth_morris_pratt () {}
         
-        /// \fn operator ( corpusIter corpus_first, corpusIter corpus_last, Pred p )
+        /// \fn operator ( corpusIter corpus_first, corpusIter corpus_last )
         /// \brief Searches the corpus for the pattern that was passed into the constructor
-        /// 
+        ///
         /// \param corpus_first The start of the data to search (Random Access Iterator)
         /// \param corpus_last  One past the end of the data to search
-        /// \param p            A predicate used for the search comparisons.
         ///
         template <typename corpusIter>
         std::pair<corpusIter, corpusIter>
@@ -99,16 +98,16 @@ namespace boost { namespace algorithm {
         const difference_type k_pattern_length;
         std::vector <difference_type> skip_;
 
-        /// \fn operator ( corpusIter corpus_first, corpusIter corpus_last, Pred p )
+        /// \fn do_search ( corpusIter corpus_first, corpusIter corpus_last, difference_type k_corpus_length )
         /// \brief Searches the corpus for the pattern that was passed into the constructor
-        /// 
+        ///
         /// \param corpus_first The start of the data to search (Random Access Iterator)
         /// \param corpus_last  One past the end of the data to search
-        /// \param p            A predicate used for the search comparisons.
+        /// \param k_corpus_length The length of the corpus to search
         ///
         template <typename corpusIter>
         std::pair<corpusIter, corpusIter>
-        do_search ( corpusIter corpus_first, corpusIter corpus_last, 
+        do_search ( corpusIter corpus_first, corpusIter corpus_last,
                                                 difference_type k_corpus_length ) const {
             difference_type match_start = 0;  // position in the corpus that we're matching
             

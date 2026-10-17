@@ -31,7 +31,6 @@
     }
 
 #define PHOENIX_DECLARE_YSON_DUMPABLE_TEMPLATE_MIXIN(type) \
-    PHOENIX_DECLARE_YSON_DUMPABLE_MIXIN__PROLOGUE(type); \
 public: \
     friend void Serialize(const type& obj, ::NYT::NYson::IYsonConsumer* consumer) \
     { \
@@ -53,6 +52,9 @@ namespace NYT::NPhoenix::NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TThis>
+void YsonSerializeFieldsImpl(const TThis* this_, NYson::IYsonConsumer* consumer);
+
+template <class TThis>
 class TYsonSerializeBaseTypesRegistrar
     : public TTypeRegistrarBase
 {
@@ -65,7 +67,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        static_cast<const TBase*>(This_)->YsonSerializeFields(Consumer_);
+        YsonSerializeFieldsImpl(static_cast<const TBase*>(This_), Consumer_);
     }
 
 private:

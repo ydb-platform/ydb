@@ -43,6 +43,7 @@ NPY_NO_EXPORT int NPY_NUMUSERTYPES = 0;
 #include "arraytypes.h"
 #include "arrayobject.h"
 #include "array_converter.h"
+#include "blas_utils.h"
 #include "hashdescr.h"
 #include "descriptor.h"
 #include "dragon4.h"
@@ -82,6 +83,8 @@ NPY_NO_EXPORT int NPY_NUMUSERTYPES = 0;
 #include "npy_dlpack.h"
 
 #include "umathmodule.h"
+
+#include "unique.h"
 
 /*
  *****************************************************************************
@@ -157,12 +160,13 @@ PyArray_GetPriority(PyObject *obj, double default_)
         return NPY_SCALAR_PRIORITY;
     }
 
-    ret = PyArray_LookupSpecial_OnInstance(obj, npy_interned_str.array_priority);
-    if (ret == NULL) {
-        if (PyErr_Occurred()) {
-            /* TODO[gh-14801]: propagate crashes during attribute access? */
-            PyErr_Clear();
-        }
+    if (PyArray_LookupSpecial_OnInstance(
+            obj, npy_interned_str.array_priority, &ret) < 0) {
+        /* TODO[gh-14801]: propagate crashes during attribute access? */
+        PyErr_Clear();
+        return default_;
+    }
+    else if (ret == NULL) {
         return default_;
     }
 
@@ -555,10 +559,8 @@ PyArray_ConcatenateFlattenedArrays(int narrays, PyArrayObject **arrays,
         }
     }
 
-    int out_passed = 0;
     if (ret != NULL) {
         assert(dtype == NULL);
-        out_passed = 1;
         if (PyArray_NDIM(ret) != 1) {
             PyErr_SetString(PyExc_ValueError,
                             "Output array must be 1D");
@@ -606,35 +608,18 @@ PyArray_ConcatenateFlattenedArrays(int narrays, PyArrayObject **arrays,
         return NULL;
     }
 
-    int give_deprecation_warning = 1;  /* To give warning for just one input array. */
     for (iarrays = 0; iarrays < narrays; ++iarrays) {
         /* Adjust the window dimensions for this array */
         sliding_view->dimensions[0] = PyArray_SIZE(arrays[iarrays]);
 
         if (!PyArray_CanCastArrayTo(
                 arrays[iarrays], PyArray_DESCR(ret), casting)) {
-            /* This should be an error, but was previously allowed here. */
-            if (casting_not_passed && out_passed) {
-                /* NumPy 1.20, 2020-09-03 */
-                if (give_deprecation_warning && DEPRECATE(
-                        "concatenate() with `axis=None` will use same-kind "
-                        "casting by default in the future. Please use "
-                        "`casting='unsafe'` to retain the old behaviour. "
-                        "In the future this will be a TypeError.") < 0) {
-                    Py_DECREF(sliding_view);
-                    Py_DECREF(ret);
-                    return NULL;
-                }
-                give_deprecation_warning = 0;
-            }
-            else {
-                npy_set_invalid_cast_error(
-                        PyArray_DESCR(arrays[iarrays]), PyArray_DESCR(ret),
-                        casting, PyArray_NDIM(arrays[iarrays]) == 0);
-                Py_DECREF(sliding_view);
-                Py_DECREF(ret);
-                return NULL;
-            }
+            npy_set_invalid_cast_error(
+                    PyArray_DESCR(arrays[iarrays]), PyArray_DESCR(ret),
+                    casting, PyArray_NDIM(arrays[iarrays]) == 0);
+            Py_DECREF(sliding_view);
+            Py_DECREF(ret);
+            return NULL;
         }
 
         /* Copy the data for this array */
@@ -686,10 +671,17 @@ PyArray_ConcatenateInto(PyObject *op,
     }
 
     /* Convert the input list into arrays */
-    narrays = PySequence_Size(op);
-    if (narrays < 0) {
+    Py_ssize_t narrays_true = PySequence_Size(op);
+    if (narrays_true < 0) {
         return NULL;
     }
+    else if (narrays_true > NPY_MAX_INT) {
+        PyErr_Format(PyExc_ValueError,
+            "concatenate() only supports up to %d arrays but got %zd.",
+            NPY_MAX_INT, narrays_true);
+        return NULL;
+    }
+    narrays = (int)narrays_true;
     arrays = PyArray_malloc(narrays * sizeof(arrays[0]));
     if (arrays == NULL) {
         PyErr_NoMemory();
@@ -1101,6 +1093,8 @@ PyArray_MatrixProduct2(PyObject *op1, PyObject *op2, PyArrayObject* out)
         Py_DECREF(it1);
         goto fail;
     }
+
+    npy_clear_floatstatus_barrier((char *) result);
     NPY_BEGIN_THREADS_DESCR(PyArray_DESCR(ap2));
     while (it1->index < it1->size) {
         while (it2->index < it2->size) {
@@ -1116,6 +1110,11 @@ PyArray_MatrixProduct2(PyObject *op1, PyObject *op2, PyArrayObject* out)
     Py_DECREF(it2);
     if (PyErr_Occurred()) {
         /* only for OBJECT arrays */
+        goto fail;
+    }
+
+    int fpes = npy_get_floatstatus_barrier((char *) result);
+    if (fpes && PyUFunc_GiveFloatingpointErrors("dot", fpes) < 0) {
         goto fail;
     }
     Py_DECREF(ap1);
@@ -1214,6 +1213,7 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
         goto clean_ret;
     }
 
+    int needs_pyapi = PyDataType_FLAGCHK(PyArray_DESCR(ret), NPY_NEEDS_PYAPI);
     NPY_BEGIN_THREADS_DESCR(PyArray_DESCR(ret));
     is1 = PyArray_STRIDES(ap1)[0];
     is2 = PyArray_STRIDES(ap2)[0];
@@ -1224,6 +1224,9 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     n = n - n_left;
     for (i = 0; i < n_left; i++) {
         dot(ip1, is1, ip2, is2, op, n, ret);
+        if (needs_pyapi && PyErr_Occurred()) {
+            goto done;
+        }
         n++;
         ip2 -= is2;
         op += os;
@@ -1235,19 +1238,21 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
         op += os * (n1 - n2 + 1);
     }
     else {
-        for (i = 0; i < (n1 - n2 + 1); i++) {
+        for (i = 0; i < (n1 - n2 + 1) && (!needs_pyapi || !PyErr_Occurred());
+             i++) {
             dot(ip1, is1, ip2, is2, op, n, ret);
             ip1 += is1;
             op += os;
         }
     }
-    for (i = 0; i < n_right; i++) {
+    for (i = 0; i < n_right && (!needs_pyapi || !PyErr_Occurred()); i++) {
         n--;
         dot(ip1, is1, ip2, is2, op, n, ret);
         ip1 += is1;
         op += os;
     }
 
+done:
     NPY_END_THREADS_DESCR(PyArray_DESCR(ret));
     if (PyErr_Occurred()) {
         goto clean_ret;
@@ -2127,16 +2132,15 @@ array_scalar(PyObject *NPY_UNUSED(ignored), PyObject *args, PyObject *kwds)
     }
     if (PyDataType_FLAGCHK(typecode, NPY_LIST_PICKLE)) {
         if (typecode->type_num == NPY_OBJECT) {
-            /* Deprecated 2020-11-24, NumPy 1.20 */
-            if (DEPRECATE(
-                    "Unpickling a scalar with object dtype is deprecated. "
-                    "Object scalars should never be created. If this was a "
-                    "properly created pickle, please open a NumPy issue. In "
-                    "a best effort this returns the original object.") < 0) {
-                return NULL;
-            }
-            Py_INCREF(obj);
-            return obj;
+            PyErr_SetString(PyExc_TypeError,
+                    "Cannot unpickle a scalar with object dtype.");
+            return NULL;
+        }
+        if (typecode->type_num == NPY_VSTRING) {
+            // TODO: if we ever add a StringDType scalar, this might need to change
+            PyErr_SetString(PyExc_TypeError,
+                            "Cannot unpickle a StringDType scalar");
+            return NULL;
         }
         /* We store the full array to unpack it here: */
         if (!PyArray_CheckExact(obj)) {
@@ -2284,14 +2288,18 @@ array_count_nonzero(PyObject *NPY_UNUSED(self), PyObject *const *args, Py_ssize_
         return NULL;
     }
 
-    count =  PyArray_CountNonzero(array);
-
+    count = PyArray_CountNonzero(array);
     Py_DECREF(array);
 
     if (count == -1) {
         return NULL;
     }
-    return PyLong_FromSsize_t(count);
+
+    PyArray_Descr *descr = PyArray_DescrFromType(NPY_INTP);
+    if (descr == NULL) {
+        return NULL;
+    }
+    return PyArray_Scalar(&count, descr, NULL);
 }
 
 static PyObject *
@@ -2322,13 +2330,9 @@ array_fromstring(PyObject *NPY_UNUSED(ignored), PyObject *args, PyObject *keywds
 
     /* binary mode, condition copied from PyArray_FromString */
     if (sep == NULL || strlen(sep) == 0) {
-        /* Numpy 1.14, 2017-10-19 */
-        if (DEPRECATE(
-                "The binary mode of fromstring is deprecated, as it behaves "
-                "surprisingly on unicode inputs. Use frombuffer instead") < 0) {
-            Py_XDECREF(descr);
-            return NULL;
-        }
+        PyErr_SetString(PyExc_ValueError,
+            "The binary mode of fromstring is removed, use frombuffer instead");
+        return NULL;
     }
     return PyArray_FromString(data, (npy_intp)s, descr, (npy_intp)nin, sep);
 }
@@ -2703,13 +2707,13 @@ fail:
 }
 
 static int
-einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
-                       PyArrayObject **op)
+einsum_sub_op_from_str(
+        Py_ssize_t nargs, PyObject *const *args,
+        PyObject **str_obj, char **subscripts, PyArrayObject **op)
 {
-    int i, nop;
+    Py_ssize_t nop = nargs - 1;
     PyObject *subscripts_str;
 
-    nop = PyTuple_GET_SIZE(args) - 1;
     if (nop <= 0) {
         PyErr_SetString(PyExc_ValueError,
                         "must specify the einstein sum subscripts string "
@@ -2722,7 +2726,7 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     }
 
     /* Get the subscripts string */
-    subscripts_str = PyTuple_GET_ITEM(args, 0);
+    subscripts_str = args[0];
     if (PyUnicode_Check(subscripts_str)) {
         *str_obj = PyUnicode_AsASCIIString(subscripts_str);
         if (*str_obj == NULL) {
@@ -2739,15 +2743,13 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     }
 
     /* Set the operands to NULL */
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         op[i] = NULL;
     }
 
     /* Get the operands */
-    for (i = 0; i < nop; ++i) {
-        PyObject *obj = PyTuple_GET_ITEM(args, i+1);
-
-        op[i] = (PyArrayObject *)PyArray_FROM_OF(obj, NPY_ARRAY_ENSUREARRAY);
+    for (Py_ssize_t i = 0; i < nop; ++i) {
+        op[i] = (PyArrayObject *)PyArray_FROM_OF(args[i+1], NPY_ARRAY_ENSUREARRAY);
         if (op[i] == NULL) {
             goto fail;
         }
@@ -2756,7 +2758,7 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     return nop;
 
 fail:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
         op[i] = NULL;
     }
@@ -2860,13 +2862,12 @@ einsum_list_to_subscripts(PyObject *obj, char *subscripts, int subsize)
  * Returns -1 on error, number of operands placed in op otherwise.
  */
 static int
-einsum_sub_op_from_lists(PyObject *args,
-                char *subscripts, int subsize, PyArrayObject **op)
+einsum_sub_op_from_lists(Py_ssize_t nargs, PyObject *const *args,
+                         char *subscripts, int subsize, PyArrayObject **op)
 {
     int subindex = 0;
-    npy_intp i, nop;
 
-    nop = PyTuple_Size(args)/2;
+    Py_ssize_t nop = nargs / 2;
 
     if (nop == 0) {
         PyErr_SetString(PyExc_ValueError, "must provide at least an "
@@ -2879,15 +2880,12 @@ einsum_sub_op_from_lists(PyObject *args,
     }
 
     /* Set the operands to NULL */
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         op[i] = NULL;
     }
 
     /* Get the operands and build the subscript string */
-    for (i = 0; i < nop; ++i) {
-        PyObject *obj = PyTuple_GET_ITEM(args, 2*i);
-        int n;
-
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         /* Comma between the subscripts for each operand */
         if (i != 0) {
             subscripts[subindex++] = ',';
@@ -2898,14 +2896,13 @@ einsum_sub_op_from_lists(PyObject *args,
             }
         }
 
-        op[i] = (PyArrayObject *)PyArray_FROM_OF(obj, NPY_ARRAY_ENSUREARRAY);
+        op[i] = (PyArrayObject *)PyArray_FROM_OF(args[2*i], NPY_ARRAY_ENSUREARRAY);
         if (op[i] == NULL) {
             goto fail;
         }
 
-        obj = PyTuple_GET_ITEM(args, 2*i+1);
-        n = einsum_list_to_subscripts(obj, subscripts+subindex,
-                                      subsize-subindex);
+        int n = einsum_list_to_subscripts(
+                args[2*i + 1], subscripts+subindex, subsize-subindex);
         if (n < 0) {
             goto fail;
         }
@@ -2913,10 +2910,7 @@ einsum_sub_op_from_lists(PyObject *args,
     }
 
     /* Add the '->' to the string if provided */
-    if (PyTuple_Size(args) == 2*nop+1) {
-        PyObject *obj;
-        int n;
-
+    if (nargs == 2*nop+1) {
         if (subindex + 2 >= subsize) {
             PyErr_SetString(PyExc_ValueError,
                     "subscripts list is too long");
@@ -2925,9 +2919,8 @@ einsum_sub_op_from_lists(PyObject *args,
         subscripts[subindex++] = '-';
         subscripts[subindex++] = '>';
 
-        obj = PyTuple_GET_ITEM(args, 2*nop);
-        n = einsum_list_to_subscripts(obj, subscripts+subindex,
-                                      subsize-subindex);
+        int n = einsum_list_to_subscripts(
+                args[2*nop], subscripts+subindex, subsize-subindex);
         if (n < 0) {
             goto fail;
         }
@@ -2940,7 +2933,7 @@ einsum_sub_op_from_lists(PyObject *args,
     return nop;
 
 fail:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
         op[i] = NULL;
     }
@@ -2949,36 +2942,39 @@ fail:
 }
 
 static PyObject *
-array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
+array_einsum(PyObject *NPY_UNUSED(dummy),
+        PyObject *const *args, Py_ssize_t nargsf, PyObject *kwnames)
 {
     char *subscripts = NULL, subscripts_buffer[256];
     PyObject *str_obj = NULL, *str_key_obj = NULL;
-    PyObject *arg0;
-    int i, nop;
+    int nop;
     PyArrayObject *op[NPY_MAXARGS];
     NPY_ORDER order = NPY_KEEPORDER;
     NPY_CASTING casting = NPY_SAFE_CASTING;
+    PyObject *out_obj = NULL;
     PyArrayObject *out = NULL;
     PyArray_Descr *dtype = NULL;
     PyObject *ret = NULL;
+    NPY_PREPARE_ARGPARSER;
 
-    if (PyTuple_GET_SIZE(args) < 1) {
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+
+    if (nargs < 1) {
         PyErr_SetString(PyExc_ValueError,
                         "must specify the einstein sum subscripts string "
                         "and at least one operand, or at least one operand "
                         "and its corresponding subscripts list");
         return NULL;
     }
-    arg0 = PyTuple_GET_ITEM(args, 0);
 
     /* einsum('i,j', a, b), einsum('i,j->ij', a, b) */
-    if (PyBytes_Check(arg0) || PyUnicode_Check(arg0)) {
-        nop = einsum_sub_op_from_str(args, &str_obj, &subscripts, op);
+    if (PyBytes_Check(args[0]) || PyUnicode_Check(args[0])) {
+        nop = einsum_sub_op_from_str(nargs, args, &str_obj, &subscripts, op);
     }
     /* einsum(a, [0], b, [1]), einsum(a, [0], b, [1], [0,1]) */
     else {
-        nop = einsum_sub_op_from_lists(args, subscripts_buffer,
-                                    sizeof(subscripts_buffer), op);
+        nop = einsum_sub_op_from_lists(nargs, args, subscripts_buffer,
+                                       sizeof(subscripts_buffer), op);
         subscripts = subscripts_buffer;
     }
     if (nop <= 0) {
@@ -2986,63 +2982,26 @@ array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
     }
 
     /* Get the keyword arguments */
-    if (kwds != NULL) {
-        PyObject *key, *value;
-        Py_ssize_t pos = 0;
-        while (PyDict_Next(kwds, &pos, &key, &value)) {
-            char *str = NULL;
-
-            Py_XDECREF(str_key_obj);
-            str_key_obj = PyUnicode_AsASCIIString(key);
-            if (str_key_obj != NULL) {
-                key = str_key_obj;
-            }
-
-            str = PyBytes_AsString(key);
-
-            if (str == NULL) {
-                PyErr_Clear();
-                PyErr_SetString(PyExc_TypeError, "invalid keyword");
-                goto finish;
-            }
-
-            if (strcmp(str,"out") == 0) {
-                if (PyArray_Check(value)) {
-                    out = (PyArrayObject *)value;
-                }
-                else {
-                    PyErr_SetString(PyExc_TypeError,
-                                "keyword parameter out must be an "
-                                "array for einsum");
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"order") == 0) {
-                if (!PyArray_OrderConverter(value, &order)) {
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"casting") == 0) {
-                if (!PyArray_CastingConverter(value, &casting)) {
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"dtype") == 0) {
-                if (!PyArray_DescrConverter2(value, &dtype)) {
-                    goto finish;
-                }
-            }
-            else {
-                PyErr_Format(PyExc_TypeError,
-                            "'%s' is an invalid keyword for einsum",
-                            str);
-                goto finish;
-            }
+    if (kwnames != NULL) {
+        if (npy_parse_arguments("einsum", args+nargs, 0, kwnames,
+                "$out", NULL, &out_obj,
+                "$order", &PyArray_OrderConverter, &order,
+                "$casting", &PyArray_CastingConverter, &casting,
+                "$dtype", &PyArray_DescrConverter2, &dtype,
+                NULL, NULL, NULL) < 0) {
+            goto finish;
         }
+        if (out_obj != NULL && !PyArray_Check(out_obj)) {
+            PyErr_SetString(PyExc_TypeError,
+                        "keyword parameter out must be an "
+                        "array for einsum");
+            goto finish;
+        }
+        out = (PyArrayObject *)out_obj;
     }
 
     ret = (PyObject *)PyArray_EinsteinSum(subscripts, nop, op, dtype,
-                                        order, casting, out);
+                                          order, casting, out);
 
     /* If no output was supplied, possibly convert to a scalar */
     if (ret != NULL && out == NULL) {
@@ -3050,7 +3009,7 @@ array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
     }
 
 finish:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
     }
     Py_XDECREF(dtype);
@@ -3548,30 +3507,18 @@ array_can_cast_safely(PyObject *NPY_UNUSED(self),
          * TODO: `PyArray_IsScalar` should not be required for new dtypes.
          *       weak-promotion branch is in practice identical to dtype one.
          */
-        if (get_npy_promotion_state() == NPY_USE_WEAK_PROMOTION) {
-            PyObject *descr = PyObject_GetAttr(from_obj, npy_interned_str.dtype);
-            if (descr == NULL) {
-                goto finish;
-            }
-            if (!PyArray_DescrCheck(descr)) {
-                Py_DECREF(descr);
-                PyErr_SetString(PyExc_TypeError,
-                    "numpy_scalar.dtype did not return a dtype instance.");
-                goto finish;
-            }
-            ret = PyArray_CanCastTypeTo((PyArray_Descr *)descr, d2, casting);
+        PyObject *descr = PyObject_GetAttr(from_obj, npy_interned_str.dtype);
+        if (descr == NULL) {
+            goto finish;
+        }
+        if (!PyArray_DescrCheck(descr)) {
             Py_DECREF(descr);
+            PyErr_SetString(PyExc_TypeError,
+                "numpy_scalar.dtype did not return a dtype instance.");
+            goto finish;
         }
-        else {
-            /* need to convert to object to consider old value-based logic */
-            PyArrayObject *arr;
-            arr = (PyArrayObject *)PyArray_FROM_O(from_obj);
-            if (arr == NULL) {
-                goto finish;
-            }
-            ret = PyArray_CanCastArrayTo(arr, d2, casting);
-            Py_DECREF(arr);
-        }
+        ret = PyArray_CanCastTypeTo((PyArray_Descr *)descr, d2, casting);
+        Py_DECREF(descr);
     }
     else if (PyArray_IsPythonNumber(from_obj)) {
         PyErr_SetString(PyExc_TypeError,
@@ -3654,24 +3601,28 @@ static PyObject *
 array_result_type(PyObject *NPY_UNUSED(dummy), PyObject *const *args, Py_ssize_t len)
 {
     npy_intp i, narr = 0, ndtypes = 0;
-    PyArrayObject **arr = NULL;
-    PyArray_Descr **dtypes = NULL;
     PyObject *ret = NULL;
 
     if (len == 0) {
         PyErr_SetString(PyExc_ValueError,
                         "at least one array or dtype is required");
-        goto finish;
+        return NULL;
     }
 
-    arr = PyArray_malloc(2 * len * sizeof(void *));
+    NPY_ALLOC_WORKSPACE(arr, PyArrayObject *, 2 * 3, 2 * len);
     if (arr == NULL) {
-        return PyErr_NoMemory();
+        return NULL;
     }
-    dtypes = (PyArray_Descr**)&arr[len];
+    PyArray_Descr **dtypes = (PyArray_Descr**)&arr[len];
+
+    PyObject *previous_obj = NULL;
 
     for (i = 0; i < len; ++i) {
         PyObject *obj = args[i];
+        if (obj == previous_obj) {
+            continue;
+        }
+
         if (PyArray_Check(obj)) {
             Py_INCREF(obj);
             arr[narr] = (PyArrayObject *)obj;
@@ -3707,7 +3658,7 @@ finish:
     for (i = 0; i < ndtypes; ++i) {
         Py_DECREF(dtypes[i]);
     }
-    PyArray_free(arr);
+    npy_free_workspace(arr);
     return ret;
 }
 
@@ -4400,6 +4351,25 @@ _set_numpy_warn_if_no_mem_policy(PyObject *NPY_UNUSED(self), PyObject *arg)
 
 
 static PyObject *
+_blas_supports_fpe(PyObject *NPY_UNUSED(self), PyObject *arg) {
+    if (arg == Py_None) {
+        return PyBool_FromLong(npy_blas_supports_fpe());
+    }
+    else if (arg == Py_True) {
+        return PyBool_FromLong(npy_set_blas_supports_fpe(true));
+    }
+    else if (arg == Py_False) {
+        return PyBool_FromLong(npy_set_blas_supports_fpe(false));
+    }
+    else {
+        PyErr_SetString(PyExc_TypeError,
+            "BLAS FPE support must be None, True, or False");
+        return NULL;
+    }
+}
+
+
+static PyObject *
 _reload_guard(PyObject *NPY_UNUSED(self), PyObject *NPY_UNUSED(args)) {
 #if !defined(PYPY_VERSION)
     if (PyThreadState_Get()->interp != PyInterpreterState_Main()) {
@@ -4517,7 +4487,7 @@ static struct PyMethodDef array_module_methods[] = {
         METH_FASTCALL, NULL},
     {"c_einsum",
         (PyCFunction)array_einsum,
-        METH_VARARGS|METH_KEYWORDS, NULL},
+        METH_FASTCALL|METH_KEYWORDS, NULL},
     {"correlate",
         (PyCFunction)array_correlate,
         METH_FASTCALL | METH_KEYWORDS, NULL},
@@ -4626,14 +4596,6 @@ static struct PyMethodDef array_module_methods[] = {
     {"get_handler_version",
         (PyCFunction) get_handler_version,
         METH_VARARGS, NULL},
-    {"_get_promotion_state",
-        (PyCFunction)npy__get_promotion_state,
-        METH_NOARGS, "Get the current NEP 50 promotion state."},
-    {"_set_promotion_state",
-         (PyCFunction)npy__set_promotion_state,
-         METH_O, "Set the NEP 50 promotion state.  This is not thread-safe.\n"
-                 "The optional warnings can be safely silenced using the \n"
-                 "`np._no_nep50_warning()` context manager."},
     {"_set_numpy_warn_if_no_mem_policy",
          (PyCFunction)_set_numpy_warn_if_no_mem_policy,
          METH_O, "Change the warn if no mem policy flag for testing."},
@@ -4645,11 +4607,15 @@ static struct PyMethodDef array_module_methods[] = {
         METH_NOARGS, NULL},
     {"_set_madvise_hugepage", (PyCFunction)_set_madvise_hugepage,
         METH_O, NULL},
+    {"_blas_supports_fpe", (PyCFunction)_blas_supports_fpe,
+        METH_O, "BLAS FPE support pass None, True, or False and returns new value"},
     {"_reload_guard", (PyCFunction)_reload_guard,
         METH_NOARGS,
         "Give a warning on reload and big warning in sub-interpreters."},
     {"from_dlpack", (PyCFunction)from_dlpack,
         METH_FASTCALL | METH_KEYWORDS, NULL},
+    {"_unique_hash",  (PyCFunction)array__unique_hash,
+        METH_O, "Collect unique values via a hash map."},
     {NULL, NULL, 0, NULL}                /* sentinel */
 };
 
@@ -5097,6 +5063,24 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
         goto err;
     }
 
+    /*
+     * Initialize the default PyDataMem_Handler capsule singleton.
+     */
+    PyDataMem_DefaultHandler = PyCapsule_New(
+            &default_handler, MEM_HANDLER_CAPSULE_NAME, NULL);
+    if (PyDataMem_DefaultHandler == NULL) {
+        goto err;
+    }
+
+    /*
+     * Initialize the context-local current handler
+     * with the default PyDataMem_Handler capsule.
+     */
+    current_handler = PyContextVar_New("current_allocator", PyDataMem_DefaultHandler);
+    if (current_handler == NULL) {
+        goto err;
+    }
+
     if (initumath(m) != 0) {
         goto err;
     }
@@ -5131,7 +5115,7 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
      * init_string_dtype() but that needs to happen after
      * the legacy dtypemeta classes are available.
      */
-    
+
     if (npy_cache_import_runtime(
             "numpy.dtypes", "_add_dtype_helper",
             &npy_runtime_imports._add_dtype_helper) == -1) {
@@ -5144,23 +5128,6 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
         goto err;
     }
     PyDict_SetItemString(d, "StringDType", (PyObject *)&PyArray_StringDType);
-
-    /*
-     * Initialize the default PyDataMem_Handler capsule singleton.
-     */
-    PyDataMem_DefaultHandler = PyCapsule_New(
-            &default_handler, MEM_HANDLER_CAPSULE_NAME, NULL);
-    if (PyDataMem_DefaultHandler == NULL) {
-        goto err;
-    }
-    /*
-     * Initialize the context-local current handler
-     * with the default PyDataMem_Handler capsule.
-     */
-    current_handler = PyContextVar_New("current_allocator", PyDataMem_DefaultHandler);
-    if (current_handler == NULL) {
-        goto err;
-    }
 
     // initialize static reference to a zero-like array
     npy_static_pydata.zero_pyint_like_arr = PyArray_ZEROS(

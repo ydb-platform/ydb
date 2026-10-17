@@ -44,7 +44,8 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            const TSharedData* page = TryGetPage(ref, partStore->Locate(lob, ref));
+            auto *info = partStore->Locate(lob, ref);
+            const TSharedData* page = TryGetPage(info->GetLocation(ref), info);
 
             if (!page && ReadMissingReferences) {
                 MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
@@ -53,11 +54,11 @@ namespace NTabletFlatExecutor {
             return { !ReadMissingReferences, page };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return TryGetPage(pageId, partStore->PageCollections.at(groupId.Index).Get());
+            return TryGetPage(location, partStore->PageCollections.at(groupId.Index).Get());
         }
 
         void EnableReadMissingReferences() {
@@ -70,53 +71,58 @@ namespace NTabletFlatExecutor {
         }
 
         ui64 MissingReferencesSize() const
-        { 
+        {
             return MissingReferencesSize_;
         }
 
     private:
-        void ToLoadPage(TPageId pageId, TPageCollection *pageCollection) {
-            if (ToLoad[pageCollection->Id].insert(pageId).second) {
+        using THashSetOfLocation = THashSet<TPageLocation, NTable::NPage::TPageLocationByOffsetHash>;
+
+        void ToLoadPage(const TPageLocation& location, TPageCollection *pageCollection) {
+            auto res = ToLoad[pageCollection->Id].insert(location);
+            if (res.second) {
                 Stats.ToLoadPages++;
-                Y_ASSERT(!pageCollection->IsStickyPage(pageId));
-                Stats.ToLoadBytes += pageCollection->GetPageSize(pageId);
+                Y_ASSERT(!pageCollection->IsStickyPage(location.Offset));
+                Stats.ToLoadBytes += location.Size;
+            } else {
+                Y_ASSERT(res.first->Type == location.Type && res.first->Size == location.Size && res.first->Crc32 == location.Crc32);
             }
         }
 
-        const TSharedData* TryGetPage(TPageId pageId, TPageCollection *pageCollection)
+        const TSharedData* TryGetPage(const TPageLocation& location, TPageCollection *pageCollection)
         {
             auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
-            auto* pinnedPage = pinnedCollection.FindPtr(pageId);
+            auto* pinnedPage = pinnedCollection.FindPtr(location.Offset);
             if (pinnedPage) {
                 // pinned pages do not need to be counted again
                 return &pinnedPage->PinnedBody;
             }
 
-            auto sharedBody = Cache.TryGetPage(pageId, pageCollection);
+            auto sharedBody = Cache.TryGetPage(location.Offset, pageCollection);
 
             if (!sharedBody) {
-                ToLoadPage(pageId, pageCollection);
+                ToLoadPage(location, pageCollection);
                 return nullptr;
             }
 
             sharedBody.IncrementFrequency();
-            auto emplaced = pinnedCollection.emplace(pageId, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
+            auto emplaced = pinnedCollection.emplace(location.Offset, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
             Y_ENSURE(emplaced.second);
             auto& pinnedBody = emplaced.first->second.PinnedBody;
 
             Stats.NewlyPinnedPages++;
-            if (!pageCollection->IsStickyPage(pageId)) {
+            if (!pageCollection->IsStickyPage(location.Offset)) {
                 Stats.NewlyPinnedBytes += pinnedBody.size();
             }
-            
+
             return &pinnedBody;
         }
 
     public:
         auto ObtainToLoad() {
-            THashMap<TLogoBlobID, TVector<TPageId>> result;
+            THashMap<TLogoBlobID, TVector<TPageLocation>> result;
             for (auto& [pageCollectionId, pages_] : ToLoad) {
-                TVector<TPageId> pages(pages_.begin(), pages_.end());
+                TVector<TPageLocation> pages(pages_.begin(), pages_.end());
                 std::sort(pages.begin(), pages.end());
                 result.emplace(pageCollectionId, std::move(pages));
             }
@@ -128,8 +134,8 @@ namespace NTabletFlatExecutor {
         TPrivatePageCache& Cache;
         TSeat& Seat;
 
-        THashMap<TLogoBlobID, THashSet<TPageId>> ToLoad;
-    
+        THashMap<TLogoBlobID, THashSetOfLocation> ToLoad;
+
         bool ReadMissingReferences = false;
         ui64 MissingReferencesSize_ = 0;
 

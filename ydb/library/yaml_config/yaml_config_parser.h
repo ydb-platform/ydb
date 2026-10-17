@@ -11,6 +11,7 @@
 #include <google/protobuf/message.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/public/api/protos/ydb_config.pb.h>
 
 #include <util/generic/string.h>

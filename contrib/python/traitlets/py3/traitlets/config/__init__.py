@@ -7,14 +7,14 @@ from .configurable import *
 from .loader import Config
 
 __all__ = [  # noqa: F405
-    "Config",
     "Application",
     "ApplicationError",
-    "LevelFormatter",
-    "configurable",
+    "Config",
     "Configurable",
     "ConfigurableError",
-    "MultipleInstanceError",
+    "LevelFormatter",
     "LoggingConfigurable",
+    "MultipleInstanceError",
     "SingletonConfigurable",
+    "configurable",
 ]

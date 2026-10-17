@@ -281,6 +281,18 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         }
     }
 
+    Y_UNIT_TEST(WriteTooBigBlock) {
+        TEncryptionIV iv = TEncryptionIV::Generate();
+        TEncryptedFileSerializer serializer("AES-256-GCM", Key32, iv);
+        const TString tooBigBlock(MAX_BLOCK_SIZE + 1, 'a');
+        UNIT_ASSERT_EXCEPTION_CONTAINS(serializer.AddBlock(tooBigBlock, false), yexception,
+            "data_shard_config.backup_bytes_batch_size");
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TEncryptedFileSerializer::EncryptFullFile("AES-256-GCM", Key32, iv, tooBigBlock),
+            yexception, "min_write_batch_size");
+    }
+
     Y_UNIT_TEST(RestoreFromState) {
         TString blocks[] = {
             "Come crawling faster",

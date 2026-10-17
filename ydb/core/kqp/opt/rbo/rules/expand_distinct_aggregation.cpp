@@ -11,12 +11,12 @@ bool IsSuitableToExpandDistinctAggregation(const TIntrusivePtr<IOperator>& input
         return false;
     }
 
-    const auto& aggTraitsList = CastOperator<TOpAggregate>(input)->GetAggregationTraits();
+    const auto aggTraitsList = CastOperator<TOpAggregate>(input)->GetAggregationTraits().Items() | std::views::values;
     return std::any_of(aggTraitsList.begin(), aggTraitsList.end(), [](const TOpAggregationTraits& aggTraits) { return aggTraits.Distinct; });
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "some") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {
@@ -26,33 +26,26 @@ std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
 }
 
 TIntrusivePtr<IOperator> ExpandSingleDistinct(const TIntrusivePtr<TOpAggregate>& aggregate) {
-    const auto& aggTraits = aggregate->GetAggregationTraits().front();
-    TVector<TInfoUnit> distinctKeys = aggregate->GetKeyColumns();
+    const auto& [output, aggTraits] = *aggregate->GetAggregationTraits().Items().begin();
+    TOrderedIUs<> distinctKeys = aggregate->GetKeyColumns();
     const auto pos = aggregate->Pos;
 
     // Split into distinct and original aggregation.
-    TVector<TOpAggregationTraits> distinctTraitsList;
-    for (const auto& key : distinctKeys) {
-        distinctTraitsList.emplace_back(TOpAggregationTraits(key, "distinct", key));
-    }
-    distinctTraitsList.emplace_back(TOpAggregationTraits(aggTraits.OriginalColName, "distinct", aggTraits.OriginalColName));
-    distinctKeys.emplace_back(aggTraits.OriginalColName);
+    // Group without traits: identity DISTINCT traits would redefine the input IDs.
+    distinctKeys.AppendMissing(aggTraits.Input);
 
     const TIntrusivePtr<IOperator> distinctAggregation =
-        MakeIntrusive<TOpAggregate>(aggregate->GetInput(), distinctTraitsList, distinctKeys, EOpPhase::Undefined,
-                                    /*distinctAll=*/true, pos);
+        MakeIntrusive<TOpAggregate>(aggregate->GetInput(), TAggregationIUs{}, distinctKeys, EOpPhase::Undefined,
+                                    /*distinctAll=*/false, pos);
     TOpAggregationTraits aggregationTraits = aggTraits;
     aggregationTraits.Distinct = false;
-    const TVector<TOpAggregationTraits> newAggTraitsList{aggregationTraits};
+    const TAggregationIUs newAggTraitsList{{output, aggregationTraits}};
     return MakeIntrusive<TOpAggregate>(distinctAggregation, newAggTraitsList, aggregate->GetKeyColumns(), EOpPhase::Undefined, /*distinctAll=*/false, pos);
 }
 
-TIntrusivePtr<IOperator> BuildDistinct(const TIntrusivePtr<IOperator>& input, TVector<TInfoUnit>&& distColumns) {
-    TVector<TOpAggregationTraits> distAggTraitsList;
-    for (const auto& distColumn : distColumns) {
-        distAggTraitsList.emplace_back(TOpAggregationTraits(distColumn, "distinct", distColumn));
-    }
-    return MakeIntrusive<TOpAggregate>(input, distAggTraitsList, distColumns, EOpPhase::Undefined, /*distinctAll=*/true, input->Pos);
+TIntrusivePtr<IOperator> BuildDistinct(const TIntrusivePtr<IOperator>& input, TOrderedIUs<>&& distColumns) {
+    // Group without traits: identity DISTINCT traits would redefine the input IDs.
+    return MakeIntrusive<TOpAggregate>(input, TAggregationIUs{}, std::move(distColumns), EOpPhase::Undefined, /*distinctAll=*/false, input->Pos);
 }
 
 bool IsDecimalType(const TTypeAnnotationNode* type) {
@@ -88,31 +81,24 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
     return resultType;
 }
 
-TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr<IOperator>& input, const TTypeAnnotationNode* inputType,
-                                                             const TVector<TOpAggregationTraits>& aggTraitsList, const TOpAggregationTraits& realAggTraits,
-                                                             const TString& prefix, TPlanProps& props, TExprContext& ctx) {
+// realAggTraits maps results to partial IDs; mapColumns gets each result's branch column.
+TIntrusivePtr<IOperator> BuildMapWithNullElements(const TIntrusivePtr<IOperator>& input, const TTypeAnnotationNode* inputType,
+                                                  const TAggregationIUs& aggTraitsList, const TMappedIUs<TInfoUnitId>& realAggTraits,
+                                                  TMappedIUs<TInfoUnitId>& mapColumns, TPlanProps& props, TExprContext& ctx) {
     Y_ENSURE(inputType);
     auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-    auto aggTraitsComparator = [](const TOpAggregationTraits& left, const TOpAggregationTraits& right) {
-        return left.OriginalColName.GetFullName() == right.OriginalColName.GetFullName() && left.AggFunction == right.AggFunction &&
-               left.ResultColName.GetFullName() == right.ResultColName.GetFullName();
-    };
-
-    TVector<TMapElement> mapElements;
-    TVector<std::pair<TString, TString>> fakeColumns;
-    ui32 i = 0;
-    for (const auto& aggTraits : aggTraitsList) {
-        const auto originalColName = aggTraits.OriginalColName.GetFullName();
-        const auto resultColName = aggTraits.ResultColName.GetFullName();
-        const auto mapColName = TInfoUnit(prefix + resultColName);
-        TMapElement mapElement;
+    TMapIUs mapElements;
+    for (const auto output : aggTraitsList.Keys()) {
+        const auto& aggTraits = aggTraitsList.At(output);
+        const auto originalColName = ctx.GetIndexAsString(aggTraits.Input);
         TExprNode::TPtr columnExpr;
         auto fieldType = inputStructType->FindItemType(originalColName);
-        Y_ENSURE(fieldType, "Aggregation column not found in input type:" << resultColName;);
-        if (aggTraitsComparator(aggTraits, realAggTraits)) {
+        Y_ENSURE(fieldType, "Aggregation column not found in input type:" << output;);
+        if (const auto* partialColName = realAggTraits.Find(output)) {
             const bool needsOptionalWrap = !fieldType->IsOptionalOrNull() || aggTraits.AggFunction == "count";
             if (!needsOptionalWrap) {
+                mapColumns.Add(output, *partialColName);
                 continue;
             }
 
@@ -121,7 +107,7 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             auto body = Build<TCoMember>(ctx, input->Pos)
                 .Struct(arg)
                 .Name<TCoAtom>()
-                    .Value(mapColName.GetFullName())
+                    .Value(ctx.GetIndexAsString(*partialColName))
                 .Build()
             .Done().Ptr();
             // clang-format on
@@ -136,9 +122,6 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             // clang-format on
             columnExpr = Build<TCoLambda>(ctx, input->Pos).Args({arg}).Body(body).Done().Ptr();
             // clang-format off
-
-            const auto newName = mapColName.GetFullName() + "_" + ToString(i++);
-            fakeColumns.emplace_back(newName, mapColName.GetFullName());
         } else {
             if (fieldType->IsOptionalOrNull()) {
                 fieldType = fieldType->Cast<TOptionalExprType>()->GetItemType();
@@ -156,23 +139,20 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             .Done().Ptr();
             // clang-format on
         }
-        mapElement = TMapElement(mapColName, TExpression(columnExpr, &ctx, &props));
-        mapElements.emplace_back(mapElement);
+        const auto mapColName = props.InfoUnitRegistry.AddGenerated("distinct_padding");
+        mapElements.Add(mapColName, TExpression(columnExpr, &ctx, &props));
+        mapColumns.Add(output, mapColName);
     }
 
-    for (const auto& fakeColumn : fakeColumns) {
-        mapElements.emplace_back(TMapElement(TInfoUnit(fakeColumn.first), TInfoUnit(fakeColumn.second), input->Pos, &ctx, &props, true));
-    }
-
-    if (mapElements.empty()) {
+    if (mapElements.Keys().Empty()) {
         return input;
     }
 
-    return MakeIntrusive<TOpMap>(input, input->Pos, mapElements);
+    return MakeIntrusive<TOpMap>(input, input->Pos, std::move(mapElements));
 }
 
 bool NeedToUnwrapOptional(const TTypeAnnotationNode* inputType, const TString& aggField, const std::pair<TString, TString>& aggFunctions,
-                          const TVector<TInfoUnit>& keys) {
+                          const TOrderedIUs<>& keys) {
     Y_ENSURE(inputType);
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto fieldType = structType->FindItemType(aggField);
@@ -182,7 +162,7 @@ bool NeedToUnwrapOptional(const TTypeAnnotationNode* inputType, const TString& a
         return true;
     }
 
-    if (!keys.empty()) {
+    if (!keys.Items().empty()) {
         return !fieldType->IsOptionalOrNull();
     }
 
@@ -192,57 +172,111 @@ bool NeedToUnwrapOptional(const TTypeAnnotationNode* inputType, const TString& a
 TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& aggregate, TPlanProps& props, TExprContext& ctx) {
     const auto& aggTraitsList = aggregate->GetAggregationTraits();
     const auto pos = aggregate->Pos;
-    const auto intermediateColumnPrefix = "__intermediate_";
+    auto& registry = props.InfoUnitRegistry;
 
-    TIntrusivePtr<IOperator> unionAllResult;
-    TVector<TOpAggregationTraits> finalAggTraitsList;
-    for (const auto& aggTraits : aggTraitsList) {
-        auto partialResult = aggregate->GetInput();
-        if (aggTraits.Distinct) {
+    // The union defines fresh IDs for the keys and the intermediate columns;
+    // every partial aggregation adds its own input ID to each union row.
+    TSubstitutions keyReplacements;
+    TOrderedIUs<> finalKeys;
+    TMappedIUs<TUnionInputRow> rows;
+    for (const auto key : aggregate->GetKeyColumns().Items()) {
+        if (!keyReplacements.Keys().Contains(key)) {
+            const auto output = registry.AddCopy(key);
+            keyReplacements.Add(key, output);
+            rows.Add(output);
+        }
+        finalKeys.Append(keyReplacements.At(key));
+    }
+    TMappedIUs<TInfoUnitId> intermediates;
+    for (const auto output : aggTraitsList.Keys()) {
+        const auto intermediate = registry.AddGenerated("distinct_union");
+        intermediates.Add(output, intermediate);
+        rows.Add(intermediate);
+    }
+
+    // The input is consumed once per partial aggregation, each through its own
+    // Replicate port. Non-primary ports expose fresh IDs.
+    const auto hub = TReplicate::Create(aggregate->GetInput(), pos, registry);
+    TVector<TIntrusivePtr<IOperator>> unionAllInputs;
+    const auto addPartialResult = [&](const TUnorderedIUs& outputs, bool isDistinct) {
+        const auto port = hub->AddOutput();
+        const auto* rebindings = port->IsPrimary() ? nullptr : &port->GetRebindings();
+        const auto rebind = [&](TInfoUnitId id) { return rebindings ? *rebindings->Find(id) : id; };
+        TOrderedIUs<> keyColumns;
+        for (const auto key : aggregate->GetKeyColumns().Items()) {
+            keyColumns.Append(rebind(key));
+        }
+
+        TIntrusivePtr<IOperator> partialResult = port;
+        if (isDistinct) {
             // Aggregation column + keys.
-            TVector<TInfoUnit> distColumns = aggregate->GetKeyColumns();
-            distColumns.emplace_back(aggTraits.OriginalColName);
+            TOrderedIUs<> distColumns = keyColumns;
+            distColumns.AppendMissing(rebind(aggTraitsList.At(*outputs.begin()).Input));
             partialResult = BuildDistinct(partialResult, std::move(distColumns));
         }
 
-        const auto aggFunctions = GetAggFunctions(aggTraits.AggFunction);
-        const auto intermediateColName = TInfoUnit(intermediateColumnPrefix + aggTraits.ResultColName.GetFullName());
-        const auto partialAggTraits = TOpAggregationTraits(aggTraits.OriginalColName, aggFunctions.first, intermediateColName);
-        const auto finalAggTraits = TOpAggregationTraits(
-            intermediateColName, aggFunctions.second, aggTraits.ResultColName, false,
-            NeedToUnwrapOptional(aggregate->GetInput()->Type, aggTraits.OriginalColName.GetFullName(), aggFunctions, aggregate->KeyColumns));
-        TVector<TOpAggregationTraits> partialAggregationTraitsList{partialAggTraits};
-        finalAggTraitsList.emplace_back(finalAggTraits);
-
-        partialResult = MakeIntrusive<TOpAggregate>(partialResult, partialAggregationTraitsList, aggregate->GetKeyColumns(), EOpPhase::Intermediate,
+        TAggregationIUs partialAggregationTraitsList;
+        TMappedIUs<TInfoUnitId> partialColumns;
+        for (const auto output : outputs) {
+            const auto& aggTraits = aggTraitsList.At(output);
+            const auto partialColName = registry.AddGenerated("distinct_partial");
+            partialAggregationTraitsList.Add(partialColName, TOpAggregationTraits{rebind(aggTraits.Input), GetAggFunctions(aggTraits.AggFunction).first});
+            partialColumns.Add(output, partialColName);
+        }
+        partialResult = MakeIntrusive<TOpAggregate>(partialResult, partialAggregationTraitsList, keyColumns, EOpPhase::Intermediate,
                                                     /*distinctAll=*/false, pos);
+        TMappedIUs<TInfoUnitId> mapColumns;
         partialResult =
-            BuildNullMapElementsExceptOneColumn(partialResult, aggregate->GetInput()->Type, aggTraitsList, aggTraits, intermediateColumnPrefix, props, ctx);
+            BuildMapWithNullElements(partialResult, aggregate->GetInput()->Type, aggTraitsList, partialColumns, mapColumns, props, ctx);
 
-        if (unionAllResult) {
-            TVector<TInfoUnit> columns;
-            columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
-            for (const auto& keyColumn : aggregate->GetKeyColumns()) {
-                columns.push_back(keyColumn);
-            }
-            for (const auto& unionAggTraits : aggTraitsList) {
-                const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
-                columns.push_back(column);
-            }
+        for (const auto& [key, output] : keyReplacements.Items()) {
+            rows.At(output).Inputs.push_back(rebind(key));
+        }
+        for (const auto& [output, intermediate] : intermediates.Items()) {
+            rows.At(intermediate).Inputs.push_back(mapColumns.At(output));
+        }
+        unionAllInputs.push_back(partialResult);
+    };
 
-            unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));
+    TAggregationIUs finalAggTraitsList;
+    TUnorderedIUs aggTraitsListNotDistinct;
+
+    for (const auto output : aggTraitsList.Keys()) {
+        const auto& aggTraits = aggTraitsList.At(output);
+        const bool isDistinct = aggTraits.Distinct;
+        const auto aggFunctions = GetAggFunctions(aggTraits.AggFunction);
+        const auto intermediateColName = intermediates.At(output);
+        const auto finalAggTraits = TOpAggregationTraits{
+            intermediateColName, aggFunctions.second, false,
+            NeedToUnwrapOptional(aggregate->GetInput()->Type, TString(ctx.GetIndexAsString(aggTraits.Input)), aggFunctions, aggregate->GetKeyColumns())};
+
+        finalAggTraitsList.Add(output, finalAggTraits);
+        if (!isDistinct) {
+            // For not distinct we keep traits and will put them in one aggregation.
+            aggTraitsListNotDistinct.Add(output);
         } else {
-            unionAllResult = partialResult;
+            addPartialResult(TUnorderedIUs{output}, /*isDistinct=*/true);
         }
     }
 
-    return MakeIntrusive<TOpAggregate>(unionAllResult, finalAggTraitsList, aggregate->GetKeyColumns(), EOpPhase::Final, /*distinctAll=*/false, pos);
+    if (!aggTraitsListNotDistinct.Empty()) {
+        addPartialResult(aggTraitsListNotDistinct, /*isDistinct=*/false);
+    }
+
+    TUnionAllIUs columns(TUnionInputPolicy{unionAllInputs.size()});
+    for (const auto output : rows.Keys()) {
+        columns.Add(output, std::move(rows.At(output)));
+    }
+    const TIntrusivePtr<IOperator> unionAllResult = MakeIntrusive<TOpUnionAll>(std::move(unionAllInputs), aggregate->Pos, std::move(columns));
+    RebindConsumers(*aggregate, keyReplacements, props.Subplans);
+
+    return MakeIntrusive<TOpAggregate>(unionAllResult, finalAggTraitsList, finalKeys, EOpPhase::Final, /*distinctAll=*/false, pos);
 }
 
 } // anonymous namespace
 
 bool TExpandDistinctAggregationRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Aggregate;
+    return IsSuitableToExpandDistinctAggregation(input);
 }
 
 TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
@@ -251,7 +285,8 @@ TIntrusivePtr<IOperator> TExpandDistinctAggregationRule::SimpleMatchAndApply(con
     }
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
-    if (aggregate->GetAggregationTraits().size() == 1) {
+    if (aggregate->GetAggregationTraits().Items().size() == 1) {
+        // Fast path.
         return ExpandSingleDistinct(aggregate);
     }
     return ExpandMultiDistinct(aggregate, props, rboCtx.ExprCtx);

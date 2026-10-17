@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
@@ -18,6 +20,7 @@ ENDIF()
 INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
 
 DEPENDS(
+    ydb/apps/ydb
     ydb/apps/ydbd
 )
 

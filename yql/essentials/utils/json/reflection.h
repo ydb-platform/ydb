@@ -26,7 +26,9 @@ TJsonValue ToJsonReflecting(T value) {
     constexpr auto r = NReflection::TReflection<T>::SelfType();
 
     TJsonValue json(JSON_MAP);
-    r.ForEachFieldValue(std::move(value), [&]<auto name>(auto&& value) {
+    r.ForEachFieldValue(std::move(value), [&]<size_t Index, auto name>(auto&& value) {
+        Y_UNUSED(Index);
+
         constexpr auto key = PascalToCamelCase(name);
         SaveTo(json, key, std::forward<decltype(value)>(value));
     });
@@ -39,8 +41,10 @@ TExpected<T> FromJsonReflecting(TJsonValue json) {
 
     T value;
     TMaybe<TString> error;
-    r.ForEachFieldValue(value, [&]<auto name>(auto& v) {
-        using TValue = std::decay_t<decltype(v)>;
+    r.ForEachFieldValue(value, [&]<size_t Index, auto name>(auto& value) {
+        Y_UNUSED(Index);
+
+        using TValue = std::decay_t<decltype(value)>;
 
         if (error) {
             return;
@@ -54,7 +58,7 @@ TExpected<T> FromJsonReflecting(TJsonValue json) {
             return;
         }
 
-        v = std::move(*parsed);
+        value = std::move(*parsed);
     });
 
     if (error) {

@@ -804,6 +804,23 @@ class ClusterDetailsProvider(object):
         return self.__cluster_description.get("log", {}).get("default", int(DEFAULT_LOG_LEVEL))
 
     @property
+    def node_broker_port(self):
+        return self.__cluster_description.get("node_broker_port", 2135)
+
+    @property
+    def node_broker_use_tls(self):
+        return self.__cluster_description.get("node_broker_use_tls", False)
+
+    @property
+    def grpc_client_cert_params(self):
+        # TODO: When explicit --node-broker endpoints are supported, also check for the grpcs:// scheme.
+        if not self.node_broker_use_tls:
+            return None
+        # The bootstrap client needs CLI settings separately from the server's GRpcConfig.
+        grpc_config = self.grpc_config
+        return tuple(grpc_config.get(key) for key in ("ca", "cert", "key"))
+
+    @property
     def grpc_config(self):
         grpc_config = merge_with_default(GRPC_DEFAULT_CONFIG, self.__cluster_description.get("grpc", {}))
 

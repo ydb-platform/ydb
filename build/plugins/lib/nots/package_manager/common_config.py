@@ -14,7 +14,6 @@ T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-se
 
 logger = logging.getLogger(__name__)
 _reported_ignored_fields = set()
-_reported_workspace_overrides = set()
 
 # npm range syntax: partial versions, comparators, unions and hyphen ranges.
 _NUM = r"(?:0|[1-9][0-9]*)"
@@ -150,7 +149,9 @@ def load_common_config(pj, sources_root, include_settings=False):
             raise ValueError(
                 "peerDependencies {}: file: не поддерживается; укажите semver, workspace: или catalog:".format(name)
             )
-    warn_workspace_overrides(join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm"))), pj.data, pj.path)
+    validate_override_references(
+        join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm"))), pj.data, pj.path
+    )
     for name, spec in pj.dependencies_iter():
         if isinstance(spec, str) and spec.startswith("catalog:"):
             group = spec[len("catalog:") :]
@@ -286,8 +287,8 @@ def rebase_pnpm_settings(settings, source_dir, target_dir):
     return result
 
 
-def warn_workspace_overrides(settings, manifest=None, owner=None):
-    """Warn during the staged migration; do not reject existing workspace overrides."""
+def validate_override_references(settings, manifest=None, owner=None):
+    """Reject effective workspace overrides, including references to direct dependencies."""
     manifest = manifest or {}
     dependencies = {}
     for section in ("devDependencies", "dependencies", "optionalDependencies"):
@@ -297,37 +298,12 @@ def warn_workspace_overrides(settings, manifest=None, owner=None):
         resolved = dependencies.get(value[1:]) if value.startswith("$") else value
         if resolved and resolved.startswith("workspace:"):
             names.append(name)
-    key = (owner, tuple(names))
-    if names and key not in _reported_workspace_overrides:
-        _reported_workspace_overrides.add(key)
-        # TODO(FBP-3521): reject workspace overrides after the file: migration.
-        logger.warning(
-            "%s: overrides %s используют устаревающий workspace: протокол; перейдите на file: протокол",
-            owner,
-            ", ".join(names),
+    if names:
+        raise ValueError(
+            "{}: overrides {}: workspace: протокол не поддерживается; перейдите на file: протокол".format(
+                owner, ", ".join(names)
+            )
         )
-
-
-def normalize_workspace_override_paths(settings, directory, root, original_overrides=None):
-    """Temporary compatibility until FBP-3521 removes workspace overrides."""
-    result = copy.deepcopy(settings)
-    prefix = os.path.relpath(root, directory).replace(os.sep, "/")
-    for name, value in result.get("overrides", {}).items():
-        match = re.match(r"^workspace:(\.\.?/.*)$", value)
-        if match:
-            original = (original_overrides or {}).get(name)
-            if (
-                original
-                and original.startswith("workspace:")
-                and os.path.normpath(os.path.join(directory, original[len("workspace:") :]))
-                == os.path.normpath(os.path.join(directory, match[1]))
-            ):
-                result["overrides"][name] = original
-                continue
-            relative = os.path.relpath(os.path.normpath(os.path.join(directory, match[1])), root).replace(os.sep, "/")
-            # TODO(FBP-3521): remove the unsimplified path through the Arcadia root.
-            result["overrides"][name] = "workspace:" + prefix + "/" + relative
-    return result
 
 
 def workspace_settings_paths(settings):

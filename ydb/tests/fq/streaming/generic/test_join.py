@@ -1290,7 +1290,9 @@ class TestJoinYdbStreaming(StreamingTestBase):
                     combine=operator.add,
                 )
                 for k in componentSensors:
-                    logging.debug(f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}')
+                    logging.debug(
+                        f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}'
+                    )
                 if component == "Lookup":
                     hits += componentSensors.get("Hits", 0)
                     miss += componentSensors.get("Miss", 0)

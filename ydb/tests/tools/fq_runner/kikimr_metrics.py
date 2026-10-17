@@ -22,7 +22,7 @@ class Sensors:
 
         return found["value"] if found is not None else None
 
-    def find_sensors(self, labels, key_label):
+    def find_sensors(self, labels, key_label, combine=lambda _, new_value: new_value):
         result = {}
         for s in self.data:
             lbls = s["labels"]
@@ -31,7 +31,13 @@ class Sensors:
                 continue
             v = lbls.get(key_label, None)
             if v is not None:
-                result[v] = s.get("value", None)
+                val = s.get("value", None)
+                if val is None:
+                    pass
+                elif v in result:
+                    result[v] = combine(result[v], val)
+                else:
+                    result[v] = val
         return result
 
     def collect_non_zeros(self):

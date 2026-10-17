@@ -27,6 +27,7 @@
 
 #include "index.h"
 #include "params.h"
+#include "visited_list_pool.h"
 
 #include <condition_variable>
 #include <iostream>
@@ -467,6 +468,9 @@ namespace similarity {
         void Search(KNNQuery<dist_t> *query, IdType) const override;
         // Query-local search breadth for concurrent readers of the same graph.
         void SearchWithEf(KNNQuery<dist_t> *query, size_t efSearch) const;
+        void ConfigureSearchWorkspaces(VisitedListPoolPolicy policy);
+        void TrimSearchWorkspaces() const;
+        VisitedListPoolStats GetSearchWorkspaceStats() const;
 
         void SetQueryTimeParams(const AnyParams &) override;
 
@@ -573,83 +577,4 @@ namespace similarity {
         DISABLE_COPY_AND_ASSIGN(Hnsw);
     };
 
-    typedef unsigned char vl_type;
-    class VisitedList {
-    public:
-        vl_type curV;
-        vl_type *mass;
-        unsigned int numelements;
-
-        VisitedList(int numelements1)
-        {
-            curV = -1;
-            numelements = numelements1;
-            // we allocate an extra sentinel element to prevent prefetch from accessing out of range memory
-            mass = new vl_type[numelements + 1];
-        }
-        void reset()
-        {
-            curV++;
-            if (curV == 0) {
-                memset(mass, 0, sizeof(vl_type) * numelements);
-                curV++;
-            }
-        };
-        ~VisitedList() { delete [] mass; }
-    };
-    ///////////////////////////////////////////////////////////
-    //
-    // Class for multi-threaded pool-management of VisitedLists
-    //
-    /////////////////////////////////////////////////////////
-
-    class VisitedListPool {
-        deque<VisitedList *> pool;
-        mutex poolguard;
-        int numelements;
-        size_t maxIdleLists;
-
-    public:
-        VisitedListPool(int initmaxpools, int numelements1)
-        {
-            numelements = numelements1;
-            maxIdleLists = initmaxpools;
-            for (int i = 0; i < initmaxpools; i++)
-                pool.push_front(new VisitedList(numelements));
-        }
-        VisitedList *getFreeVisitedList()
-        {
-            VisitedList *rez;
-            {
-                unique_lock<mutex> lock(poolguard);
-                if (pool.size() > 0) {
-                    rez = pool.front();
-                    pool.pop_front();
-                } else {
-                    rez = new VisitedList(numelements);
-                }
-            }
-            rez->reset();
-            return rez;
-        };
-        void releaseVisitedList(VisitedList *vl)
-        {
-            unique_lock<mutex> lock(poolguard);
-            // Extra concurrent readers may allocate temporary lists. Retain
-            // only the initial workspace covered by the graph's reservation.
-            if (pool.size() < maxIdleLists)
-                pool.push_front(vl);
-            else
-                delete vl;
-        };
-        ~VisitedListPool()
-        {
-            //LOG(LIB_INFO) << "Total " << pool.size() << " lists allocated";
-            while (pool.size()) {
-                VisitedList *rez = pool.front();
-                pool.pop_front();
-                delete rez;
-            }
-        };
-    };
 }

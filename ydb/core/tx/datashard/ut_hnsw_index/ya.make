@@ -10,6 +10,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 PEERDIR(
+    library/cpp/dot_product
     ydb/core/base
     ydb/core/tx/datashard/hnsw
     ydb/core/scheme

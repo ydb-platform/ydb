@@ -29,6 +29,8 @@
 #include <limits>
 #include <memory>
 
+#include <library/cpp/dot_product/dot_product.h>
+
 #include "portable_prefetch.h"
 #include "portable_simd.h"
 #include "knnquery.h"
@@ -70,8 +72,9 @@
 namespace similarity {
 
     float
-    NegativeDotProduct(const float *pVect1, const float *pVect2, size_t &qty, float * __restrict TmpRes) {
-        return -ScalarProduct(pVect1, pVect2, qty, TmpRes);
+    NegativeDotProduct(const float *pVect1, const float *pVect2, size_t &qty, float *) {
+        // Select AVX2/FMA at runtime when available, keeping the portable fallback.
+        return -::DotProduct(pVect1, pVect2, qty);
     }
 
     /*
@@ -233,7 +236,8 @@ namespace similarity {
         enterpoint_ = first;
         ElList_[0] = first;
 
-        visitedlistpool = new VisitedListPool(indexThreadQty_, this->data_.size());
+        // Keep scratch space for every builder until construction finishes.
+        visitedlistpool = new VisitedListPool(indexThreadQty_, this->data_.size(), indexThreadQty_);
 
         unique_ptr<ProgressDisplay> progress_bar(PrintProgress_ ? new ProgressDisplay(this->data_.size(), cerr) : NULL);
 
@@ -348,6 +352,9 @@ namespace similarity {
                 delete temp[i];
             temp.clear();
         }
+        // Search retention is independent of construction concurrency. Runtime
+        // workspaces are allocated lazily, under the caller's memory policy.
+        visitedlistpool->Configure({});
         // Uncomment for debug mode
         // checkList1(ElList_);
 
@@ -647,7 +654,7 @@ namespace similarity {
 #endif
 
 #if USE_BITSET_FOR_INDEXING
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *mass = vl->mass;
         vl_type curV = vl->curV;
 #else
@@ -730,9 +737,6 @@ namespace similarity {
         resultSet.swap(fullResultSet);
 #endif
 
-#if USE_BITSET_FOR_INDEXING
-        visitedlistpool->releaseVisitedList(vl);
-#endif
     }
 
     template <typename dist_t>
@@ -778,6 +782,21 @@ namespace similarity {
                 throw runtime_error("Invalid searchMethod: " + ConvertToString(searchMethod_));
             break;
         };
+    }
+
+    template <typename dist_t>
+    void Hnsw<dist_t>::ConfigureSearchWorkspaces(VisitedListPoolPolicy policy) {
+        visitedlistpool->Configure(std::move(policy));
+    }
+
+    template <typename dist_t>
+    void Hnsw<dist_t>::TrimSearchWorkspaces() const {
+        visitedlistpool->TrimIdle();
+    }
+
+    template <typename dist_t>
+    VisitedListPoolStats Hnsw<dist_t>::GetSearchWorkspaceStats() const {
+        return visitedlistpool->GetStats();
     }
 
     namespace {
@@ -832,11 +851,11 @@ namespace similarity {
         maxM0_ = 2 * connectivity;
         searchMethod_ = 0;
         SetQueryTimeParams(getEmptyParams());
-        // Include the optimized layout and its search bitmap before any
-        // allocations. Both graph representations coexist after loading.
+        // Both graph representations coexist after loading. Runtime search
+        // workspaces are allocated lazily and reserved separately by the caller.
         uint64_t used = uint64_t(totalElementsStored_) * (sizeof(HnswNode) + sizeof(HnswNode*)
             + this->data_[0]->bufferlength() + (maxM0_ + 1) * sizeof(int)
-            + sizeof(Object) + 2 * sizeof(void*) + 1) + 2 * EXTRA_MEM_PAD_SIZE;
+            + sizeof(Object) + 2 * sizeof(void*)) + 2 * EXTRA_MEM_PAD_SIZE;
         if (used > maxBytes)
             throw std::runtime_error("HNSW topology exceeds memory budget");
         ElList_.resize(totalElementsStored_, nullptr);
@@ -877,7 +896,7 @@ namespace similarity {
                 }
             }
         }
-        visitedlistpool = new VisitedListPool(1, totalElementsStored_);
+        visitedlistpool = new VisitedListPool(0, totalElementsStored_);
         OptimizeIndex();
     }
 
@@ -1152,7 +1171,7 @@ namespace similarity {
         input.close();
 
         LOG(LIB_INFO) << "Finished loading index";
-        visitedlistpool = new VisitedListPool(1, totalElementsStored_);
+        visitedlistpool = new VisitedListPool(0, totalElementsStored_);
 
 
     }
@@ -1245,7 +1264,6 @@ namespace similarity {
             }
             data_rearranged_[i] = new Object(data_level0_memory_ + (i)*memoryPerObject_ + offsetData_);
         }
-
     }
 
     template <typename dist_t>
@@ -1254,7 +1272,7 @@ namespace similarity {
     {
         // A filtered caller may request more candidates than the configured
         // efSearch. Widen this query only; the index is shared by readers.
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
@@ -1345,7 +1363,6 @@ namespace similarity {
                 }
             }
         }
-        visitedlistpool->releaseVisitedList(vl);
     }
 
     template <typename dist_t>
@@ -1354,7 +1371,7 @@ namespace similarity {
     {
         // A filtered caller may request more candidates than the configured
         // efSearch. Widen this query only; the index is shared by readers.
-        VisitedList *vl = visitedlistpool->getFreeVisitedList();
+        auto vl = visitedlistpool->acquire();
         vl_type *massVisited = vl->mass;
         vl_type currentV = vl->curV;
 
@@ -1474,8 +1491,6 @@ namespace similarity {
         for (uint_fast32_t i = 0; i < query->GetK() && i < sortedArr.size(); ++i) {
             query->CheckAndAddToResult(queueData[i].key, queueData[i].data->getData());
         }
-
-        visitedlistpool->releaseVisitedList(vl);
     }
 
 

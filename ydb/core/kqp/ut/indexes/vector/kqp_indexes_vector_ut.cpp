@@ -3378,7 +3378,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         const TString survivor = ownerRows == 2 ? "HnswBudgetOwner" : "HnswBudgetWaiter";
         const TString removed = ownerRows == 2 ? "HnswBudgetWaiter" : "HnswBudgetOwner";
         scheme("DROP TABLE `/Root/" + removed + "`;");
-        const auto deadline = TInstant::Now() + TDuration::Seconds(12);
+        // Cache reclamation runs on a ten-second wakeup. Allow reclamation,
+        // quota reporting and a subsequent construction retry to complete.
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
         ui64 rows = 2;
         while (TInstant::Now() < deadline && rows != 1) {
             Sleep(TDuration::MilliSeconds(100));

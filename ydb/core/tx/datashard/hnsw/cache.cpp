@@ -132,11 +132,22 @@ private:
     void UpdateCounters() {
         ui64 graphs = 0, bytes = 0, references = 0, downloading = 0, reclaimable = 0;
         ui64 received = 0, total = 0;
+        THnswSearchWorkspaceStats workspaces;
         for (const auto& [_, entry] : Entries) {
             if (entry.Graph) {
                 ++graphs;
                 bytes += entry.Graph->EstimatedMemoryBytes();
                 references += entry.Graph->GraphUseCount() - 1 + entry.Graph.use_count() - 1;
+                const auto stats = entry.Graph->GetSearchWorkspaceStats();
+                workspaces.Allocations += stats.Allocations;
+                workspaces.Reuses += stats.Reuses;
+                workspaces.Frees += stats.Frees;
+                workspaces.AllocationFailures += stats.AllocationFailures;
+                workspaces.ActiveBuffers += stats.ActiveBuffers;
+                workspaces.IdleBuffers += stats.IdleBuffers;
+                workspaces.RetainedBytes += stats.RetainedBytes;
+                workspaces.AllocatedBytes += stats.AllocatedBytes;
+                reclaimable += stats.RetainedBytes;
                 if (entry.Graph->GraphUseCount() == 1 && entry.Graph.use_count() == 1 && !entry.Exporting)
                     reclaimable += entry.Graph->EstimatedMemoryBytes();
             }
@@ -155,6 +166,15 @@ private:
         Counters->GetCounter("DownloadReceivedBytes")->Set(received);
         Counters->GetCounter("DownloadTotalBytes")->Set(total);
         Counters->GetCounter("UsedBytes")->Set(Tracker->GetUsed());
+        // Pool lifetimes follow graph generations; these are aggregate gauges.
+        Counters->GetCounter("SearchWorkspaceAllocations")->Set(workspaces.Allocations);
+        Counters->GetCounter("SearchWorkspaceReuses")->Set(workspaces.Reuses);
+        Counters->GetCounter("SearchWorkspaceFrees")->Set(workspaces.Frees);
+        Counters->GetCounter("SearchWorkspaceAllocationFailures")->Set(workspaces.AllocationFailures);
+        Counters->GetCounter("SearchWorkspaceActiveBuffers")->Set(workspaces.ActiveBuffers);
+        Counters->GetCounter("SearchWorkspaceIdleBuffers")->Set(workspaces.IdleBuffers);
+        Counters->GetCounter("SearchWorkspaceRetainedBytes")->Set(workspaces.RetainedBytes);
+        Counters->GetCounter("SearchWorkspaceAllocatedBytes")->Set(workspaces.AllocatedBytes);
         Tracker->SetReclaimable(reclaimable);
     }
 
@@ -187,6 +207,13 @@ private:
 
     void Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
         const auto limit = ev->Get()->LimitBytes;
+        Tracker->SetLimit(limit);
+        if (Tracker->GetUsed() > limit) {
+            for (const auto& [_, entry] : Entries) {
+                if (entry.Graph)
+                    entry.Graph->TrimSearchWorkspaces();
+            }
+        }
         if (Tracker->GetUsed() > limit) {
             for (auto it = Entries.begin(); it != Entries.end();) {
                 if (it->second.Waiters.empty() && !it->second.Exporting && !it->second.Loading
@@ -197,7 +224,6 @@ private:
                     ++it;
             }
         }
-        Tracker->SetLimit(limit);
         for (const auto& client : Clients)
             Send(client, new NMemory::TEvConsumerLimit(limit));
         UpdateCounters();

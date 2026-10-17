@@ -147,13 +147,16 @@ private:
         auto assignIter = AssignByProxy.find(ev->Sender);
         if (assignIter.IsEnd())
             return;
-        for (auto id : assignIter->second) {
-            return DestroyClientSession(ServerSessions.find(
+        // The proxy reports its death once for all its partition sessions. DestroyClientSession erases from the
+        // set, so iterate over a copy.
+        const auto partitionSessionIds = assignIter->second;
+        for (auto id : partitionSessionIds) {
+            DestroyClientSession(ServerSessions.find(
                     TReadSessionKey{ev->Get()->Session, id}), false,
                     Ydb::PersQueue::ErrorCode::ErrorCode::OK, "", ev->Sender
             );
         }
-        AssignByProxy.erase(assignIter);
+        AssignByProxy.erase(ev->Sender);
     }
 
     void HandlePartitionSessionReleased(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {

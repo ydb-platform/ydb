@@ -531,24 +531,8 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
             return {};
         }
 
-        {
-            status = ReplaceNonDetFunctionsWithParams(newProgram, ctx, &nonDetParamBindings);
-
-            if (status != TStatus::Ok) {
-                ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()),
-                    "Failed to replace non deterministic functions with params for KQP transaction"));
-                return {};
-            }
-        }
-
         optimizedStages.emplace(stage.Ref().UniqueId());
         YQL_ENSURE(programs.emplace(stage.Ref().UniqueId(), TKqpProgram(newProgram)).second);
-    }
-
-    TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
-
-    for (const auto& [_, binding] : nonDetParamBindings) {
-        bindings.emplace_back(std::move(binding));
     }
 
     TVector<TDqPhyStage> newStages;
@@ -556,14 +540,27 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
     // Rebuild stages only after all new programs are ready.
     for (const auto& stage : topSortedStages) {
+        auto program = programs.at(stage.Ref().UniqueId()).Ptr();
+        auto status = ReplaceNonDetFunctionsWithParams(program, ctx, &nonDetParamBindings);
+        if (status != TStatus::Ok) {
+            ctx.AddError(TIssue(ctx.GetPosition(stage.Pos()),
+                "Failed to replace non deterministic functions with params for KQP transaction"));
+            return {};
+        }
+
         auto newStage = Build<TDqPhyStage>(ctx, stage.Pos())
             .InitFrom(stage)
             .Inputs(ctx.ReplaceNodes(stage.Inputs().Ptr(), stagesMap))
-            .Program(ctx.DeepCopyLambda(programs.at(stage.Ref().UniqueId()).Lambda().Ref()))
+            .Program(ctx.DeepCopyLambda(TKqpProgram(program).Lambda().Ref()))
             .Done();
 
         newStages.emplace_back(newStage);
         stagesMap.emplace(stage.Raw(), newStage.Ptr());
+    }
+
+    TVector<TKqpParamBinding> bindings(tx.ParamBindings().begin(), tx.ParamBindings().end());
+    for (const auto& [_, binding] : nonDetParamBindings) {
+        bindings.emplace_back(std::move(binding));
     }
 
     return Build<TKqpPhysicalTx>(ctx, tx.Pos())

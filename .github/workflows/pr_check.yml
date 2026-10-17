@@ -41,7 +41,18 @@ concurrency:
 jobs:
   check-running-allowed:
     # Skip runs triggered by irrelevant labels (anything other than rebase-and-check / ok-to-test)
-    if: ${{ github.event_name == 'pull_request_target' && (github.event.action != 'labeled' || github.event.label.name == 'rebase-and-check' || github.event.label.name == 'ok-to-test') && github.event.pull_request.state == 'open' && vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).pr_check == true }}
+    # The skip-ci label also prevents checks on pushes and explicit test requests.
+    if: >-
+      ${{
+        github.event_name == 'pull_request_target' &&
+        (github.event.action != 'labeled' ||
+         github.event.label.name == 'rebase-and-check' ||
+         github.event.label.name == 'ok-to-test') &&
+        github.event.pull_request.state == 'open' &&
+        !contains(github.event.pull_request.labels.*.name, 'skip-ci') &&
+        vars.CHECKS_SWITCH != '' &&
+        fromJSON(vars.CHECKS_SWITCH).pr_check == true
+      }}
     runs-on: [self-hosted, tiny-worker]
     timeout-minutes: 600
     outputs:

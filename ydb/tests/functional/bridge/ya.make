@@ -4,17 +4,20 @@ TEST_SRCS(
     common.py
     test_bridge.py
     test_discovery.py
+    test_three_piles.py
+    test_sdk_cleanup.py
 )
 
-SPLIT_FACTOR(10)
+SPLIT_FACTOR(24)
 
-REQUIREMENTS(ram:32 cpu:32)
+# Each case runs up to 24 YDB processes; do not co-schedule bridge clusters.
+REQUIREMENTS(ram:48 cpu:all)
 SIZE(LARGE)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 IF (SANITIZER_TYPE == "thread")
     TIMEOUT(1800)
 ELSE()
-    TIMEOUT(100)
+    TIMEOUT(600)
 ENDIF()
 
 

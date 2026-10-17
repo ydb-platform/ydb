@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/lib/udf/service_manifest/auth.h>
 #include <ydb/public/lib/udf/service_manifest/manifest.h>
 
 #include <util/generic/string.h>
@@ -122,6 +123,7 @@ struct TWasmManifest {
     TVector<TWasmUdfDescriptor> Functions;
     TVector<TWasmObjectDescriptor> Objects;
     std::shared_ptr<const NYdb::NWasm::NServices::TServiceManifest> Services;
+    std::shared_ptr<const NYdb::NWasm::NServices::TAuthManifest> Auth;
 };
 
 }   // namespace NKikimr::NUdfStore::NWasm

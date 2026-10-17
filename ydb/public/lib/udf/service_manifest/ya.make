@@ -1,6 +1,6 @@
 LIBRARY()
 
-SRCS(manifest.cpp)
+SRCS(manifest.cpp auth.cpp)
 
 PEERDIR(
     library/cpp/json

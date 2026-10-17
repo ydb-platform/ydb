@@ -58,7 +58,7 @@ TManifest Parse(TStringBuf json) {
         ythrow yexception() << "module_kind must be wasm or native";
     }
 
-    for (const auto field : { "functions", "objects", "required_libraries", "service_methods", "service_abi_version" }) {
+    for (const auto field : { "functions", "objects", "required_libraries", "service_methods", "service_abi_version", "auth_provider" }) {
         if (root.Has(field) && (result.Type != EModuleType::Module || result.Kind != EModuleKind::Wasm)) {
             ythrow yexception() << field << " is only applicable to WASM modules";
         }

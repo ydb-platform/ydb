@@ -11,6 +11,7 @@ using THandle = uint64_t;
 enum class EOperationKind: uint32_t {
     Request,
     Timer,
+    Secret,
 };
 
 enum class EOperationStatus: uint32_t {
@@ -25,6 +26,8 @@ enum class EOperationStatus: uint32_t {
 extern "C" {
 uint64_t WasmAsyncOperationStart(const void* request, uint64_t size);
 uint64_t WasmAsyncTimerStart(uint64_t delayMicroseconds);
+// Only enabled in an operator-approved auth realm; the handle is host-scoped.
+uint64_t WasmAuthSecretStart(uint64_t secretHandle);
 uint32_t WasmAsyncOperationPoll(uint64_t operation);
 uint64_t WasmAsyncOperationSize(uint64_t operation);
 void WasmAsyncOperationRead(uint64_t operation, void* output, uint64_t size);

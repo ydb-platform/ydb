@@ -1,5 +1,7 @@
 #include "helpers.h"
 
+#include <ydb/public/lib/udf/service_manifest/auth.h>
+
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmManifestTest) {
@@ -118,5 +120,60 @@ Y_UNIT_TEST_SUITE(TFqWasmManifestTest) {
         UNIT_ASSERT(ReadServiceRequest(bytes, header, rows));
         header.Count = MaxServiceBatchRows + 1;
         UNIT_ASSERT(!ReadServiceRequest(Encode(header), header, rows));
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWasmAuthManifestTest) {
+    const TString Manifest = R"({"module_name":"TestAuth","module_kind":"wasm","module_type":"module",
+        "auth_provider":{"name":"TEST_AUTH","abi_version":1,"header":"x-auth-test","parameters":[
+            {"name":"SOURCE_ID","type":"Uint32"},{"name":"SECRET","type":"Secret"}]}})";
+
+    Y_UNIT_TEST(ExplicitRegistrationAndParameterValidation) {
+        using namespace NYdb::NWasm::NServices;
+        auto manifest = ParseAuthManifest(Manifest);
+        TAuthRegistry denied({});
+        UNIT_ASSERT_EXCEPTION(denied.Register(manifest), yexception);
+        TAuthRegistry allowed({ "TestAuth" });
+        allowed.Register(manifest);
+        UNIT_ASSERT_VALUES_EQUAL(allowed.Find("TEST_AUTH").Header, "x-auth-test");
+        UNIT_ASSERT_EXCEPTION(allowed.Register(manifest), yexception);
+        UNIT_ASSERT_EXCEPTION(allowed.Find("MISSING"), yexception);
+        ValidateAuthParameters(manifest, { { "SOURCE_ID", "1" }, { "SECRET", "/secret/reference" } });
+        UNIT_ASSERT_EXCEPTION(ValidateAuthParameters(manifest, { { "SOURCE_ID", "0" }, { "SECRET", "/s" } }), yexception);
+        UNIT_ASSERT_EXCEPTION(ValidateAuthParameters(manifest, { { "SOURCE_ID", "4294967296" }, { "SECRET", "/s" } }), yexception);
+        UNIT_ASSERT_EXCEPTION(ValidateAuthParameters(manifest, { { "SOURCE_ID", "1" } }), yexception);
+    }
+
+    Y_UNIT_TEST(RejectInvalidAuthContracts) {
+        using namespace NYdb::NWasm::NServices;
+        const TVector<std::function<void(NJson::TJsonValue&)>> mutations{
+            [](auto& root) {
+                root["auth_provider"]["abi_version"] = 2;
+            },
+            [](auto& root) {
+                root["auth_provider"]["name"] = "TOKEN";
+            },
+            [](auto& root) {
+                root["auth_provider"]["header"] = "host";
+            },
+            [](auto& root) {
+                root["auth_provider"]["header"] = "x-auth-test\r\n";
+            },
+            [](auto& root) {
+                root["auth_provider"]["parameters"][1]["name"] = "SOURCE_ID";
+            },
+            [](auto& root) {
+                root["auth_provider"]["parameters"][0]["type"] = "Pointer";
+            },
+            [](auto& root) {
+                root["module_kind"] = "native";
+            },
+        };
+        for (const auto& mutate : mutations) {
+            NJson::TJsonValue root;
+            UNIT_ASSERT(NJson::ReadJsonTree(Manifest, &root, true));
+            mutate(root);
+            UNIT_ASSERT_EXCEPTION(ParseAuthManifest(NJson::WriteJson(root, false)), yexception);
+        }
     }
 }

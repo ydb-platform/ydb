@@ -47,6 +47,7 @@ struct TLimits {
     ui64 MaxPayloadBytes = 1 << 20;
     ui64 MaxBufferedBytes = 8 << 20;
     TDuration CpuBudget = TDuration::MilliSeconds(100);
+    bool AllowSecrets = false;
 };
 
 struct TStats {
@@ -76,6 +77,7 @@ public:
     // Host imports require an active short-lived entry scope.
     THandle StartOperation(THandle call, TString request, EOperationKind kind = EOperationKind::Request);
     THandle StartTimer(THandle call, ui64 delayMicroseconds);
+    THandle StartSecret(THandle call, ui64 secretHandle);
     EOperationStatus PollOperation(THandle call, THandle operation) const;
     TString ReadOperation(THandle call, THandle operation) const;
     void CancelOperation(THandle call, THandle operation);

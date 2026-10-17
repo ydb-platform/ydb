@@ -422,6 +422,11 @@ bool TRuntime::IsPoisoned() const {
     return State_->Poisoned;
 }
 
+THandle TRuntime::StartSecret(THandle call, ui64 secretHandle) {
+    Y_ENSURE(State_->Limits.AllowSecrets, "Secret access is restricted to auth WASM");
+    return StartOperation(call, TString(reinterpret_cast<const char*>(&secretHandle), sizeof(secretHandle)), EOperationKind::Secret);
+}
+
 THandle TRuntime::StartTimer(THandle call, ui64 delayMicroseconds) {
     Y_ENSURE(delayMicroseconds <= (TInstant::Max() - TInstant::Now()).MicroSeconds(), "Async timer delay overflow");
     return StartOperation(call, TString(reinterpret_cast<const char*>(&delayMicroseconds), sizeof(delayMicroseconds)), EOperationKind::Timer);

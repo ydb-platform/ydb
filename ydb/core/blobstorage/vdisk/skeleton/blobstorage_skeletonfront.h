@@ -19,6 +19,7 @@ namespace NKikimr {
         enum EPhase {
             LocalRecoveryDone,      // Local recovery finished
             SyncGuidRecoveryDone,   // Sync Guid recovery finished
+            LostDataRecoveryStarted, // Selected pools can serve full sync from a partial index
         };
 
         const EPhase Phase;

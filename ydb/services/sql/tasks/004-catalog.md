@@ -1,7 +1,7 @@
 # Ответы для рукопожатия psql
 
-status: pending
-commit:
+status: done
+commit: 3b657fe0e264d58f2ae653b86dc5439f1f703183
 id: catalog
 depends: wire-simple-error
 

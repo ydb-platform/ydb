@@ -1,3 +1,4 @@
 RECURSE(
+    parse
     wire
 )

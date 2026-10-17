@@ -1,0 +1,83 @@
+#include "lexer.h"
+
+#include <util/string/ascii.h>
+
+namespace NKikimr::NSql {
+
+namespace {
+
+bool IsIdentStart(char ch) {
+    return IsAsciiAlpha(ch) || ch == '_';
+}
+
+bool IsIdentContinue(char ch) {
+    return IsAsciiAlnum(ch) || ch == '_';
+}
+
+} // namespace
+
+TLexer::TLexer(TStringBuf sql)
+    : Input(sql)
+{
+}
+
+void TLexer::SkipSpace() {
+    while (Position < Input.size() && IsAsciiSpace(Input[Position])) {
+        ++Position;
+    }
+}
+
+TToken TLexer::Next() {
+    SkipSpace();
+    if (Position >= Input.size()) {
+        return {};
+    }
+
+    const char ch = Input[Position];
+    if (ch == '*') {
+        ++Position;
+        return {ETokenKind::Star, "*", false};
+    }
+    if (ch == ',') {
+        ++Position;
+        return {ETokenKind::Comma, ",", false};
+    }
+    if (ch == ';') {
+        ++Position;
+        return {ETokenKind::Semicolon, ";", false};
+    }
+    if (ch == '"') {
+        ++Position;
+        TString text;
+        while (Position < Input.size()) {
+            if (Input[Position] == '"') {
+                if (Position + 1 < Input.size() && Input[Position + 1] == '"') {
+                    text.push_back('"');
+                    Position += 2;
+                    continue;
+                }
+                ++Position;
+                return {ETokenKind::Identifier, text, true};
+            }
+            text.push_back(Input[Position]);
+            ++Position;
+        }
+        return {ETokenKind::Error, text, true};
+    }
+    if (IsIdentStart(ch)) {
+        const size_t begin = Position;
+        ++Position;
+        while (Position < Input.size() && IsIdentContinue(Input[Position])) {
+            ++Position;
+        }
+        TString text(Input.substr(begin, Position - begin));
+        text.to_lower();
+        return {ETokenKind::Identifier, text, false};
+    }
+
+    TString text(Input.substr(Position, 1));
+    ++Position;
+    return {ETokenKind::Error, text, false};
+}
+
+} // namespace NKikimr::NSql

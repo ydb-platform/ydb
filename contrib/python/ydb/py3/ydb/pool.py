@@ -93,15 +93,18 @@ class ConnectionsCache:
     def cleanup_outdated(self) -> "ConnectionsCache":
         with self.lock:
             outdated_connections = list(self.outdated.values())
-            for outdated_connection in outdated_connections:
-                outdated_connection.close()
+        # close() holds the connection lock and invokes our remove() callback.
+        # Do not hold the cache lock while waiting for a concurrent disconnect.
+        for outdated_connection in outdated_connections:
+            outdated_connection.close()
         return self
 
     def cleanup(self) -> None:
         with self.lock:
             actual_connections = list(self.connections.values())
-            for connection in actual_connections:
-                connection.close()
+        # A concurrent close can already hold a connection lock and need ours.
+        for connection in actual_connections:
+            connection.close()
 
     def complete_discovery(self, error: Optional[Exception]) -> None:
         with self.lock:

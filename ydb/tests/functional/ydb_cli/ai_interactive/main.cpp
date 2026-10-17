@@ -1,3 +1,4 @@
+// ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 #include <ydb/apps/ydb/commands/ydb_root.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/interactive_config.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_root_common.h>

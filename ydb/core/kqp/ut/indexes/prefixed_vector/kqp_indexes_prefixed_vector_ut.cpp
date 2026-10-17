@@ -1642,3 +1642,4 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 }
 }
 }
+// ci: widen increment graph, 2026-10-05

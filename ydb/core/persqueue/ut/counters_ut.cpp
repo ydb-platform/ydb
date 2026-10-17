@@ -1704,3 +1704,4 @@ Y_UNIT_TEST(ManyCounters) {
 } // Y_UNIT_TEST_SUITE(TMultiBucketCounter)
 
 } // namespace NKikimr::NPQ
+// ci: widen increment graph, 2026-10-05

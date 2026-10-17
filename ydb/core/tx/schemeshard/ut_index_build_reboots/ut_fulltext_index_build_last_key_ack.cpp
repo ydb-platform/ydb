@@ -138,3 +138,4 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildLastKeyAckTests) {
         UNIT_ASSERT_VALUES_EQUAL(rows, kExpectedPostingRows);
     }
 } // Y_UNIT_TEST_SUITE(FulltextIndexBuildLastKeyAckTests)
+// ci: widen increment graph, 2026-10-05

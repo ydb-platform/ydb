@@ -1,3 +1,4 @@
+// ci: widen the increment graph so auto sharding exceeds one hour, 2026-10-05
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>

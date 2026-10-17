@@ -22,12 +22,12 @@ private:
     public:
         TInputController(const TActorIdentity& actorId)
             : TTableExistsActor::TEvController(actorId) {
-
         }
     };
 
     std::shared_ptr<TInputController> InputController;
     ISnapshotConstructorController::TPtr OutputController;
+
 protected:
     virtual void OnNewEnrichedSnapshot(NFetcher::ISnapshot::TPtr snapshot) final;
     virtual void OnConstructSnapshotError(const TString& errorMessage) final;
@@ -42,34 +42,38 @@ public:
     class TEvController: public ISnapshotConstructorController {
     private:
         const TActorIdentity ActorId;
+
     public:
         class TEvResult: public TEventLocal<TEvResult, EEvents::EvAccessorSimpleResult> {
         private:
             YDB_READONLY_DEF(NFetcher::ISnapshot::TPtr, Result);
+
         public:
             TEvResult(NFetcher::ISnapshot::TPtr snapshot)
-                : Result(snapshot) {
-
+                : Result(snapshot)
+            {
             }
         };
 
         class TEvError: public TEventLocal<TEvError, EEvents::EvAccessorSimpleError> {
         private:
             YDB_READONLY_DEF(TString, ErrorMessage);
+
         public:
             TEvError(const TString& errorMessage)
-                : ErrorMessage(errorMessage) {
-
+                : ErrorMessage(errorMessage)
+            {
             }
         };
 
         class TEvTableAbsent: public TEventLocal<TEvTableAbsent, EEvents::EvAccessorSimpleTableAbsent> {
         private:
             YDB_READONLY_DEF(TString, Path);
+
         public:
             TEvTableAbsent(const TString& path)
-                : Path(path) {
-
+                : Path(path)
+            {
             }
         };
 
@@ -88,7 +92,6 @@ public:
         TEvController(const TActorIdentity& actorId)
             : ActorId(actorId)
         {
-
         }
     };
 
@@ -100,12 +103,13 @@ public:
                 TBase::StateMain(ev);
         }
     }
+
     TDSAccessorSimple(const NRequest::TConfig& config, ISnapshotConstructorController::TPtr outputController,
         NFetcher::ISnapshotsFetcher::TPtr snapshotConstructor)
         : TBase(config, snapshotConstructor)
-        , OutputController(outputController){
-
+        , OutputController(outputController)
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

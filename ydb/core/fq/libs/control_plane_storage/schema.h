@@ -92,4 +92,4 @@ namespace NFq {
 #define CREATED_AT_COLUMN_NAME "created_at"
 #define LAST_ACCESS_AT_COLUMN_NAME "last_access_at"
 
-} // namespace NFq
+}   // namespace NFq

@@ -11,17 +11,16 @@ using namespace NCommon;
 TPqConfiguration::TPqConfiguration(bool strictConfigValidation)
     : NCommon::TSettingDispatcher(PqProviderName, TQContext(), strictConfigValidation)
 {
-    REGISTER_SETTING(*this, Auth)
-        .ValueSetter([this](const TString&, const TString& value) {
-            Auth = value;
-            for (auto& clusterSetting : ClustersConfigurationSettings) {
-                clusterSetting.second.AuthToken = value;
-            }
+    REGISTER_SETTING(*this, Auth).ValueSetter([this](const TString&, const TString& value) {
+        Auth = value;
+        for (auto& clusterSetting : ClustersConfigurationSettings) {
+            clusterSetting.second.AuthToken = value;
+        }
 
-            for (auto& token: Tokens) {
-                token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
-            }
-        });
+        for (auto& token : Tokens) {
+            token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
+        }
+    });
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
     REGISTER_SETTING(*this, PqReadByRtmrCluster_);
@@ -34,14 +33,12 @@ TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {
     return std::make_shared<const TPqSettings>(*this);
 }
 
-void TPqConfiguration::Init(
-    const TPqGatewayConfig& config,
-    TIntrusivePtr<TTypeAnnotationContext> typeCtx,
+void TPqConfiguration::Init(const TPqGatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver,
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds)
 {
     TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
-    for (auto& cluster: config.GetClusterMapping()) {
+    for (auto& cluster : config.GetClusterMapping()) {
         clusters.push_back(cluster.GetName());
     }
 
@@ -49,7 +46,7 @@ void TPqConfiguration::Init(
 
     Dispatch(config.GetDefaultSettings());
 
-    for (auto& cluster: config.GetClusterMapping()) {
+    for (auto& cluster : config.GetClusterMapping()) {
         AddCluster(cluster, databaseIds, typeCtx->Credentials, dbResolver, {});
     }
     FreezeDefaults();
@@ -64,12 +61,9 @@ TString TPqConfiguration::GetDatabaseForTopic(const TString& cluster) const {
     return clusterSetting->Database;
 }
 
-void TPqConfiguration::AddCluster(
-    const NYql::TPqClusterConfig& cluster,
-    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds,
-    const TCredentials::TPtr& credentials,
-    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver,
-    const THashMap<TString, TString>& properties)
+void TPqConfiguration::AddCluster(const NYql::TPqClusterConfig& cluster,
+    THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth>& databaseIds, const TCredentials::TPtr& credentials,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver>& dbResolver, const THashMap<TString, TString>& properties)
 {
     Dispatch(cluster.GetName(), cluster.GetSettings());
     TPqClusterConfigurationSettings& clusterSettings = ClustersConfigurationSettings[cluster.GetName()];
@@ -86,23 +80,25 @@ void TPqConfiguration::AddCluster(
     clusterSettings.SharedReading = cluster.GetSharedReading();
     clusterSettings.ReadGroup = cluster.GetReadGroup();
 
-    const TString authToken = credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
+    const TString authToken =
+        credentials->FindCredentialContent("cluster:default_" + clusterSettings.ClusterName, "default_pq", cluster.GetToken());
     clusterSettings.AuthToken = authToken;
 
-    const auto structuredTokenJson = NFq::NMessageStream::ComposeAuthToken(properties, authToken,
-        cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature());
+    const auto structuredTokenJson =
+        NFq::NMessageStream::ComposeAuthToken(properties, authToken, cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature());
     Tokens[clusterSettings.ClusterName] = structuredTokenJson;
 
     if (dbResolver) {
-        YQL_CLOG(DEBUG, ProviderPq) << "Settings: clusterName = " << cluster.GetName()
-            << ", clusterDbId = "  << cluster.GetDatabaseId() << ", cluster.GetEndpoint(): " << cluster.GetEndpoint() << ", HasEndpoint = " << (cluster.HasEndpoint() ? "TRUE" : "FALSE") ;
+        YQL_CLOG(DEBUG, ProviderPq) << "Settings: clusterName = " << cluster.GetName() << ", clusterDbId = " << cluster.GetDatabaseId()
+                                    << ", cluster.GetEndpoint(): " << cluster.GetEndpoint()
+                                    << ", HasEndpoint = " << (cluster.HasEndpoint() ? "TRUE" : "FALSE");
         if (cluster.GetDatabaseId()) {
             databaseIds[std::make_pair(cluster.GetDatabaseId(), NYql::EDatabaseType::DataStreams)] =
-                NYql::TDatabaseAuth{structuredTokenJson, cluster.GetAddBearerToToken()};
+                NYql::TDatabaseAuth{ structuredTokenJson, cluster.GetAddBearerToToken() };
             DbId2Clusters[cluster.GetDatabaseId()].emplace_back(cluster.GetName());
             YQL_CLOG(DEBUG, ProviderPq) << "Add dbId: " << cluster.GetDatabaseId() << " to DbId2Clusters";
         }
     }
 }
 
-} // namespace NYql
+}   // namespace NYql

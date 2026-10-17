@@ -2618,7 +2618,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2700,7 +2702,9 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 10);
+        UNIT_ASSERT(s3Mock.GetData().contains("/data_complete.json"));
+        UNIT_ASSERT(s3Mock.GetData().contains("/export_complete.json"));
 
         // Make corruption
         corruption(s3Mock.GetData());

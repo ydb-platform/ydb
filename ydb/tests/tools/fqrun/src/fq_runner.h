@@ -29,4 +29,4 @@ private:
     std::shared_ptr<TImpl> Impl;
 };
 
-}  // namespace NFqRun
+}   // namespace NFqRun

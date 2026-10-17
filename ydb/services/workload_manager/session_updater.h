@@ -1,9 +1,9 @@
 #pragma once
 
+#include <ydb/core/protos/kqp.pb.h>
+
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
-
-#include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr::NWorkloadManager {
 
@@ -13,11 +13,11 @@ namespace NKikimr::NWorkloadManager {
 ///
 class ISessionUpdater {
 public:
-    enum EState : ui32 {
-        NONE = 0,      // Request is not in workload manager queue
+    enum EState: ui32 {
+        NONE = 0,   // Request is not in workload manager queue
         PENDING = 1,   // Request is in local pending queue, waiting to be delayed or started
         DELAYED = 2,   // Request is in delayed_requests table, waiting for available slot
-        EXITED = 3     // Request has exited from WM
+        EXITED = 3   // Request has exited from WM
     };
 
     virtual ~ISessionUpdater() = default;
@@ -59,8 +59,7 @@ inline TString WmStateToStatus(ISessionUpdater::EState state) {
 }
 
 inline bool IsWmStateQueued(ISessionUpdater::EState state) {
-    return state == ISessionUpdater::EState::PENDING ||
-           state == ISessionUpdater::EState::DELAYED;
+    return state == ISessionUpdater::EState::PENDING || state == ISessionUpdater::EState::DELAYED;
 }
 
-} // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

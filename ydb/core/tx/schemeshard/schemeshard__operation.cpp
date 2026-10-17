@@ -110,18 +110,6 @@ bool TSchemeShard::ProcessOperationParts(
     auto selfId = TabletID();
     const TString owner = record.GetOwner().empty() ? BUILTIN_ACL_ROOT : record.GetOwner();
 
-    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
-        && context.UserToken
-        && !context.UserToken->IsSystemUser()
-        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
-    {
-        response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
-            NKikimrScheme::StatusPreconditionFailed, ui64(txId), selfId,
-            "Client schema modifications are disabled for non-administrators");
-        AbortOperationPropose(txId, context);
-        return false;
-    }
-
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation
         context.IsAllowedPrivateTables = true;
@@ -227,6 +215,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
         response->SetError(NKikimrScheme::StatusAccepted, "An operation with the same txId is already in flight. This should not happen. Note that the transaction body is not guaranteed to be identical — StatusAccepted is simply returned for retries.");
         return response;
+    }
+
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+    {
+        return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+            "Client schema modifications are disabled for non-administrators");
     }
 
     TOperation::TPtr operation = new TOperation(txId);

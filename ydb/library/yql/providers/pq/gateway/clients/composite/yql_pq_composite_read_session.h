@@ -2,9 +2,10 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYql {
 
@@ -18,7 +19,7 @@ struct TCompositeTopicReadSessionSettings {
     NFq::TMessageStreamReadSessionSettings BaseSettings;
     TDuration IdleTimeout;
     TDuration MaxPartitionReadSkew;
-    NActors::TActorId AggregatorActor; // TDqPqInfoAggregationActor
+    NActors::TActorId AggregatorActor;   // TDqPqInfoAggregationActor
 };
 
 class ICompositeTopicReadSessionControl {
@@ -33,9 +34,6 @@ public:
 };
 
 std::pair<std::shared_ptr<NFq::IMessageStreamReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
-    const NActors::TActorContext& ctx,
-    NFq::IMessageStreamDataClient& topicClient,
-    const TCompositeTopicReadSessionSettings& settings
-);
+    const NActors::TActorContext& ctx, NFq::IMessageStreamDataClient& topicClient, const TCompositeTopicReadSessionSettings& settings);
 
-} // namespace NYql
+}   // namespace NYql

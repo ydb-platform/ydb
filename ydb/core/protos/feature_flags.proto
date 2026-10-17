@@ -354,11 +354,6 @@ message TFeatureFlags {
     optional bool EnableSuperLemmer = 319 [default = false];
     optional bool EnableImportInParquet = 320 [default = false];
     optional bool EnableS3Scheduling = 321 [default = false];
-<<<<<<< HEAD
-=======
-    // Bumps GROUP BY HOP state version to 3
-    optional bool EnableHoppingWindowStartCheck = 346 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
->>>>>>> cce5d0e3c38 (Backport client modification feature flag to stable-26-3-1 (#56054))
 }

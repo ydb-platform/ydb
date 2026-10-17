@@ -333,10 +333,10 @@ namespace NKikimr {
                 auto& storagePools = StoragePools.Unshare();
                 const auto spIt = storagePools.find(group->StoragePoolId);
                 Y_ABORT_UNLESS(spIt != storagePools.end());
-                if (auto& numGroups = spIt->second.NumGroups; !group->BridgePileId && numGroups) {
+                if (auto& numGroups = spIt->second.NumGroups; !group->IsBridgePileOnly() && numGroups) {
                     --numGroups;
                 } else {
-                    Y_DEBUG_ABORT_UNLESS(group->BridgePileId);
+                    Y_DEBUG_ABORT_UNLESS(group->IsBridgePileOnly());
                 }
                 const size_t numErased = StoragePoolGroups.Unshare().erase({spIt->first, groupId});
                 Y_ABORT_UNLESS(numErased == 1);

@@ -848,6 +848,104 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         CheckStaysConverged(runtime, allKeepers);
     }
 
+    // turn the only static group into the pile of its own, as it happens when converting cluster to bridged one
+    void MakeInlinePile(NKikimrBlobStorage::TStorageConfig& config) {
+        NBridge::MakeInlinePile(config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0));
+        config.MutableClusterState()->CopyFrom(NBridge::MakeImplicitSinglePileClusterState());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+    }
+
+    Y_UNIT_TEST(InlinePileStaticGroupValidation) {
+        auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        MakeInlinePile(config);
+        if (const auto error = NStorage::ValidateConfig(config)) {
+            UNIT_FAIL(*error);
+        }
+
+        // pile generation must follow the generation of the group itself
+        auto *group = config.MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups(0);
+        group->MutableBridgeGroupState()->MutablePile(0)->SetGroupGeneration(2);
+        const auto error = NStorage::ValidateConfig(config);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_VALUES_EQUAL(*error, "incorrect referenced group generation");
+    }
+
+    Y_UNIT_TEST(InlinePileStaticGroupQuorum) {
+        auto config = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        MakeInlinePile(config);
+        UNIT_ASSERT(HasQuorum(config, {1, 2, 3, 4, 5, 6}));
+        UNIT_ASSERT(!HasQuorum(config, {1, 2, 3, 4, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17}));
+    }
+
+    Y_UNIT_TEST(ConvertStorageConfigToBridge) {
+        auto initial = MakeStorageConfig(17, 1, {1, 2, 3, 4, 5, 6, 7, 8}, TBlobStorageGroupType::Erasure4Plus2Block);
+        auto *ring = initial.MutableStateStorageConfig()->MutableRing(); // legacy ring
+        ring->SetNToSelect(1);
+        ring->AddNode(1);
+        auto *ringGroup = initial.MutableSchemeBoardConfig()->AddRingGroups();
+        ringGroup->SetNToSelect(1);
+        ringGroup->AddNode(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+
+        auto config = initial;
+        if (const auto error = NStorage::ConvertStorageConfigToBridge(&config)) {
+            UNIT_FAIL(*error);
+        }
+        config.SetGeneration(initial.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        if (const auto error = NStorage::ValidateConfigUpdate(initial, config)) {
+            UNIT_FAIL(*error);
+        }
+
+        const auto& cs = config.GetClusterState();
+        UNIT_ASSERT_VALUES_EQUAL(cs.PerPileStateSize(), 1);
+        UNIT_ASSERT_EQUAL(cs.GetPerPileState(0), NKikimrBridge::TClusterState::SYNCHRONIZED);
+        UNIT_ASSERT(config.GetClusterStateDetails().GetBscConversionPending());
+
+        // static group becomes an inline pile with bumped generation
+        const auto& ss = config.GetBlobStorageConfig().GetServiceSet();
+        UNIT_ASSERT_VALUES_EQUAL(ss.GroupsSize(), 1);
+        const auto& group = ss.GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeProxyGroupId(), group.GetGroupID());
+        UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId),
+            TBridgePileId::FromPileIndex(0));
+        UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeGroupState().PileSize(), 1);
+        const auto& pile = group.GetBridgeGroupState().GetPile(0);
+        UNIT_ASSERT_VALUES_EQUAL(pile.GetGroupId(), group.GetGroupID());
+        UNIT_ASSERT_VALUES_EQUAL(pile.GetGroupGeneration(), 2);
+        UNIT_ASSERT_EQUAL(pile.GetStage(), NKikimrBridge::TGroupState::SYNCED);
+        UNIT_ASSERT_VALUES_EQUAL(ss.VDisksSize(), 8);
+        for (const auto& vdisk : ss.GetVDisks()) {
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.GetVDiskID().GetGroupGeneration(), 2);
+        }
+
+        // ring groups get bound to the only pile, legacy ring is turned into the ring group
+        const auto& stateStorage = config.GetStateStorageConfig();
+        UNIT_ASSERT(!stateStorage.HasRing());
+        UNIT_ASSERT_VALUES_EQUAL(stateStorage.RingGroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stateStorage.GetRingGroups(0).GetNode(0), 1);
+        for (const auto *pb : {&stateStorage, &config.GetSchemeBoardConfig()}) {
+            UNIT_ASSERT_VALUES_EQUAL(pb->RingGroupsSize(), 1);
+            const auto& item = pb->GetRingGroups(0);
+            UNIT_ASSERT(item.HasBridgePileId());
+            UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&item, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId),
+                TBridgePileId::FromPileIndex(0));
+        }
+
+        // conversion can't be done twice
+        auto again = config;
+        const auto error = NStorage::ConvertStorageConfigToBridge(&again);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_VALUES_EQUAL(*error, "cluster is already bridged one");
+
+        // piles can't be added until BSC converts its groups
+        config.MutableClusterState()->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        UNIT_ASSERT(NStorage::ValidateConfig(config));
+        config.MutableClusterStateDetails()->SetBscConversionPending(false);
+        UNIT_ASSERT(!NStorage::ValidateConfig(config));
+    }
+
     Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
         const auto config = MakeStorageConfig(3, 0, {1});
         TNodeWardenTestState state{2, 3};

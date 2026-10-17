@@ -158,7 +158,9 @@ namespace NKikimr::NBsController {
         for (auto it = spToGroups.lower_bound({id, Min<TGroupId>()}); it != spToGroups.end() && it->first == id; ++it) {
             const TGroupInfo *group = Groups.Find(it->second);
             Y_ABORT_UNLESS(group);
-            if (!group->BridgeGroupInfo && group->ErasureSpecies != storagePool.ErasureSpecies) {
+            // inline pile keeps its own VDisks, so it must match the pool geometry like any physical group
+            const bool physical = !group->BridgeGroupInfo || group->IsInlinePile();
+            if (physical && group->ErasureSpecies != storagePool.ErasureSpecies) {
                 throw TExError() << "GroupId# " << it->second << " has different erasure species";
             }
         }
@@ -179,9 +181,10 @@ namespace NKikimr::NBsController {
             storagePool.VDiskHeapAllocatorNumLeadingDisks = cur.VDiskHeapAllocatorNumLeadingDisks;
             cur = std::move(storagePool); // update existing storage pool
         } else {
-            // enable bridge mode by default for new pools (when bridge mode is enabled cluster-wide)
-            const bool bridgeMode = AppData()->BridgeModeEnabled;
-            Y_DEBUG_ABORT_UNLESS(bridgeMode == static_cast<bool>(BridgeInfo));
+            // enable bridge mode by default for new pools (when the cluster is bridged one; bridge-capable cluster
+            // that has not been converted yet runs in implicit single-pile state and keeps creating ordinary pools)
+            Y_DEBUG_ABORT_UNLESS(AppData()->BridgeModeEnabled == static_cast<bool>(BridgeInfo));
+            const bool bridgeMode = BridgeInfo && !BridgeInfo->IsImplicit;
             spIt->second.BridgeMode = bridgeMode;
         }
         Fit.PoolsAndGroups.emplace(id, std::nullopt);

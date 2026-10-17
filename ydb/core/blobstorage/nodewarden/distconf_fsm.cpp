@@ -187,6 +187,10 @@ namespace NKikimr::NStorage {
             case TEvGather::kDemandRetroTrace:
                 return;
 
+            case TEvGather::kCollectBridgeCapability:
+                Y_DEBUG_ABORT();
+                break;
+
             case TEvGather::RESPONSE_NOT_SET:
                 return SwitchToError("response not set");
         }
@@ -635,6 +639,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case TEvScatter::kDemandRetroTrace:
+            case TEvScatter::kCollectBridgeCapability:
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -654,6 +659,10 @@ namespace NKikimr::NStorage {
 
             case TEvScatter::kDemandRetroTrace:
                 Perform(task.Response.MutableDemandRetroTrace(), task.Request.GetDemandRetroTrace(), task);
+                break;
+
+            case TEvScatter::kCollectBridgeCapability:
+                Perform(task.Response.MutableCollectBridgeCapability(), task.Request.GetCollectBridgeCapability(), task);
                 break;
 
             case TEvScatter::REQUEST_NOT_SET:
@@ -751,6 +760,33 @@ namespace NKikimr::NStorage {
                     if (const auto [_, inserted] = nodesAlreadyReplied.insert(status.GetNodeId()); inserted) {
                         response->AddStatus()->CopyFrom(status);
                     }
+                }
+            }
+        }
+    }
+
+    void TDistributedConfigKeeper::Perform(TEvGather::TCollectBridgeCapability *response,
+            const TEvScatter::TCollectBridgeCapability& /*request*/, TScatterTask& task) {
+        auto add = [&](ui32 nodeId, bool capable) {
+            if (capable) {
+                response->AddCapableNodeIds(nodeId);
+            } else {
+                response->AddNotCapableNodeIds(nodeId);
+            }
+        };
+
+        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig));
+        for (const ui32 nodeId : ConnectedDynamicNodes) {
+            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId));
+        }
+        for (const auto& reply : task.CollectedResponses) {
+            if (reply.HasCollectBridgeCapability()) {
+                const auto& item = reply.GetCollectBridgeCapability();
+                for (const ui32 nodeId : item.GetCapableNodeIds()) {
+                    response->AddCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetNotCapableNodeIds()) {
+                    response->AddNotCapableNodeIds(nodeId);
                 }
             }
         }

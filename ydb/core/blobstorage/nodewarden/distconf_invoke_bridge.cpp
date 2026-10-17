@@ -9,6 +9,8 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::NeedBridgeMode() {
         if (!Self->Cfg->BridgeConfig) {
             throw TExError() << "Bridge mode is not enabled";
+        } else if (!Self->StorageConfig || !Self->StorageConfig->HasClusterState()) {
+            throw TExError() << "Cluster is not converted to bridged one yet";
         }
     }
 
@@ -154,7 +156,6 @@ namespace NKikimr::NStorage {
                     pile->ClearStage();
                     pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
                 }
-                group->SetGroupGeneration(group->GetGroupGeneration() + 1);
                 for (auto& pile : *state->MutablePile()) {
                     const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     auto *refGroup = groupMap[refGroupId];
@@ -164,6 +165,7 @@ namespace NKikimr::NStorage {
                     pile.SetGroupGeneration(refGroup->GetGroupGeneration());
                     changedGroupIds.insert(refGroupId);
                 }
+                BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
             }
             for (auto& vdisk : *ss->MutableVDisks()) {
                 auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
@@ -185,9 +187,8 @@ namespace NKikimr::NStorage {
 
         const auto bridgePileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSyncFinished::GetBridgePileId);
 
-        if (!Self->Cfg->BridgeConfig) {
-            throw TExError() << "Bridge mode is not enabled";
-        } else if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
+        NeedBridgeMode();
+        if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
             throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
             throw TExError() << "Generation mismatch";
@@ -262,7 +263,7 @@ namespace NKikimr::NStorage {
         state->CopyFrom(newState);
 
         // update referenced group generations
-        bridgeProxyGroup->SetGroupGeneration(bridgeProxyGroup->GetGroupGeneration() + 1);
+        BumpBridgeProxyGeneration(bridgeProxyGroup, [&](TGroupId id) { return referencedGroups.contains(id); });
         for (auto& pile : *state->MutablePile()) {
             const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
             Y_ABORT_UNLESS(it != groupMap.end());
@@ -286,9 +287,8 @@ namespace NKikimr::NStorage {
 
         const auto pileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSuspended::GetPileId);
 
-        if (!Self->Cfg->BridgeConfig) {
-            throw TExError() << "Bridge mode is not enabled";
-        } else if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
+        NeedBridgeMode();
+        if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
             throw TExError() << "BridgePileId out of bounds";
         } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
             throw TExError() << "Generation mismatch";
@@ -305,6 +305,86 @@ namespace NKikimr::NStorage {
 
         clusterState->SetPerPileState(pileId.GetPileIndex(), NKikimrBridge::TClusterState::DISCONNECTED);
         StartProposition(&config, /*mindPrev=*/ false);
+    }
+
+    void TInvokeRequestHandlerActor::ConvertToBridge(const TQuery::TConvertToBridge& /*cmd*/) {
+        RunCommonChecks();
+
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to convert cluster to bridged one";
+        } else if (!Self->Cfg->BridgeConfig) {
+            throw TExError() << "Bridge mode is not enabled";
+        } else if (Self->Cfg->BridgeConfig->PilesSize() != 1) {
+            throw TExError() << "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
+        } else if (Self->StorageConfig->HasClusterState()) {
+            throw TExError() << "Cluster is already bridged one";
+        }
+
+        // nodes running without BridgeConfig won't be able to work in bridged cluster, so ensure there are none of them
+        // among static nodes and dynamic nodes connected to them; every configured static node must positively report
+        // its capability, as the one being temporarily disconnected may still run without BridgeConfig and return
+        // after the conversion; dynamic nodes can't be enumerated this way, the ones that are missed here can't serve
+        // bridged groups until restarted with BridgeConfig
+        TEvScatter task;
+        task.MutableCollectBridgeCapability();
+        IssueScatterTask(std::move(task), [this](TEvGather *res) {
+            if (!res->HasCollectBridgeCapability()) {
+                throw TExError() << "Incorrect CollectBridgeCapability response";
+            }
+            const auto& response = res->GetCollectBridgeCapability();
+
+            const THashSet<ui32> capable(response.GetCapableNodeIds().begin(), response.GetCapableNodeIds().end());
+            std::set<ui32> notCapable(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
+            std::set<ui32> unknown;
+            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
+                if (const ui32 nodeId = node.GetNodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+                    unknown.insert(nodeId); // node is not connected or runs older version that doesn't report anything
+                }
+            }
+            for (const auto& [node, _] : Self->AllBoundNodes) {
+                if (const ui32 nodeId = node.NodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+                    unknown.insert(nodeId);
+                }
+            }
+            if (!notCapable.empty() || !unknown.empty()) {
+                TStringBuilder err;
+                if (!notCapable.empty()) {
+                    err << "Some nodes are running without BridgeConfig NodeIds#";
+                    for (const ui32 nodeId : notCapable) {
+                        err << ' ' << nodeId;
+                    }
+                }
+                if (!unknown.empty()) {
+                    if (!notCapable.empty()) {
+                        err << "; ";
+                    }
+                    err << "Some static nodes did not report their BridgeConfig, they must be running and connected"
+                        " NodeIds#";
+                    for (const ui32 nodeId : unknown) {
+                        err << ' ' << nodeId;
+                    }
+                }
+                throw TExError() << err;
+            }
+
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+            if (auto error = ConvertStorageConfigToBridge(&config)) {
+                throw TExError() << *error;
+            }
+            StartProposition(&config);
+        });
+    }
+
+    void TInvokeRequestHandlerActor::NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& /*cmd*/) {
+        RunCommonChecks();
+
+        if (!Self->StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+            return Finish(TResult::OK, std::nullopt); // already cleared
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        config.MutableClusterStateDetails()->ClearBscConversionPending();
+        StartProposition(&config);
     }
 
 } // NKikimr::NStorage

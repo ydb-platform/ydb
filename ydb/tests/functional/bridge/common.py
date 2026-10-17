@@ -5,6 +5,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
 
 from hamcrest import assert_that, is_, has_entries
@@ -18,6 +19,8 @@ class BridgeKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 16
+    pile_names = ("r1", "r2")
+    bridge_rpc_timeout = 10
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -25,27 +28,23 @@ class BridgeKiKiMRTest(object):
     }
     logger = logging.getLogger(__name__)
 
-    @classmethod
-    def setup_class(cls):
+    def setup_method(self):
         log_configs = {
             'GRPC_SERVER': LogLevels.DEBUG,
             'GRPC_PROXY': LogLevels.DEBUG,
         }
 
         bridge_config = {
-            "piles": [
-                {"name": "r1"},
-                {"name": "r2"}
-            ]
+            "piles": [{"name": name} for name in self.pile_names]
         }
 
-        cls.configurator = KikimrConfigGenerator(
-            cls.erasure,
-            nodes=cls.nodes_count,
+        self.configurator = KikimrConfigGenerator(
+            self.erasure,
+            nodes=self.nodes_count,
             use_in_memory_pdisks=False,
-            use_config_store=cls.use_config_store,
-            metadata_section=cls.metadata_section,
-            separate_node_configs=cls.separate_node_configs,
+            use_config_store=self.use_config_store,
+            metadata_section=self.metadata_section,
+            separate_node_configs=self.separate_node_configs,
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['bridge'],
@@ -53,25 +52,69 @@ class BridgeKiKiMRTest(object):
             bridge_config=bridge_config
         )
 
-        cls.cluster = KiKiMR(configurator=cls.configurator)
-        cls.cluster.start()
+        self.cluster = KiKiMR(configurator=self.configurator)
+        self.cluster.start()
 
-        host = cls.cluster.nodes[1].host
-        grpc_port = cls.cluster.nodes[1].port
-        cls.bridge_client = BridgeClient(host, grpc_port)
-        cls.secondary_bridge_client = BridgeClient(cls.cluster.nodes[2].host, cls.cluster.nodes[2].port)
-        cls.bridge_client.set_auth_token('root@builtin')
-        cls.secondary_bridge_client.set_auth_token('root@builtin')
+        self.pile_nodes = {name: [] for name in self.pile_names}
+        for node_id, host in enumerate(self.configurator.yaml_config["hosts"], 1):
+            self.pile_nodes[host["location"]["bridge_pile_name"]].append(self.cluster.nodes[node_id])
+        self.bridge_clients = {}
+        for name, nodes in self.pile_nodes.items():
+            client = BridgeClient(nodes[0].host, nodes[0].port, timeout=self.bridge_rpc_timeout)
+            client.set_auth_token('root@builtin')
+            self.bridge_clients[name] = client
+        self.bridge_client = self.bridge_clients[self.pile_names[0]]
+        self.secondary_bridge_client = self.bridge_clients[self.pile_names[1]]
 
-    @classmethod
-    def teardown_class(cls):
-        cls.bridge_client.close()
-        cls.cluster.stop()
+    def teardown_method(self):
+        for client in self.bridge_clients.values():
+            client.close()
+        self.cluster.stop()
+
+    @staticmethod
+    def stop_driver(driver):
+        # Temporary workaround for the SDK lock inversion, until
+        # https://a.yandex-team.ru/review/16529757 is synchronized from Arcadia.
+        # These drivers disable discovery, so only cleanup() is used at shutdown.
+        cache = driver._store
+
+        def cleanup():
+            # values() takes a snapshot under the cache lock and releases it
+            # before close() can wait for a concurrent disconnect callback.
+            for connection in cache.values():
+                connection.close()
+
+        cache.cleanup = cleanup
+        driver.stop()
 
     def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS, quorum_piles=None):
-        response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
-        self.logger.debug("Update cluster state response: %s", response)
-        assert_that(response.operation.status, is_(expected_status))
+        deadline = time.monotonic() + 120
+        completed_states = {
+            PileState.PROMOTED: PileState.PRIMARY,
+            PileState.SUSPENDED: PileState.DISCONNECTED,
+            PileState.NOT_SYNCHRONIZED: PileState.SYNCHRONIZED,
+        }
+        while True:
+            response = client.update_cluster_state(updates, quorum_piles=quorum_piles)
+            self.logger.debug("Update cluster state response: %s", response)
+            transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
+                issue in str(response.operation.issues) for issue in (
+                    "No quorum to start propose/commit configuration", "Hop node disconnected",
+                )
+            )
+            if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:
+                break
+            # A request may have committed before its acknowledgement was lost.
+            current = self.get_cluster_state(client)
+            actual = {pile.pile_name: pile.state for pile in current.pile_states}
+            if updates and all(
+                actual.get(update.pile_name) in (update.state, completed_states.get(update.state, update.state))
+                for update in updates
+            ):
+                return bridge.UpdateClusterStateResult()
+            self.logger.warning("Retrying bridge update after transient error: %s", response.operation.issues)
+            time.sleep(1)
+        assert_that(response.operation.status, is_(expected_status), str(response))
         if expected_status == StatusIds.SUCCESS:
             result = bridge.UpdateClusterStateResult()
             response.operation.result.Unpack(result)

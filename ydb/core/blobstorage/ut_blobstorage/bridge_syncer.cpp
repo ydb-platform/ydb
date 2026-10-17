@@ -73,7 +73,14 @@ void TestLateSyncerCompletion(ECompletionRace race) {
     std::vector<NKikimrBlobStorage::TEvControllerUpdateSyncerState> reports;
     std::vector<NKikimrBlobStorage::TEvControllerUpdateSyncerState> registrations;
     const IEventHandle *replayEvent = nullptr;
-    runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+    runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+        // This test supplies assignments and group configurations directly to
+        // NodeWarden without changing BSC state. Background BSC updates must not
+        // replace these assignments or restart an already completed syncer.
+        if (nodeId == 1 && event->GetTypeRewrite() ==
+                TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType && event->Sender != sender) {
+            return false;
+        }
         if (event->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType &&
                 event->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->BridgeProxyGroupId.GetRawId() == groupId) {
             if (event.get() == replayEvent) {
@@ -148,6 +155,8 @@ void TestLateSyncerCompletion(ECompletionRace race) {
         UNIT_ASSERT(reports.front().GetSyncers(0).GetFinished());
         UNIT_ASSERT_VALUES_EQUAL(reports.front().GetSyncers(0).GetBridgeProxyGroupGeneration(), generation);
         assign(generation + 1, false);
+        // Ignore background registrations captured before the reconnect being tested.
+        registrations.clear();
         // Reconnect before the new group configuration arrives. Registration includes syncer state.
         runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender,
             new TEvTabletPipe::TEvClientDestroyed(env.TabletId, {}, {})), 1);

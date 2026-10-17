@@ -788,7 +788,8 @@ i64 TDqPqRdReadActor::GetAsyncInputData(
         Partitions[readyBatch.PartitionKey].Offset = readyBatch.NextOffset;
     }
 
-    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space " << (freeSpace - usedSpace) << ", result size " << usedSpace);
+    SRC_LOG_T("Return " << buffer.RowCount() << " rows, watermark " << watermark << ", buffer size " << ReadyBufferSizeBytes << ", free space "
+                        << (freeSpace - usedSpace) << ", result size " << usedSpace);
 
     ReadyBufferSizeBytes -= usedSpace;
     if (!ReadyBuffer.empty()) {
@@ -1171,11 +1172,10 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
 
         const auto& watermarksUs = message.GetWatermarksUs();
 
-        auto& activeBatch = Parent->ReadyBuffer.emplace(
-                partitionKey,
-                nextOffset,
-                watermarksUs.empty() ? Nothing() : TMaybe<TInstant>(TInstant::MicroSeconds(*std::max_element(watermarksUs.begin(), watermarksUs.end()))),
-                ev->Get()->GetPayload(message.GetPayloadId()));
+        auto& activeBatch = Parent->ReadyBuffer.emplace(partitionKey, nextOffset,
+            watermarksUs.empty() ? Nothing()
+                                 : TMaybe<TInstant>(TInstant::MicroSeconds(*std::max_element(watermarksUs.begin(), watermarksUs.end()))),
+            ev->Get()->GetPayload(message.GetPayloadId()));
         Parent->ReadyBufferSizeBytes += activeBatch.Data.size();
     }
 

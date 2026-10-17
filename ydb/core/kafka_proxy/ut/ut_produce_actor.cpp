@@ -96,11 +96,8 @@ namespace {
                 Ctx->Finalize();
             }
 
-<<<<<<< HEAD
             void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0) {
-=======
-            void SendProduce(TMaybe<TString> transactionalId = {}, ui64 producerId = 0, ui16 producerEpoch = 0, i32 baseSequence = 0, i32 partitionIndex = 0, i64 baseTimestamp = 0, i64 timestampDelta = 0, ECompressionType compression = ECompressionType::NONE) {
-                SendProduceToPartitions({partitionIndex}, transactionalId, producerId, producerEpoch, baseSequence, baseTimestamp, timestampDelta, compression);
+                SendProduceToPartitions({0}, transactionalId, producerId, producerEpoch, baseSequence);
             }
 
             void SendProduceToPartitions(
@@ -109,11 +106,7 @@ namespace {
                     ui64 producerId = 0,
                     ui16 producerEpoch = 0,
                     i32 baseSequence = 0,
-                    i64 baseTimestamp = 0,
-                    i64 timestampDelta = 0,
-                    ECompressionType compression = ECompressionType::NONE,
                     size_t recordsCount = 1) {
->>>>>>> cce5d0e3c38 (Backport client modification feature flag to stable-26-3-1 (#56054))
                 auto message = std::make_shared<NKafka::TProduceRequestData>();
                 if (transactionalId) {
                     message->TransactionalId = transactionalId->data();
@@ -121,7 +114,6 @@ namespace {
                 NKafka::TProduceRequestData::TTopicProduceData topicData;
                 topicData.Name = "my-topic";
                 NKafka::TProduceRequestData::TTopicProduceData::TPartitionProduceData partitionData;
-                partitionData.Index = 0;
                 NKafka::TKafkaRecords records(std::in_place);
                 records->ProducerId = producerId;
                 records->ProducerEpoch = producerEpoch;
@@ -130,26 +122,20 @@ namespace {
                 records->LastOffsetDelta = recordsCount - 1;
                 records->BaseSequence = baseSequence;
                 records->Magic = 2; // Current supported
-<<<<<<< HEAD
-                records->Records.resize(1);
-                records->Records[0].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
-                records->Records[0].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
-=======
-                records->BaseTimestamp = baseTimestamp;
-                records->Attributes = static_cast<i16>(compression);
                 records->Records.resize(recordsCount);
                 for (size_t i = 0; i < recordsCount; ++i) {
                     records->Records[i].OffsetDelta = i;
-                    records->Records[i].TimestampDelta = timestampDelta;
                     records->Records[i].Key = TKafkaRawBytes(KeyToProduce.data(), KeyToProduce.size());
                     records->Records[i].Value = TKafkaRawBytes(ValueToProduce.data(), ValueToProduce.size());
                 }
->>>>>>> cce5d0e3c38 (Backport client modification feature flag to stable-26-3-1 (#56054))
 
                 const TString serializedRecords = WriteKafkaRecordBatch(*records);
                 auto recordsBuffer = std::make_shared<TBuffer>(serializedRecords.data(), serializedRecords.size());
                 partitionData.Records = TKafkaRawBytes(recordsBuffer->data(), recordsBuffer->size());
-                topicData.PartitionData.push_back(partitionData);
+                for (auto partitionIndex : partitionIndexes) {
+                    partitionData.Index = partitionIndex;
+                    topicData.PartitionData.push_back(partitionData);
+                }
                 message->TopicData.push_back(topicData);
                 auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>(recordsBuffer, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
@@ -446,24 +432,28 @@ namespace {
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
+            size_t requests = 0;
             for (size_t size : {size_t(16), size_t(600 * 1024)}) {
                 for (size_t recordsCount : {size_t(1), size_t(2)}) {
                     for (const auto& transactionalId : {TMaybe<TString>{}, TMaybe<TString>{"transaction"}}) {
                         ValueToProduce = TString(size, 'x');
-                        SendProduceToPartitions({0, 1}, transactionalId, 0, 0, 0, 0, 0,
-                            ECompressionType::NONE, recordsCount);
-
-                        auto event = GrabProduceResponse();
-                        auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
-                        UNIT_ASSERT(response);
-                        UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 2);
-
-                        for (const auto& partition : response->Responses[0].PartitionResponses) {
-                            UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::POLICY_VIOLATION);
-                            UNIT_ASSERT_STRING_CONTAINS(TString(*partition.ErrorMessage), "Client data writes are disabled");
-                        }
+                        SendProduceToPartitions({0, 1}, transactionalId, 0, 0, 0, recordsCount);
+                        ++requests;
                     }
+                }
+            }
+
+            for (size_t i = 0; i < requests; ++i) {
+                auto event = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+                UNIT_ASSERT(event);
+                auto response = std::dynamic_pointer_cast<TProduceResponseData>(event->Response);
+                UNIT_ASSERT(response);
+                UNIT_ASSERT_VALUES_EQUAL(response->Responses.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(response->Responses[0].PartitionResponses.size(), 2);
+
+                for (const auto& partition : response->Responses[0].PartitionResponses) {
+                    UNIT_ASSERT_VALUES_EQUAL(partition.ErrorCode, EKafkaErrors::POLICY_VIOLATION);
+                    UNIT_ASSERT_STRING_CONTAINS(TString(*partition.ErrorMessage), "Client data writes are disabled");
                 }
             }
 

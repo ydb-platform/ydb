@@ -30,6 +30,11 @@ struct TBinding {
     TVector<std::pair<TString, TString>> Headers;
     std::shared_ptr<ITvmTicketProvider> TvmProvider;
     TTvmCredentials TvmCredentials;
+    // A host-selected WASM auth provider is scoped to the owning compartment.
+    // Never accepted in the guest request envelope or bootstrap transport.
+    std::shared_ptr<ICredentialProvider> AuthProvider;
+    TString AuthHeader;
+    TString AuthAlias;
     TString CaFile;
     TString CaCertificate;
     std::shared_ptr<grpc::ChannelCredentials> GrpcCredentials;

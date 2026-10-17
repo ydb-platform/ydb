@@ -4,7 +4,7 @@ YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
 
-SRCS(tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
+SRCS(auth_ut.cpp tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
 
 PEERDIR(
     library/cpp/http/server
@@ -36,5 +36,8 @@ RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/profile/ut/data/profile.wasm /fq_transpor
 RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/ut/data/echo.wasm /echo_service.wasm)
 RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/profile/manifest.json /ydb/udfs/wasm/profile/manifest.json)
 RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/manifest.json /ydb/udfs/wasm/echo/manifest.json)
+
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm /auth_test.wasm)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/auth_test/manifest.json /auth_test_manifest.json)
 
 END()

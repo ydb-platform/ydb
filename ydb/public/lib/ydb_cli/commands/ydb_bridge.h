@@ -65,7 +65,7 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
-    TString DownPile;
+    TVector<TString> DownPiles;
     TString NewPrimaryPile;
 };
 

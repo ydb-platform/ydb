@@ -490,7 +490,10 @@ private:
         stats.FromCache = false;
         stats.DurationUs = (TInstant::Now() - StartTime).MicroSeconds();
         stats.CpuTimeUs = CompileCpuTime.MicroSeconds();
-        ReleaseExprNodes();
+        if (SplitCtx) {
+            // a step of a split query shares its nodes with the session actor
+            ReleaseExprNodes();
+        }
         Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
@@ -504,6 +507,7 @@ private:
 
     // Expression nodes of a split query are shared with the session actor, and their reference counters are not atomic.
     // They are released before the reply is sent, so that the session actor can release its references only after this.
+    // Other queries keep releasing them on PassAway, after the reply.
     void ReleaseExprNodes() {
         AsyncSplitResult.Reset();
         AsyncCompileResult.Reset();

@@ -2,6 +2,7 @@
 #include "integration.h"
 
 #include <ydb/core/external_sources/external_service.h>
+#include <ydb/core/fq/libs/wasm_services/query/auth.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/providers/function/provider/dq_function_provider.h>
@@ -49,12 +50,19 @@ void RegisterKqpWasmServiceTransforms(NYql::NDq::TDqAsyncIoFactory& factory, con
         tvmProvider = CreateTvmTicketProvider();
     }
     RegisterServiceTransformsWithResolver(
-        factory, config, [tvmProvider](const TString& invocation, const THashMap<TString, TString>& secureParams) {
+        factory, config, [tvmProvider, config](const TString& invocation, const THashMap<TString, TString>& secureParams) {
             const auto settings = NExternalSource::TServiceConnectionSettings::Deserialize(ServiceInvocationSettings(invocation));
             TBinding binding;
             binding.Protocol = settings.Protocol == "HTTP" ? EProtocol::Http : EProtocol::Grpc;
             binding.Endpoint = settings.Endpoint;
             binding.CaCertificate = settings.CaCertificate;
+            if (settings.AuthProvider) {
+                binding.AuthConnection = std::make_shared<TAuthConnection>();
+                binding.AuthConnection->Provider = settings.AuthProvider;
+                binding.AuthConnection->Parameters = settings.AuthParameters;
+                binding.AuthConnection->Identity = ServiceInvocationConnection(invocation);
+                binding.AuthConnection->ResolveSecret = CreateAuthSecretResolver(config, secureParams);
+            }
             if (settings.SecretReference) {
                 const auto entry = secureParams.find(ServiceConnectionKey(ServiceInvocationConnection(invocation)));
                 Y_ENSURE(entry != secureParams.end(), "External service credential is unavailable");

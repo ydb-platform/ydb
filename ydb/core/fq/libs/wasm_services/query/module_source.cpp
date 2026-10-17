@@ -28,7 +28,7 @@ public:
 
     TWasmModuleArtifactPtr Load(const TString& name) override {
         auto module = GetWasmModuleCatalog().FindByModuleName(name);
-        Y_ENSURE(module && module->Manifest.Services, "WASM service module is not loaded in UDF Store");
+        Y_ENSURE(module && (module->Manifest.Services || module->Manifest.Auth), "WASM service/auth module is not loaded in UDF Store");
         return module;
     }
 };
@@ -51,7 +51,7 @@ public:
             const TFile file(manifestPath, RdOnly);
             Y_ENSURE(file.GetLength() <= 65536, "WASM service manifest exceeds byte limit");
             auto manifest = ParseManifest(TFileInput(file).ReadAll());
-            Y_ENSURE(manifest.Services, "Expected a WASM service module manifest");
+            Y_ENSURE(manifest.Services || manifest.Auth, "Expected a WASM service module manifest");
             Y_ENSURE(manifest.RequiredLibraries.empty(), "Local WASM services require self-contained modules");
             const auto name = manifest.ModuleName;
             Y_ENSURE(Modules.emplace(name, TEntry{ path, std::move(manifest), {} }).second, "Duplicate WASM service module name");
@@ -68,7 +68,9 @@ public:
     TVector<TServiceManifest> Describe() const override {
         TVector<TServiceManifest> result;
         for (const auto& [_, entry] : Modules) {
-            result.push_back(*entry.Manifest.Services);
+            if (entry.Manifest.Services) {
+                result.push_back(*entry.Manifest.Services);
+            }
         }
         return result;
     }

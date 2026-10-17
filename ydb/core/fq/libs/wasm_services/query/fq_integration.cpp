@@ -1,3 +1,4 @@
+#include "auth.h"
 #include "query.h"
 
 #include <ydb/core/fq/libs/common/external_service.h>
@@ -42,7 +43,7 @@ void RegisterServiceTransforms(NYql::NDq::TDqAsyncIoFactory& factory, const NCon
         tvmProvider = CreateTvmTicketProvider();
     }
     RegisterServiceTransformsWithResolver(
-        factory, config, [tvmProvider](const TString& invocation, const THashMap<TString, TString>& secureParams) {
+        factory, config, [tvmProvider, config](const TString& invocation, const THashMap<TString, TString>& secureParams) {
             const auto entry = secureParams.find(ServiceConnectionKey(ServiceInvocationConnection(invocation)));
             Y_ENSURE(entry != secureParams.end(), "External service connection is unavailable");
             FederatedQuery::ExternalService service;
@@ -54,6 +55,13 @@ void RegisterServiceTransforms(NYql::NDq::TDqAsyncIoFactory& factory, const NCon
             binding.CaCertificate = service.ca_certificate();
             for (const auto& [key, value] : service.headers()) {
                 binding.Headers.emplace_back(key, value);
+            }
+            if (service.has_wasm_auth()) {
+                binding.AuthConnection = std::make_shared<TAuthConnection>();
+                binding.AuthConnection->Provider = service.wasm_auth().provider();
+                binding.AuthConnection->Parameters = service.wasm_auth().parameters();
+                binding.AuthConnection->Identity = ServiceInvocationConnection(invocation);
+                binding.AuthConnection->ResolveSecret = CreateAuthSecretResolver(config, secureParams);
             }
             if (service.has_tvm_auth()) {
                 Y_ENSURE(tvmProvider->IsAvailable(),

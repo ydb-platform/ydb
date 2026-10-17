@@ -24,7 +24,9 @@ enum class EProtocol {
 
 // Trusted, already resolved binding supplied by the owner, never by guest code.
 // Metadata/ACL resolution belongs to the query engine; TVM ticket refresh belongs to the provider.
+struct TAuthConnection;
 struct TBinding {
+    std::shared_ptr<TAuthConnection> AuthConnection;
     EProtocol Protocol = EProtocol::Http;
     TString Endpoint;
     TVector<std::pair<TString, TString>> Headers;

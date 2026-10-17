@@ -3,6 +3,7 @@ import concurrent.futures
 import http.server
 import json
 import ssl
+import struct
 import threading
 from pathlib import Path
 
@@ -12,6 +13,10 @@ from ydb.udfs.wasm.profile.proto.schema import profile_pb2
 
 class MockServices:
     def __init__(self, http_port=0, grpc_port=0, certificate=None, private_key=None, require_tvm_ticket=False):
+        self.auth_requests = []
+        self.auth_headers = []
+        self.auth_secret = None
+        self.auth_ttl_ms = 60000
         self.requests = []
         self.tvm_tickets = []
         self.require_tvm_ticket = require_tvm_ticket
@@ -24,6 +29,22 @@ class MockServices:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if self.path == '/auth':
+                    with owner.lock:
+                        owner.auth_requests.append(body)
+                    accepted = body == owner.auth_secret
+                    ticket = b'synthetic-auth-ticket'
+                    payload = struct.pack('<IIQ', 1, len(ticket), owner.auth_ttl_ms) + ticket if accepted else b''
+                    self.send_response(200 if accepted else 403)
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                if not owner.check_wasm_auth('http', self.headers.get('X-Auth-Test')):
+                    self.send_response(401)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 if not owner.check_tvm_ticket('http', self.headers.get('X-Ya-Service-Ticket')):
                     self.send_response(401)
                     self.send_header('Content-Length', '0')
@@ -90,7 +111,16 @@ class MockServices:
         # Deliberately only checks presence, not TVM signatures or claims.
         return not self.require_tvm_ticket or bool(ticket)
 
+    def check_wasm_auth(self, protocol, ticket):
+        if self.auth_secret is None:
+            return True
+        with self.lock:
+            self.auth_headers.append((protocol, ticket))
+        return ticket == 'synthetic-auth-ticket'
+
     def check_grpc_tvm_ticket(self, context):
+        if not self.check_wasm_auth('grpc', dict(context.invocation_metadata()).get('x-auth-test')):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing test auth header')
         ticket = dict(context.invocation_metadata()).get('x-ya-service-ticket')
         if not self.check_tvm_ticket('grpc', ticket):
             context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing x-ya-service-ticket')

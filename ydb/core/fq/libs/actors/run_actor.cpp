@@ -25,6 +25,7 @@
 #include <ydb/core/fq/libs/wasm_services/tracing.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -62,6 +63,7 @@
 #include <library/cpp/json/yson/json2yson.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/scheme/scheme.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <util/string/split.h>
 #include <util/system/hostname.h>
@@ -1577,6 +1579,11 @@ private:
     void FillServiceConnectionParams(Yql::DqsProto::ExecuteGraphRequest& request) {
         if (!Params.Config.GetWasmServices().GetEnabled()) {
             return;
+        }
+        if (!Params.UserId.empty() && !Params.Config.GetWasmServices().GetAuthSecretDatabase().empty()) {
+            const NACLib::TUserToken identity(Params.UserId, TVector<TString>{});
+            (*request.MutableSecureParams())["wasm.auth.identity"] = Base64Encode(identity.SerializeAsString());
+            (*request.MutableSecureParams())["wasm.auth.database"] = Params.Config.GetWasmServices().GetAuthSecretDatabase();
         }
         for (const auto& task : request.GetTask()) {
             for (const auto& output : task.GetOutputs()) {

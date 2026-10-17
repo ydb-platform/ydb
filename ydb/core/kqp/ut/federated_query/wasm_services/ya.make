@@ -19,6 +19,9 @@ PEERDIR(
 RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/ut/data/echo.wasm /echo.wasm)
 RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/echo/manifest.json /echo.manifest)
 
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm /auth.wasm)
+RESOURCE(${ARCADIA_ROOT}/ydb/udfs/wasm/auth_test/manifest.json /auth.manifest)
+
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -3,6 +3,7 @@
 
 #include <ydb/core/fq/libs/common/external_service.h>
 #include <ydb/core/fq/libs/common/util.h>
+#include <ydb/core/fq/libs/wasm_services/query/auth.h>
 #include <ydb/core/fq/libs/wasm_services/query/module_source.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 
@@ -113,7 +114,8 @@ struct TQueryTransformEnv {
     NYql::NDq::IDqOutputChannel::TPtr RealChannel;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
-        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false)
+        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false,
+        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {})
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -130,6 +132,9 @@ struct TQueryTransformEnv {
         config.SetMaxBatchBytes(batchBytes);
         config.SetMaxBufferedRows(maxBufferedRows);
         config.SetMaxBufferedBytes(maxBufferedBytes);
+        if (configure) {
+            configure(config);
+        }
         auto connection = TestServiceConnection("profiles");
         auto* entry = connection.mutable_content()->mutable_setting()->mutable_external_service();
         entry->set_endpoint(binding.Endpoint);
@@ -144,6 +149,11 @@ struct TQueryTransformEnv {
             } else {
                 (*entry->mutable_headers())[key] = value;
             }
+        }
+        if (binding.AuthConnection) {
+            entry->clear_auth();
+            entry->mutable_wasm_auth()->set_provider(binding.AuthConnection->Provider);
+            entry->mutable_wasm_auth()->set_parameters(binding.AuthConnection->Parameters);
         }
         if (binding.Protocol == EProtocol::Grpc) {
             entry->set_protocol(FederatedQuery::ExternalService::GRPC);

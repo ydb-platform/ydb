@@ -138,7 +138,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::ExternalService),
             CreateExternalDataSource(TString{NYql::FunctionProviderName}, {"NONE", "TOKEN"},
-                {"protocol", "use_tls", "ca_certificate", "tvm_source_id", "tvm_destination_id"}, hostnamePatternsRegEx)
+                {"protocol", "use_tls", "ca_certificate", "tvm_source_id", "tvm_destination_id", "auth_provider", "auth_parameters"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

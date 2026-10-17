@@ -1,3 +1,5 @@
+* Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
+
 * Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
 
 * Fixed table and query sessions being reused after commit or rollback errors that require closing the session.

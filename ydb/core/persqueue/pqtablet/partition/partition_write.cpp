@@ -1653,6 +1653,26 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     if (lastBlobPart) {
+        // One multipart message may span several KV write cycles. For example,
+        // A was persisted in a previous cycle; B and C are still pending writes:
+        //
+        //   KV:          tmp_A -> payload_A
+        //   request:     CmdWrite(tmp_B, payload_B), CmdWrite(tmp_C, payload_C)
+        //   formedBlobs: [A: tmp_A -> data_A] [B: tmp_B -> data_B] [C: tmp_C -> data_C]
+        //
+        // RenameTmpCmdWrites changes the keys INSIDE the pending CmdWrite commands
+        // to data_B and data_C and returns curWrites = 2. It does not rename A in KV.
+        // The last curWrites entries of formedBlobs correspond to these pending
+        // writes; only the earlier entries need an actual CmdRename in KV.
+        // Thus RenameFormedBlobs uses i + curWrites < formedBlobs.size():
+        // for three blobs and curWrites = 2, only A (i = 0) needs CmdRename.
+        //
+        //   Resulting request (command order omitted):
+        //     CmdRename(tmp_A -> data_A)
+        //     CmdWrite(data_B, payload_B)
+        //     CmdWrite(data_C, payload_C)
+        //
+        // Parts still in PartitionedBlob.Blobs are handled below via NewHead.
         PQ_ENSURE(BlobEncoder.PartitionedBlob.IsComplete());
         ui32 curWrites = RenameTmpCmdWrites(request);
         PQ_ENSURE(curWrites <= BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
@@ -1717,8 +1737,18 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 
     BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
     PQ_ENSURE(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
+    // Fast write does not retain Head batches or DataKeysHead entries between
+    // write cycles: SyncHeadFastWrite moves persisted keys to DataKeysBody and
+    // clears the levels. Thus the only key here describes the entire NewHead.
+    // Compact reuses the shared level machinery and may promote this single key
+    // through size thresholds; it does not merge it with previously written blobs.
+    // The resulting key still covers exactly NewHead, so SerializeForKey writes
+    // only NewHead batches here (Head is empty).
+    // TODO: Simplify fast write by removing the DataKeysHead insertion and this
+    // Compact call; return {key, NewHead.PackedSize} directly, keeping the relevant
+    // invariant checks. There are no previous head keys to merge in this path.
     auto res = BlobEncoder.Compact(key, headCleared);
-    PQ_ENSURE(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
+    PQ_ENSURE(res.first.HasSuffix());
     PQ_ENSURE(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
     PQ_ENSURE(res.second <= MaxBlobSize);
 

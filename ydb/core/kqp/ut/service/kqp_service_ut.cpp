@@ -1127,12 +1127,13 @@ struct TDictCase {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
+        // Check the KQP retry result without SDK retries and their real-time backoff.
         auto result = kikimr.RunCall([&queryClient]() {
             return queryClient.ExecuteQuery(R"(
                 SELECT COUNT(*) AS cnt, SUM(Data) AS sum_data
                 FROM `/Root/LargeTable`
                 LIMIT 100
-            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_C(bouncedRequests > 0, "The query did not send a single TEvStartKqpTasksRequest, "

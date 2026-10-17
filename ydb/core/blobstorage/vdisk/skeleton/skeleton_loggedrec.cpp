@@ -247,12 +247,14 @@ namespace NKikimr {
             bool confirmSyncLogAlso,
             std::unique_ptr<TEvLocalSyncDataResult> result,
             TEvLocalSyncData::TPtr origEv,
-            TActorId syncLogActorId)
+            TActorId syncLogActorId,
+            TActorId replActorId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Result(std::move(result))
         , OrigEv(origEv)
         , Span(TWilson::VDiskInternals, std::move(OrigEv->TraceId), "VDisk.LoggedRecLocalSyncData")
         , SyncLogActorId(syncLogActorId)
+        , ReplActorId(replActorId)
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
@@ -269,6 +271,11 @@ namespace NKikimr {
 #else
         hull.AddSyncDataCmd(ctx, OrigEv->Get()->Data, Seg, replySender);
 #endif
+        if (ReplActorId && OrigEv->Get()->LogoBlobsSize) {
+            // The index is now applied; coalesce a new replication pass at the scheduler.
+            ctx.Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, ReplActorId,
+                ctx.SelfID, nullptr, 1));
+        }
         Span.EndOk();
         SendVDiskResponse(ctx, OrigEv->Sender, Result.release(), OrigEv->Cookie, vCtx, {});
         TActivationContext::Send(std::unique_ptr<IEventHandle>(OrigEv->Forward(SyncLogActorId).Release()));

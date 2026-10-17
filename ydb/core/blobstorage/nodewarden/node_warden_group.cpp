@@ -292,7 +292,9 @@ namespace NKikimr::NStorage {
 
             if (const auto& info = group.Info) {
                 Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
-                for (auto& vdisk : group.VDisksOfGroup) {
+                for (auto it = group.VDisksOfGroup.begin(); it != group.VDisksOfGroup.end(); ) {
+                    auto& vdisk = *it++;
+                    // A policy change can restart and unlink the current VDisk.
                     UpdateGroupInfoForDisk(vdisk, info);
                 }
             }

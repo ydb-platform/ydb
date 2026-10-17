@@ -416,6 +416,86 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
+
+    Y_UNIT_TEST(SingleDcModePersistence) {
+        TEnvironmentSetup env(9, 3);
+        bool active = false;
+        env.Prepare("single-dc", [](TTestActorRuntime&) {}, active);
+        NKikimrBlobStorage::TConfigRequest request;
+        env.DefineBox(1, "test box", {{"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0}}, env.GetNodes(), request);
+        env.DefineStoragePool(1, 1, "pool", 1, NKikimrBlobStorage::ROT, {}, request, "mirror-3-dc");
+        const auto setupResponse = env.Invoke(request);
+        UNIT_ASSERT_C(setupResponse.GetSuccess(), setupResponse.GetErrorDescription());
+        auto query = [&] {
+            NKikimrBlobStorage::TConfigRequest req;
+            req.AddCommand()->MutableQueryBaseConfig();
+            auto response = env.Invoke(req);
+            UNIT_ASSERT(response.GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).GetBaseConfig().GroupSize(), 1);
+            return response.GetStatus(0).GetBaseConfig().GetGroup(0);
+        };
+        auto group = query();
+        UNIT_ASSERT(!group.GetEnableSingleDcMode());
+        auto checkServiceSet = [&] {
+            const auto sender = env.Runtime->AllocateEdgeActor(0);
+            const auto pipe = env.Runtime->ConnectToPipe(env.TabletId, sender, 0, GetPipeConfigWithRetries());
+            const ui32 nodeId = env.Runtime->GetNodeId(0);
+            const auto previousWarden = env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), sender, 0);
+            env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerRegisterNode(
+                nodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
+            env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+            env.Runtime->SendToPipe(pipe, sender, new TEvBlobStorage::TEvControllerGetGroup(nodeId, group.GetGroupId()));
+            const auto response = env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(
+                sender, TDuration::Seconds(10));
+            UNIT_ASSERT(response);
+            bool found = false;
+            for (const auto& info : response->Get()->Record.GetServiceSet().GetGroups()) {
+                if (info.GetGroupID() == group.GetGroupId()) {
+                    found = true;
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetGroupGeneration(), group.GetGroupGeneration());
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetEnableSingleDcMode(), group.GetEnableSingleDcMode());
+                    UNIT_ASSERT_VALUES_EQUAL(info.HasSurvivingDc(), group.HasSurvivingDc());
+                    if (info.HasSurvivingDc()) {
+                        UNIT_ASSERT_VALUES_EQUAL(info.GetSurvivingDc(), group.GetSurvivingDc());
+                    }
+                }
+            }
+            UNIT_ASSERT(found);
+            env.Runtime->RegisterService(MakeBlobStorageNodeWardenID(nodeId), previousWarden, 0);
+        };
+        checkServiceSet();
+        auto set = [&](bool enabled, ui32 realm, ui32 generation) {
+            NKikimrBlobStorage::TConfigRequest req;
+            auto *cmd = req.AddCommand()->MutableSetGroupSingleDcMode();
+            cmd->SetGroupId(group.GetGroupId());
+            cmd->SetGroupGeneration(generation);
+            cmd->SetEnableSingleDcMode(enabled);
+            if (enabled) cmd->SetSurvivingDc(realm);
+            return env.Invoke(req);
+        };
+        UNIT_ASSERT(!set(true, 3, group.GetGroupGeneration()).GetSuccess());
+        const ui32 oldGeneration = group.GetGroupGeneration();
+        UNIT_ASSERT(set(true, 0, oldGeneration).GetSuccess());
+        group = query();
+        UNIT_ASSERT(group.GetEnableSingleDcMode());
+        UNIT_ASSERT(group.HasSurvivingDc());
+        UNIT_ASSERT_VALUES_EQUAL(group.GetSurvivingDc(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), oldGeneration + 1);
+        checkServiceSet();
+        UNIT_ASSERT(!set(true, 1, oldGeneration).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        group = query();
+        UNIT_ASSERT(group.GetEnableSingleDcMode());
+        UNIT_ASSERT(group.HasSurvivingDc());
+        UNIT_ASSERT_VALUES_EQUAL(group.GetSurvivingDc(), 0);
+        checkServiceSet();
+        UNIT_ASSERT(set(false, 0, group.GetGroupGeneration()).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        group = query();
+        UNIT_ASSERT(!group.GetEnableSingleDcMode());
+        UNIT_ASSERT(!group.HasSurvivingDc());
+        checkServiceSet();
+    }
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
         RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {

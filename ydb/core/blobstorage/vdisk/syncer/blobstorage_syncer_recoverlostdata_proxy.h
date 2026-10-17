@@ -15,6 +15,10 @@ namespace NKikimr {
     } // NSyncer
 
 
+    struct TEvCancelSyncerRecovery
+        : TEventLocal<TEvCancelSyncerRecovery, EventSpaceBegin(TKikimrEvents::ES_PRIVATE)>
+    {};
+
     ////////////////////////////////////////////////////////////////////////////
     // TEvSyncerFullSyncedWithPeer
     ////////////////////////////////////////////////////////////////////////////

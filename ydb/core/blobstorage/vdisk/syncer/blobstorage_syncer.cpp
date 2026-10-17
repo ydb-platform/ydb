@@ -286,6 +286,9 @@ namespace NKikimr {
             auto selfVDiskId = GInfo->GetVDiskId(SyncerCtx->VCtx->ShortSelfVDisk);
             PropagatorIds.reserve(SyncerCtx->VCtx->Top->GetTotalVDisksNum());
             for (auto &x : neighbors) {
+                if (!GInfo->IsVDiskInActiveRealm(x.VDiskIdShort)) {
+                    continue;
+                }
                 const TVDiskID vd = GInfo->GetVDiskId(x.OrderNumber);
                 const TActorId va = GInfo->GetActorId(x.OrderNumber);
                 auto aid = ctx.Register(CreateSyncerGuidPropagator(SyncerCtx->VCtx,
@@ -727,10 +730,21 @@ namespace NKikimr {
             Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
                 SyncerCtx->VCtx->VDiskLogPrefix);
 
+            const bool policyChanged = GInfo->EnableSingleDcMode != msg->NewInfo->EnableSingleDcMode
+                || GInfo->SurvivingDc != msg->NewInfo->SurvivingDc;
             GInfo = msg->NewInfo;
             // reconfigure scheduler
             if (SchedulerId) {
                 ctx.Send(SchedulerId, msg->Clone());
+            }
+            if (policyChanged) {
+                for (const auto& aid : PropagatorIds) {
+                    ctx.Send(aid, new TEvents::TEvPoisonPill);
+                    ActiveActors.Erase(aid);
+                }
+                PropagatorIds.clear();
+                RunPropagators(ctx);
+                return;
             }
             // reconfigure propagators
             for (const auto &aid : PropagatorIds) {

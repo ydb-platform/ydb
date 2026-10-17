@@ -243,6 +243,7 @@ inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode st
 }
 
 struct TComputeRuntimeSettings {
+    std::shared_ptr<const NWilson::TTraceId> TraceId;
     TMaybe<TDuration> Timeout;
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     TMaybe<TReportStatsSettings> ReportStatsSettings;

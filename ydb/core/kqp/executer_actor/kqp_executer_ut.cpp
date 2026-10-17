@@ -238,14 +238,22 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         )", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
     */
-    Y_UNIT_TEST(OversizedTaskReturnsLimitExceeded) {
+    // A task for another node exceeds the size limit, which is found out after compute actors of local tasks have been
+    // started. With delayAbortAfterTaskState, the abort the executer takes from planning is held until a local
+    // compute actor reports its state: with real threads that compute actor may run before the executer gets to
+    // sending the abort to itself.
+    void CheckOversizedTask(bool delayAbortAfterTaskState) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
         serverSettings.SetNodeCount(2);
+        serverSettings.SetUseRealThreads(!delayAbortAfterTaskState);
         TKikimrRunner kikimr(serverSettings);
+        auto call = [&](auto&& f) {
+            return delayAbortAfterTaskState ? kikimr.RunCall(f) : f();
+        };
 
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto db = call([&] { return kikimr.GetTableClient(); });
+        auto session = call([&] { return db.CreateSession().GetValueSync().GetSession(); });
 
         TString tableName = "/Root/TestLimitSize";
         const int column_count = 49;
@@ -268,8 +276,9 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             }
             tableBuilder.SetPrimaryKeyColumns({"Key"}).SetPartitionAtKeys(
                 partitions);
-            auto result = session.CreateTable(tableName, tableBuilder.Build())
-                              .ExtractValueSync();
+            auto result = call([&] {
+                return session.CreateTable(tableName, tableBuilder.Build()).ExtractValueSync();
+            });
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -287,7 +296,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             }
             rows.EndList();
 
-            auto res = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            auto res = call([&] { return db.BulkUpsert(tableName, rows.Build()).GetValueSync(); });
             Cerr << res.GetIssues().ToString();
             UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
@@ -306,12 +315,38 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         }
         query << "FROM `/Root/TestLimitSize`;";
 
+        std::unique_ptr<IEventHandle> heldAbort;
+        bool taskStateSeen = false;
+        if (delayAbortAfterTaskState) {
+            auto& runtime = *kikimr.GetTestServer().GetRuntime();
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvKqp::TEvAbortExecution::EventType && ev->Sender == ev->Recipient
+                        && !taskStateSeen && !heldAbort) {
+                    heldAbort.reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                if (ev->GetTypeRewrite() == TKqpComputeEvents::EvState && heldAbort
+                        && ev->GetRecipientRewrite() == heldAbort->Recipient && !taskStateSeen) {
+                    // the abort follows right after this state report
+                    taskStateSeen = true;
+                    const ui32 nodeIndex = heldAbort->Recipient.NodeId() - runtime.GetNodeId(0);
+                    runtime.Send(heldAbort.release(), nodeIndex, true);
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            });
+        }
+        Y_DEFER {
+            if (delayAbortAfterTaskState) {
+                kikimr.GetTestServer().GetRuntime()->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+            }
+        };
+
         ui64 oldSize = GetMaxTaskSize();
         SetMaxTaskSize(200_KB);
         Y_DEFER { SetMaxTaskSize(oldSize); };
-        auto result =
-            session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx())
-                .ExtractValueSync();
+        auto result = call([&] {
+            return session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
 
         UNIT_ASSERT(!result.IsSuccess());
         // After the fix: NDqProto::LIMIT_EXCEEDED ->
@@ -322,6 +357,14 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                                    result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
                                     "Datashard program size limit exceeded");
+    }
+
+    Y_UNIT_TEST(OversizedTaskReturnsLimitExceeded) {
+        CheckOversizedTask(false);
+    }
+
+    Y_UNIT_TEST(OversizedTaskReturnsLimitExceededAfterLocalTaskState) {
+        CheckOversizedTask(true);
     }
 }
 

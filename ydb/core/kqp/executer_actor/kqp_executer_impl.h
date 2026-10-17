@@ -1664,7 +1664,12 @@ protected:
 
         auto err = Planner->PlanExecution();
         if (err) {
-            TlsActivationContext->Send(err.release());
+            // Planning may fail after compute actors of local tasks have been started, and they report their state
+            // to the executer at once. Handle the abort here rather than by an event to self: the executer is still
+            // in a state that does not expect them, and an event of theirs coming first would replace the abort
+            // reason by an internal error.
+            auto* abort = err->Get<TEvKqp::TEvAbortExecution>();
+            HandleAbortExecution(abort->Record.GetStatusCode(), abort->GetIssues(), false);
             return false;
         }
 

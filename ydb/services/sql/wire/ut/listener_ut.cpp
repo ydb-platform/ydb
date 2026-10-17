@@ -281,4 +281,37 @@ Y_UNIT_TEST_SUITE(SqlListener) {
         UNIT_ASSERT(SendAll(*again, StartupMessage(database)));
         UNIT_ASSERT(HasReadyForQuery(ReadReply(*again)));
     }
+
+    // psql 16.9 (--no-psqlrc, interactive \\q) and PostgreSQL 18 libpq send no SQL
+    // before the prompt. The stub answers the catalog reads named for that handshake.
+    Y_UNIT_TEST(CatalogStartupQueries) {
+        TPortManager ports;
+        const ui16 sqlPort = ports.GetTcpPort();
+        TServer server(SqlSettings(ports.GetTcpPort(), sqlPort));
+        const TString database = "/" + server.GetSettings().DomainName;
+
+        auto session = Open(sqlPort);
+        UNIT_ASSERT(session);
+        UNIT_ASSERT(SendAll(*session, StartupMessage(database)));
+        UNIT_ASSERT(HasReadyForQuery(ReadReply(*session)));
+
+        UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT version()")));
+        const TString version = ReadReply(*session);
+        UNIT_ASSERT_C(version.Contains("PostgreSQL 18.0"), version);
+        UNIT_ASSERT(HasReadyForQuery(version));
+        UNIT_ASSERT(!version.Contains("0A000"));
+
+        UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT oid, typname FROM pg_catalog.pg_type")));
+        const TString types = ReadReply(*session);
+        UNIT_ASSERT_C(types.Contains("bool"), types);
+        UNIT_ASSERT(types.Contains("int8"));
+        UNIT_ASSERT(HasReadyForQuery(types));
+        UNIT_ASSERT(!types.Contains("0A000"));
+
+        UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT * FROM pg_catalog.pg_class")));
+        const TString extra = ReadReply(*session);
+        UNIT_ASSERT(extra.Contains("0A000"));
+        UNIT_ASSERT(extra.Contains("not supported"));
+        UNIT_ASSERT(HasReadyForQuery(extra));
+    }
 }

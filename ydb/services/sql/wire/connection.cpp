@@ -1,5 +1,6 @@
 #include "connection.h"
 
+#include "catalog.h"
 #include "protocol.h"
 
 #include <ydb/core/base/path.h>
@@ -179,6 +180,19 @@ private:
             if (message.Type == 'X') {
                 PassAway();
                 return false;
+            }
+            if (message.Type == 'Q') {
+                TStringBuf sql(message.Payload);
+                if (sql.EndsWith('\0')) {
+                    sql.Chop(1);
+                }
+                TString catalogReply;
+                if (TryAnswerCatalog(sql, catalogReply)) {
+                    if (!Write(catalogReply)) {
+                        return false;
+                    }
+                    continue;
+                }
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());

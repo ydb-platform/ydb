@@ -1,5 +1,7 @@
 #include "protocol.h"
 
+#include <util/string/cast.h>
+
 namespace NKikimr::NSql {
 
 namespace {
@@ -7,6 +9,14 @@ namespace {
 ui32 ReadBe32(const char* data) {
     const auto* bytes = reinterpret_cast<const unsigned char*>(data);
     return (ui32(bytes[0]) << 24) | (ui32(bytes[1]) << 16) | (ui32(bytes[2]) << 8) | ui32(bytes[3]);
+}
+
+void AppendBe16(TString& out, ui16 value) {
+    char bytes[2] = {
+        static_cast<char>((value >> 8) & 0xff),
+        static_cast<char>(value & 0xff),
+    };
+    out.append(bytes, 2);
 }
 
 void AppendBe32(TString& out, ui32 value) {
@@ -147,6 +157,37 @@ TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message) {
     AppendCString(payload, message);
     payload.push_back('\0');
     return MakeMessage('E', payload);
+}
+
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TString>> rows) {
+    TString description;
+    AppendBe16(description, static_cast<ui16>(columns.size()));
+    for (const TResultColumn& column : columns) {
+        AppendCString(description, column.Name);
+        AppendBe32(description, 0);
+        AppendBe16(description, 0);
+        AppendBe32(description, column.TypeOid);
+        AppendBe16(description, static_cast<ui16>(column.TypeSize));
+        AppendBe32(description, static_cast<ui32>(-1));
+        AppendBe16(description, 0);
+    }
+
+    TString out = MakeMessage('T', description);
+    for (const TVector<TString>& row : rows) {
+        TString data;
+        AppendBe16(data, static_cast<ui16>(row.size()));
+        for (const TString& value : row) {
+            AppendBe32(data, static_cast<ui32>(value.size()));
+            data.append(value);
+        }
+        out.append(MakeMessage('D', data));
+    }
+
+    TString complete = "SELECT " + ToString(rows.size());
+    complete.push_back('\0');
+    out.append(MakeMessage('C', complete));
+    out.append(MakeReadyForQuery());
+    return out;
 }
 
 TString MakeHandshake(ui32 backendPid, ui32 secret) {

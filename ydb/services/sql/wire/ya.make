@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    catalog.cpp
     connection.cpp
     listener.cpp
     protocol.cpp

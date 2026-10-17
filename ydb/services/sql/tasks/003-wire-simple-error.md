@@ -1,7 +1,7 @@
 # Simple query отвечает 0A000
 
-status: pending
-commit:
+status: done
+commit: 0b1adb6efb4e2586fff2694eecc0a81623886f4c
 id: wire-simple-error
 depends: wire-startup
 

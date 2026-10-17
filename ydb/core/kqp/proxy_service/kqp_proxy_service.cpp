@@ -26,6 +26,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/core/kqp/federated_query/actors/lookup_actor/kikimr_lookup_session_pool_service.h>
 #include <ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/pq_checkpoint_provider_integration.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
@@ -533,6 +534,7 @@ public:
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+        InitDqSourceStreamLookupJoinQueryPoolService();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -646,6 +648,9 @@ public:
         if (AccessServiceService) {
             Send(AccessServiceService, new TEvents::TEvPoison());
         }
+        if (DqSourceStreamLookupJoinQueryPoolService) {
+            Send(DqSourceStreamLookupJoinQueryPoolService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -701,6 +706,7 @@ public:
         InitCheckpointStorage();
         InitDescribeResourceIdService();
         InitAccessServiceService();
+        InitDqSourceStreamLookupJoinQueryPoolService();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -2412,6 +2418,16 @@ private:
         }
     }
 
+    void InitDqSourceStreamLookupJoinQueryPoolService() {
+        if (!FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups() || DqSourceStreamLookupJoinQueryPoolService) {
+            return;
+        }
+        auto actor = NYql::NDq::NDqSourceLookup::CreateQuerySessionPoolActor();
+        DqSourceStreamLookupJoinQueryPoolService = TActivationContext::Register(actor);
+        TActivationContext::ActorSystem()->RegisterLocalService(
+                NYql::NDq::NDqSourceLookup::QuerySessionPoolServiceActorId(), DqSourceStreamLookupJoinQueryPoolService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -2485,6 +2501,7 @@ private:
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
     TActorId AccessServiceService;
+    TActorId DqSourceStreamLookupJoinQueryPoolService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

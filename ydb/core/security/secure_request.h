@@ -62,7 +62,7 @@ private:
     void ProcessAuthorizeTicketResult(THolder<TEvTicketParser::TEvAuthorizeTicketResult> result, const TActorContext& ctx) {
         if (result->HasError()) {
             if (IsTokenRequired()) {
-                return static_cast<TDerived*>(this)->OnAccessDenied(result->Error, ctx);
+                return static_cast<TDerived*>(this)->OnAccessDenied(result->GetError(), ctx);
             }
         }
 
@@ -151,26 +151,22 @@ public:
     }
 
     TIntrusiveConstPtr<NACLib::TUserToken> GetParsedToken() const {
-        if (AuthorizeTicketResult) {
-            return AuthorizeTicketResult->Token;
+        if (AuthorizeTicketResult && !AuthorizeTicketResult->HasError()) {
+            return AuthorizeTicketResult->GetToken();
         }
         return nullptr;
     }
 
     TString GetSerializedToken() const {
-        if (AuthorizeTicketResult) {
-            if (AuthorizeTicketResult->Token) {
-                return AuthorizeTicketResult->Token->GetSerializedToken();
-            }
+        if (AuthorizeTicketResult && !AuthorizeTicketResult->HasError()) {
+            return AuthorizeTicketResult->GetToken()->GetSerializedToken();
         }
         return TString();
     }
 
     TString GetUserSID() const {
-        if (AuthorizeTicketResult) {
-            if (AuthorizeTicketResult->Token) {
-                return AuthorizeTicketResult->Token->GetUserSID();
-            }
+        if (AuthorizeTicketResult && !AuthorizeTicketResult->HasError()) {
+            return AuthorizeTicketResult->GetToken()->GetUserSID();
         }
         const TVector<TString>& defaultUserSIDs = GetDefaultUserSIDs();
         if (!defaultUserSIDs.empty()) {
@@ -180,10 +176,8 @@ public:
     }
 
     TString GetSanitizedToken() const {
-        if (AuthorizeTicketResult) {
-            if (AuthorizeTicketResult->Token) {
-                return AuthorizeTicketResult->Token->GetSanitizedToken();
-            }
+        if (AuthorizeTicketResult && !AuthorizeTicketResult->HasError()) {
+            return AuthorizeTicketResult->GetToken()->GetSanitizedToken();
         }
         return TString();
     }

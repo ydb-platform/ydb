@@ -306,9 +306,9 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(!event->HasError(), event->Error);
-        UNIT_ASSERT(event->Token != nullptr);
-        userToken = event->Token->SerializeAsString();
+        UNIT_ASSERT_C(!event->HasError(), event->GetError());
+
+        userToken = event->GetToken()->SerializeAsString();
     }
     {
         TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev(new TEvTxUserProxy::TEvProposeTransaction());
@@ -354,9 +354,9 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         auto event = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         Cerr << __FUNCTION__ << " grab ticket_parser result" << Endl;
 
-        UNIT_ASSERT_C(!event->HasError(), event->Error);
-        UNIT_ASSERT(event->Token != nullptr);
-        userToken = event->Token->SerializeAsString();
+        UNIT_ASSERT_C(!event->HasError(), event->GetError());
+
+        userToken = event->GetToken()->SerializeAsString();
     }
     {
         TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> ev(new TEvTxUserProxy::TEvProposeTransaction());

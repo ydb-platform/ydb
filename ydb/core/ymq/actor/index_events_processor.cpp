@@ -320,6 +320,7 @@ void TSearchEventsProcessor::RunQuery(const TString& query, NYdb::TParams* param
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     auto* request = ev->Record.MutableRequest();
 
+    request->SetIsInternalCall(true);
     request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     request->SetKeepSession(State == EState::QueuesListingExecute);

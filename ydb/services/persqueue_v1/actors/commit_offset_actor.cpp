@@ -43,6 +43,11 @@ TCommitOffsetActor::~TCommitOffsetActor() = default;
 
 void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     TBase::Bootstrap(ctx);
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+            NYql::TIssues{NYql::TIssue("Consumer offset commits are disabled")}, ctx);
+        return;
+    }
     Become(&TThis::StateFunc);
 
     auto request = dynamic_cast<const Ydb::Topic::CommitOffsetRequest*>(GetProtoRequest());

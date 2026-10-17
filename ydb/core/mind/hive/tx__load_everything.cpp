@@ -388,6 +388,14 @@ public:
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
+                if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get());
+                        !node.BridgePileId && implicitPileId) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = implicitPileId;
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
                 if (!(bool)node.Local) {
                     // it's safe to call here, because there is no any tablets in the node yet
                     node.BecomeDisconnected();

@@ -1,3 +1,5 @@
+* Added `ydb bridge convert` to migrate an ordinary cluster to single-pile bridge mode.
+
 
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 

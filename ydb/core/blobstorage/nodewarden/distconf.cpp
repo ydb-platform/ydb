@@ -43,19 +43,12 @@ namespace NKikimr::NStorage {
             const auto& bridge = AppData()->BridgeConfig;
             pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(bridge.PilesSize());
 
-            THashMap<TString, ui32> pileNames;
-            for (size_t i = 0; i < bridge.PilesSize(); ++i) {
-                pileNames.emplace(bridge.GetPiles(i).GetName(), i);
-            }
-
             for (const auto& item : Cfg->NameserviceConfig.GetNode()) {
                 const TNodeLocation location = item.HasLocation() ? TNodeLocation(item.GetLocation())
                     : item.HasWalleLocation() ? TNodeLocation(item.GetWalleLocation())
                     : TNodeLocation();
-                if (const auto& bridgePileName = location.GetBridgePileName()) {
-                    if (const auto it = pileNames.find(*bridgePileName); it != pileNames.end()) {
-                        pileMap->at(it->second).push_back(item.GetNodeId());
-                    }
+                if (const auto index = NBridge::ResolvePileIndex(bridge, location.GetBridgePileName())) {
+                    pileMap->at(*index).push_back(item.GetNodeId());
                 }
             }
         }
@@ -493,7 +486,7 @@ namespace NKikimr::NStorage {
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
-            fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, HandleDynamicConfigSubscribe);
+            hFunc(TEvNodeWardenDynamicConfigSubscribe, Handle);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
             cFunc(TEvPrivate::EvReconnect, HandleReconnect);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -611,19 +604,23 @@ namespace NKikimr::NStorage {
                 Y_ABORT("missing Location in dynamic TNodeInfo");
             }
             const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
-            if (!bridgePileName) {
-                Y_ABORT("missing BridgePileName in dynamic TNodeLocation");
-            }
-            const auto it = BridgePileNameMap.find(*bridgePileName);
-            Y_ABORT_UNLESS(it != BridgePileNameMap.end(), "incorrect bridge pile name in dynamic TNodeLocation: %s",
-                bridgePileName->c_str());
-            bridgeInfo->SelfNodePile = &bridgeInfo->Piles[it->second.GetPileIndex()];
+            const auto index = NBridge::ResolvePileIndex(*Cfg->BridgeConfig, bridgePileName);
+            Y_VERIFY_S(index, "can't resolve bridge pile for dynamic node BridgePileName# "
+                << bridgePileName.value_or("<none>"));
+            bridgeInfo->SelfNodePile = &bridgeInfo->Piles[*index];
         }
 
         Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
 
-        Y_ABORT_UNLESS(config.HasClusterState());
-        const NKikimrBridge::TClusterState& state = config.GetClusterState();
+        // the cluster may be not converted to bridged one yet; then it runs single pile in implicit state
+        std::optional<NKikimrBridge::TClusterState> implicitState;
+        if (!config.HasClusterState()) {
+            Y_VERIFY_S(numPiles == 1, "ClusterState is missing in StorageConfig while BridgeConfig contains "
+                << numPiles << " piles; only single-pile BridgeConfig is allowed for not yet bridged cluster");
+            implicitState.emplace(NBridge::MakeImplicitSinglePileClusterState());
+            bridgeInfo->IsImplicit = true;
+        }
+        const NKikimrBridge::TClusterState& state = implicitState ? *implicitState : config.GetClusterState();
 
         Y_ABORT_UNLESS(state.PerPileStateSize() == numPiles);
         for (size_t i = 0; i < numPiles; ++i) {

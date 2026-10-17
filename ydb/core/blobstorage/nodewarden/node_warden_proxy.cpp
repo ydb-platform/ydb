@@ -34,78 +34,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
 
-    YDB_LOG_DEBUG("StartLocalProxy",
-        {"marker", "NW12"},
-        {"groupId", groupId},
-        {"hasGroupInfo", static_cast<bool>(group.Info)},
-        {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
-
-    if (EnableProxyMock) {
-        // create mock proxy
-        proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
-    } else if (auto info = NeedGroupInfo(groupId)) {
-        if (info->BlobDepotId) {
-            TActorId proxyActorId;
-
-            switch (info->DecommitStatus) {
-                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
-                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
-                    Y_ABORT("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
-                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
-                    // create proxy that will be used by blob depot agent to fetch underlying data
-                    proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
-                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
-                        getCounters(info), TBlobStorageProxyParameters{
-                            .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                            .Controls = TBlobStorageProxyControlWrappers{
-                                .EnablePutBatching = EnablePutBatching,
-                                .EnableVPatch = EnableVPatch,
-                                .LongRequestThresholdMs = LongRequestThresholdMs,
-                                .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-                                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
-                                ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
-                            }
-                        }), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
-                    [[fallthrough]];
-                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
-                    proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
-                    group.AgentProxy = true;
-                    break;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_UNREACHABLE();
-            }
-        } else if (info->IsBridged()) {
-            proxy.reset(CreateBridgeProxyActor(info));
-        } else {
-            // create proxy with configuration
-            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
-                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
-                        .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
-                        .Controls = TBlobStorageProxyControlWrappers{
-                            .EnablePutBatching = EnablePutBatching,
-                            .EnableVPatch = EnableVPatch,
-                            .LongRequestThresholdMs = LongRequestThresholdMs,
-                            .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-                            .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                            .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
-                            ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
-                        }
-                    }
-                )
-            );
-        }
-    } else {
-        // create proxy without configuration
-        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
+    auto makeParameters = [&] {
+        return TBlobStorageProxyParameters{
             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
             .Controls = TBlobStorageProxyControlWrappers{
                 .EnablePutBatching = EnablePutBatching,
@@ -118,7 +48,62 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
             }
-        }));
+        };
+    };
+
+    YDB_LOG_DEBUG("StartLocalProxy",
+        {"marker", "NW12"},
+        {"groupId", groupId},
+        {"hasGroupInfo", static_cast<bool>(group.Info)},
+        {"groupInfoGeneration", group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt});
+
+    if (EnableProxyMock) {
+        // create mock proxy
+        proxy.reset(CreateBlobStorageGroupProxyMockActor(TGroupId::FromValue(groupId)));
+    } else if (auto info = NeedGroupInfo(groupId)) {
+        if (info->BlobDepotId.value_or(0)) { // zero is reported when BlobDepot has failed to be created
+            TActorId proxyActorId;
+
+            switch (info->DecommitStatus) {
+                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+                    Y_ABORT("unexpected DecommitStatus for dynamic group with bound BlobDepotId");
+
+                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+                    // create proxy that will be used by blob depot agent to fetch underlying data
+                    proxyActorId = as->Register(CreateBlobStorageGroupProxyConfigured(
+                        TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
+                        getCounters(info), makeParameters()),
+                        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+                    [[fallthrough]];
+                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                    proxy.reset(NBlobDepot::CreateBlobDepotAgent(groupId, info, proxyActorId));
+                    group.AgentProxy = true;
+                    break;
+
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_UNREACHABLE();
+            }
+        } else if (info->IsInlinePile()) {
+            // create proxy for the inline pile of the group and the bridge proxy in front of it
+            const TActorId innerProxyId = as->Register(CreateBlobStorageGroupProxyConfigured(info->MakeInlinePileView(),
+                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), makeParameters()),
+                TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+            proxy.reset(CreateBridgeProxyActor(info, innerProxyId));
+            group.InlinePileProxy = true;
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
+        } else {
+            // create proxy with configuration
+            proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
+                group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), makeParameters()));
+        }
+    } else {
+        // create proxy without configuration
+        proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon,
+            makeParameters()));
 
         Y_DEBUG_ABORT_UNLESS(!EjectedGroups.contains(groupId));
     }

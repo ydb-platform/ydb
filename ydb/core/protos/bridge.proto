@@ -31,6 +31,10 @@ message TClusterStateDetails {
         bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
+
+    // set when the cluster has just been converted from ordinary one and BSC has not yet converted its groups; no more
+    // piles can be added while it is set
+    bool BscConversionPending = 3;
 }
 
 message TGroupState {

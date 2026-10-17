@@ -609,7 +609,8 @@ namespace NKikimr {
                     }
                 } unregister{*this, removeQ};
                 return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks,
-                    std::move(forbid), groupSizeInUnits, requiredSpace, bridgePileId);
+                    std::move(forbid), groupSizeInUnits, requiredSpace,
+                    NBridge::GetPlacementPileId(bridgePileId, State.BridgeInfo.get()));
             }
 
             template<typename T>
@@ -907,7 +908,7 @@ namespace NKikimr {
 
                     enumerateGroups([&](TGroupId groupId) {
                         fitter.CheckExistingGroup(groupId, state.Fit.GroupsToAllocate.contains(groupId));
-                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->BridgePileId) {
+                        if (const TGroupInfo *group = state.Groups.Find(groupId); group && !group->IsBridgePileOnly()) {
                             ++numActualGroups;
                         }
                     });

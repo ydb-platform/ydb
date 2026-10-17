@@ -315,6 +315,9 @@ struct TEnvironmentSetup {
         SetupStaticStorage();
         SetupStorage();
         SetupTablet();
+        for (ui32 nodeId : Runtime->GetNodes()) {
+            SetupTenantPool(nodeId);
+        }
     }
 
     void StopNode(ui32 nodeId) {
@@ -330,9 +333,13 @@ struct TEnvironmentSetup {
         }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
+        }
+        // node warden must be started before tablets as bootstrapper queries it for storage config in bridge mode
+        SetupStorage(nodeId);
+        if (nodeId == Settings.ControllerNodeId) {
             SetupTablet();
         }
-        SetupStorage(nodeId);
+        SetupTenantPool(nodeId);
     }
 
     void RestartNode(ui32 nodeId) {
@@ -467,8 +474,23 @@ struct TEnvironmentSetup {
                             TStringBuilder res;
                             for (ui32 nodeId : Runtime->GetNodes()) {
                                 res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
-                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
-                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                                    << nodeId << ", unit: unit_" << nodeId;
+                                if (Settings.NumPiles) {
+                                    res << ", bridge_pile_name: pile_" << (nodeId - 1) / 8 + 1;
+                                }
+                                res << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        auto makeBridgeConfig = [&] {
+                            TStringBuilder res;
+                            if (Settings.NumPiles) {
+                                res << "  bridge_config:\n";
+                                res << "    piles:\n";
+                                for (ui32 i = 0; i < Settings.NumPiles; ++i) {
+                                    res << "    - name: pile_" << i + 1 << "\n";
+                                }
                             }
                             return res;
                         };
@@ -485,12 +507,7 @@ config:
   self_management_config:
     enabled: true
     automatic_bootstrap: true
-  bridge_config:
-    piles:
-    - name: pile_1
-    - name: pile_2
-    - name: pile_3
-  host_configs:
+)" << makeBridgeConfig() << R"(  host_configs:
   - nvme:
     - SectorMap:0:1000
     - SectorMap:1:1000
@@ -528,8 +545,10 @@ config:
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
 
-                if (Settings.NumPiles) {
-                    config->BridgeConfig.emplace().CopyFrom(Runtime->GetAppDataBridgeConfig());
+                // bridge config is taken from the runtime when the node starts, so the test may change it between
+                // node restarts (this is what happens when the cluster is being converted into bridged one)
+                if (const auto& bridgeConfig = Runtime->GetAppDataBridgeConfig(); bridgeConfig.PilesSize()) {
+                    config->BridgeConfig.emplace().CopyFrom(bridgeConfig);
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
@@ -644,6 +663,13 @@ config:
             bool working = true;
             Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
         }
+    }
+
+    // start services making node able to run tablets launched by Hive
+    void SetupTenantPool(ui32 nodeId) {
+        if (!Settings.SetupHive) {
+            return;
+        }
 
         auto localConfig = MakeIntrusive<TLocalConfig>();
 
@@ -658,16 +684,11 @@ config:
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
         tenantPoolConfig->AddStaticSlot(DomainName);
 
-        if (Settings.SetupHive) {
-            for (ui32 nodeId : Runtime->GetNodes()) {
-                Runtime->RegisterService(MakeTenantPoolRootID(),
-                    Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
-                Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
-                    Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
-                Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
-                Runtime->Register(CreateLabelsMaintainer({}), nodeId);
-            }
-        }
+        Runtime->RegisterService(MakeTenantPoolRootID(), Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
+        Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
+            Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
+        Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
+        Runtime->Register(CreateLabelsMaintainer({}), nodeId);
     }
 
     void CreateBoxAndPool(ui32 numDrivesPerNode = 0, ui32 numGroups = 0, ui32 numStorageNodes = 0,

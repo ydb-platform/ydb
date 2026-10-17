@@ -160,10 +160,11 @@ namespace NKikimr::NStorage {
         // build node location map
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
+        const auto placementPileId = NBridge::GetPlacementPileId(bridgePileId, BridgeInfo.get());
         for (const auto& node : config->GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
             nodeLocations.try_emplace(node.GetNodeId(), location);
-            if (bridgePileId == ResolveNodePileId(location)) {
+            if (placementPileId == ResolveNodePileId(location)) {
                 allowedNodeIds.insert(node.GetNodeId());
             }
         }
@@ -465,7 +466,7 @@ namespace NKikimr::NStorage {
                 slotSizeInUnits = pdiskConfig.GetSlotSizeInUnits();
             }
 
-            const bool pileFilter = !bridgePileId || allowedNodeIds.contains(pdiskId.NodeId);
+            const bool pileFilter = !Cfg->BridgeConfig || allowedNodeIds.contains(pdiskId.NodeId);
             const bool nodeAllowFilter = !restrictSelfHealNodes || selfHealAllowedNodeSet.contains(pdiskId.NodeId);
 
             TString whyUnusable = item.WhyUnusable;
@@ -648,7 +649,7 @@ namespace NKikimr::NStorage {
                 continue;
             }
             TNodeLocation location(node.GetLocation());
-            TBridgePileId pileId = ResolveNodePileId(location);
+            TBridgePileId pileId = ResolveNodePileIdForConfig(baseConfig, location);
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

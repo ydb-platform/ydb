@@ -3,6 +3,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/path.h>
@@ -1652,22 +1653,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 
             if (const auto& bridgePileName = TNodeLocation(record.GetLocation()).GetBridgePileName()) {
                 if (AppData()->BridgeModeEnabled) {
-                    const auto& bridge = AppData()->BridgeConfig;
-                    const auto& piles = bridge.GetPiles();
-                    bool found = false;
-                    for (int i = 0; i < piles.size(); ++i) {
-                        if (piles[i].GetName() == *bridgePileName) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
+                    if (!NBridge::ResolvePileIndex(AppData()->BridgeConfig, bridgePileName)) {
                         Error = TStringBuilder() << "Incorrect bridge pile name " << *bridgePileName;
                     }
                 } else {
                     Error = "Bridge pile specified while bridge mode is disabled";
                 }
-            } else if (AppData()->BridgeModeEnabled) {
+            } else if (AppData()->BridgeModeEnabled && AppData()->BridgeConfig.PilesSize() != 1) {
+                // pile name may be omitted only when there is single pile
                 Error = "Bridge pile not specified while bridge mode is enabled";
             }
 

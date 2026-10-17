@@ -64,6 +64,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeFailover>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeTakedown>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeRejoin>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
 }
 
 TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
@@ -195,6 +196,7 @@ int TCommandBridgeList::Run(TConfig& config) {
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
+            json.InsertValue("conversion_in_progress", result.IsConversionInProgress());
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
@@ -212,6 +214,9 @@ int TCommandBridgeList::Run(TConfig& config) {
                 ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
             }
             ss << "Generation: " << result.GetGeneration() << Endl;
+            if (result.IsConversionInProgress()) {
+                ss << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
+            }
             Cout << ss.Str();
             break;
         }
@@ -358,6 +363,35 @@ int TCommandBridgeRejoin::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeConvert::TCommandBridgeConvert(bool allowEmptyDatabase)
+    : TYdbCommand("convert", {}, "Convert a non-bridged cluster into a bridged one with a single pile. All nodes must "
+        "already run with a single-pile bridge config. Storage groups are converted in the background.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandBridgeConvert::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeConvert::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+int TCommandBridgeConvert::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.ConvertToBridge().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Cluster converted to bridge mode successfully." << Endl;
 
     return EXIT_SUCCESS;
 }

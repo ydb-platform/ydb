@@ -11,6 +11,7 @@
 #include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/config_units.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/event_filter.h>
@@ -898,31 +899,23 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             if (Config.HasBridgeConfig()) {
                 // when we work in Bridge mode, we need special actor to ensure connectivity check between nodes
                 const auto& bridge = Config.GetBridgeConfig();
-                TString name;
+                std::optional<TString> bridgePileName;
 
                 if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
                     const auto& nodeInfo = Config.GetDynamicNodeConfig().GetNodeInfo();
                     Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                    const auto& bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
                 } else {
                     const auto it = table->StaticNodeTable.find(NodeId);
                     Y_ABORT_UNLESS(it != table->StaticNodeTable.end());
-                    const auto& entry = it->second;
-                    const auto& bridgePileName = entry.Location.GetBridgePileName();
-                    Y_ABORT_UNLESS(bridgePileName);
-                    name = *bridgePileName;
+                    bridgePileName = it->second.Location.GetBridgePileName();
                 }
 
-                size_t i;
-                for (i = 0; i < bridge.PilesSize(); ++i) {
-                    if (bridge.GetPiles(i).GetName() == name) {
-                        break;
-                    }
-                }
-                Y_ABORT_UNLESS(i != bridge.PilesSize());
-                const auto selfBridgePileId = TBridgePileId::FromPileIndex(i);
+                // pile name may be omitted when there is only one pile
+                const auto index = NBridge::ResolvePileIndex(bridge, bridgePileName);
+                Y_VERIFY_S(index, "can't resolve bridge pile for this node BridgePileName# "
+                    << bridgePileName.value_or("<none>"));
+                const auto selfBridgePileId = TBridgePileId::FromPileIndex(*index);
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(

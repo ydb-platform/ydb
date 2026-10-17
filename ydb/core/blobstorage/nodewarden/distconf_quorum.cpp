@@ -27,23 +27,23 @@ namespace NKikimr::NStorage {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    static std::optional<TBridgePileId> ResolveBridgePileId(const TNodeLocation& location,
-            const THashMap<TString, TBridgePileId>& bridgePileNameMap) {
-        const auto& bridgePileName = location.GetBridgePileName();
-        if (bridgePileName.has_value() != !bridgePileNameMap.empty()) {
-            Y_DEBUG_ABORT_S("incorrect node bridge pile name setting Location# " << location.ToString());
-            return std::nullopt;
+    static std::optional<TBridgePileId> ResolveBridgePileId(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeLocation& location, const THashMap<TString, TBridgePileId>& bridgePileNameMap) {
+        if (!config.HasClusterState() || bridgePileNameMap.empty()) {
+            // this config is not a bridged one (or this node is not bridge-capable), all nodes are in default pile
+            return TBridgePileId();
         }
-        if (bridgePileNameMap) {
-            Y_ABORT_UNLESS(bridgePileName);
+        if (const auto& bridgePileName = location.GetBridgePileName()) {
             if (const auto it = bridgePileNameMap.find(*bridgePileName); it != bridgePileNameMap.end()) {
                 return it->second;
             }
             Y_DEBUG_ABORT_S("incorrect pile name: " << *bridgePileName);
             return std::nullopt;
-        } else {
-            return TBridgePileId();
+        } else if (bridgePileNameMap.size() == 1) {
+            return bridgePileNameMap.begin()->second; // single-pile cluster, node is in the only pile
         }
+        Y_DEBUG_ABORT_S("missing bridge pile name Location# " << location.ToString());
+        return std::nullopt;
     }
 
     static THashMap<TBridgePileId, THashMap<TString, std::tuple<ui32, ui32>>> PrepareStatusMap(
@@ -134,7 +134,7 @@ namespace NKikimr::NStorage {
         bool error = false;
         EnumerateConfigDrives(config, 0, [&](const NKikimrBlobStorage::TNodeIdentifier& node, const auto& drive) {
             TNodeLocation location(node.GetLocation());
-            const auto& bridgePileId = ResolveBridgePileId(location, bridgePileNameMap);
+            const auto& bridgePileId = ResolveBridgePileId(config, location, bridgePileNameMap);
             if (!bridgePileId) {
                 error = true;
             } else if (const auto it = status.find(*bridgePileId); it != status.end()) {
@@ -311,7 +311,9 @@ namespace NKikimr::NStorage {
                         ? TBridgePileId::FromPileIndex(i) == singleBridgePileId
                         : NBridge::PileStateTraits(cs.GetPerPileState(i)).RequiresConfigQuorum;
                 }
-            } else if (const auto& checker = info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
+            }
+            const bool hasOwnVDisks = !info->IsBridged() || info->IsInlinePile(); // bridge proxy group doesn't have them
+            if (hasOwnVDisks && !info->GetQuorumChecker().CheckQuorumForGroup(group.Confirmed)) {
                 badGroups.insert(groupId);
             }
         }

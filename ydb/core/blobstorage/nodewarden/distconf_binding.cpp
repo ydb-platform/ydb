@@ -79,17 +79,17 @@ namespace NKikimr::NStorage {
 
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
-            std::optional<TString> expectedBridgePileName;
+            TBridgePileId expectedBridgePileId;
             if (Cfg->BridgeConfig) {
                 Y_ABORT_UNLESS(Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo());
                 const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
                 Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                expectedBridgePileName = TNodeLocation(nodeInfo.GetLocation()).GetBridgePileName();
+                expectedBridgePileId = ResolveNodePileId(TNodeLocation(nodeInfo.GetLocation()));
             }
 
             std::vector<ui32> nodeIds;
             for (const auto& [item, location] : newNodeList) {
-                if (location.GetBridgePileName() == expectedBridgePileName) {
+                if (ResolveNodePileId(location) == expectedBridgePileId) {
                     nodeIds.push_back(item.NodeId());
                 }
             }
@@ -103,7 +103,7 @@ namespace NKikimr::NStorage {
         for (const auto& [item, location] : newNodeList) {
             if (item.NodeId() == selfNodeId) {
                 SelfNode = item;
-                SelfNodeBridgePileName = location.GetBridgePileName();
+                SelfNodeBridgePileId = ResolveNodePileId(location);
                 found = true;
                 break;
             }
@@ -126,7 +126,8 @@ namespace NKikimr::NStorage {
             Hosts.emplace(std::get<0>(item), std::get<1>(item));
 
             // check if node is from the same pile (as this one)
-            if (location.GetBridgePileName() == SelfNodeBridgePileName) {
+            const TBridgePileId bridgePileId = ResolveNodePileId(location);
+            if (bridgePileId == SelfNodeBridgePileId) {
                 NodesFromSamePile.insert(item.NodeId());
                 if (nodeId < selfNodeId) {
                     nodeIdsForOutgoingBinding.push_back(nodeId);
@@ -137,7 +138,7 @@ namespace NKikimr::NStorage {
 
             // check if node is located in primary pile (and this one is not the primary) -- then it is suitable for
             // binding to primary pile
-            if (location.GetBridgePileName() != SelfNodeBridgePileName) {
+            if (bridgePileId != SelfNodeBridgePileId) {
                 nodeIdsForOtherPilesOutgoingBinding.push_back(item.NodeId());
             }
         }
@@ -189,16 +190,20 @@ namespace NKikimr::NStorage {
     }
 
     TBridgePileId TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
-        if (const auto& bridgePileName = location.GetBridgePileName()) {
-            if (const auto it = BridgePileNameMap.find(*bridgePileName); it != BridgePileNameMap.end()) {
-                return it->second;
-            } else {
-                Y_DEBUG_ABORT_S("incorrect bridge pile name for node Location# " << location.ToString());
-            }
-        } else if (BridgePileNameMap) {
-            Y_DEBUG_ABORT_S("missing bridge pile name for node Location# " << location.ToString());
+        if (!Cfg || !Cfg->BridgeConfig) {
+            return TBridgePileId(); // this node is not bridge-capable, all nodes are in default pile
+        } else if (const auto index = NBridge::ResolvePileIndex(*Cfg->BridgeConfig, location.GetBridgePileName())) {
+            return TBridgePileId::FromPileIndex(*index);
+        } else {
+            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
+            return TBridgePileId();
         }
-        return TBridgePileId();
+    }
+
+    TBridgePileId TDistributedConfigKeeper::ResolveNodePileIdForConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeLocation& location) {
+        // piles are taken into account only when the config is bridged one
+        return config.HasClusterState() ? ResolveNodePileId(location) : TBridgePileId();
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {

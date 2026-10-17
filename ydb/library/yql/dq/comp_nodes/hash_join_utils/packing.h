@@ -1,8 +1,6 @@
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
 
-#include <array>
-
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
@@ -283,7 +281,6 @@ template <class TTraits>
 struct SIMDPack {
     template <class T>
     using TSimd = typename TTraits::template TSimd8<T>;
-    using TPerm = std::array<ui8, TSimd<ui8>::SIZE>;
 
     static void PackColSize(const ui8 *const src_cols[], ui8 *dst_rows,
         size_t size, size_t col_size, size_t cols_num, size_t padded_size,
@@ -293,24 +290,19 @@ struct SIMDPack {
         size_t size, size_t col_size, size_t cols_num, size_t padded_size,
         size_t start = 0);
 
-    static TPerm BuildTuplePerm(size_t col_size, size_t col_pad,
+    static TSimd<ui8> BuildTuplePerm(size_t col_size, size_t col_pad,
         size_t tuple_size, ui8 offset, ui8 index, bool packing);
 
     static void PackTupleOr(ui8 stores_per_load, ui8 cols,
         const ui8 *const src_cols[], ui8 *dst_rows, size_t size,
         const size_t col_sizes[], const size_t offsets[], size_t tuple_size,
-        size_t padded_size, const TPerm perms[], size_t start = 0);
+        size_t padded_size, const TSimd<ui8> perms[], size_t start = 0);
 
     static void UnpackTupleOr(ui8 loads_per_store, ui8 cols,
         const ui8 *src_rows, ui8 *const dst_cols[], size_t size,
         const size_t col_sizes[], const size_t offsets[], size_t tuple_size,
-        size_t padded_size, const TPerm perms[], size_t start = 0);
+        size_t padded_size, const TSimd<ui8> perms[], size_t start = 0);
 };
-
-#ifdef USE_X86_SIMD
-extern template struct SIMDPack<NSimd::TSimdAVX2Traits>;
-extern template struct SIMDPack<NSimd::TSimdSSE42Traits>;
-#endif
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

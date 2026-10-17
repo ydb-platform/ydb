@@ -691,7 +691,21 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabDomain(context.SS, dstPath.GetPathIdForDomain());
+        context.MemChanges.GrabNewTable(context.SS, allocatedPathId);
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistApplyUserAttrs(allocatedPathId);
+        context.DbChanges.PersistTable(allocatedPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         TPathElement::TPtr newTable = dstPath.Base();
@@ -701,11 +715,14 @@ public:
         newTable->PathType = TPathElement::EPathType::EPathTypeTable;
         newTable->UserAttrs->AlterData = userAttrs;
 
-        NIceDb::TNiceDb db(context.GetDB());
-
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTable, newTable->PathId);
 
         ApplyPartitioning(OperationId.GetTxId(), newTable->PathId, tableInfo, txState, channelsBinding, context.SS, partitions);
+
+        for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
+            context.MemChanges.GrabNewShard(context.SS, shardIdx);
+            context.DbChanges.PersistShard(shardIdx);
+        }
 
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
@@ -725,50 +742,26 @@ public:
             context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
         }
 
-        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
-
-        context.SS->ApplyAndPersistUserAttrs(db, newTable->PathId);
 
         if (!acl.empty()) {
             newTable->ApplyACL(acl);
         }
-        context.SS->PersistPath(db, newTable->PathId);
-        context.SS->PersistTable(db, newTable->PathId);
-        context.SS->PersistTxState(db, OperationId);
 
-        context.SS->PersistUpdateNextPathId(db);
-        context.SS->PersistUpdateNextShardIdx(db);
-        // Persist new shards info
         for (const auto& shardIdx : tableInfo->GetPartitionStore() | std::views::keys) {
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shardIdx), "shard info is set before");
-            auto tabletType = context.SS->ShardInfos[shardIdx].TabletType;
-            const auto& bindedChannels = context.SS->ShardInfos[shardIdx].BindedChannels;
-            context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
-            context.SS->PersistChannelsBinding(db, shardIdx, bindedChannels);
-
             if (storePerShardConfig) {
                 tableInfo->PerShardPartitionConfig[shardIdx].CopyFrom(perShardConfig);
-                context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, perShardConfig);
             }
         }
 
-        if (parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) {
-            ++parentPath.Base()->DirAlterVersion;
-            context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-        }
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);
-
-        context.SS->ClearDescribePathCaches(dstPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         YDB_LOG_TRACE_CTX(context.Ctx, "TCreateTable Propose creating new table",
             {"path", dstPath.PathString()},
@@ -780,8 +773,8 @@ public:
         return result;
     }
 
-    void AbortPropose(TProposeContext&) override {
-        Y_ABORT("no AbortPropose for TCreateTable");
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

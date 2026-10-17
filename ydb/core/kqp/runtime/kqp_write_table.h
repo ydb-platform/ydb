@@ -12,6 +12,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+// O(1) ShardId-to-partition index over a resolved partitioning (kqp_shard_meta.h).
+// Only referenced (by reference) here to keep this header's dependency graph light.
+class TShardPartitionIndex;
+
 using TRowsRef = TConstArrayRef<TConstArrayRef<TCell>>;
 
 class IDataBatch : public TThrRefBase {
@@ -174,6 +178,10 @@ public:
     // partitioning is being applied). Used by the write actor to compute the covering
     // targets of shards removed by a split/merge.
     virtual TPartitioning::TCPtr GetPartitioning() const = 0;
+
+    // The held partitioning with its O(1) shard lookup, used for repeated per-shard
+    // metadata registrations and for the covering computation of removed shards.
+    virtual const TShardPartitionIndex& GetShardPartitionIndex() const = 0;
 
     // Shards present in ShardsInfo but absent from the current partitioning: their
     // tablet ids were removed by a split/merge, their pending batches (if any) must be

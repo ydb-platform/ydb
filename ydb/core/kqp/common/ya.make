@@ -14,6 +14,7 @@ SRCS(
     kqp_resolve.h
     kqp_row_builder.cpp
     kqp_ru_calc.cpp
+    kqp_shard_meta.cpp
     kqp_timeouts.cpp
     kqp_timeouts.h
     kqp_tx.cpp

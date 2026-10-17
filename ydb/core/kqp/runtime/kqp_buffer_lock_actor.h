@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_write_table.h"
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 

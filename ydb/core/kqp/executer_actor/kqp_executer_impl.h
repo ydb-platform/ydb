@@ -250,11 +250,15 @@ protected:
         for (auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
             AFL_ENSURE(TxManager);
             if (stageInfo.Meta.ShardKey) {
-                TxManager->SetPartitioning(stageInfo.Meta.TableId, stageInfo.Meta.ShardKey->Partitioning);
+                TxManager->SetTableMeta(stageInfo.Meta.TableId, IKqpTransactionManager::TTableMeta{
+                    .InitialPartitioning = stageInfo.Meta.ShardKey->Partitioning,
+                    .KeyColumnTypes = stageInfo.Meta.ShardKey->KeyColumnTypes});
             }
             for (const auto& indexMeta : stageInfo.Meta.IndexMetas) {
                 if (indexMeta.ShardKey) {
-                    TxManager->SetPartitioning(indexMeta.TableId, indexMeta.ShardKey->Partitioning);
+                    TxManager->SetTableMeta(indexMeta.TableId, IKqpTransactionManager::TTableMeta{
+                        .InitialPartitioning = indexMeta.ShardKey->Partitioning,
+                        .KeyColumnTypes = indexMeta.ShardKey->KeyColumnTypes});
                 }
             }
 

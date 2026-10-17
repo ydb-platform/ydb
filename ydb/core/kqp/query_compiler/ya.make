@@ -7,6 +7,10 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/wasm_services
+    ydb/core/external_sources
+    ydb/core/fq/libs/wasm_services/query
+    ydb/library/yql/providers/function/proto
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/runtime/common

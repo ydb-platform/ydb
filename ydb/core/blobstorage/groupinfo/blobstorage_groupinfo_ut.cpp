@@ -70,6 +70,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             if (erasureType == TBlobStorageGroupType::ErasureMirror3dc || erasureType == TBlobStorageGroupType::ErasureMirror3of4) {
                 continue;
             }
+            if (erasureType == TBlobStorageGroupType::Erasure8Plus2Block) {
+                // Exhaustive 8+2 enumeration requires 2^30 layouts.
+                // TBlobStorageIngress::Block82* tests check a bounded set instead.
+                continue;
+            }
 
             const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
             TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);

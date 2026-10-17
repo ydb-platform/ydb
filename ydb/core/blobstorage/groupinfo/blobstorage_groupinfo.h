@@ -34,8 +34,8 @@ namespace NBlobMapper {
     class TMirror3dcMapper;
 } // NBlobMapper
 
-static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10;
+static constexpr ui8 MaxHandoffNodes = TBlobStorageGroupType::MaxHandoffNodes;
+static constexpr ui8 MaxNodesPerBlob = TBlobStorageGroupType::MaxSubgroupSize;
 static constexpr ui8 MaxTotalPartCount = 7;
 static constexpr ui8 MaxVDisksInGroup = 32;
 

@@ -808,45 +808,54 @@ TString FormatTypedValue(const Ydb::TypedValue& typedValue) {
                             return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
                         }
                         default:
-                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                     break;
                 }
                 case Ydb::Type::INTERVAL: {
                     const auto& value = typedValue.value();
                     switch (value.value_case()) {
-                    case Ydb::Value::kInt64Value: {
-                        auto intValue = value.int64_value();
-                        Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TInterval>(intValue));
-                        const auto duration = TDuration::MicroSeconds(intValue < 0 ? -static_cast<ui64>(intValue): static_cast<ui64>(intValue));  // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Interval range)
-                        return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << (intValue < 0 ? "-" : "") << ToIso8601(duration) << "\")";
-                    }
-                    default:
-                        throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
+                        case Ydb::Value::kInt64Value: {
+                            auto intValue = value.int64_value();
+                            Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TInterval>(intValue));
+                            const auto duration = TDuration::MicroSeconds(
+                                intValue < 0
+                                    ? -static_cast<ui64>(intValue)
+                                    : static_cast<ui64>(
+                                          intValue));   // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Interval range)
+                            return TStringBuilder()
+                                   << FormatType(typedValue.type()) << "(\"" << (intValue < 0 ? "-" : "") << ToIso8601(duration) << "\")";
+                        }
+                        default:
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                 }
                 case Ydb::Type::TIMESTAMP: {
                     const auto& value = typedValue.value();
                     switch (value.value_case()) {
-                    case Ydb::Value::kInt64Value: {
-                        auto intValue = value.int64_value();
-                        Y_ENSURE(intValue >= 0 && NUdf::IsValidLayoutValue<NUdf::TTimestamp>(intValue));
-                        const auto instant = TInstant::MicroSeconds(static_cast<ui64>(intValue));
-                        return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
-                    }
-                    default:
-                        throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
+                        case Ydb::Value::kInt64Value: {
+                            auto intValue = value.int64_value();
+                            Y_ENSURE(intValue >= 0 && NUdf::IsValidLayoutValue<NUdf::TTimestamp>(intValue));
+                            const auto instant = TInstant::MicroSeconds(static_cast<ui64>(intValue));
+                            return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
+                        }
+                        default:
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                 }
                 case Ydb::Type::DATE: {
                     const auto& value = typedValue.value();
                     switch (value.value_case()) {
-                    case Ydb::Value::kUint32Value:
-                        Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TDate>(value.uint32_value()));
-                        return TStringBuilder() << FormatType(typedValue.type()) << "(\""
-                            << TInstant::Days(value.uint32_value()).FormatGmTime("%Y-%m-%d") << "\")";
-                    default:
-                        throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";
+                        case Ydb::Value::kUint32Value:
+                            Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TDate>(value.uint32_value()));
+                            return TStringBuilder() << FormatType(typedValue.type()) << "(\""
+                                                    << TInstant::Days(value.uint32_value()).FormatGmTime("%Y-%m-%d") << "\")";
+                        default:
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                 }
                 default:

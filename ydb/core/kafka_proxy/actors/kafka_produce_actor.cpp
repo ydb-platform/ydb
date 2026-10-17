@@ -361,7 +361,9 @@ void TKafkaProduceActor::ProcessRequests(const TActorContext& ctx) {
     ProcessingRequests = true;
     Y_DEFER { ProcessingRequests = false; };
 
-    auto canProcess = EnqueueInitialization();
+    auto canProcess = AppData(ctx)->FeatureFlags.GetEnableClientModifications()
+        ? EnqueueInitialization()
+        : Requests.size();
     while (canProcess--) {
         PendingRequests.push_back(std::make_shared<TPendingRequest>(Requests.front()));
         Requests.pop_front();
@@ -588,6 +590,16 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
 
     pendingRequest->Results.resize(PartsCount(r));
     pendingRequest->StartTime = ctx.Now();
+
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        for (auto& result : pendingRequest->Results) {
+            result.ErrorCode = EKafkaErrors::POLICY_VIOLATION;
+            result.ErrorMessage = "Client data writes are disabled";
+        }
+
+        SendResults(ctx);
+        return;
+    }
 
     size_t position = 0;
     bool ruPerRequest = Context->Config.GetMeteringV2Enabled();

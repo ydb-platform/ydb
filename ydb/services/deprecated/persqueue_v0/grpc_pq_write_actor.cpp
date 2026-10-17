@@ -191,6 +191,10 @@ void TWriteSessionActor::CheckACL(const TActorContext& ctx) {
 }
 
 void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        CloseSession("Client data writes are disabled", NPersQueue::NErrorCode::PRECONDITION_FAILED, ctx);
+        return;
+    }
     THolder<TEvPQProxy::TEvWriteInit> event(ev->Release());
 
     if (State != ES_CREATED) {

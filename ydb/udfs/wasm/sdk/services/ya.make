@@ -1,0 +1,7 @@
+PY3_LIBRARY()
+
+PY_SRCS(generate.py)
+
+END()
+
+RECURSE_FOR_TESTS(ut)

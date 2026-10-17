@@ -1391,6 +1391,218 @@ selector_config: []
         CheckPartialBootstrapRestart(ERestartOrder::Partitioned, TDuration::MilliSeconds(1001));
     }
 
+    Y_UNIT_TEST(BootstrapWritesKnownEmptyDisk) {
+        auto initial = MakeStorageConfig(1, 0, {1});
+        initial.MutableSelfManagementConfig()->SetEnabled(true);
+        initial.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        auto *drive = initial.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->AddDrive();
+        drive->SetPath("/dev/disk1_2");
+        drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+        auto committed = initial;
+        committed.SetGeneration(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&committed);
+        TNodeWardenTestState state;
+        state.Metadata[std::pair<ui32, TString>{1, "/dev/disk1_1"}].MutableCommittedStorageConfig()->CopyFrom(committed);
+        const auto emptyKey = std::pair<ui32, TString>{1, "/dev/disk1_2"};
+
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        RegisterKeeper(runtime, initial, 1, state);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            const auto it = state.Metadata.find(emptyKey);
+            return it != state.Metadata.end() &&
+                it->second.GetCommittedStorageConfig().GetFingerprint() == committed.GetFingerprint();
+        }), "Bootstrap did not write the local commit to a disk successfully read as empty");
+    }
+
+    Y_UNIT_TEST(BootstrapReadErrorsAllowQuorumRecovery) {
+        auto initial = MakeStorageConfig(9, 0, {1, 2, 3, 4, 5, 6, 7, 8, 9},
+            TBlobStorageGroupType::ErasureMirror3dc);
+        initial.MutableSelfManagementConfig()->SetEnabled(true);
+        initial.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        auto *bs = initial.MutableBlobStorageConfig();
+        auto *serviceSet = bs->MutableServiceSet();
+        auto *group = serviceSet->MutableGroups(0);
+        const auto domains = group->GetRings(0);
+        group->ClearRings();
+        for (ui32 dc = 0; dc < 3; ++dc) {
+            auto *ring = group->AddRings();
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                const ui32 index = dc * 3 + domain;
+                ring->AddFailDomains()->CopyFrom(domains.GetFailDomains(index));
+                auto *id = serviceSet->MutableVDisks(index)->MutableVDiskID();
+                id->SetRing(dc);
+                id->SetDomain(domain);
+                initial.MutableAllNodes(index)->MutableLocation()->SetDataCenter("dc-" + std::to_string(dc));
+                for (ui32 disk : {2, 3}) {
+                    auto *drive = bs->MutableDefineHostConfig(index)->AddDrive();
+                    drive->SetPath("/dev/disk" + std::to_string(index + 1) + "_" + std::to_string(disk));
+                    drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+                }
+            }
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+        auto older = initial;
+        older.SetGeneration(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&older);
+        auto newer = older;
+        newer.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&newer);
+
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        std::vector<NStorage::TSuccessfulDisk> available;
+        std::vector<NStorage::TSuccessfulDisk> newerDisks;
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            for (ui32 disk = 1; disk <= 3; ++disk) {
+                const TString path = "/dev/disk" + std::to_string(nodeId) + "_" + std::to_string(disk);
+                state.Metadata[std::pair<ui32, TString>{nodeId, path}].MutableCommittedStorageConfig()->CopyFrom(
+                    nodeId == 9 && disk != 3 ? older : newer);
+                if (disk != 3) {
+                    available.emplace_back(NStorage::TNodeIdentifier(newer.GetAllNodes(nodeId - 1)),
+                        path, nodeId * 1000 + disk);
+                    if (nodeId != 9) {
+                        newerDisks.push_back(available.back());
+                    }
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(available.size(), 18);
+        const auto nwConfig = MakeNodeWardenConfig(newer);
+        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, available, {}, {}, *nwConfig, false));
+        UNIT_ASSERT(NStorage::HasConfigQuorum(newer, newerDisks, {}, {}, *nwConfig, false));
+
+        TTestActorSystem runtime(9);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        bool allowCollection = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldScatters;
+        std::array<ui32, 9> failedReads{};
+        ui32 writesBeforeCollection = 0;
+        bool downgraded = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (!allowCollection && ev->GetTypeRewrite() == NStorage::TEvNodeConfigScatter::EventType) {
+                heldScatters.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenReadMetadata>()->Path.EndsWith("_3")) {
+                ++failedReads.at(nodeId - 1);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NStorage::TEvNodeWardenReadMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                writesBeforeCollection += !allowCollection;
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenWriteMetadata>();
+                const auto& previous = state.Metadata.at(std::pair<ui32, TString>{nodeId, msg->Path});
+                downgraded |= msg->Record.GetCommittedStorageConfig().GetGeneration() <
+                    previous.GetCommittedStorageConfig().GetGeneration();
+                if (msg->Path.EndsWith("_3")) {
+                    runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                        new NStorage::TEvNodeWardenWriteMetadataResult(std::nullopt,
+                            NPDisk::EPDiskMetadataOutcome::ERROR), 0, ev->Cookie), nodeId);
+                    return false;
+                }
+            }
+            return true;
+        };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 9; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, initial, nodeId, state));
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }),
+            "An unreadable non-static disk on each node prevented the binding tree from forming");
+        UNIT_ASSERT(std::ranges::all_of(failedReads, [](ui32 count) { return count != 0; }));
+        UNIT_ASSERT_VALUES_EQUAL(writesBeforeCollection, 0);
+        UNIT_ASSERT(!downgraded);
+
+        // No failed read is repaired. Recovery must use the remaining disk and static-group quorum.
+        allowCollection = true;
+        for (auto& [nodeId, ev] : heldScatters) {
+            runtime.Send(ev.release(), nodeId);
+        }
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return std::ranges::all_of(state.Metadata, [&](const auto& item) {
+                return item.second.GetCommittedStorageConfig().GetFingerprint() == newer.GetFingerprint();
+            });
+        }, TDuration::Minutes(2)), "The available quorum did not restore the older node's configuration");
+        UNIT_ASSERT(!downgraded);
+        QueryKeeper(runtime, keepers.front(), true); // the root reached its working state
+        CheckStaysConverged(runtime, keepers);
+        UNIT_ASSERT(std::ranges::all_of(failedReads, [](ui32 count) { return count > 1; }));
+        UNIT_ASSERT(!downgraded);
+    }
+
+    Y_UNIT_TEST(BootstrapReadErrorDoesNotOverwriteNewerConfig) {
+        auto initial = MakeStorageConfig(1, 0, {1});
+        initial.MutableSelfManagementConfig()->SetEnabled(true);
+        initial.MutableSelfManagementConfig()->SetAutomaticBootstrap(false);
+        auto *drive = initial.MutableBlobStorageConfig()->MutableDefineHostConfig(0)->AddDrive();
+        drive->SetPath("/dev/disk1_2");
+        drive->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&initial);
+        auto older = initial;
+        older.SetGeneration(1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&older);
+        auto newer = older;
+        newer.SetGeneration(2);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&newer);
+        TNodeWardenTestState state;
+        const auto oldKey = std::pair<ui32, TString>{1, "/dev/disk1_1"};
+        const auto newKey = std::pair<ui32, TString>{1, "/dev/disk1_2"};
+        state.Metadata[oldKey].MutableCommittedStorageConfig()->CopyFrom(older);
+        // A partially persisted commit follows a successful proposal quorum.
+        state.Metadata[oldKey].MutableProposedStorageConfig()->CopyFrom(newer);
+        state.Metadata[newKey].MutableCommittedStorageConfig()->CopyFrom(newer);
+
+        TTestActorSystem runtime(1);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        bool failRead = true;
+        ui32 failedReads = 0;
+        ui32 writes = 0;
+        bool downgraded = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (failRead && ev->GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadata::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenReadMetadata>()->Path == newKey.second) {
+                ++failedReads;
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new NStorage::TEvNodeWardenReadMetadataResult(std::nullopt,
+                        NPDisk::EPDiskMetadataOutcome::ERROR, {}), 0, ev->Cookie), nodeId);
+                return false;
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
+                ++writes;
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenWriteMetadata>();
+                const auto it = state.Metadata.find(std::pair<ui32, TString>{1, msg->Path});
+                if (it != state.Metadata.end() && msg->Record.GetCommittedStorageConfig().GetGeneration() <
+                        it->second.GetCommittedStorageConfig().GetGeneration()) {
+                    downgraded = true;
+                }
+            }
+            return true;
+        };
+        RegisterKeeper(runtime, initial, 1, state);
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(65));
+        UNIT_ASSERT(failedReads);
+        UNIT_ASSERT_C(!downgraded, "Bootstrap wrote an older configuration over a newer local commit");
+        UNIT_ASSERT_VALUES_EQUAL_C(state.Metadata.at(newKey).GetCommittedStorageConfig().GetGeneration(), 2,
+            "Bootstrap overwrote the unread newer committed configuration");
+        UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+        UNIT_ASSERT_C(failedReads > 1, "Quorum collection did not retry the failed metadata read");
+        failRead = false;
+        UNIT_ASSERT_C(SimUntil(runtime, [&] {
+            return state.Metadata.at(oldKey).GetCommittedStorageConfig().GetGeneration() == 2;
+        }), "Quorum recovery did not finish the partial commit after the read succeeded");
+        UNIT_ASSERT_VALUES_EQUAL(state.Metadata.at(newKey).GetCommittedStorageConfig().GetGeneration(), 2);
+        UNIT_ASSERT(writes);
+        runtime.FilterFunction = nullptr;
+    }
+
     Y_UNIT_TEST(Block42QuorumOverridesNodeMajority) {
         const auto config = MakeStorageConfig(17, 0, {1, 2, 3, 4, 5, 6, 7, 8},
                                               TBlobStorageGroupType::Erasure4Plus2Block);

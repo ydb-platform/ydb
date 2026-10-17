@@ -106,7 +106,8 @@ Y_UNIT_TEST(CreateLayout) {
 
 // A row of 4-byte and 1-byte columns that is short enough for the small-tuple
 // SIMD path, but has more packable columns than PackTupleOr is instantiated for.
-Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+static void TestPackNarrowRowWithManySmallColumns(
+    THolder<TTupleLayout> (*createLayout)(const std::vector<TColumnDesc>&)) {
 
     TScopedAlloc alloc(__LOCATION__);
 
@@ -121,7 +122,7 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
         columns.push_back(desc);
     }
 
-    auto tl = TTupleLayout::Create(columns);
+    auto tl = createLayout(columns);
     UNIT_ASSERT_VALUES_EQUAL(tl->TotalRowSize, 20);
 
     constexpr ui32 NTuples = 1000;
@@ -159,6 +160,29 @@ Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
 
     for (size_t col = 0; col != ColsNum; ++col) {
         UNIT_ASSERT_VALUES_EQUAL_C(unpackedData[col], colsData[col], "column " << col);
+    }
+}
+
+Y_UNIT_TEST(PackNarrowRowWithManySmallColumns) {
+    TestPackNarrowRowWithManySmallColumns(TTupleLayout::Create);
+}
+
+Y_UNIT_TEST(PackNarrowRowFallback) {
+    TestPackNarrowRowWithManySmallColumns(
+        [](const std::vector<TColumnDesc>& columns) -> THolder<TTupleLayout> {
+            return MakeHolder<TTupleLayoutFallback>(columns);
+        });
+}
+
+Y_UNIT_TEST(PackNarrowRowSSE42) {
+    if (NX86::HaveSSE42()) {
+        TestPackNarrowRowWithManySmallColumns(CreateSSE42TupleLayout);
+    }
+}
+
+Y_UNIT_TEST(PackNarrowRowAVX2) {
+    if (NX86::HaveAVX2()) {
+        TestPackNarrowRowWithManySmallColumns(CreateAVX2TupleLayout);
     }
 }
 

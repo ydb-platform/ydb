@@ -1,5 +1,7 @@
 #pragma once
 
+#include "monitoring_snapshot.h"
+
 #include "defs.h"
 #include "ddisk_config.h"
 #include "ddisk_checksums.h"
@@ -149,6 +151,8 @@ namespace NKikimr::NDDisk {
             EvGetTabletStats,
             EvTabletStats,
             EvTabletStatsChanged,
+            EvGetTabletStatsSnapshot,
+            EvTabletStatsSnapshot,
         };
     };
 
@@ -1020,6 +1024,7 @@ struct TPersistentBufferFormat {
         std::map<std::pair<ui64, ui8>, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
         std::vector<TOpStats> OpStats;
+        std::optional<TPersistentBufferMonInfo> MonInfo;
     };
 
     struct TEvGetPersistentBufferInfo : public TEventLocal<TEvGetPersistentBufferInfo, TEv::EvGetPersistentBufferInfo> {
@@ -1029,6 +1034,7 @@ struct TPersistentBufferFormat {
         // Zero returns all matching namespaces and ignores TabletsOffset.
         ui32 TabletsLimit = 0;
         std::optional<ui64> TabletIdFilter;
+        std::optional<TPersistentBufferSnapshotQuery> MonQuery;
         TEvGetPersistentBufferInfo(bool describeFreeSpace = false, bool describeTablets = false)
             : DescribeFreeSpace(describeFreeSpace)
             , DescribeTablets(describeTablets)

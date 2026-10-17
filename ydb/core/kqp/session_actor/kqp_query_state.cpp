@@ -39,6 +39,11 @@ bool TKqpQueryState::EnsureTableVersions(const TEvTxProxySchemeCache::TEvNavigat
     const auto& navigate = *response.Request;
 
     for (const auto& entry : navigate.ResultSet) {
+        // External connections have no table-read actor to recheck access later.
+        // Recompile on failed authorization/navigation instead of using a cached binding.
+        if (entry.Access && entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
+            return false;
+        }
         switch (entry.Status) {
             case TSchemeCacheNavigate::EStatus::Ok: {
                 auto expectedVersion = TableVersions.FindPtr(TTableId(entry.TableId.PathId));
@@ -121,10 +126,24 @@ std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySet> TKqpQueryState::BuildN
     }
 
     navigate->Cookie = QueryId;
+    THashSet<TTableId> serviceConnections;
+    for (const auto& tx : PreparedQuery->GetPhysicalQuery().GetTransactions()) {
+        for (const auto& stage : tx.GetStages()) {
+            for (const auto& transform : stage.GetOutputTransforms()) {
+                if (transform.HasExternalTransform()) {
+                    const auto& connection = transform.GetExternalTransform().GetConnection();
+                    serviceConnections.emplace(connection.GetOwnerId(), connection.GetTableId());
+                }
+            }
+        }
+    }
 
     for (const auto& [tableId, _] : TableVersions) {
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.TableId = tableId;
+        if (serviceConnections.contains(tableId)) {
+            entry.Access = NACLib::SelectRow;
+        }
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
         entry.SyncVersion = false;

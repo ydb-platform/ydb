@@ -31,10 +31,22 @@ public:
 
         auto apply = node.Cast<TCoApply>();
         auto callable = apply.Callable().Maybe<TDqSqlExternalFunction>();
-        if (!callable
-            || apply.Args().Count() != 2
-            || !apply.Arg(1).Maybe<TDqCnUnionAll>()) {
-
+        if (!callable || apply.Args().Count() != 2) {
+            return node;
+        }
+        if (!apply.Arg(1).Maybe<TDqCnUnionAll>()) {
+            // A provider read is not a pure literal input. Wait until its
+            // optimizer exposes the DQ connection, otherwise the read may turn
+            // into a nested DqCnUnionAll inside a zero-input stage program.
+            if (FindNode(apply.Arg(1).Ptr(), [](const TExprNode::TPtr& input) {
+                    return TCoDataSource::Match(input.Get());
+                })) {
+                return node;
+            }
+            const auto input = DqBuildPureExprStage(apply.Arg(1), ctx);
+            if (input.Ptr() != apply.Arg(1).Ptr()) {
+                return TExprBase(ctx.ChangeChild(apply.Ref(), 1, input.Ptr()));
+            }
             return node;
         }
         callable = callable.Cast();
@@ -111,14 +123,12 @@ public:
                 .InvokeUrl<TCoAtom>().Build(description->InvokeUrl)
                 .Done();
 
+        const auto& runtimeType = description->TransformType.empty() ? transformType : description->TransformType;
         auto dqTransform = Build<TDqTransform>(ctx, node.Pos())
-                .Index().Build("0")
-                .DataSink(transformSink)
-                .Type<TCoAtom>().Build(transformType)
-                .InputType(inputType)
-                .OutputType(outputType)
-                .Settings(settings)
-                .Done();
+                               .Index()
+                               .Build("0") .DataSink(transformSink)
+                                       .Type<TCoAtom>()
+                                       .Build(runtimeType) .InputType(inputType).OutputType(outputType).Settings(settings).Done();
 
         auto transformStage = Build<TDqStage>(ctx, node.Pos())
                 .Inputs()
@@ -163,4 +173,4 @@ THolder<IGraphTransformer> CreateDqFunctionPhysicalOptTransformer(TDqFunctionSta
     return MakeHolder<TDqFunctionPhysicalOptTransformer>(state);
 }
 
-}
+}   // namespace NYql::NDqFunction

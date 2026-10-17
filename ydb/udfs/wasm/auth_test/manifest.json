@@ -1,0 +1,13 @@
+{
+  "module_name": "TestAuth",
+  "module_type": "module",
+  "module_kind": "wasm",
+  "auth_provider": {
+    "name": "TEST_AUTH",
+    "abi_version": 1,
+    "header": "x-auth-test",
+    "parameters": [
+      { "name": "secret", "type": "Secret" }
+    ]
+  }
+}

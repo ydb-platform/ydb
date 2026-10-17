@@ -1,5 +1,6 @@
 #include <ydb/services/udf_store/wasm/manifest.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/yexception.h>
@@ -162,5 +163,33 @@ Y_UNIT_TEST_SUITE(TWasmManifestTest) {
             "functions":[{"name":"Apply","result_type":"Int64"}],
             "objects":[{"name":"X","create_export":"create","methods":[{"name":"Apply","export":"apply","result_type":"Int64"}]}]})"),
             yexception, "Duplicate YQL function name");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWasmServiceStoreManifestTest) {
+    Y_UNIT_TEST(ServiceOnlyAndMixedModules) {
+        const TString json = R"({"module_type":"module","module_kind":"wasm","module_name":"Adapter",
+            "service_abi_version":2,"service_methods":[{"name":"Lookup","batch":false,"max_batch_rows":1,
+            "max_output_row_bytes":8,"input":[{"name":"id","type":"Uint64"}],
+            "output":[{"name":"value","type":"Uint64"}]}]})";
+        const auto manifest = ParseManifest(json);
+        UNIT_ASSERT(manifest.Functions.empty());
+        UNIT_ASSERT(manifest.Services);
+        UNIT_ASSERT_VALUES_EQUAL(manifest.Services->Methods.at("Lookup").Input[0].Name, "id");
+        NJson::TJsonValue root;
+        UNIT_ASSERT(NJson::ReadJsonTree(json, &root, true));
+        root["functions"].AppendValue(NJson::TJsonValue(NJson::JSON_MAP));
+        root["functions"][0]["name"] = "ordinary";
+        root["functions"][0]["result_type"] = "Uint64";
+        const auto mixed = ParseManifest(NJson::WriteJson(root));
+        UNIT_ASSERT_VALUES_EQUAL(mixed.Functions.size(), 1);
+        UNIT_ASSERT(mixed.Services);
+        root["service_abi_version"] = 1;
+        UNIT_ASSERT_EXCEPTION(ParseManifest(NJson::WriteJson(root)), yexception);
+        root["service_abi_version"] = 2;
+        root["service_methods"][0]["output"][0]["type"] = "Optional<Uint64>";
+        UNIT_ASSERT_EXCEPTION(ParseManifest(NJson::WriteJson(root)), yexception);
+        root["service_methods"] = NJson::TJsonValue(NJson::JSON_ARRAY);
+        UNIT_ASSERT_EXCEPTION(ParseManifest(NJson::WriteJson(root)), yexception);
     }
 }

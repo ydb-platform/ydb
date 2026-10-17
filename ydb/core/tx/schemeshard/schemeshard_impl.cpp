@@ -6294,6 +6294,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         // for subscriptions on owners
         HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
+        HFuncTraced(TEvInterconnect::TEvNodeConnected, Handle);
         HFuncTraced(TEvPrivate::TEvRetryNodeSubscribe, Handle);
 
         // shred

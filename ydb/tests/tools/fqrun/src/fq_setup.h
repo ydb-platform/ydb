@@ -27,6 +27,8 @@ public:
 
     TRequestResult DescribeQuery(const TString& queryId, const TFqOptions& options, TExecutionMeta& meta) const;
 
+    TRequestResult AbortQuery(const TString& queryId, const TFqOptions& options) const;
+
     TRequestResult FetchQueryResults(const TString& queryId, i32 resultSetId, const TFqOptions& options, Ydb::ResultSet& resultSet) const;
 
     TRequestResult CreateConnection(const FederatedQuery::ConnectionContent& connection, const TFqOptions& options, TString& connectionId) const;

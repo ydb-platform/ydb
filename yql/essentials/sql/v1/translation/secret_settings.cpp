@@ -177,7 +177,12 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
     }
 
     const auto& authMethod = *authMethodIt->second.GetLiteral();
-    auto it = AuthMethodFields.find(authMethod);
+    const auto sourceType = result.find("source_type");
+    const bool currentIam = authMethod == "CURRENT_IAM" && sourceType != result.end() && sourceType->second.GetLiteral() &&
+                            *sourceType->second.GetLiteral() == "ExternalService";
+    // ExternalService resolves the caller's IAM token on the host. Like NONE,
+    // it must not accept any explicit credential settings.
+    auto it = AuthMethodFields.find(currentIam ? TString("NONE") : authMethod);
     if (it == AuthMethodFields.end()) {
         ctx.Error() << "Unknown AUTH_METHOD = " << authMethod;
         return false;

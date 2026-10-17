@@ -129,7 +129,6 @@ struct TSessionInfoDeleter {
     void operator()(TSessionInfo* sessionInfo);
 };
 
-namespace {
 // Event ids
 enum EEventIds: ui32 {
     EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
@@ -166,7 +165,6 @@ struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvS
     TEvState State;
         TResponse Response;
 };
-}   // namespace
 
 class TQuerySessionPoolServiceActor: public NActors::TActorBootstrapped<TQuerySessionPoolServiceActor> {
     using TBase = NActors::TActorBootstrapped<TQuerySessionPoolServiceActor>;

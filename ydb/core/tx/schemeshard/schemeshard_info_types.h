@@ -71,6 +71,7 @@ class TSchemeShard;
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
     bool DisableForceShardSplit;
+    bool MergeBySizeEnabled;
 };
 
 struct TSplitSettings {
@@ -84,6 +85,11 @@ struct TSplitSettings {
     TControlWrapper MergeByLoadMinLowLoadDurationSec;
     TControlWrapper ForceShardSplitDataSize;
     TControlWrapper DisableForceShardSplit;
+<<<<<<< HEAD
+=======
+    TControlWrapper EnableSplitMergeFairScheduling;
+    TControlWrapper MergeBySizeEnabled;
+>>>>>>> 976bd102257 (schemeshard: add MergeBySizeEnabled ICB control (#56055))
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -96,6 +102,11 @@ struct TSplitSettings {
         , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
         , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
         , DisableForceShardSplit(0, 0, 1)
+<<<<<<< HEAD
+=======
+        , EnableSplitMergeFairScheduling(0, 0, 1)
+        , MergeBySizeEnabled(1, 0, 1)
+>>>>>>> 976bd102257 (schemeshard: add MergeBySizeEnabled ICB control (#56055))
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -111,12 +122,19 @@ struct TSplitSettings {
 
         TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
         TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
+<<<<<<< HEAD
+=======
+
+        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,   icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        TControlBoard::RegisterSharedControl(MergeBySizeEnabled,               icb->SchemeShardControls.MergeBySizeEnabled);
+>>>>>>> 976bd102257 (schemeshard: add MergeBySizeEnabled ICB control (#56055))
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
             .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .MergeBySizeEnabled = ui64(MergeBySizeEnabled) != 0,
         };
     }
 };
@@ -1216,6 +1234,10 @@ public:
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Global switch: merge by size can be disabled cluster-wide via ICB
+        if (!params.MergeBySizeEnabled) {
+            return false;
+        }
         // Auto merge is only enabled when auto split is also enabled
         if (!IsSplitBySizeEnabled(params)) {
             return false;

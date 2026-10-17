@@ -1300,6 +1300,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         };
 
 
+        Y_UNIT_TEST_F(ClientModificationsSendMessage, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+            for (bool enableClientModifications : {false, true}) {
+                KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+                auto single = SendMessage({{"QueueUrl", path.QueueUrl}, {"MessageBody", "single"}}, enableClientModifications ? 200 : 400);
+                auto batch = SendMessageBatch({
+                    {"QueueUrl", path.QueueUrl},
+                    {"Entries", NJson::TJsonArray{
+                        NJson::TJsonMap{{"Id", "small"}, {"MessageBody", "batch"}},
+                        NJson::TJsonMap{{"Id", "large"}, {"MessageBody", TString(NKikimr::NSQS::TLimits::MaxMessageSize - 1, 'x')}}
+                    }}
+                }, enableClientModifications ? 200 : 400);
+
+                if (enableClientModifications) {
+                    UNIT_ASSERT(!GetByPath<TString>(single, "MessageId").empty());
+                    UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+                } else {
+                    for (const auto* result : {&single, &batch}) {
+                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "__type"), "AccessDeniedException");
+                        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(*result, "message"), "Client data writes are disabled");
+                    }
+                }
+            }
+        }
+
         Y_UNIT_TEST_F(TestSendMessage, TFixture) {
             auto driver = MakeDriver(*this);
             const TSqsTopicPaths path;
@@ -2275,7 +2304,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto charges = recorder.Take();
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one write RU charge");
         // Total payload = count * size (24 KiB) mapped onto WRITE_BLOCK_SIZE
-        // blocks by a fresh calculator. 
+        // blocks by a fresh calculator.
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
@@ -2332,7 +2361,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }
         UNIT_ASSERT_VALUES_EQUAL(collected, RuMetering_MessageCount);
         // Total payload = count * size (24 KiB) mapped onto READ_BLOCK_SIZE
-        // blocks by a fresh calculator. 
+        // blocks by a fresh calculator.
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);

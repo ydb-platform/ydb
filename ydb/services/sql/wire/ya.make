@@ -3,10 +3,13 @@ LIBRARY()
 SRCS(
     connection.cpp
     listener.cpp
+    protocol.cpp
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/raw_socket
+    ydb/core/tx/scheme_cache
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/services

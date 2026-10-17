@@ -1,0 +1,30 @@
+#pragma once
+
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+
+namespace NKikimr::NSql {
+
+constexpr ui32 ProtocolVersion3 = 196608;
+constexpr ui32 SslRequestCode = 80877103;
+constexpr ui32 CancelRequestCode = 80877102;
+
+struct TStartupMessage {
+    bool SslRequest = false;
+    bool CancelRequest = false;
+    ui32 Protocol = 0;
+    THashMap<TString, TString> Parameters;
+};
+
+// Consumes one startup message from the front of buffer.
+// Returns false when more bytes are required. On a malformed message, error is set.
+bool TryParseStartup(TString& buffer, TStartupMessage& message, TString& error);
+
+TString MakeAuthenticationOk();
+TString MakeParameterStatus(TStringBuf name, TStringBuf value);
+TString MakeBackendKeyData(ui32 backendPid, ui32 secret);
+TString MakeReadyForQuery();
+TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message);
+TString MakeHandshake(ui32 backendPid, ui32 secret);
+
+} // namespace NKikimr::NSql

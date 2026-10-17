@@ -1,5 +1,9 @@
 #include "connection.h"
 
+#include "protocol.h"
+
+#include <ydb/core/base/path.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -23,17 +27,172 @@ public:
     void Bootstrap() {
         LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::PGWIRE,
             "sql connection accepted from " << Address << " by " << ListenerActorId);
-        Become(&TSqlConnection::StateWork);
+        Socket->SetNonBlock();
+        Become(&TSqlConnection::StateStartup);
     }
 
 private:
-    void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
+    void RequestRead() {
+        if (PollerToken) {
+            PollerToken->Request(true, !Outbox.empty());
+        }
     }
 
-    STATEFN(StateWork) {
+    bool Write(TStringBuf data) {
+        while (!data.empty()) {
+            const ssize_t written = Socket->Send(data.data(), data.size());
+            if (written > 0) {
+                data.Skip(written);
+                continue;
+            }
+            if (written == -EAGAIN || written == -EWOULDBLOCK) {
+                Outbox.append(data);
+                RequestRead();
+                return false;
+            }
+            PassAway();
+            return false;
+        }
+        return true;
+    }
+
+    void Flush() {
+        TStringBuf data = Outbox;
+        while (!data.empty()) {
+            const ssize_t written = Socket->Send(data.data(), data.size());
+            if (written > 0) {
+                data.Skip(written);
+                continue;
+            }
+            if (written == -EAGAIN || written == -EWOULDBLOCK) {
+                Outbox = TString(data);
+                RequestRead();
+                return;
+            }
+            PassAway();
+            return;
+        }
+        Outbox.clear();
+    }
+
+    void Fail(TStringBuf sqlState, TStringBuf message) {
+        Write(MakeErrorResponse(sqlState, message));
+        CloseAfterWrite = true;
+        if (Outbox.empty()) {
+            PassAway();
+        }
+    }
+
+    void ReadSocket() {
+        char chunk[4096];
+        for (;;) {
+            const ssize_t received = Socket->Receive(chunk, sizeof(chunk));
+            if (received > 0) {
+                Inbox.append(chunk, received);
+                continue;
+            }
+            if (received == 0) {
+                PassAway();
+                return;
+            }
+            if (received == -EAGAIN || received == -EWOULDBLOCK) {
+                break;
+            }
+            PassAway();
+            return;
+        }
+        if (HandleInbox()) {
+            RequestRead();
+        }
+    }
+
+    bool HandleInbox() {
+        TString error;
+        TStartupMessage message;
+        if (!TryParseStartup(Inbox, message, error)) {
+            return true;
+        }
+        if (error) {
+            Fail("08P01", error);
+            return false;
+        }
+        if (message.SslRequest || message.CancelRequest) {
+            PassAway();
+            return false;
+        }
+
+        const auto database = message.Parameters.FindPtr("database");
+        if (!database || database->empty()) {
+            Fail("3D000", "database is required");
+            return false;
+        }
+        DatabasePath = *database;
+        ResolveDatabase();
+        return false;
+    }
+
+    void ResolveDatabase() {
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(DatabasePath);
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        request->ResultSet.emplace_back(std::move(entry));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Become(&TSqlConnection::StateResolve);
+    }
+
+    void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* request = ev->Get()->Request.Get();
+        const bool known = request
+            && request->ResultSet.size() == 1
+            && request->ResultSet[0].Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
+        if (!known) {
+            Fail("3D000", "unknown database");
+            return;
+        }
+        const ui32 backendPid = static_cast<ui32>(SelfId().LocalId());
+        const ui32 secret = SelfId().Hint() ^ 0x53514c;
+        Write(MakeHandshake(backendPid, secret));
+        Become(&TSqlConnection::StateReady);
+    }
+
+    void HandleRegister(NActors::TEvPollerRegisterResult::TPtr& ev) {
+        PollerToken = std::move(ev->Get()->PollerToken);
+        RequestRead();
+    }
+
+    void HandleReady(NActors::TEvPollerReady::TPtr& ev) {
+        if (ev->Get()->Write) {
+            Flush();
+            if (CloseAfterWrite && Outbox.empty()) {
+                PassAway();
+                return;
+            }
+        }
+        if (ev->Get()->Read && CurrentStateFunc() == &TSqlConnection::StateStartup) {
+            ReadSocket();
+        }
+    }
+
+    STATEFN(StateStartup) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NActors::TEvPollerRegisterResult, Handle);
+            hFunc(NActors::TEvPollerRegisterResult, HandleRegister);
+            hFunc(NActors::TEvPollerReady, HandleReady);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateResolve) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
+            hFunc(NActors::TEvPollerReady, HandleReady);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateReady) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvPollerReady, HandleReady);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -42,6 +201,10 @@ private:
     TIntrusivePtr<NRawSocket::TSocketDescriptor> Socket;
     NRawSocket::TNetworkConfig::TSocketAddressType Address;
     NActors::TPollerToken::TPtr PollerToken;
+    TString Inbox;
+    TString Outbox;
+    TString DatabasePath;
+    bool CloseAfterWrite = false;
 };
 
 } // namespace

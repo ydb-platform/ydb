@@ -1,7 +1,7 @@
 # Каркас сервиса и слушатель
 
-status: pending
-commit:
+status: done
+commit: e04a61264f9a97fc3960d5f34abcb65bf7cd70d0
 id: scaffold
 depends: 
 

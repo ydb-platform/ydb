@@ -624,6 +624,11 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
+        if (compileSettings.Action == ECompileActorAction::COMPILE) {
+            return EnqueueCacheMiss(std::move(compileRequest), ctx);
+        }
+
+        // Parsing or splitting can still lead to a cache hit in a subsequent request.
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -835,6 +840,13 @@ private:
         }
     }
 
+    // The miss is reported at lookup time, before the request is queued: a request that is
+    // later rejected, times out or is cancelled still did not find its plan in the cache.
+    void EnqueueCacheMiss(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
+        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        EnqueueCompileRequest(std::move(compileRequest), ctx);
+    }
+
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
@@ -861,16 +873,15 @@ private:
             {"queryId", compileRequest.Query.SerializeToString()},
             {"ast", queryAst.Ast->Root->ToString()});
 
-        auto compileResult = QueryCache->FindByAst(
-            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
-            compileRequest.CompileSettings.IsWarmupCompilation
-                ? EWarmupAttributionMode::Warmup
-                : EWarmupAttributionMode::Client,
-            Counters,
-            compileRequest.TempTablesState);
-
-        if (!compileRequest.FindInCache) {
-            compileResult = nullptr;
+        TKqpCompileResult::TConstPtr compileResult;
+        if (compileRequest.FindInCache) {
+            compileResult = QueryCache->FindByAst(
+                compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+                compileRequest.CompileSettings.IsWarmupCompilation
+                    ? EWarmupAttributionMode::Warmup
+                    : EWarmupAttributionMode::Client,
+                Counters,
+                compileRequest.TempTablesState);
         }
 
         if (compileResult) {
@@ -886,13 +897,15 @@ private:
             return;
         }
 
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-
         LWTRACK(KqpCompileServiceEnqueued,
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
         compileRequest.QueryAst = std::move(queryAst);
+
+        if (compileRequest.FindInCache && compileRequest.CompileSettings.Action != ECompileActorAction::SPLIT) {
+            return EnqueueCacheMiss(std::move(compileRequest), ctx);
+        }
 
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }

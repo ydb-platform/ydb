@@ -5,4 +5,4 @@
 namespace NYql::NDq::NDqSourceLookup {
 NActors::TActorId QuerySessionPoolServiceActorId();
 NActors::IActor* CreateQuerySessionPoolActor();
-}
+}   // namespace NYql::NDq::NDqSourceLookup

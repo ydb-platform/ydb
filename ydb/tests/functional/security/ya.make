@@ -3,4 +3,6 @@ RECURSE(
     acl
     mon
     node_registration
+    oidc
+    sdk
 )

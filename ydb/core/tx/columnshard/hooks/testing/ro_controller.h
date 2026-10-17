@@ -107,13 +107,16 @@ public:
     }
 
     bool WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
-        TInstant start = TInstant::Now();
+        const auto now = [testRuntime]() {
+            return testRuntime ? testRuntime->GetCurrentTime() : TInstant::Now();
+        };
+        TInstant start = now();
         const ui32 countStart0 = GetCleaningStartedCounter().Val();
         ui32 countStart = countStart0;
-        while (Now() - start < d) {
+        while (now() - start < d) {
             if (countStart != GetCleaningStartedCounter().Val()) {
                 countStart = GetCleaningStartedCounter().Val();
-                start = TInstant::Now();
+                start = now();
             }
             if (testRuntime) {
                 testRuntime->SimulateSleep(TDuration::Seconds(1));

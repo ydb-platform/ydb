@@ -41,4 +41,16 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.CreateTable->Unique[0].size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(parsed.CreateTable->Unique[0][0].Name, "email");
     }
+
+    Y_UNIT_TEST(AddColumn) {
+        const TParseResult parsed = Parse("ALTER TABLE t ADD COLUMN note text");
+        UNIT_ASSERT(parsed.AlterTable);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.AlterTable->Name.Name, "t");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.AlterTable->Column.Name.Name, "note");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.AlterTable->Column.Type.Name, "text");
+
+        const TParseResult drop = Parse("ALTER TABLE t DROP COLUMN note");
+        UNIT_ASSERT(!drop.AlterTable);
+        UNIT_ASSERT_VALUES_EQUAL(drop.SqlState, "0A000");
+    }
 }

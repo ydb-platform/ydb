@@ -33,6 +33,9 @@ public:
         if (IsKeyword("create")) {
             return ParseCreate();
         }
+        if (IsKeyword("alter")) {
+            return ParseAlter();
+        }
         return Unsupported(Current.Text);
     }
 
@@ -221,6 +224,52 @@ public:
 
         TParseResult result;
         result.CreateTable = std::move(create);
+        return result;
+    }
+
+    TParseResult ParseAlter() {
+        Advance();
+        if (!IsKeyword("table")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        TAlterTableStmt alter;
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        const TIdentifier first = Identifier();
+        Advance();
+        if (Current.Kind == ETokenKind::Dot) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            alter.Schema = first;
+            alter.Name = Identifier();
+            Advance();
+        } else {
+            alter.Name = first;
+        }
+        if (!IsKeyword("add")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (!IsKeyword("column")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        bool inlinePrimary = false;
+        if (auto error = ParseColumn(alter.Column, inlinePrimary)) {
+            return *error;
+        }
+        if (inlinePrimary) {
+            return Unsupported("primary key");
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.AlterTable = std::move(alter);
         return result;
     }
 

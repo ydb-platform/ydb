@@ -1,7 +1,7 @@
 # UNIQUE в CREATE TABLE
 
-status: pending
-commit:
+status: done
+commit: 1cd6371954d4cb763b01b5476a83ef345dd11513
 id: create-unique
 depends: create-table
 

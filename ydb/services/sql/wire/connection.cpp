@@ -207,6 +207,12 @@ private:
                     RequestRead();
                     return false;
                 }
+                if (parsed.AlterTable) {
+                    Register(CreateAlterTableActor(SelfId(), DatabasePath, *parsed.AlterTable));
+                    Become(&TSqlConnection::StateScheme);
+                    RequestRead();
+                    return false;
+                }
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());

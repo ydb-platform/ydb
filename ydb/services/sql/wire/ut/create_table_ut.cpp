@@ -224,4 +224,60 @@ conn.cursor().execute("CREATE TABLE uniq (id int4 PRIMARY KEY, email text, UNIQU
         UNIT_ASSERT_VALUES_EQUAL(unique.KeyColumnNamesSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(unique.GetKeyColumnNames(0), "email");
     }
+
+    Y_UNIT_TEST(AddColumnLeavesDateUnchanged) {
+        TPortManager ports;
+        const ui16 sqlPort = ports.GetTcpPort();
+        TServerSettings settings(ports.GetTcpPort());
+        settings.AppConfig->MutableSqlConfig()->SetEnable(true);
+        settings.AppConfig->MutableSqlConfig()->SetListeningPort(sqlPort);
+        settings.AppConfig->MutableSqlConfig()->SetListeningAddress("::");
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+
+        const char* script = R"PY(
+import sys
+sys.path[:0] = sys.argv[3].split(":")
+import importlib.metadata as metadata
+metadata.version = lambda name: "1.31.5"
+import pg8000.dbapi
+conn = pg8000.dbapi.connect(user="test", host="::1", port=int(sys.argv[1]), database=sys.argv[2], timeout=60)
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute("CREATE TABLE base (id int4 PRIMARY KEY)")
+cur.execute("ALTER TABLE base ADD COLUMN note text")
+try:
+    cur.execute("ALTER TABLE base ADD COLUMN d date")
+except pg8000.dbapi.DatabaseError:
+    pass
+else:
+    raise SystemExit("date column was added")
+)PY";
+        const TString scriptPath = "pg8000_alter.py";
+        {
+            TFileOutput out(scriptPath);
+            out << script;
+        }
+        const TString root = ArcadiaSourceRoot();
+        const TString pythonPath = root + "/contrib/python/pg8000:"
+            + root + "/contrib/python/scramp:"
+            + root + "/contrib/python/asn1crypto:"
+            + root + "/contrib/python/python-dateutil/py3:"
+            + root + "/contrib/python/six/py3";
+        TShellCommand command("python3", {scriptPath, ToString(sqlPort), database, pythonPath});
+        command.Run().Wait();
+        UNIT_ASSERT_C(command.GetExitCode() && *command.GetExitCode() == 0,
+            command.GetOutput() + "\n" + command.GetError());
+
+        const auto columns = WaitTable(server, database + "/base");
+        const TSeenColumn* id = columns.FindPtr("id");
+        const TSeenColumn* note = columns.FindPtr("note");
+        UNIT_ASSERT(id && note);
+        UNIT_ASSERT_VALUES_EQUAL(id->TypeName, "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(note->TypeName, "Utf8");
+        UNIT_ASSERT(!columns.FindPtr("d"));
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2u);
+    }
 }

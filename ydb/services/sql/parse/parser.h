@@ -70,9 +70,16 @@ struct TCreateTableStmt {
     TVector<TVector<TIdentifier>> Unique;
 };
 
+struct TAlterTableStmt {
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TColumnDef Column;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
+    std::optional<TAlterTableStmt> AlterTable;
     TString SqlState;
     TString Message;
 };

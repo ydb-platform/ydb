@@ -254,10 +254,142 @@ private:
     NActors::TActorId Pipe;
 };
 
+class TAlterTableActor : public NActors::TActorBootstrapped<TAlterTableActor> {
+public:
+    TAlterTableActor(const NActors::TActorId& replyTo, TString database, TAlterTableStmt statement)
+        : ReplyTo(replyTo)
+        , Database(std::move(database))
+        , Statement(std::move(statement))
+    {
+    }
+
+    void Bootstrap() {
+        TString error;
+        if (!Build(error)) {
+            Reply(false, "0A000", error ? error : TString("not supported"));
+            return;
+        }
+        auto event = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        event->Record.SetDatabaseName(Database);
+        auto* modify = event->Record.MutableTransaction()->MutableModifyScheme();
+        modify->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        TString dir = Database;
+        if (dir && dir.back() == '/') {
+            dir.pop_back();
+        }
+        if (Statement.Schema) {
+            dir += "/" + Statement.Schema->Name;
+        }
+        modify->SetWorkingDir(dir);
+        *modify->MutableAlterTable() = Alter;
+        Send(MakeTxProxyID(), event.Release());
+        Become(&TAlterTableActor::StatePropose);
+    }
+
+private:
+    bool Build(TString& error) {
+        const TResolvedType resolved = ResolveColumnType(Statement.Column.Type);
+        if (!resolved.Ok()) {
+            error = resolved.Message;
+            return false;
+        }
+        Alter.SetName(Statement.Name.Name);
+        auto* column = Alter.AddColumns();
+        column->SetName(Statement.Column.Name.Name);
+        column->SetType(resolved.Name);
+        if (Statement.Column.NotNull) {
+            column->SetNotNull(true);
+        }
+        if (Statement.Column.Default) {
+            TString message;
+            if (!FillDefaultLiteral(*column->MutableDefaultFromLiteral(), resolved.Name, *Statement.Column.Default, message)) {
+                error = message;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void Reply(bool ok, TString sqlState, TString message) {
+        auto result = MakeHolder<TEvDdlResult>();
+        result->Ok = ok;
+        result->SqlState = std::move(sqlState);
+        result->Message = std::move(message);
+        result->CommandTag = "ALTER TABLE";
+        Send(ReplyTo, result.Release());
+        if (Pipe) {
+            NTabletPipe::CloseClient(SelfId(), Pipe);
+            Pipe = {};
+        }
+        PassAway();
+    }
+
+    void HandleStatus(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        const auto& status = *ev->Get();
+        const auto code = status.Status();
+        if (code == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
+            Pipe = Register(NTabletPipe::CreateClient(SelfId(), status.Record.GetSchemeShardTabletId()));
+            auto notify = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(status.Record.GetTxId());
+            NTabletPipe::SendData(SelfId(), Pipe, notify.Release());
+            return;
+        }
+        const auto scheme = static_cast<NKikimrScheme::EStatus>(status.Record.GetSchemeShardStatus());
+        if (code == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete
+            && scheme == NKikimrScheme::StatusSuccess)
+        {
+            Reply(true, {}, {});
+            return;
+        }
+        TString message = status.Record.GetSchemeShardReason();
+        if (!message) {
+            message = "scheme request failed";
+        }
+        Reply(false, scheme == NKikimrScheme::StatusAlreadyExists ? "42701" : "42P01", message);
+    }
+
+    void HandleNotify(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
+        Reply(true, {}, {});
+    }
+
+    void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            Reply(false, "08006", "scheme pipe failed");
+        }
+    }
+
+    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        Reply(false, "08006", "scheme pipe closed");
+    }
+
+    void IgnoreRegistered(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
+    }
+
+    STATEFN(StatePropose) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleStatus);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, HandleNotify);
+            hFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, IgnoreRegistered);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConnected);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    const NActors::TActorId ReplyTo;
+    const TString Database;
+    const TAlterTableStmt Statement;
+    NKikimrSchemeOp::TTableDescription Alter;
+    NActors::TActorId Pipe;
+};
+
 } // namespace
 
 NActors::IActor* CreateTableActor(const NActors::TActorId& replyTo, TString database, TCreateTableStmt statement) {
     return new TCreateTableActor(replyTo, std::move(database), std::move(statement));
+}
+
+NActors::IActor* CreateAlterTableActor(const NActors::TActorId& replyTo, TString database, TAlterTableStmt statement) {
+    return new TAlterTableActor(replyTo, std::move(database), std::move(statement));
 }
 
 } // namespace NKikimr::NSql

@@ -1,7 +1,7 @@
 # INSERT одной строки
 
-status: pending
-commit:
+status: done
+commit: cbae0959e37c46e9feae4d5b448dee71bfdb65f9
 id: insert-row
 depends: select-point
 

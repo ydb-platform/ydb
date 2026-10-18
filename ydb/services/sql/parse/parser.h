@@ -137,12 +137,38 @@ struct TAlterTableStmt {
     TColumnDef Column;
 };
 
-// One VALUES tuple of literals. A second tuple, SELECT, ON CONFLICT and RETURNING stay 0A000.
+enum class EConflictAction {
+    None,
+    Nothing,
+    Update,
+};
+
+struct TUpdateAssign {
+    TIdentifier Column;
+    bool Excluded = false;
+    TIdentifier ExcludedColumn;
+    TLiteral Value;
+};
+
+// One comparison. Excluded means the left side is EXCLUDED.column.
+struct TConflictWhere {
+    TIdentifier Column;
+    bool Excluded = false;
+    ECompareOp Op = ECompareOp::Eq;
+    TLiteral Value;
+};
+
+// One VALUES tuple of literals. A second tuple, SELECT and RETURNING stay 0A000.
+// ON CONFLICT is only the primary key, DO NOTHING or DO UPDATE of literals and EXCLUDED.
 struct TInsertStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
     TVector<TIdentifier> Columns;
     TVector<TLiteral> Values;
+    EConflictAction Conflict = EConflictAction::None;
+    TVector<TIdentifier> ConflictTarget;
+    TVector<TUpdateAssign> Update;
+    std::optional<TConflictWhere> ConflictWhere;
 };
 
 struct TParseResult {

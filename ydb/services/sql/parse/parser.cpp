@@ -95,8 +95,13 @@ public:
             }
             return Unsupported(Current.Text);
         }
-        if (Current.Kind == ETokenKind::Comma || IsKeyword("on") || IsKeyword("returning")) {
+        if (Current.Kind == ETokenKind::Comma || IsKeyword("returning")) {
             return Unsupported(Current.Text);
+        }
+        if (IsKeyword("on")) {
+            if (auto error = ConflictClause(insert)) {
+                return *error;
+            }
         }
         if (auto error = Finish()) {
             return *error;
@@ -104,6 +109,139 @@ public:
         TParseResult result;
         result.Insert = std::move(insert);
         return result;
+    }
+
+    std::optional<TParseResult> ValueLiteral(TLiteral& literal) {
+        if (IsKeyword("null")) {
+            literal = {TLiteral::EKind::Null, {}};
+        } else if (Current.Kind == ETokenKind::Number) {
+            literal = {TLiteral::EKind::Integer, Current.Text};
+        } else if (Current.Kind == ETokenKind::String) {
+            literal = {TLiteral::EKind::String, Current.Text};
+        } else {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ConflictClause(TInsertStmt& insert) {
+        Advance();
+        if (!IsKeyword("conflict")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (auto error = ParenthesizedNames(insert.ConflictTarget)) {
+            return error;
+        }
+        if (!IsKeyword("do")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (IsKeyword("nothing")) {
+            insert.Conflict = EConflictAction::Nothing;
+            Advance();
+            return std::nullopt;
+        }
+        if (!IsKeyword("update")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (!IsKeyword("set")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        insert.Conflict = EConflictAction::Update;
+        for (;;) {
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            TUpdateAssign assign;
+            assign.Column = Identifier();
+            Advance();
+            if (Current.Kind != ETokenKind::Operator || Current.Text != "=") {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (IsKeyword("excluded")) {
+                Advance();
+                if (Current.Kind != ETokenKind::Dot) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                if (Current.Kind != ETokenKind::Identifier) {
+                    return Unsupported(Current.Text);
+                }
+                assign.Excluded = true;
+                assign.ExcludedColumn = Identifier();
+                Advance();
+            } else if (auto error = ValueLiteral(assign.Value)) {
+                return error;
+            }
+            insert.Update.push_back(std::move(assign));
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
+        }
+        if (IsKeyword("where")) {
+            Advance();
+            TConflictWhere where;
+            if (IsKeyword("excluded")) {
+                where.Excluded = true;
+                Advance();
+                if (Current.Kind != ETokenKind::Dot) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+            } else if (Current.Kind == ETokenKind::Identifier) {
+                const TIdentifier first = Identifier();
+                Advance();
+                if (Current.Kind == ETokenKind::Dot) {
+                    Advance();
+                    if (Current.Kind != ETokenKind::Identifier) {
+                        return Unsupported(Current.Text);
+                    }
+                    where.Column = Identifier();
+                    Advance();
+                } else {
+                    where.Column = first;
+                }
+            } else {
+                return Unsupported(Current.Text);
+            }
+            if (where.Excluded) {
+                if (Current.Kind != ETokenKind::Identifier) {
+                    return Unsupported(Current.Text);
+                }
+                where.Column = Identifier();
+                Advance();
+            }
+            if (Current.Kind != ETokenKind::Operator) {
+                return Unsupported(Current.Text);
+            }
+            if (Current.Text == "=") {
+                where.Op = ECompareOp::Eq;
+            } else if (Current.Text == "<>" || Current.Text == "!=") {
+                where.Op = ECompareOp::NotEq;
+            } else if (Current.Text == "<") {
+                where.Op = ECompareOp::Lt;
+            } else if (Current.Text == ">") {
+                where.Op = ECompareOp::Gt;
+            } else if (Current.Text == "<=") {
+                where.Op = ECompareOp::Le;
+            } else if (Current.Text == ">=") {
+                where.Op = ECompareOp::Ge;
+            } else {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (auto error = ValueLiteral(where.Value)) {
+                return error;
+            }
+            insert.ConflictWhere = std::move(where);
+        }
+        return std::nullopt;
     }
 
     // SelectStmt / select_no_parens / simple_select

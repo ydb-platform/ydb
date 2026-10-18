@@ -5,7 +5,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_type_order.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -13,6 +15,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
 #include <algorithm>
@@ -109,7 +112,7 @@ public:
         PassAway();
     }
 
-    void Succeed() {
+    void Succeed(ui32 count) {
         if (Replied) {
             return;
         }
@@ -117,7 +120,7 @@ public:
         Unlink();
         auto result = MakeHolder<TEvQueryResult>();
         result->Ok = true;
-        result->CommandTag = "INSERT 0 1";
+        result->CommandTag = "INSERT 0 " + ToString(count);
         Send(ReplyTo, result.Release());
         PassAway();
     }
@@ -177,6 +180,16 @@ public:
             }
         }
 
+        for (const auto& [id, column] : entry.Columns) {
+            Y_UNUSED(id);
+            TPrepared prepared;
+            if (!Prepare(column, prepared)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            PreparedColumns[column.Name] = prepared;
+        }
+
         THashMap<TString, const TLiteral*> given;
         if (Statement.Columns.empty()) {
             TVector<const TSysTables::TTableColumnInfo*> ordered;
@@ -218,7 +231,7 @@ public:
         };
         TVector<TSlot> slots;
         Storage.clear();
-        Storage.reserve(Statement.Values.size() + entry.Columns.size());
+        Storage.reserve(Statement.Values.size() + entry.Columns.size() + 8);
         KeyTypes.clear();
         TVector<const TSysTables::TTableColumnInfo*> keys;
         for (const auto& [id, column] : entry.Columns) {
@@ -271,8 +284,40 @@ public:
                 KeyTypes.push_back(prepared.Type);
             }
             slots.push_back({prepared, cell});
+            Proposed[prepared.Name] = cell;
+            PreparedColumns[prepared.Name] = prepared;
             return true;
         };
+
+        if (Statement.Conflict != EConflictAction::None) {
+            THashSet<TString> target;
+            for (const TIdentifier& name : Statement.ConflictTarget) {
+                target.insert(name.Name);
+            }
+            if (target.size() != keys.size()) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            for (const auto* info : keys) {
+                if (!target.contains(info->Name)) {
+                    Fail("0A000", "not supported");
+                    return false;
+                }
+            }
+        }
+        if (Statement.ConflictWhere && !Statement.ConflictWhere->Excluded) {
+            const auto* info = FindColumn(entry, Statement.ConflictWhere->Column.Name);
+            if (!info) {
+                Fail("42703", Statement.ConflictWhere->Column.Name);
+                return false;
+            }
+            TPrepared prepared;
+            if (!Prepare(*info, prepared)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            PreparedColumns[prepared.Name] = prepared;
+        }
 
         for (const auto* info : keys) {
             const auto* literal = given.FindPtr(info->Name);
@@ -337,7 +382,133 @@ public:
         }
         TSerializedCellMatrix matrix(cells, 1, static_cast<ui16>(cells.size()));
         Payload = matrix.ReleaseBuffer();
+        InsertPayload = Payload;
+        InsertColumnIds = ColumnIds;
         Table = entry.TableId;
+        ReadColumns.clear();
+        for (const auto* info : keys) {
+            const auto* prepared = PreparedColumns.FindPtr(info->Name);
+            if (!prepared) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            ReadColumns.push_back(*prepared);
+        }
+        if (Statement.ConflictWhere && !Statement.ConflictWhere->Excluded) {
+            bool listed = false;
+            for (const TPrepared& column : ReadColumns) {
+                if (column.Name == Statement.ConflictWhere->Column.Name) {
+                    listed = true;
+                }
+            }
+            if (!listed) {
+                ReadColumns.push_back(PreparedColumns[Statement.ConflictWhere->Column.Name]);
+            }
+        }
+        return true;
+    }
+
+    void UseInsert() {
+        Payload = InsertPayload;
+        ColumnIds = InsertColumnIds;
+        Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
+    }
+
+    bool WhereHolds(const THashMap<TString, TCell>& existing) {
+        if (!Statement.ConflictWhere) {
+            return true;
+        }
+        const TConflictWhere& where = *Statement.ConflictWhere;
+        const TPrepared* column = PreparedColumns.FindPtr(where.Column.Name);
+        if (!column) {
+            Fail("42703", where.Column.Name);
+            return false;
+        }
+        TCell left;
+        if (where.Excluded) {
+            if (const TCell* proposed = Proposed.FindPtr(where.Column.Name)) {
+                left = *proposed;
+            }
+        } else if (const TCell* found = existing.FindPtr(where.Column.Name)) {
+            left = *found;
+        }
+        if (left.IsNull() || where.Value.Kind == TLiteral::EKind::Null) {
+            return false;
+        }
+        TCell right;
+        if (!Decode(*column, where.Value, right)) {
+            return false;
+        }
+        const int compared = CompareTypedCells(left, right, NScheme::TTypeInfoOrder(column->Type));
+        switch (where.Op) {
+            case ECompareOp::Eq:
+                return compared == 0;
+            case ECompareOp::NotEq:
+                return compared != 0;
+            case ECompareOp::Lt:
+                return compared < 0;
+            case ECompareOp::Gt:
+                return compared > 0;
+            case ECompareOp::Le:
+                return compared <= 0;
+            case ECompareOp::Ge:
+                return compared >= 0;
+        }
+        return false;
+    }
+
+    bool BuildUpdate() {
+        TVector<TCell> cells;
+        std::vector<ui32> ids;
+        TVector<NScheme::TTypeInfo> types;
+        for (const TPrepared& column : ReadColumns) {
+            if (column.KeyOrder < 0) {
+                continue;
+            }
+            const TCell* key = Proposed.FindPtr(column.Name);
+            if (!key || key->IsNull()) {
+                Fail("23502", "null value in column " + column.Name);
+                return false;
+            }
+            ids.push_back(column.Id);
+            types.push_back(column.Type);
+            cells.push_back(*key);
+        }
+        if (Statement.Update.empty()) {
+            Fail("0A000", "not supported");
+            return false;
+        }
+        for (const TUpdateAssign& assign : Statement.Update) {
+            const TPrepared* column = PreparedColumns.FindPtr(assign.Column.Name);
+            if (!column) {
+                Fail("42703", assign.Column.Name);
+                return false;
+            }
+            if (column->KeyOrder >= 0) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            TCell cell;
+            if (assign.Excluded) {
+                if (!PreparedColumns.contains(assign.ExcludedColumn.Name)) {
+                    Fail("42703", assign.ExcludedColumn.Name);
+                    return false;
+                }
+                if (const TCell* proposed = Proposed.FindPtr(assign.ExcludedColumn.Name)) {
+                    cell = *proposed;
+                }
+            } else if (!Decode(*column, assign.Value, cell)) {
+                return false;
+            }
+            ids.push_back(column->Id);
+            types.push_back(column->Type);
+            cells.push_back(cell);
+        }
+        TSerializedCellMatrix matrix(cells, 1, static_cast<ui16>(cells.size()));
+        Payload = matrix.ReleaseBuffer();
+        ColumnIds = std::move(ids);
+        ColumnTypes = std::move(types);
+        Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
         return true;
     }
 
@@ -366,7 +537,8 @@ public:
     void Write() {
         auto event = std::make_unique<NEvents::TDataEvents::TEvWrite>(TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         const ui64 index = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*event).AddDataToPayload(TString(Payload));
-        event->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, Table, ColumnIds, index, NKikimrDataEvents::FORMAT_CELLVEC);
+        Reading = false;
+        event->AddOperation(Operation, Table, ColumnIds, index, NKikimrDataEvents::FORMAT_CELLVEC);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(event.release(), TabletId, true));
         Linked = true;
         Become(&TInsertActor::StateWrite);
@@ -412,6 +584,47 @@ public:
             return;
         }
         TabletId = partitions[0].ShardId;
+        if (Statement.Conflict == EConflictAction::None) {
+            UseInsert();
+            Allocate();
+            return;
+        }
+        Read();
+    }
+
+    void Read() {
+        Reading = true;
+        Found = false;
+        FoundCells.clear();
+        FoundStorage.clear();
+        auto request = MakeHolder<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(++ReadId);
+        request->Record.MutableTableId()->SetOwnerId(Table.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(Table.PathId.LocalPathId);
+        request->Record.MutableTableId()->SetSchemaVersion(Table.SchemaVersion);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        for (const TPrepared& column : ReadColumns) {
+            request->Record.AddColumns(column.Id);
+        }
+        request->Keys.push_back(TSerializedCellVec(KeyCells));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), TabletId, true));
+        Linked = true;
+        Become(&TInsertActor::StateRead);
+    }
+
+    void ApplyFound() {
+        if (!Found) {
+            UseInsert();
+            Allocate();
+            return;
+        }
+        if (Statement.Conflict == EConflictAction::Nothing || !WhereHolds(FoundCells)) {
+            Succeed(0);
+            return;
+        }
+        if (!BuildUpdate()) {
+            return;
+        }
         Allocate();
     }
 
@@ -429,7 +642,7 @@ public:
         using EStatus = NKikimrDataEvents::TEvWriteResult;
         switch (status) {
             case EStatus::STATUS_COMPLETED:
-                Succeed();
+                Succeed(1);
                 return;
             case EStatus::STATUS_OVERLOADED:
                 if (OverloadRetries >= kOverloadRetries) {
@@ -448,6 +661,19 @@ public:
                 Write();
                 return;
             case EStatus::STATUS_CONSTRAINT_VIOLATION:
+                if (Statement.Conflict == EConflictAction::Nothing) {
+                    Succeed(0);
+                    return;
+                }
+                if (Statement.Conflict == EConflictAction::Update && Operation == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                    if (Reread) {
+                        Fail("23505", "duplicate key value violates unique constraint");
+                        return;
+                    }
+                    Reread = true;
+                    Read();
+                    return;
+                }
                 Fail("23505", "duplicate key value violates unique constraint");
                 return;
             case EStatus::STATUS_BAD_REQUEST:
@@ -463,11 +689,66 @@ public:
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        if (Reading) {
+            Read();
+            return;
+        }
         Write();
     }
 
     void HandleDelivery(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
         Fail("08006", "connection failure");
+    }
+
+    void HandleRead(TEvDataShard::TEvReadResult::TPtr& ev) {
+        const auto code = ev->Get()->Record.GetStatus().GetCode();
+        if (code == Ydb::StatusIds::OVERLOADED) {
+            if (OverloadRetries >= kOverloadRetries) {
+                Fail("53000", "overloaded");
+                return;
+            }
+            ++OverloadRetries;
+            Schedule(TDuration::MilliSeconds(50), new NActors::TEvents::TEvWakeup());
+            return;
+        }
+        if (code == Ydb::StatusIds::INTERNAL_ERROR) {
+            if (InternalRetries >= InternalErrorRetries) {
+                Fail("XX000", "internal error");
+                return;
+            }
+            ++InternalRetries;
+            Read();
+            return;
+        }
+        if (code != Ydb::StatusIds::SUCCESS) {
+            Fail(code == Ydb::StatusIds::SCHEME_ERROR ? TString("42P01") : TString("XX000"), Path);
+            return;
+        }
+        auto& result = *ev->Get();
+        if (result.GetRowsCount() > 0) {
+            const TConstArrayRef<TCell> cells = result.GetCells(0);
+            if (cells.size() != ReadColumns.size()) {
+                Fail("XX000", "internal error");
+                return;
+            }
+            Found = true;
+            for (size_t i = 0; i < cells.size(); ++i) {
+                if (cells[i].IsNull()) {
+                    FoundCells[ReadColumns[i].Name] = TCell();
+                    continue;
+                }
+                FoundStorage.push_back(TString(cells[i].AsBuf()));
+                FoundCells[ReadColumns[i].Name] = TCell(FoundStorage.back().data(), FoundStorage.back().size());
+            }
+        }
+        if (!ev->Get()->Record.GetFinished()) {
+            auto ack = MakeHolder<TEvDataShard::TEvReadAck>();
+            ack->Record.SetReadId(ev->Get()->Record.GetReadId());
+            ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ack.Release(), TabletId, false));
+            return;
+        }
+        ApplyFound();
     }
 
     STATEFN(StateNavigate) {
@@ -480,6 +761,15 @@ public:
     STATEFN(StateResolve) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolve);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateRead) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvDataShard::TEvReadResult, HandleRead);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, HandleDelivery);
+            hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -511,6 +801,18 @@ public:
     std::vector<ui32> ColumnIds;
     TVector<NScheme::TTypeInfo> ColumnTypes;
     TString Payload;
+    TString InsertPayload;
+    std::vector<ui32> InsertColumnIds;
+    NKikimrDataEvents::TEvWrite::TOperation::EOperationType Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
+    THashMap<TString, TPrepared> PreparedColumns;
+    THashMap<TString, TCell> Proposed;
+    TVector<TPrepared> ReadColumns;
+    THashMap<TString, TCell> FoundCells;
+    TVector<TString> FoundStorage;
+    bool Found = false;
+    bool Reading = false;
+    bool Reread = false;
+    ui64 ReadId = 0;
     TVector<TString> Storage;
     TVector<TCell> KeyCells;
     TVector<NScheme::TTypeInfo> KeyTypes;

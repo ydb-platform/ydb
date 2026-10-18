@@ -179,7 +179,7 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
     return MakeTextResult(columns, cells);
 }
 
-TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows) {
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag) {
     TString description;
     AppendBe16(description, static_cast<ui16>(columns.size()));
     for (const TResultColumn& column : columns) {
@@ -207,7 +207,7 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
         out.append(MakeMessage('D', data));
     }
 
-    TString complete = "SELECT " + ToString(rows.size());
+    TString complete = tag ? TString(tag) : "SELECT " + ToString(rows.size());
     complete.push_back('\0');
     out.append(MakeMessage('C', complete));
     out.append(MakeReadyForQuery());

@@ -95,11 +95,16 @@ public:
             }
             return Unsupported(Current.Text);
         }
-        if (Current.Kind == ETokenKind::Comma || IsKeyword("returning")) {
+        if (Current.Kind == ETokenKind::Comma) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("on")) {
             if (auto error = ConflictClause(insert)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("returning")) {
+            if (auto error = ReturningClause(insert)) {
                 return *error;
             }
         }
@@ -240,6 +245,39 @@ public:
                 return error;
             }
             insert.ConflictWhere = std::move(where);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ReturningClause(TInsertStmt& insert) {
+        Advance();
+        for (;;) {
+            TReturningItem item;
+            if (Current.Kind == ETokenKind::Star) {
+                item.Star = true;
+                Advance();
+            } else if (Current.Kind == ETokenKind::Identifier) {
+                item.Column = Identifier();
+                Advance();
+                if (Current.Kind == ETokenKind::LeftParen || Current.Kind == ETokenKind::Operator) {
+                    return Unsupported(Current.Text);
+                }
+                if (IsKeyword("as")) {
+                    Advance();
+                    if (Current.Kind != ETokenKind::Identifier) {
+                        return Unsupported(Current.Text);
+                    }
+                    item.Alias = Identifier();
+                    Advance();
+                }
+            } else {
+                return Unsupported(Current.Text);
+            }
+            insert.Returning.push_back(std::move(item));
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
         }
         return std::nullopt;
     }

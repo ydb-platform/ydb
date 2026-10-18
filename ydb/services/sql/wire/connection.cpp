@@ -264,7 +264,7 @@ private:
                 }
                 rows.push_back(std::move(line));
             }
-            reply = MakeTextResult(columns, rows);
+            reply = MakeTextResult(columns, rows, result.CommandTag);
         }
         const bool written = Write(reply);
         Become(&TSqlConnection::StateQuery);

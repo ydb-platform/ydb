@@ -42,6 +42,15 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "t");
     }
 
+    Y_UNIT_TEST(InsertReturning) {
+        const TParseResult parsed = Parse("INSERT INTO items (id, note) VALUES (7, 'hello') RETURNING note AS label, extra");
+        UNIT_ASSERT_C(parsed.Insert, parsed.SqlState + " " + parsed.Message);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Insert->Returning.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Insert->Returning[0].Column.Name, "note");
+        UNIT_ASSERT(parsed.Insert->Returning[0].Alias);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Insert->Returning[0].Alias->Name, "label");
+    }
+
     Y_UNIT_TEST(UnknownCommand) {
         const TParseResult parsed = Parse("UPDATE t SET a = 1");
         UNIT_ASSERT(!parsed.Select);

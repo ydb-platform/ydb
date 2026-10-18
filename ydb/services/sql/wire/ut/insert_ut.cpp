@@ -86,4 +86,44 @@ Y_UNIT_TEST_SUITE(InsertRow) {
         UNIT_ASSERT(!wrongTarget.Ok);
         UNIT_ASSERT_VALUES_EQUAL(wrongTarget.SqlState, "0A000");
     }
+
+    Y_UNIT_TEST(ReturningShowsTheWrittenRow) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        const auto created = sql.Exec("CREATE TABLE items (id int8 PRIMARY KEY, note text, extra text DEFAULT 'keep')");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+
+        const auto inserted = sql.Exec("INSERT INTO items (id, note) VALUES (7, 'hello') RETURNING note AS label, extra");
+        UNIT_ASSERT_C(inserted.Ok, inserted.SqlState + " " + inserted.Message);
+        UNIT_ASSERT_VALUES_EQUAL(inserted.CommandTag, "INSERT 0 1");
+        UNIT_ASSERT_VALUES_EQUAL(inserted.Columns.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(inserted.Columns[0].Name, "label");
+        UNIT_ASSERT_VALUES_EQUAL(inserted.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(inserted.Rows[0][0].Text, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(inserted.Rows[0][1].Text, "keep");
+
+        const auto updated = sql.Exec(
+            "INSERT INTO items (id, note, extra) VALUES (7, 'changed', 'gone') "
+            "ON CONFLICT (id) DO UPDATE SET note = EXCLUDED.note RETURNING note, extra");
+        UNIT_ASSERT_C(updated.Ok, updated.SqlState + " " + updated.Message);
+        UNIT_ASSERT_VALUES_EQUAL(updated.CommandTag, "INSERT 0 1");
+        UNIT_ASSERT_VALUES_EQUAL(updated.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(updated.Rows[0][0].Text, "changed");
+        UNIT_ASSERT_VALUES_EQUAL(updated.Rows[0][1].Text, "keep");
+
+        const auto skipped = sql.Exec("INSERT INTO items (id, note) VALUES (7, 'other') ON CONFLICT (id) DO NOTHING RETURNING note");
+        UNIT_ASSERT_C(skipped.Ok, skipped.SqlState + " " + skipped.Message);
+        UNIT_ASSERT_VALUES_EQUAL(skipped.CommandTag, "INSERT 0 0");
+        UNIT_ASSERT_VALUES_EQUAL(skipped.Columns.size(), 1u);
+        UNIT_ASSERT(skipped.Rows.empty());
+
+        const auto expression = sql.Exec("INSERT INTO items (id, note) VALUES (8, 'x') RETURNING note || 'y'");
+        UNIT_ASSERT(!expression.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(expression.SqlState, "0A000");
+    }
 }

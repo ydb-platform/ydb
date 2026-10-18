@@ -39,6 +39,42 @@ TString TablePath(const TString& database, const TInsertStmt& statement) {
     return path;
 }
 
+struct TPgWire {
+    ui32 Oid = 25;
+    i16 Size = -1;
+};
+
+std::optional<TPgWire> PgWire(NScheme::TTypeId type) {
+    switch (type) {
+        case NScheme::NTypeIds::Bool:
+            return TPgWire{16, 1};
+        case NScheme::NTypeIds::Int8:
+        case NScheme::NTypeIds::Int16:
+        case NScheme::NTypeIds::Uint8:
+            return TPgWire{21, 2};
+        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Uint16:
+            return TPgWire{23, 4};
+        case NScheme::NTypeIds::Int64:
+        case NScheme::NTypeIds::Uint32:
+            return TPgWire{20, 8};
+        case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::Decimal:
+            return TPgWire{1700, -1};
+        case NScheme::NTypeIds::Utf8:
+            return TPgWire{25, -1};
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return TPgWire{17, -1};
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            return TPgWire{114, -1};
+        default:
+            return std::nullopt;
+    }
+}
+
 TString LiteralText(const Ydb::TypedValue& typed) {
     const auto& value = typed.value();
     switch (typed.type().type_id()) {
@@ -121,8 +157,78 @@ public:
         auto result = MakeHolder<TEvQueryResult>();
         result->Ok = true;
         result->CommandTag = "INSERT 0 " + ToString(count);
+        if (!ResultColumns.empty()) {
+            result->Columns = ResultColumns;
+            if (count > 0) {
+                result->Rows = ResultRows;
+            }
+        }
         Send(ReplyTo, result.Release());
         PassAway();
+    }
+
+    bool PrepareReturning() {
+        ResultColumns.clear();
+        if (Statement.Returning.empty()) {
+            return true;
+        }
+        TVector<TPrepared> ordered;
+        for (const auto& [name, column] : PreparedColumns) {
+            Y_UNUSED(name);
+            ordered.push_back(column);
+        }
+        std::sort(ordered.begin(), ordered.end(), [](const TPrepared& left, const TPrepared& right) {
+            return left.Id < right.Id;
+        });
+        auto add = [&](const TPrepared& column, const TString& name) -> bool {
+            const auto wire = PgWire(column.Type.GetTypeId());
+            if (!wire) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            ResultColumns.push_back({name, wire->Oid, wire->Size});
+            ResultSources.push_back(column);
+            return true;
+        };
+        for (const TReturningItem& item : Statement.Returning) {
+            if (item.Star) {
+                for (const TPrepared& column : ordered) {
+                    if (!add(column, column.Name)) {
+                        return false;
+                    }
+                }
+                continue;
+            }
+            const TPrepared* column = PreparedColumns.FindPtr(item.Column.Name);
+            if (!column) {
+                Fail("42703", item.Column.Name);
+                return false;
+            }
+            if (!add(*column, item.Alias ? item.Alias->Name : column->Name)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool RememberImage(const THashMap<TString, TCell>& image) {
+        if (Statement.Returning.empty()) {
+            return true;
+        }
+        TVector<TQueryCell> row;
+        for (const TPrepared& column : ResultSources) {
+            const TCell* cell = image.FindPtr(column.Name);
+            const bool null = !cell || cell->IsNull();
+            const TStringBuf bytes = null ? TStringBuf() : cell->AsBuf();
+            const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
+            if (!encoded.Ok) {
+                Fail(encoded.SqlState.empty() ? TString("0A000") : encoded.SqlState, encoded.Message.empty() ? TString("not supported") : encoded.Message);
+                return false;
+            }
+            row.push_back({encoded.Null, encoded.Bytes});
+        }
+        ResultRows = {std::move(row)};
+        return true;
     }
 
     const TSysTables::TTableColumnInfo* FindColumn(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& name) const {
@@ -405,7 +511,17 @@ public:
                 ReadColumns.push_back(PreparedColumns[Statement.ConflictWhere->Column.Name]);
             }
         }
-        return true;
+        if (Statement.Conflict == EConflictAction::Update && !Statement.Returning.empty()) {
+            ReadColumns.clear();
+            for (const auto& [name, column] : PreparedColumns) {
+                Y_UNUSED(name);
+                ReadColumns.push_back(column);
+            }
+            std::sort(ReadColumns.begin(), ReadColumns.end(), [](const TPrepared& left, const TPrepared& right) {
+                return left.Id < right.Id;
+            });
+        }
+        return PrepareReturning();
     }
 
     void UseInsert() {
@@ -503,6 +619,7 @@ public:
             ids.push_back(column->Id);
             types.push_back(column->Type);
             cells.push_back(cell);
+            Assigned[column->Name] = cell;
         }
         TSerializedCellMatrix matrix(cells, 1, static_cast<ui16>(cells.size()));
         Payload = matrix.ReleaseBuffer();
@@ -586,6 +703,9 @@ public:
         TabletId = partitions[0].ShardId;
         if (Statement.Conflict == EConflictAction::None) {
             UseInsert();
+            if (!RememberImage(Proposed)) {
+                return;
+            }
             Allocate();
             return;
         }
@@ -615,6 +735,9 @@ public:
     void ApplyFound() {
         if (!Found) {
             UseInsert();
+            if (!RememberImage(Proposed)) {
+                return;
+            }
             Allocate();
             return;
         }
@@ -623,6 +746,13 @@ public:
             return;
         }
         if (!BuildUpdate()) {
+            return;
+        }
+        THashMap<TString, TCell> image = FoundCells;
+        for (const auto& [name, cell] : Assigned) {
+            image[name] = cell;
+        }
+        if (!RememberImage(image)) {
             return;
         }
         Allocate();
@@ -806,6 +936,10 @@ public:
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
     THashMap<TString, TPrepared> PreparedColumns;
     THashMap<TString, TCell> Proposed;
+    THashMap<TString, TCell> Assigned;
+    TVector<TQueryColumn> ResultColumns;
+    TVector<TPrepared> ResultSources;
+    TVector<TVector<TQueryCell>> ResultRows;
     TVector<TPrepared> ReadColumns;
     THashMap<TString, TCell> FoundCells;
     TVector<TString> FoundStorage;

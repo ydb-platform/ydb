@@ -158,6 +158,12 @@ struct TConflictWhere {
     TLiteral Value;
 };
 
+struct TReturningItem {
+    bool Star = false;
+    TIdentifier Column;
+    std::optional<TIdentifier> Alias;
+};
+
 // One VALUES tuple of literals. A second tuple, SELECT and RETURNING stay 0A000.
 // ON CONFLICT is only the primary key, DO NOTHING or DO UPDATE of literals and EXCLUDED.
 struct TInsertStmt {
@@ -169,6 +175,7 @@ struct TInsertStmt {
     TVector<TIdentifier> ConflictTarget;
     TVector<TUpdateAssign> Update;
     std::optional<TConflictWhere> ConflictWhere;
+    TVector<TReturningItem> Returning;
 };
 
 struct TParseResult {

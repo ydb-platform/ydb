@@ -1,7 +1,7 @@
 # ON CONFLICT по первичному ключу
 
-status: pending
-commit:
+status: done
+commit: 86ce31148f6ea97f0487174fc79ea988abf2b284
 id: insert-on-conflict
 depends: insert-row
 

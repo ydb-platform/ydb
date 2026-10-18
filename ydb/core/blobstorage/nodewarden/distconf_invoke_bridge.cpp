@@ -14,6 +14,15 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TInvokeRequestHandlerActor::CheckPileNotification(TBridgePileId bridgePileId, ui64 generation) {
+        NeedBridgeMode();
+        if (!bridgePileId || Self->BridgeInfo->Piles.size() <= bridgePileId.GetPileIndex()) {
+            throw TExError() << "BridgePileId out of bounds";
+        } else if (Self->StorageConfig->GetClusterState().GetGeneration() != generation) {
+            throw TExError() << "Generation mismatch";
+        }
+    }
+
     void TInvokeRequestHandlerActor::SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd) {
         NeedBridgeMode();
 
@@ -22,7 +31,8 @@ namespace NKikimr::NStorage {
         const auto& newClusterState = cmd.GetNewClusterState();
 
         // check new config alone
-        const ui32 numPiles = Self->Cfg->BridgeConfig->PilesSize();
+        Y_ABORT_UNLESS(Self->BridgeInfo);
+        const ui32 numPiles = Self->BridgeInfo->Piles.size();
         const auto primaryPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
         const auto promotedPileId = TBridgePileId::FromProto(&newClusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
         if (newClusterState.PerPileStateSize() != numPiles) {
@@ -186,13 +196,7 @@ namespace NKikimr::NStorage {
         RunCommonChecks();
 
         const auto bridgePileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSyncFinished::GetBridgePileId);
-
-        NeedBridgeMode();
-        if (Self->Cfg->BridgeConfig->PilesSize() <= bridgePileId.GetPileIndex()) {
-            throw TExError() << "BridgePileId out of bounds";
-        } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
-            throw TExError() << "Generation mismatch";
-        }
+        CheckPileNotification(bridgePileId, cmd.GetGeneration());
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
@@ -286,13 +290,7 @@ namespace NKikimr::NStorage {
         RunCommonChecks();
 
         const auto pileId = TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgeSuspended::GetPileId);
-
-        NeedBridgeMode();
-        if (Self->Cfg->BridgeConfig->PilesSize() <= pileId.GetPileIndex()) {
-            throw TExError() << "BridgePileId out of bounds";
-        } else if (Self->StorageConfig->GetClusterState().GetGeneration() != cmd.GetGeneration()) {
-            throw TExError() << "Generation mismatch";
-        }
+        CheckPileNotification(pileId, cmd.GetGeneration());
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         auto* clusterState = config.MutableClusterState();
@@ -368,7 +366,7 @@ namespace NKikimr::NStorage {
             }
 
             NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            if (auto error = ConvertStorageConfigToBridge(&config)) {
+            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
                 throw TExError() << *error;
             }
             StartProposition(&config);

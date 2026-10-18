@@ -2006,6 +2006,10 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             if (!bridgePileName && piles.size() != 1) {
                 *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
                 return false;
+            } else if (bridgePileName && !piles.contains(*bridgePileName)) {
+                *errorReason = TStringBuilder() << "unknown pile name '" << *bridgePileName << "' for node "
+                    << r->GetNodeId();
+                return false;
             }
         } else if (bridgePileName) {
             *errorReason = "pile name can't be specified when Bridge mode is not enabled";

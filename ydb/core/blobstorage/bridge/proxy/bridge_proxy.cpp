@@ -1165,7 +1165,11 @@ namespace NKikimr {
         }
     };
 
-    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId) {
+    IActor *CreateBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info) {
+        return new TBridgedBlobStorageProxyActor(std::move(info), TActorId());
+    }
+
+    IActor *CreateInlinePileBridgeProxyActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId innerProxyId) {
         return new TBridgedBlobStorageProxyActor(std::move(info), innerProxyId);
     }
 

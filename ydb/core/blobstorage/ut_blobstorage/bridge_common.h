@@ -152,15 +152,45 @@ namespace NBridgeTest {
         return res;
     }
 
+    // keeps the latest group info distributed by BS_CONTROLLER to nodes; Filter is to be called from the filter function
+    // of the test runtime
+    class TGroupInfoTracker {
+        THashMap<ui32, NKikimrBlobStorage::TGroupInfo> Groups;
+
+    public:
+        bool Filter(ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                for (const auto& group : record.GetServiceSet().GetGroups()) {
+                    auto& info = Groups[group.GetGroupID()];
+                    if (info.GetGroupGeneration() <= group.GetGroupGeneration()) {
+                        info.CopyFrom(group); // the update of the same generation may change decommit status
+                    }
+                }
+            }
+            return true;
+        }
+
+        const NKikimrBlobStorage::TGroupInfo& Get(ui32 groupId) const {
+            const auto it = Groups.find(groupId);
+            UNIT_ASSERT_C(it != Groups.end(), "group info not distributed GroupId# " << groupId);
+            return it->second;
+        }
+    };
+
+    // create storage pool with the designated number of groups and wait for them to start; returns the first group id
+    inline ui32 CreatePoolAndGetGroup(TEnvironmentSetup& env, ui32 numGroups = 1) {
+        env.CreatePool(numGroups);
+        env.Sim(TDuration::Seconds(30));
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), numGroups);
+        return groups.front();
+    }
+
     // create cluster with dynamic groups and convert it into single-pile bridged one; returns the first group id, which
     // some data is written to
     inline ui32 ConvertCluster(TEnvironmentSetup& env, TDataChecker& checker, ui32 numGroups = 1) {
-        env.CreatePool(numGroups);
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), numGroups);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env, numGroups);
 
         checker.Write(groupId);
         RollingRestartWithSinglePileBridgeConfig(env, checker, groupId);

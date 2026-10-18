@@ -283,18 +283,9 @@ namespace {
                 ev.Get<TEvBlobStorage::TEvPut>()->WriteSource == TWriteSource::BlobDepotPut;
         });
         // remember the latest group info reported to nodes
-        auto reportedGroupInfo = std::make_shared<std::optional<NKikimrBlobStorage::TGroupInfo>>();
-        chain.Add([groupId, reportedGroupInfo](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
-                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
-                for (const auto& group : record.GetServiceSet().GetGroups()) {
-                    auto& info = *reportedGroupInfo;
-                    if (group.GetGroupID() == groupId && (!info || info->GetGroupGeneration() <= group.GetGroupGeneration())) {
-                        info = group;
-                    }
-                }
-            }
-            return true;
+        auto reportedGroupInfo = std::make_shared<TGroupInfoTracker>();
+        chain.Add([reportedGroupInfo](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return reportedGroupInfo->Filter(nodeId, ev);
         });
 
         const auto response = DecommitGroup(env, groupId);
@@ -343,11 +334,10 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 0);
 
         // nodes see it as an ordinary decommitted group, without any bridge part (inline pile loses it too)
-        const auto& info = *reportedGroupInfo;
-        UNIT_ASSERT(info);
-        UNIT_ASSERT_C(info->GetDecommitStatus() == NKikimrBlobStorage::TGroupDecommitStatus::DONE, info->ShortDebugString());
-        UNIT_ASSERT_C(!info->HasBridgeGroupState() && !info->HasBridgeProxyGroupId() && !info->HasBridgePileId(),
-            info->ShortDebugString());
+        const auto& info = reportedGroupInfo->Get(groupId);
+        UNIT_ASSERT_C(info.GetDecommitStatus() == NKikimrBlobStorage::TGroupDecommitStatus::DONE, info.ShortDebugString());
+        UNIT_ASSERT_C(!info.HasBridgeGroupState() && !info.HasBridgeProxyGroupId() && !info.HasBridgePileId(),
+            info.ShortDebugString());
 
         // data is served by the BlobDepot now, including the nodes that were restarted
         checker.CheckAll();

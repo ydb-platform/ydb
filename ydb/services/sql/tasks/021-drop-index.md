@@ -1,7 +1,7 @@
 # DROP INDEX
 
-status: pending
-commit:
+status: done
+commit: 2fdfe5a0eff90f14f6750d7eeb4e343e38a01014
 id: drop-index
 depends: create-index
 

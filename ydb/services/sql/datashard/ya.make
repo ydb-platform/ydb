@@ -5,6 +5,7 @@ SRCS(
     delete.cpp
     insert.cpp
     insert_select.cpp
+    join.cpp
     select.cpp
     update.cpp
 )

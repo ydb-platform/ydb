@@ -18,6 +18,7 @@ SRCS(
     extended_ut.cpp
     index_ut.cpp
     insert_ut.cpp
+    join_ut.cpp
     listener_ut.cpp
     schemata_ut.cpp
     sequences_ut.cpp

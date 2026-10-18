@@ -57,5 +57,6 @@ NActors::IActor* CreateRollbackActor(const NActors::TActorId& replyTo, ui64 txId
 NActors::IActor* CreateUpdateActor(const NActors::TActorId& replyTo, TString database, TUpdateStmt statement, ui32 internalErrorRetries, bool defer);
 NActors::IActor* CreateDeleteActor(const NActors::TActorId& replyTo, TString database, TDeleteStmt statement, ui32 internalErrorRetries, bool defer);
 NActors::IActor* CreateInsertSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TInsertStmt statement, ui32 internalErrorRetries);
+NActors::IActor* CreateJoinActor(const NActors::TActorId& replyTo, TString database, TSelectStmt statement, ui32 internalErrorRetries, ui64 lockTxId = 0);
 
 } // namespace NKikimr::NSql

@@ -1,7 +1,7 @@
 # ON CONFLICT по уникальному индексу
 
-status: pending
-commit:
+status: done
+commit: a1754fdfd83a149c906c8e921ab5353da32ba425
 id: index-on-conflict
 depends: index-write-sync
 

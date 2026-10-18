@@ -81,6 +81,17 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "t");
     }
 
+    Y_UNIT_TEST(InnerJoinKeepsBothTables) {
+        const TParseResult parsed = Parse("SELECT lefts.note, rights.extra FROM lefts INNER JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Select->Join);
+        UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Inner);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "lefts");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Join->Name.Name, "rights");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Columns[0].Qualifier, "lefts");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Columns[0].Name, "note");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);
@@ -93,9 +104,9 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(distinct.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(distinct.Message, "distinct");
 
-        const TParseResult join = Parse("SELECT a FROM t JOIN u ON t.id = u.id");
+        const TParseResult join = Parse("SELECT a FROM t FULL JOIN u ON t.id = u.id");
         UNIT_ASSERT_VALUES_EQUAL(join.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(join.Message, "join");
+        UNIT_ASSERT_VALUES_EQUAL(join.Message, "full");
 
         const TParseResult grant = Parse("GRANT SELECT ON t TO u");
         UNIT_ASSERT_VALUES_EQUAL(grant.SqlState, "0A000");

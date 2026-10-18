@@ -10,6 +10,7 @@ namespace NKikimr::NSql {
 struct TIdentifier {
     TString Name;
     bool Quoted = false;
+    TString Qualifier;
 };
 
 enum class ECompareOp {
@@ -39,11 +40,30 @@ struct TComparison {
     TLiteral Value;
 };
 
+enum class EJoinKind {
+    Inner,
+    Left,
+    Right,
+    Cross,
+};
+
+struct TJoin {
+    EJoinKind Kind = EJoinKind::Inner;
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TString Alias;
+    TString LeftAlias;
+    TIdentifier LeftColumn;
+    TIdentifier RightColumn;
+};
+
 struct TSelectStmt {
     bool Star = false;
     TVector<TIdentifier> Columns;
     std::optional<TIdentifier> Schema;
     TIdentifier From;
+    TString Alias;
+    std::optional<TJoin> Join;
     TVector<TComparison> Where;
     std::optional<ui64> Limit;
 };

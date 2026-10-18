@@ -486,6 +486,10 @@ private:
             }
         } else {
             for (const TIdentifier& name : Statement.Columns) {
+                if (name.Qualifier && name.Qualifier != Statement.From.Name && name.Qualifier != Statement.Alias) {
+                    Fail("42703", name.Qualifier);
+                    return;
+                }
                 const auto* info = FindColumn(entry, name.Name);
                 if (!info) {
                     Fail("42703", name.Name);

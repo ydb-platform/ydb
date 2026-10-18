@@ -311,6 +311,8 @@ private:
                 Register(CreateConstraintsActor(SelfId(), Database, *parsed.Select));
             } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "sequences") {
                 Register(CreateSequencesActor(SelfId(), Database, *parsed.Select));
+            } else if (parsed.Select->Join) {
+                Register(CreateJoinActor(SelfId(), Database, *parsed.Select, InternalErrorRetries, Tx == ETx::Open ? TxId : 0));
             } else {
                 Register(CreateSelectActor(SelfId(), Database, sql, *parsed.Select, InternalErrorRetries, std::nullopt, Tx == ETx::Open ? TxId : 0));
             }

@@ -687,7 +687,7 @@ private:
     }
 
     TIdentifier Identifier() const {
-        return {Current.Text, Current.Quoted};
+        return {Current.Text, Current.Quoted, {}};
     }
 
     bool IsTableConstraintStart() const {
@@ -1157,19 +1157,39 @@ private:
             Advance();
             return std::nullopt;
         }
+        TIdentifier column;
+        if (auto error = ColumnRef(column)) {
+            return error;
+        }
+        select.Columns.push_back(std::move(column));
+        while (Current.Kind == ETokenKind::Comma) {
+            Advance();
+            if (auto error = ColumnRef(column)) {
+                return error;
+            }
+            select.Columns.push_back(std::move(column));
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ColumnRef(TIdentifier& column) {
         if (Current.Kind != ETokenKind::Identifier) {
             return Unsupported(Current.Text);
         }
-        select.Columns.push_back(Identifier());
+        column = Identifier();
         Advance();
-        while (Current.Kind == ETokenKind::Comma) {
-            Advance();
-            if (Current.Kind != ETokenKind::Identifier) {
-                return Unsupported(Current.Text);
-            }
-            select.Columns.push_back(Identifier());
-            Advance();
+        if (Current.Kind != ETokenKind::Dot) {
+            return std::nullopt;
         }
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        const TIdentifier second = Identifier();
+        column.Qualifier = column.Name;
+        column.Name = second.Name;
+        column.Quoted = second.Quoted;
+        Advance();
         return std::nullopt;
     }
 
@@ -1181,9 +1201,55 @@ private:
         if (auto error = QualifiedName(select.Schema, select.From)) {
             return error;
         }
-        if (Current.Kind == ETokenKind::Comma || IsKeyword("join") || IsKeyword("inner") || IsKeyword("left")
-            || IsKeyword("right") || IsKeyword("full") || IsKeyword("cross") || IsKeyword("natural")
-            || IsKeyword("as")) {
+        if (IsKeyword("as")) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            select.Alias = Identifier().Name;
+            Advance();
+        }
+        if (IsKeyword("inner")) {
+            Advance();
+            if (!IsKeyword("join")) {
+                return Unsupported(Current.Text);
+            }
+        }
+        if (IsKeyword("join")) {
+            Advance();
+            TJoin join;
+            join.Kind = EJoinKind::Inner;
+            if (auto error = QualifiedName(join.Schema, join.Name)) {
+                return error;
+            }
+            if (IsKeyword("as")) {
+                Advance();
+                if (Current.Kind != ETokenKind::Identifier) {
+                    return Unsupported(Current.Text);
+                }
+                join.Alias = Identifier().Name;
+                Advance();
+            }
+            if (!IsKeyword("on")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (auto error = ColumnRef(join.LeftColumn)) {
+                return error;
+            }
+            if (Current.Kind != ETokenKind::Operator || Current.Text != "=") {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (auto error = ColumnRef(join.RightColumn)) {
+                return error;
+            }
+            join.LeftAlias = select.Alias;
+            select.Join = std::move(join);
+            return std::nullopt;
+        }
+        if (Current.Kind == ETokenKind::Comma || IsKeyword("left") || IsKeyword("right") || IsKeyword("full")
+            || IsKeyword("cross") || IsKeyword("natural")) {
             return Unsupported(Current.Text);
         }
         return std::nullopt;

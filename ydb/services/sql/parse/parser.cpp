@@ -180,6 +180,9 @@ public:
         if (auto error = QualifiedName(alter.Schema, alter.Name)) {
             return *error;
         }
+        if (IsKeyword("drop")) {
+            return DropColumn(alter);
+        }
         if (!IsKeyword("add")) {
             return Unsupported(Current.Text);
         }
@@ -227,6 +230,33 @@ private:
         return IsKeyword("null") || IsKeyword("not") || IsKeyword("default") || IsKeyword("primary")
             || IsKeyword("unique") || IsKeyword("check") || IsKeyword("references") || IsKeyword("collate")
             || IsKeyword("constraint") || IsKeyword("storage") || IsKeyword("compression") || IsKeyword("generated");
+    }
+
+    TParseResult DropColumn(TAlterTableStmt alter) {
+        Advance();
+        if (IsKeyword("column")) {
+            Advance();
+        }
+        alter.Kind = EAlterTableKind::DropColumn;
+        if (IsKeyword("if")) {
+            Advance();
+            if (!IsKeyword("exists")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            alter.IfExists = true;
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        alter.Column.Name = Identifier();
+        Advance();
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.AlterTable = std::move(alter);
+        return result;
     }
 
     std::optional<TParseResult> Finish() {

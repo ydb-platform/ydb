@@ -288,12 +288,16 @@ public:
 
 private:
     bool Build(TString& error) {
+        Alter.SetName(Statement.Name.Name);
+        if (Statement.Kind == EAlterTableKind::DropColumn) {
+            Alter.AddDropColumns()->SetName(Statement.Column.Name.Name);
+            return true;
+        }
         const TResolvedType resolved = ResolveColumnType(Statement.Column.Type);
         if (!resolved.Ok()) {
             error = resolved.Message;
             return false;
         }
-        Alter.SetName(Statement.Name.Name);
         auto* column = Alter.AddColumns();
         column->SetName(Statement.Column.Name.Name);
         column->SetType(resolved.Name);
@@ -343,6 +347,12 @@ private:
         TString message = status.Record.GetSchemeShardReason();
         if (!message) {
             message = "scheme request failed";
+        }
+        if (Statement.Kind == EAlterTableKind::DropColumn && Statement.IfExists
+            && message.Contains("unknown column"))
+        {
+            Reply(true, {}, {});
+            return;
         }
         Reply(false, scheme == NKikimrScheme::StatusAlreadyExists ? "42701" : "42P01", message);
     }

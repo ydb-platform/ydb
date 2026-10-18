@@ -50,7 +50,15 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.AlterTable->Column.Type.Name, "text");
 
         const TParseResult drop = Parse("ALTER TABLE t DROP COLUMN note");
-        UNIT_ASSERT(!drop.AlterTable);
-        UNIT_ASSERT_VALUES_EQUAL(drop.SqlState, "0A000");
+        UNIT_ASSERT(drop.AlterTable);
+        UNIT_ASSERT(drop.AlterTable->Kind == EAlterTableKind::DropColumn);
+        UNIT_ASSERT_VALUES_EQUAL(drop.AlterTable->Column.Name.Name, "note");
+        UNIT_ASSERT(!drop.AlterTable->IfExists);
+
+        const TParseResult again = Parse("ALTER TABLE app.t DROP COLUMN IF EXISTS note");
+        UNIT_ASSERT(again.AlterTable);
+        UNIT_ASSERT(again.AlterTable->IfExists);
+        UNIT_ASSERT(again.AlterTable->Schema);
+        UNIT_ASSERT_VALUES_EQUAL(again.AlterTable->Schema->Name, "app");
     }
 }

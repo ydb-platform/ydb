@@ -280,4 +280,60 @@ else:
         UNIT_ASSERT(!columns.FindPtr("d"));
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2u);
     }
+
+    Y_UNIT_TEST(DropColumnRemovesIt) {
+        TPortManager ports;
+        const ui16 sqlPort = ports.GetTcpPort();
+        TServerSettings settings(ports.GetTcpPort());
+        settings.AppConfig->MutableSqlConfig()->SetEnable(true);
+        settings.AppConfig->MutableSqlConfig()->SetListeningPort(sqlPort);
+        settings.AppConfig->MutableSqlConfig()->SetListeningAddress("::");
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+
+        const char* script = R"PY(
+import sys
+sys.path[:0] = sys.argv[3].split(":")
+import importlib.metadata as metadata
+metadata.version = lambda name: "1.31.5"
+import pg8000.dbapi
+conn = pg8000.dbapi.connect(user="test", host="::1", port=int(sys.argv[1]), database=sys.argv[2], timeout=60)
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute("CREATE TABLE base (id int4 PRIMARY KEY, note text)")
+cur.execute("ALTER TABLE base DROP COLUMN note")
+
+def must_fail(sql):
+    try:
+        cur.execute(sql)
+    except pg8000.dbapi.DatabaseError:
+        return
+    raise SystemExit("drop succeeded: " + sql)
+
+must_fail("ALTER TABLE base DROP COLUMN note")
+must_fail("ALTER TABLE base DROP COLUMN id")
+)PY";
+        const TString scriptPath = "pg8000_drop_column.py";
+        {
+            TFileOutput out(scriptPath);
+            out << script;
+        }
+        const TString root = ArcadiaSourceRoot();
+        const TString pythonPath = root + "/contrib/python/pg8000:"
+            + root + "/contrib/python/scramp:"
+            + root + "/contrib/python/asn1crypto:"
+            + root + "/contrib/python/python-dateutil/py3:"
+            + root + "/contrib/python/six/py3";
+        TShellCommand command("python3", {scriptPath, ToString(sqlPort), database, pythonPath});
+        command.Run().Wait();
+        UNIT_ASSERT_C(command.GetExitCode() && *command.GetExitCode() == 0,
+            command.GetOutput() + "\n" + command.GetError());
+
+        const auto columns = WaitTable(server, database + "/base");
+        UNIT_ASSERT(columns.FindPtr("id"));
+        UNIT_ASSERT(!columns.FindPtr("note"));
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1u);
+    }
 }

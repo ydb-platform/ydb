@@ -70,9 +70,16 @@ struct TCreateTableStmt {
     TVector<TVector<TIdentifier>> Unique;
 };
 
+enum class EAlterTableKind {
+    AddColumn,
+    DropColumn,
+};
+
 struct TAlterTableStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
+    EAlterTableKind Kind = EAlterTableKind::AddColumn;
+    bool IfExists = false;
     TColumnDef Column;
 };
 

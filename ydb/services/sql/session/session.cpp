@@ -1,6 +1,7 @@
 #include "events.h"
 
 #include <ydb/services/sql/ddl/events.h>
+#include <ydb/services/sql/ischema/columns.h>
 #include <ydb/services/sql/ischema/schemata.h>
 #include <ydb/services/sql/ischema/tables.h>
 #include <ydb/services/sql/parse/parser.h>
@@ -94,6 +95,8 @@ private:
                 Register(CreateSchemataActor(SelfId(), Database, *parsed.Select));
             } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "tables") {
                 Register(CreateTablesActor(SelfId(), Database, *parsed.Select));
+            } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "columns") {
+                Register(CreateColumnsActor(SelfId(), Database, *parsed.Select));
             } else {
                 Register(CreateSelectActor(SelfId(), Database, sql, *parsed.Select, InternalErrorRetries));
             }

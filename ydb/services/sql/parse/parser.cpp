@@ -64,6 +64,16 @@ public:
                 return *error;
             }
         }
+        if (IsKeyword("select")) {
+            TParseResult selected = SelectStmt();
+            if (!selected.Select) {
+                return selected;
+            }
+            insert.Source = std::move(*selected.Select);
+            TParseResult result;
+            result.Insert = std::move(insert);
+            return result;
+        }
         if (!IsKeyword("values")) {
             return Unsupported(Current.Text);
         }

@@ -176,6 +176,7 @@ struct TInsertStmt {
     TVector<TUpdateAssign> Update;
     std::optional<TConflictWhere> ConflictWhere;
     TVector<TReturningItem> Returning;
+    std::optional<TSelectStmt> Source;
 };
 
 struct TParseResult {

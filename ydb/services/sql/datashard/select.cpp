@@ -108,12 +108,13 @@ TPlanStore& Plans() {
 
 class TSelectActor : public NActors::TActorBootstrapped<TSelectActor> {
 public:
-    TSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries)
+    TSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , Text(std::move(text))
         , Statement(std::move(statement))
         , InternalErrorRetries(internalErrorRetries)
+        , Snapshot(std::move(snapshot))
     {
     }
 
@@ -588,6 +589,10 @@ private:
         record.MutableTableId()->SetTableId(Table.PathId.LocalPathId);
         record.MutableTableId()->SetSchemaVersion(Table.SchemaVersion);
         record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        if (Snapshot) {
+            record.MutableSnapshot()->SetStep(Snapshot->first);
+            record.MutableSnapshot()->SetTxId(Snapshot->second);
+        }
         for (const TColumn& column : ReadColumns) {
             record.AddColumns(column.Id);
         }
@@ -828,6 +833,7 @@ private:
     const TString Text;
     const TSelectStmt Statement;
     const ui32 InternalErrorRetries;
+    const std::optional<std::pair<ui64, ui64>> Snapshot;
     TString Path;
     TTableId Table;
     TVector<TColumn> Output;
@@ -858,8 +864,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries) {
-    return new TSelectActor(replyTo, std::move(database), std::move(text), std::move(statement), internalErrorRetries);
+NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot) {
+    return new TSelectActor(replyTo, std::move(database), std::move(text), std::move(statement), internalErrorRetries, std::move(snapshot));
 }
 
 } // namespace NKikimr::NSql

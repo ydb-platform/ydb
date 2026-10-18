@@ -111,7 +111,11 @@ private:
             return;
         }
         if (parsed.Insert) {
-            Register(CreateInsertActor(SelfId(), Database, *parsed.Insert, InternalErrorRetries));
+            if (parsed.Insert->Source) {
+                Register(CreateInsertSelectActor(SelfId(), Database, sql, *parsed.Insert, InternalErrorRetries));
+            } else {
+                Register(CreateInsertActor(SelfId(), Database, *parsed.Insert, InternalErrorRetries));
+            }
             return;
         }
         Busy = false;

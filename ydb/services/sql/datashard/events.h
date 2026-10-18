@@ -7,6 +7,9 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
+#include <utility>
+
 namespace NKikimr::NSql {
 
 inline constexpr ui32 EvQueryResult = EventSpaceBegin(TKikimrEvents::ES_SQL) + 3;
@@ -31,7 +34,8 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
     TVector<TVector<TQueryCell>> Rows;
 };
 
-NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries);
+NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot = std::nullopt);
 NActors::IActor* CreateInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries);
+NActors::IActor* CreateInsertSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TInsertStmt statement, ui32 internalErrorRetries);
 
 } // namespace NKikimr::NSql

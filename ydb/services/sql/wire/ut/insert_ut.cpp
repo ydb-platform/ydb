@@ -126,4 +126,36 @@ Y_UNIT_TEST_SUITE(InsertRow) {
         UNIT_ASSERT(!expression.Ok);
         UNIT_ASSERT_VALUES_EQUAL(expression.SqlState, "0A000");
     }
+
+    Y_UNIT_TEST(InsertSelectCopiesTheRows) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        const auto source = sql.Exec("CREATE TABLE src (id int8 PRIMARY KEY, note text)");
+        UNIT_ASSERT_C(source.Ok, source.SqlState + " " + source.Message);
+        const auto target = sql.Exec("CREATE TABLE dst (id int8 PRIMARY KEY, note text)");
+        UNIT_ASSERT_C(target.Ok, target.SqlState + " " + target.Message);
+        UNIT_ASSERT(sql.Exec("INSERT INTO src (id, note) VALUES (1, 'left')").Ok);
+        UNIT_ASSERT(sql.Exec("INSERT INTO src (id, note) VALUES (2, 'right')").Ok);
+
+        const auto copied = sql.Exec("INSERT INTO dst (id, note) SELECT id, note FROM src WHERE id < 100");
+        UNIT_ASSERT_C(copied.Ok, copied.SqlState + " " + copied.Message);
+        UNIT_ASSERT_VALUES_EQUAL(copied.CommandTag, "INSERT 0 2");
+
+        const auto selected = sql.Exec("SELECT note FROM dst WHERE id < 100");
+        UNIT_ASSERT_C(selected.Ok, selected.SqlState + " " + selected.Message);
+        UNIT_ASSERT_VALUES_EQUAL(selected.Rows.size(), 2u);
+
+        const auto duplicate = sql.Exec("INSERT INTO dst (id, note) SELECT id, note FROM src WHERE id = 1");
+        UNIT_ASSERT(!duplicate.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(duplicate.SqlState, "23505");
+        const auto again = sql.Exec("SELECT note FROM dst WHERE id = 1");
+        UNIT_ASSERT_C(again.Ok, again.SqlState + " " + again.Message);
+        UNIT_ASSERT_VALUES_EQUAL(again.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(again.Rows[0][0].Text, "left");
+    }
 }

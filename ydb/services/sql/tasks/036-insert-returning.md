@@ -1,7 +1,7 @@
 # INSERT RETURNING
 
-status: pending
-commit:
+status: done
+commit: a399f17da01df1d734c1491b995790414f05062c
 id: insert-returning
 depends: insert-on-conflict
 

@@ -16,11 +16,13 @@ TCodecValue FirstOwned(TCodecValue value, TCodecValue (*next)(NScheme::TTypeId, 
 } // namespace
 
 TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format) {
-    return FirstOwned(EncodeIntegerCell(type, null, cell, format), EncodeTextCell, type, null, cell, format);
+    return FirstOwned(FirstOwned(EncodeIntegerCell(type, null, cell, format), EncodeTextCell, type, null, cell, format),
+        EncodeTimeCell, type, null, cell, format);
 }
 
 TCodecValue DecodeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format) {
-    return FirstOwned(DecodeIntegerCell(type, null, wire, format), DecodeTextCell, type, null, wire, format);
+    return FirstOwned(FirstOwned(DecodeIntegerCell(type, null, wire, format), DecodeTextCell, type, null, wire, format),
+        DecodeTimeCell, type, null, wire, format);
 }
 
 } // namespace NKikimr::NSql

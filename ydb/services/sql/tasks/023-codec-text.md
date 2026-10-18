@@ -1,7 +1,7 @@
 # Кодек text и bytea
 
-status: pending
-commit:
+status: done
+commit: c684d421b3fcded3c5897c65c77c2f23bf83ee69
 id: codec-text
 depends: codec-ints
 

@@ -4,6 +4,7 @@ SRCS(
     dispatch.cpp
     ints.cpp
     text.cpp
+    time.cpp
 )
 
 PEERDIR(

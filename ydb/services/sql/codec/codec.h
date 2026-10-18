@@ -29,5 +29,7 @@ TCodecValue EncodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf cell,
 TCodecValue DecodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
 TCodecValue EncodeTextCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
 TCodecValue DecodeTextCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
+TCodecValue EncodeTimeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
+TCodecValue DecodeTimeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
 
 } // namespace NKikimr::NSql

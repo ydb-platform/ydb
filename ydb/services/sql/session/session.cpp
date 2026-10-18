@@ -259,6 +259,10 @@ private:
             }
             return;
         }
+        if (parsed.Delete) {
+            Register(CreateDeleteActor(SelfId(), Database, *parsed.Delete, InternalErrorRetries, Tx == ETx::Open));
+            return;
+        }
         if (parsed.Update) {
             Register(CreateUpdateActor(SelfId(), Database, *parsed.Update, InternalErrorRetries, Tx == ETx::Open));
             return;

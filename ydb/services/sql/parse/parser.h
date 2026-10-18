@@ -198,6 +198,12 @@ struct TSetAssign {
     TLiteral Value;
 };
 
+struct TDeleteStmt {
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TVector<TComparison> Where;
+};
+
 struct TUpdateStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
@@ -217,6 +223,7 @@ struct TParseResult {
     std::optional<TInsertStmt> Insert;
     std::optional<TTxStmt> Tx;
     std::optional<TUpdateStmt> Update;
+    std::optional<TDeleteStmt> Delete;
     TString SqlState;
     TString Message;
 };

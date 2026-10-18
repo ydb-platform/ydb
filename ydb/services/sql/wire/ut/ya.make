@@ -11,6 +11,7 @@ SRCS(
     columns_ut.cpp
     constraints_ut.cpp
     create_table_ut.cpp
+    delete_ut.cpp
     tx_ut.cpp
     update_ut.cpp
     extended_ut.cpp

@@ -1,7 +1,7 @@
 # UPDATE одной таблицы
 
-status: pending
-commit:
+status: done
+commit: b3cfc32970b121b38b55a4ed776c0925adb12bbc
 id: update
 depends: tx-multi-shard
 

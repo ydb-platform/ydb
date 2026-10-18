@@ -49,6 +49,9 @@ public:
         if (IsKeyword("update")) {
             return UpdateStmt();
         }
+        if (IsKeyword("delete")) {
+            return DeleteStmt();
+        }
         if (IsKeyword("begin") || IsKeyword("start") || IsKeyword("commit") || IsKeyword("end")
             || IsKeyword("rollback") || IsKeyword("abort")) {
             return TransactionStmt();
@@ -80,6 +83,36 @@ public:
         }
         TParseResult result;
         result.Tx = tx;
+        return result;
+    }
+
+    TParseResult DeleteStmt() {
+        Advance();
+        if (!IsKeyword("from")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        TDeleteStmt statement;
+        if (auto error = QualifiedName(statement.Schema, statement.Name)) {
+            return *error;
+        }
+        if (IsKeyword("using") || Current.Kind == ETokenKind::Star || Current.Kind == ETokenKind::Comma) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("where")) {
+            Advance();
+            if (auto error = WhereClause(statement.Where)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("returning")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Delete = std::move(statement);
         return result;
     }
 

@@ -22,6 +22,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
+#include <ydb/core/kqp/query_data/kqp_snapshot_tables.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -825,8 +826,6 @@ public:
     }
 
     void AcquirePersistentSnapshot() {
-        STLOG_D("Acquire persistent snapshot",
-            (trace_id, TraceId()));
         AcquireSnapshotSpan = NWilson::TSpan(TWilsonKqp::SessionAcquireSnapshot, QueryState->KqpSessionSpan.GetTraceId(),
             "SessionActor.AcquirePersistentSnapshot");
         auto timeout = QueryState->QueryDeadlines.TimeoutAt - TAppData::TimeProvider->Now();
@@ -834,7 +833,22 @@ public:
         auto* snapMgr = CreateKqpSnapshotManager(Settings.Database, timeout);
         auto snapMgrActorId = RegisterWithSameMailbox(snapMgr);
 
-        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(QueryState->PreparedQuery->GetQueryTables(), QueryId, std::move(QueryState->Orbit));
+        TVector<TSnapshotTableRangeInfo> rangeInfo;
+        auto tables = BuildSnapshotTables(*QueryState->PreparedQuery, *QueryState->QueryData, &rangeInfo);
+        size_t boundedTables = 0;
+        for (const auto& table : tables) {
+            boundedTables += table.HasKeyRange();
+        }
+        STLOG_D("Acquire persistent snapshot",
+            (tables, tables.size()), (bounded_tables, boundedTables), (trace_id, TraceId()));
+        for (const auto& info : rangeInfo) {
+            STLOG_D("Persistent snapshot table range",
+                (table, info.TablePath), (bounded, info.FullTableReason.empty()),
+                (full_table_reason, info.FullTableReason), (key_range_reads, info.KeyRangeReads),
+                (computed_range_reads, info.ComputedRangeReads), (trace_id, TraceId()));
+        }
+        auto ev = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(
+            std::move(tables), QueryId, std::move(QueryState->Orbit));
         Send(snapMgrActorId, ev.release());
 
         QueryState->TxCtx->SnapshotHandle.ManagingActor = snapMgrActorId;

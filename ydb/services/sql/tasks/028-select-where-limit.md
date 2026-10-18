@@ -1,7 +1,7 @@
 # WHERE, LIMIT и несколько шардов
 
-status: pending
-commit:
+status: done
+commit: 15867f822ddb2d63426153824f0e5892cd67d9c9
 id: select-where-limit
 depends: select-point
 

@@ -3,6 +3,7 @@ RECURSE(
     codec
     datashard
     ddl
+    ischema
     parse
     plan
     wire

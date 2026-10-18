@@ -1,7 +1,7 @@
 # DROP SCHEMA
 
-status: pending
-commit:
+status: done
+commit: 397cbdec86b13fef72d942cdd2d3dbe55794e4ad
 id: drop-schema
 depends: create-schema
 

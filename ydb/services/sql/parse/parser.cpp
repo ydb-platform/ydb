@@ -179,6 +179,9 @@ public:
         if (IsKeyword("sequence")) {
             return AlterSequence();
         }
+        if (IsKeyword("schema")) {
+            return AlterSchema();
+        }
         return Unsupported(Current.Text);
     }
 
@@ -322,6 +325,18 @@ private:
         TParseResult result;
         result.Drop = std::move(drop);
         return result;
+    }
+
+    TParseResult AlterSchema() {
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (IsKeyword("rename") || IsKeyword("owner")) {
+            return Unsupported(Current.Text);
+        }
+        return Unsupported(Current.Text);
     }
 
     TParseResult AlterSequence() {

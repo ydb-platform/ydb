@@ -158,4 +158,16 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(cascade.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(cascade.Message, "cascade");
     }
+
+    Y_UNIT_TEST(AlterSchemaIsUnsupported) {
+        const TParseResult rename = Parse("ALTER SCHEMA kept RENAME TO moved");
+        UNIT_ASSERT(!rename.CreateSchema);
+        UNIT_ASSERT(!rename.Drop);
+        UNIT_ASSERT_VALUES_EQUAL(rename.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(rename.Message, "rename");
+
+        const TParseResult owner = Parse("ALTER SCHEMA kept OWNER TO someone");
+        UNIT_ASSERT_VALUES_EQUAL(owner.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(owner.Message, "owner");
+    }
 }

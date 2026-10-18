@@ -2,6 +2,7 @@
 #include "types.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -264,11 +265,33 @@ public:
     }
 
     void Bootstrap() {
+        if (Statement.Kind == EAlterTableKind::SetDefault) {
+            auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+            TString path = Database;
+            if (path && path.back() == '/') {
+                path.pop_back();
+            }
+            if (Statement.Schema) {
+                path += "/" + Statement.Schema->Name;
+            }
+            path += "/" + Statement.Name.Name;
+            entry.Path = SplitPath(path);
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+            request->ResultSet.emplace_back(std::move(entry));
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+            Become(&TAlterTableActor::StateColumn);
+            return;
+        }
         TString error;
         if (!Build(error)) {
             Reply(false, "0A000", error ? error : TString("not supported"));
             return;
         }
+        Propose();
+    }
+
+    void Propose() {
         auto event = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         event->Record.SetDatabaseName(Database);
         auto* modify = event->Record.MutableTransaction()->MutableModifyScheme();
@@ -282,6 +305,10 @@ public:
         }
         modify->SetWorkingDir(dir);
         *modify->MutableAlterTable() = Alter;
+        if (Statement.Kind == EAlterTableKind::SetNotNull) {
+            // SchemeShard rejects NotNull=true unless the request is internal.
+            modify->SetInternal(true);
+        }
         Send(MakeTxProxyID(), event.Release());
         Become(&TAlterTableActor::StatePropose);
     }
@@ -292,6 +319,27 @@ private:
         if (Statement.Kind == EAlterTableKind::DropColumn) {
             Alter.AddDropColumns()->SetName(Statement.Column.Name.Name);
             return true;
+        }
+        if (Statement.Kind == EAlterTableKind::SetNotNull || Statement.Kind == EAlterTableKind::DropNotNull) {
+            auto* column = Alter.AddColumns();
+            column->SetName(Statement.Column.Name.Name);
+            column->SetNotNull(Statement.Kind == EAlterTableKind::SetNotNull);
+            return true;
+        }
+        if (Statement.Kind == EAlterTableKind::DropDefault) {
+            auto* column = Alter.AddColumns();
+            column->SetName(Statement.Column.Name.Name);
+            column->SetEmptyDefault(google::protobuf::NULL_VALUE);
+            return true;
+        }
+        if (Statement.Kind == EAlterTableKind::SetDefault) {
+            auto* column = Alter.AddColumns();
+            column->SetName(Statement.Column.Name.Name);
+            if (!Statement.Column.Default || DefaultType.empty()) {
+                error = "default";
+                return false;
+            }
+            return FillDefaultLiteral(*column->MutableDefaultFromLiteral(), DefaultType, *Statement.Column.Default, error);
         }
         const TResolvedType resolved = ResolveColumnType(Statement.Column.Type);
         if (!resolved.Ok()) {
@@ -374,6 +422,36 @@ private:
     void IgnoreRegistered(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
     }
 
+    void HandleColumn(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* request = ev->Get()->Request.Get();
+        if (!request || request->ResultSet.size() != 1
+            || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok)
+        {
+            Reply(false, "42P01", Statement.Name.Name);
+            return;
+        }
+        for (const auto& [id, column] : request->ResultSet[0].Columns) {
+            Y_UNUSED(id);
+            if (column.Name == Statement.Column.Name.Name) {
+                DefaultType = NScheme::TypeName(column.PType, column.PTypeMod);
+                break;
+            }
+        }
+        TString error;
+        if (!Build(error)) {
+            Reply(false, "0A000", error ? error : TString("not supported"));
+            return;
+        }
+        Propose();
+    }
+
+    STATEFN(StateColumn) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleColumn);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
     STATEFN(StatePropose) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleStatus);
@@ -389,6 +467,7 @@ private:
     const TString Database;
     const TAlterTableStmt Statement;
     NKikimrSchemeOp::TTableDescription Alter;
+    TString DefaultType;
     NActors::TActorId Pipe;
 };
 

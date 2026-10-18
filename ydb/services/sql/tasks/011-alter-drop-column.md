@@ -1,7 +1,7 @@
 # ALTER TABLE DROP COLUMN
 
-status: pending
-commit:
+status: done
+commit: a7d0bb736536fbfcb21ab902a1067f79ec8afacd
 id: alter-drop-column
 depends: alter-add-column
 

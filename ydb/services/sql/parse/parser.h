@@ -73,6 +73,10 @@ struct TCreateTableStmt {
 enum class EAlterTableKind {
     AddColumn,
     DropColumn,
+    SetNotNull,
+    DropNotNull,
+    SetDefault,
+    DropDefault,
 };
 
 struct TAlterTableStmt {

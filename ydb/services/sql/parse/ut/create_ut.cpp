@@ -61,4 +61,24 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT(again.AlterTable->Schema);
         UNIT_ASSERT_VALUES_EQUAL(again.AlterTable->Schema->Name, "app");
     }
+
+    Y_UNIT_TEST(AlterColumnNullAndDefault) {
+        const TParseResult setNull = Parse("ALTER TABLE t ALTER COLUMN note SET NOT NULL");
+        UNIT_ASSERT(setNull.AlterTable);
+        UNIT_ASSERT(setNull.AlterTable->Kind == EAlterTableKind::SetNotNull);
+
+        const TParseResult setDefault = Parse("ALTER TABLE t ALTER note SET DEFAULT 'hi'");
+        UNIT_ASSERT(setDefault.AlterTable);
+        UNIT_ASSERT(setDefault.AlterTable->Kind == EAlterTableKind::SetDefault);
+        UNIT_ASSERT_VALUES_EQUAL(setDefault.AlterTable->Column.Default->Text, "hi");
+
+        const TParseResult dropDefault = Parse("ALTER TABLE t ALTER COLUMN note DROP DEFAULT");
+        UNIT_ASSERT(dropDefault.AlterTable);
+        UNIT_ASSERT(dropDefault.AlterTable->Kind == EAlterTableKind::DropDefault);
+
+        const TParseResult typed = Parse("ALTER TABLE t ALTER COLUMN note TYPE int4");
+        UNIT_ASSERT(!typed.AlterTable);
+        UNIT_ASSERT_VALUES_EQUAL(typed.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(typed.Message, "type");
+    }
 }

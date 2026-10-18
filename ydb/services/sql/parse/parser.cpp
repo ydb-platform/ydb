@@ -183,6 +183,9 @@ public:
         if (IsKeyword("drop")) {
             return DropColumn(alter);
         }
+        if (IsKeyword("alter")) {
+            return AlterColumn(alter);
+        }
         if (!IsKeyword("add")) {
             return Unsupported(Current.Text);
         }
@@ -230,6 +233,73 @@ private:
         return IsKeyword("null") || IsKeyword("not") || IsKeyword("default") || IsKeyword("primary")
             || IsKeyword("unique") || IsKeyword("check") || IsKeyword("references") || IsKeyword("collate")
             || IsKeyword("constraint") || IsKeyword("storage") || IsKeyword("compression") || IsKeyword("generated");
+    }
+
+    TParseResult AlterColumn(TAlterTableStmt alter) {
+        Advance();
+        if (IsKeyword("column")) {
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        alter.Column.Name = Identifier();
+        Advance();
+        if (IsKeyword("type")) {
+            return Unsupported("type");
+        }
+        if (IsKeyword("set")) {
+            Advance();
+            if (IsKeyword("data") || IsKeyword("type")) {
+                return Unsupported("type");
+            }
+            if (IsKeyword("not")) {
+                Advance();
+                if (!IsKeyword("null")) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                alter.Kind = EAlterTableKind::SetNotNull;
+            } else if (IsKeyword("default")) {
+                Advance();
+                TLiteral literal;
+                if (Current.Kind == ETokenKind::Number) {
+                    literal = {TLiteral::EKind::Integer, Current.Text};
+                } else if (Current.Kind == ETokenKind::String) {
+                    literal = {TLiteral::EKind::String, Current.Text};
+                } else {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                alter.Kind = EAlterTableKind::SetDefault;
+                alter.Column.Default = std::move(literal);
+            } else {
+                return Unsupported(Current.Text);
+            }
+        } else if (IsKeyword("drop")) {
+            Advance();
+            if (IsKeyword("not")) {
+                Advance();
+                if (!IsKeyword("null")) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                alter.Kind = EAlterTableKind::DropNotNull;
+            } else if (IsKeyword("default")) {
+                Advance();
+                alter.Kind = EAlterTableKind::DropDefault;
+            } else {
+                return Unsupported(Current.Text);
+            }
+        } else {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.AlterTable = std::move(alter);
+        return result;
     }
 
     TParseResult DropColumn(TAlterTableStmt alter) {

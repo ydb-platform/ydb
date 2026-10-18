@@ -221,6 +221,8 @@ private:
     NSectorMap::EDiskMode DiskMode = NSectorMap::DM_NONE;
     THolder<NSectorMap::TSectorOperationThrottler> SectorOperationThrottler;
     std::function<void()> ReadCallback = nullptr;
+    // Accessed under MapLock. Reuse the compression table, but never a sector's dictionary.
+    LZ4_stream_t CompressionState;
 
     std::mt19937_64 RandomGenerator{RandomNumber<ui64>()};
 
@@ -233,6 +235,7 @@ public:
       , AllocatedBytes(0)
       , DiskMode(diskMode)
     {
+        Y_ABORT_UNLESS(LZ4_initStream(&CompressionState, sizeof(CompressionState)));
         FailureProbabilities.WriteErrorProbability = 0.0;
         FailureProbabilities.ReadErrorProbability = 0.0;
         FailureProbabilities.SilentWriteFailProbability = 0.0;
@@ -346,7 +349,10 @@ public:
             TGuard<TTicketLock> guard(MapLock);
             for (; size > 0; size -= NSectorMap::SECTOR_SIZE) {
                 char tmp[4 * NSectorMap::SECTOR_SIZE];
-                int written = LZ4_compress_default((const char*)data, tmp, NSectorMap::SECTOR_SIZE, 4 * NSectorMap::SECTOR_SIZE);
+                // Each sector must remain independently decodable, including replayed old versions.
+                LZ4_resetStream_fast(&CompressionState);
+                int written = LZ4_compress_fast_continue(&CompressionState, (const char*)data, tmp,
+                    NSectorMap::SECTOR_SIZE, sizeof(tmp), 1);
                 Y_VERIFY_S(written > 0, "written# " << written);
                 TString str = TString::Uninitialized(written);
                 memcpy(str.Detach(), tmp, written);

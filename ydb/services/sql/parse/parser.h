@@ -25,6 +25,7 @@ struct TLiteral {
     enum class EKind {
         Integer,
         String,
+        Null,
     };
 
     EKind Kind = EKind::Integer;
@@ -136,6 +137,14 @@ struct TAlterTableStmt {
     TColumnDef Column;
 };
 
+// One VALUES tuple of literals. A second tuple, SELECT, ON CONFLICT and RETURNING stay 0A000.
+struct TInsertStmt {
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TVector<TIdentifier> Columns;
+    TVector<TLiteral> Values;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
@@ -145,11 +154,12 @@ struct TParseResult {
     std::optional<TDropStmt> Drop;
     std::optional<TSchemaStmt> CreateSchema;
     std::optional<TCreateIndexStmt> CreateIndex;
+    std::optional<TInsertStmt> Insert;
     TString SqlState;
     TString Message;
 };
 
-// PostgreSQL 18 gram.y in C++. Implemented: SELECT, CREATE TABLE, ALTER TABLE ADD COLUMN.
+// PostgreSQL 18 gram.y in C++. Implemented: SELECT, CREATE TABLE, ALTER TABLE ADD COLUMN, INSERT one row.
 // Any other rule is SQLSTATE 0A000 and is not a statement.
 TParseResult Parse(TStringBuf sql);
 

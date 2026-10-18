@@ -110,6 +110,10 @@ private:
             }
             return;
         }
+        if (parsed.Insert) {
+            Register(CreateInsertActor(SelfId(), Database, *parsed.Insert, InternalErrorRetries));
+            return;
+        }
         Busy = false;
         Fail("0A000", "not supported");
     }
@@ -137,7 +141,8 @@ private:
                 result.Message.empty() ? TString("not supported") : result.Message);
             return;
         }
-        Succeed("SELECT " + ToString(result.Rows.size()), result.Columns, result.Rows);
+        const TString tag = result.CommandTag.empty() ? "SELECT " + ToString(result.Rows.size()) : result.CommandTag;
+        Succeed(tag, result.Columns, result.Rows);
     }
 
     void HandleDdl(TEvDdlResult::TPtr& ev) {

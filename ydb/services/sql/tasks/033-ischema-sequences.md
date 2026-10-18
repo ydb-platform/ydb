@@ -1,7 +1,7 @@
 # information_schema.sequences
 
-status: pending
-commit:
+status: done
+commit: 7762f34326734309bb631ea926566bf75a66f7dd
 id: ischema-sequences
 depends: select-point
 

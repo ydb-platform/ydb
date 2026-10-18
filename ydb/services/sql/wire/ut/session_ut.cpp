@@ -29,6 +29,6 @@ Y_UNIT_TEST_SUITE(SqlSession) {
 
         const TSqlClient::TResult rejected = sql.Exec("INSERT INTO app.t (id) VALUES (1)");
         UNIT_ASSERT(!rejected.Ok);
-        UNIT_ASSERT_VALUES_EQUAL(rejected.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(rejected.SqlState, "42P01");
     }
 }

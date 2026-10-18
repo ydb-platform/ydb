@@ -26,10 +26,12 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
     bool Ok = false;
     TString SqlState;
     TString Message;
+    TString CommandTag;
     TVector<TQueryColumn> Columns;
     TVector<TVector<TQueryCell>> Rows;
 };
 
 NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries);
+NActors::IActor* CreateInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries);
 
 } // namespace NKikimr::NSql

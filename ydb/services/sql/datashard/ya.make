@@ -1,14 +1,17 @@
 LIBRARY()
 
 SRCS(
+    insert.cpp
     select.cpp
 )
 
 PEERDIR(
     ydb/core/base
     ydb/core/scheme
+    ydb/core/tx/data_events
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
+    ydb/core/tx/tx_proxy
     ydb/library/actors/core
     ydb/public/api/protos
     ydb/services/sql/codec

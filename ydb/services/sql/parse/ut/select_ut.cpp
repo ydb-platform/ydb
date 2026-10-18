@@ -43,10 +43,10 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
     }
 
     Y_UNIT_TEST(UnknownCommand) {
-        const TParseResult parsed = Parse("INSERT INTO t");
+        const TParseResult parsed = Parse("UPDATE t SET a = 1");
         UNIT_ASSERT(!parsed.Select);
         UNIT_ASSERT_VALUES_EQUAL(parsed.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "insert");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "update");
     }
 
     Y_UNIT_TEST(WhereAndLimit) {

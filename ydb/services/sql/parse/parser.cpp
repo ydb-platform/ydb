@@ -43,7 +43,67 @@ public:
         if (IsKeyword("alter")) {
             return AlterIntroducer();
         }
+        if (IsKeyword("insert")) {
+            return InsertStmt();
+        }
         return Unsupported(Current.Text);
+    }
+
+    TParseResult InsertStmt() {
+        Advance();
+        if (!IsKeyword("into")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        TInsertStmt insert;
+        if (auto error = QualifiedName(insert.Schema, insert.Name)) {
+            return *error;
+        }
+        if (Current.Kind == ETokenKind::LeftParen) {
+            if (auto error = ParenthesizedNames(insert.Columns)) {
+                return *error;
+            }
+        }
+        if (!IsKeyword("values")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        for (;;) {
+            TLiteral literal;
+            if (IsKeyword("null")) {
+                literal = {TLiteral::EKind::Null, {}};
+            } else if (Current.Kind == ETokenKind::Number) {
+                literal = {TLiteral::EKind::Integer, Current.Text};
+            } else if (Current.Kind == ETokenKind::String) {
+                literal = {TLiteral::EKind::String, Current.Text};
+            } else {
+                return Unsupported(Current.Text);
+            }
+            insert.Values.push_back(std::move(literal));
+            Advance();
+            if (Current.Kind == ETokenKind::Comma) {
+                Advance();
+                continue;
+            }
+            if (Current.Kind == ETokenKind::RightParen) {
+                Advance();
+                break;
+            }
+            return Unsupported(Current.Text);
+        }
+        if (Current.Kind == ETokenKind::Comma || IsKeyword("on") || IsKeyword("returning")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Insert = std::move(insert);
+        return result;
     }
 
     // SelectStmt / select_no_parens / simple_select

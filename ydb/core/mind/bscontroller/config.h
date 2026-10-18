@@ -313,6 +313,15 @@ namespace NKikimr {
                 return res;
             }
 
+            // delete the group along with its VDisks
+            void DeleteExistingGroupWithVSlots(const TGroupInfo& group) {
+                const TGroupId groupId = group.ID;
+                for (const TVSlotInfo *vslot : group.VDisksInGroup) {
+                    DestroyVSlot(vslot->VSlotId);
+                }
+                DeleteExistingGroup(groupId);
+            }
+
             void DeleteExistingGroup(TGroupId groupId) {
                 const TGroupInfo *group = Groups.Find(groupId);
                 Y_ABORT_UNLESS(group);

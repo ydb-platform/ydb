@@ -81,8 +81,11 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
+    // virtual group without working BlobDepot can't serve anything, unless it has physical part; for bridge proxy group
+    // the physical part is in its piles, its status is derived from them
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
-            VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty()) {
+            VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::NEW) && VDisksInGroup.empty() &&
+            !BridgeGroupInfo) {
         Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
     }
 

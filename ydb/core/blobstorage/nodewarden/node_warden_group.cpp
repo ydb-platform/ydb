@@ -276,21 +276,23 @@ namespace NKikimr::NStorage {
                     ? DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType())
                     : nullptr;
 
-                if (info && info->BlobDepotId.value_or(0) && !group.AgentProxy) {
-                    // re-register proxy as an agent
-                    group.AgentProxy = true;
-                    TActorSystem *as = TActivationContext::ActorSystem();
-                    group.ProxyId = Register(NBlobDepot::CreateBlobDepotAgent(groupId, info, group.ProxyId),
-                        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
-                    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
-                } else if (info && info->IsInlinePile() && !group.InlinePileProxy) {
+                if (info && info->IsInlinePile() && !group.InlinePileProxy) {
                     // the group has just been converted into the bridged one, it becomes an inline pile; put bridge
-                    // proxy in front of the running DS proxy, the latter will serve the inline pile
+                    // proxy in front of the running DS proxy, the latter will serve the inline pile; this also happens
+                    // when the proxy was started before the group info arrived
                     Y_ABORT_UNLESS(!group.AgentProxy);
                     group.InlinePileProxy = true;
                     TActorSystem *as = TActivationContext::ActorSystem();
                     group.ProxyId = Register(CreateBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
                         AppData()->SystemPoolId);
+                    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+                }
+                if (info && info->BlobDepotId.value_or(0) && !group.AgentProxy) {
+                    // re-register proxy as an agent; for inline pile, the agent is put in front of the bridge proxy
+                    group.AgentProxy = true;
+                    TActorSystem *as = TActivationContext::ActorSystem();
+                    group.ProxyId = Register(NBlobDepot::CreateBlobDepotAgent(groupId, info, group.ProxyId),
+                        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
                 }
 

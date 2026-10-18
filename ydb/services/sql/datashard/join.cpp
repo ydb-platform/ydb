@@ -120,7 +120,9 @@ public:
     }
 
     void Bootstrap() {
-        if (!Statement.Join || Statement.Star || !Statement.Where.empty() || Statement.Join->Kind != EJoinKind::Inner) {
+        if (!Statement.Join || Statement.Star || !Statement.Where.empty()
+            || (Statement.Join->Kind != EJoinKind::Inner && Statement.Join->Kind != EJoinKind::Left))
+        {
             Fail("0A000", "not supported");
             return;
         }
@@ -561,12 +563,20 @@ private:
             }
             bucket[RightRows[i].Bytes[rightKey]].push_back(i);
         }
+        const bool keepLeft = Statement.Join->Kind == EJoinKind::Left;
         for (const THeld& left : LeftRows) {
-            if (left.Nulls[leftKey]) {
-                continue;
-            }
-            const TVector<size_t>* hits = MapFindPtr(bucket, left.Bytes[leftKey]);
-            if (!hits) {
+            const TVector<size_t>* hits = left.Nulls[leftKey] ? nullptr : MapFindPtr(bucket, left.Bytes[leftKey]);
+            if (!hits || hits->empty()) {
+                if (!keepLeft) {
+                    continue;
+                }
+                if (Statement.Limit && Rows.size() >= *Statement.Limit) {
+                    Succeed();
+                    return;
+                }
+                if (!Append(left, nullptr)) {
+                    return;
+                }
                 continue;
             }
             for (size_t index : *hits) {
@@ -574,7 +584,7 @@ private:
                     Succeed();
                     return;
                 }
-                if (!Append(left, RightRows[index])) {
+                if (!Append(left, &RightRows[index])) {
                     return;
                 }
             }
@@ -582,7 +592,7 @@ private:
         Succeed();
     }
 
-    bool Append(const THeld& left, const THeld& right) {
+    bool Append(const THeld& left, const THeld* right) {
         TVector<TQueryCell> line;
         line.reserve(Output.size());
         for (const TOutput& column : Output) {
@@ -590,8 +600,9 @@ private:
                 Fail("42702", column.Source);
                 return false;
             }
-            const THeld& row = column.Side == 0 ? left : right;
-            const bool null = row.Nulls[column.Index];
+            const bool missing = column.Side == 1 && right == nullptr;
+            const THeld& row = column.Side == 0 ? left : (missing ? left : *right);
+            const bool null = missing || row.Nulls[column.Index];
             const TStringBuf bytes = null ? TStringBuf() : TStringBuf(row.Bytes[column.Index]);
             const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
             if (!encoded.Ok) {

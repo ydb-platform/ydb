@@ -1209,7 +1209,17 @@ private:
             select.Alias = Identifier().Name;
             Advance();
         }
-        if (IsKeyword("inner")) {
+        EJoinKind kind = EJoinKind::Inner;
+        if (IsKeyword("left")) {
+            Advance();
+            if (IsKeyword("outer")) {
+                Advance();
+            }
+            if (!IsKeyword("join")) {
+                return Unsupported(Current.Text);
+            }
+            kind = EJoinKind::Left;
+        } else if (IsKeyword("inner")) {
             Advance();
             if (!IsKeyword("join")) {
                 return Unsupported(Current.Text);
@@ -1218,7 +1228,7 @@ private:
         if (IsKeyword("join")) {
             Advance();
             TJoin join;
-            join.Kind = EJoinKind::Inner;
+            join.Kind = kind;
             if (auto error = QualifiedName(join.Schema, join.Name)) {
                 return error;
             }

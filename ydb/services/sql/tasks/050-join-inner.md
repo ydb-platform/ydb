@@ -1,7 +1,7 @@
 # INNER JOIN
 
-status: pending
-commit:
+status: done
+commit: 2edca0934cd820d6c577481977cedfd01d194dce
 id: join-inner
 depends: select-where-limit
 

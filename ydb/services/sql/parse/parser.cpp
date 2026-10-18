@@ -255,11 +255,14 @@ private:
     TParseResult DropObject() {
         Advance();
         TDropStmt drop;
-        if (!IsKeyword("table")) {
+        if (IsKeyword("table")) {
+            drop.Kind = EDropKind::Table;
+        } else if (IsKeyword("sequence")) {
+            drop.Kind = EDropKind::Sequence;
+        } else {
             return Unsupported(Current.Text);
         }
         Advance();
-        drop.Kind = EDropKind::Table;
         if (IsKeyword("if")) {
             Advance();
             if (!IsKeyword("exists")) {

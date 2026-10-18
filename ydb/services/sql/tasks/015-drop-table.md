@@ -1,7 +1,7 @@
 # DROP TABLE
 
-status: pending
-commit:
+status: done
+commit: 8c674c4e04557385c59ebc1717541e1c5b700dd8
 id: drop-table
 depends: create-table
 

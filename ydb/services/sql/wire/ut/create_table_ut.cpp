@@ -608,4 +608,67 @@ else:
         Describe(server, database + "/doomed", exists);
         UNIT_ASSERT(!exists);
     }
+
+    Y_UNIT_TEST(DropSequenceRemovesPath) {
+        TPortManager ports;
+        const ui16 sqlPort = ports.GetTcpPort();
+        TServerSettings settings(ports.GetTcpPort());
+        settings.AppConfig->MutableSqlConfig()->SetEnable(true);
+        settings.AppConfig->MutableSqlConfig()->SetListeningPort(sqlPort);
+        settings.AppConfig->MutableSqlConfig()->SetListeningAddress("::");
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+
+        const char* script = R"PY(
+import sys
+sys.path[:0] = sys.argv[3].split(":")
+import importlib.metadata as metadata
+metadata.version = lambda name: "1.31.5"
+import pg8000.dbapi
+conn = pg8000.dbapi.connect(user="test", host="::1", port=int(sys.argv[1]), database=sys.argv[2], timeout=60)
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute("CREATE SEQUENCE doomed_seq")
+cur.execute("DROP SEQUENCE doomed_seq")
+cur.execute("DROP SEQUENCE IF EXISTS doomed_seq")
+try:
+    cur.execute("DROP SEQUENCE doomed_seq")
+except pg8000.dbapi.DatabaseError:
+    pass
+else:
+    raise SystemExit("missing sequence was dropped")
+)PY";
+        const TString scriptPath = "pg8000_drop_sequence.py";
+        {
+            TFileOutput out(scriptPath);
+            out << script;
+        }
+        const TString root = ArcadiaSourceRoot();
+        const TString pythonPath = root + "/contrib/python/pg8000:"
+            + root + "/contrib/python/scramp:"
+            + root + "/contrib/python/asn1crypto:"
+            + root + "/contrib/python/python-dateutil/py3:"
+            + root + "/contrib/python/six/py3";
+        TShellCommand command("python3", {scriptPath, ToString(sqlPort), database, pythonPath});
+        command.Run().Wait();
+        UNIT_ASSERT_C(command.GetExitCode() && *command.GetExitCode() == 0,
+            command.GetOutput() + "\n" + command.GetError());
+
+        auto* runtime = server.GetRuntime();
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(database + "/doomed_seq");
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        request->ResultSet.emplace_back(std::move(entry));
+        const TActorId edge = runtime->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeSchemeCacheID(), edge, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())), 0, true);
+        auto ev = runtime->GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+        const auto* navigate = ev->Get()->Request.Get();
+        const bool exists = navigate && navigate->ResultSet.size() == 1
+            && navigate->ResultSet[0].Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+            && navigate->ResultSet[0].SequenceInfo;
+        UNIT_ASSERT(!exists);
+    }
 }

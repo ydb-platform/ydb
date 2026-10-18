@@ -123,4 +123,12 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT(!cascade.Drop);
         UNIT_ASSERT_VALUES_EQUAL(cascade.SqlState, "0A000");
     }
+
+    Y_UNIT_TEST(DropSequence) {
+        const TParseResult parsed = Parse("DROP SEQUENCE IF EXISTS app.bounds");
+        UNIT_ASSERT(parsed.Drop);
+        UNIT_ASSERT(parsed.Drop->Kind == EDropKind::Sequence);
+        UNIT_ASSERT(parsed.Drop->IfExists);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Drop->Schema->Name, "app");
+    }
 }

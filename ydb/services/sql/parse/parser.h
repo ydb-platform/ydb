@@ -81,6 +81,7 @@ enum class EAlterTableKind {
 
 enum class EDropKind {
     Table,
+    Sequence,
 };
 
 struct TDropStmt {

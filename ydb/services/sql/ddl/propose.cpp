@@ -733,7 +733,9 @@ public:
         auto event = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         event->Record.SetDatabaseName(Database);
         auto* modify = event->Record.MutableTransaction()->MutableModifyScheme();
-        modify->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+        modify->SetOperationType(Statement.Kind == EDropKind::Sequence
+            ? NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence
+            : NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         TString dir = Database;
         if (dir && dir.back() == '/') {
             dir.pop_back();
@@ -753,7 +755,7 @@ private:
         result->Ok = ok;
         result->SqlState = std::move(sqlState);
         result->Message = std::move(message);
-        result->CommandTag = "DROP TABLE";
+        result->CommandTag = Statement.Kind == EDropKind::Sequence ? "DROP SEQUENCE" : "DROP TABLE";
         Send(ReplyTo, result.Release());
         if (Pipe) {
             NTabletPipe::CloseClient(SelfId(), Pipe);

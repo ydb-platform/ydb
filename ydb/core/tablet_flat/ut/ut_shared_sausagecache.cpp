@@ -1698,6 +1698,68 @@ Y_UNIT_TEST(TryKeepInMemoryMode_TableLargerThanMemory) {
     UNIT_ASSERT(retried.size() <= 10);
 }
 
+Y_UNIT_TEST(TryKeepInMemoryMode_ReloadEvictedPage_Touched) {
+    // Regression: reloading a touched page into a full in-memory tier must not keep evicting partners.
+    // Precondition: the table is larger than the in-memory tier, so the tier stays full.
+    // Detector: no new evictions while the workload only re-reads already resident pages.
+    TMyEnvBase env;
+    env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+    env->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+    auto counters = GetSharedPageCounters(env);
+
+    env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
+    SetupSharedCache(env, 2_MB, true);
+
+    env.SendSync(new NFake::TEvExecute{ new TTxInitSchema(TableId, true) });
+    // write 200 rows, each ~100KB (~20MB), ~10x the shared cache limit
+    for (i64 key = 0; key < 200; ++key) {
+        TString value(size_t(100 * 1024), char('a' + key % 26));
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(TableId, key, std::move(value)) });
+    }
+    env.SendSync(new NFake::TEvCompact(TableId));
+    env.WaitFor<NFake::TEvCompacted>();
+
+    // The in-memory tier is full: target in-memory reserved exceeds the cache capacity.
+    UNIT_ASSERT_GT(counters->TargetInMemoryBytes->Val(), static_cast<i64>(0_MB));
+    UNIT_ASSERT_GE(counters->ActiveInMemoryBytes->Val(), static_cast<i64>(2_MB - 1_MB / 2));
+    LogCounters(counters);
+
+    // A scan over the table: the first pass populates and exercises the in-memory tier, retries
+    // are expected because a part larger than the cache cannot be fully resident.
+    TRetriedCounters retried;
+    for (i64 key = 199; key >= 0; --key) {
+        DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+    }
+    LogCounters(counters);
+    UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
+
+    // Repeated scans must not turn into runaway eviction churn (the table is ~10x the cache).
+    const i64 evictOpsAfterLoad = counters->S3FIFOEvictOps->Val();
+    for (ui32 round = 0; round < 20; ++round) {
+        retried = {};
+        for (i64 key = 199; key >= 0; --key) {
+            DoReadRows(env, new TTxReadRows(TableId, key, retried), true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(retried.at(0), 200);
+        // Each WakeupSharedCache forces a ProcessGCList pass.
+        WakeupSharedCache(env);
+    }
+    LogCounters(counters);
+
+    // Measured steady state is ~1 eviction per reloaded page (~200 per round); allow 3x margin.
+    const i64 evictOpsGrowth = counters->S3FIFOEvictOps->Val() - evictOpsAfterLoad;
+    UNIT_ASSERT_LE(evictOpsGrowth, static_cast<i64>(20 * 200 * 3));
+    UNIT_ASSERT_LE(counters->EvictedPages->Val(), static_cast<i64>(10000));
+
+    // GC passes alone, with no new reads, must not keep evicting: the guard refuses the reload.
+    const i64 evictOpsBeforeIdle = counters->S3FIFOEvictOps->Val();
+    for (ui32 i = 0; i < 10; ++i) {
+        WakeupSharedCache(env);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counters->S3FIFOEvictOps->Val(), evictOpsBeforeIdle);
+}
+
 Y_UNIT_TEST(TryKeepInMemoryMode_Enabling) {
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);

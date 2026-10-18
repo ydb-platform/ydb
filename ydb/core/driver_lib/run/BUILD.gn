@@ -95,7 +95,7 @@ library("_self") {
     "//ydb/core/keyvalue",
     "//ydb/core/kqp",  # peerdir only
     # "//ydb/core/kqp/common/simple",
-    # "//ydb/core/kqp/compile_service",
+    "//ydb/core/kqp/compile_service",
     "//ydb/core/kqp/federated_query/actors",  # peerdir only
     "//ydb/core/kqp/proxy_service",
     "//ydb/core/kqp/rm_service",
@@ -121,7 +121,7 @@ library("_self") {
     # "//ydb/core/node_whiteboard",
     "//ydb/core/path_aliasing",
     "//ydb/core/persqueue",
-    # "//ydb/core/persqueue/deferred_publish",
+    "//ydb/core/persqueue/deferred_publish",
     # "//ydb/core/persqueue/pqtablet/blob",
     "//ydb/core/public_http",
     "//ydb/core/quoter",
@@ -186,7 +186,7 @@ library("_self") {
     "//ydb/library/actors/protos",
     # "//ydb/library/actors/retro_tracing",  # peerdir only
     # "//ydb/library/actors/retro_tracing/collector",
-    # "//ydb/library/aws_init",
+    "//ydb/library/aws_init",
     # "//ydb/library/global_plugins",  # peerdir only
     "//ydb/library/grpc/server/actors",
     # "//ydb/library/security",
@@ -222,13 +222,13 @@ library("_self") {
     "//ydb/services/persqueue_v1",
     "//ydb/services/rate_limiter",
     "//ydb/services/replication",
-    # "//ydb/services/scheme_secret",
+    "//ydb/services/scheme_secret",
     "//ydb/services/tablet",
     "//ydb/services/test_shard",
     "//ydb/services/udf_store",
     "//ydb/services/udf_store/compile_controller",
     "//ydb/services/view",
-    # "//ydb/services/workload_manager/service",
+    "//ydb/services/workload_manager/service",
     "//ydb/services/ydb",
     # "//yql/essentials/minikql/comp_nodes",
     # "//yql/essentials/minikql/comp_nodes/llvm16",  # link slot

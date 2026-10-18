@@ -13,7 +13,8 @@ library("cli_utils") {
   ]
 
   deps = [
-    # "//library/cpp/malloc/api",
+    "//ydb/library/keys",  # peerdir only
+    "//library/cpp/malloc/api",
     # "//library/cpp/protobuf/json",
     # "//library/cpp/yson",  # peerdir only
     # "//ydb/core/actorlib_impl",  # peerdir only

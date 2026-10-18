@@ -30,7 +30,7 @@ library("partition_direct") {
   deps = [
     # "//contrib/proto/opentelemetry",  # peerdir only
     # "//library/cpp/cgiparam",  # peerdir only
-    # "//ydb/core/mind/bscontroller",  # peerdir only
+    "//ydb/core/mind/bscontroller",  # peerdir only
     "//ydb/core/nbs/cloud/blockstore/bootstrap",  # peerdir only
     # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",  # peerdir only
     # "//ydb/library/aclib",  # peerdir only

@@ -12,7 +12,7 @@ library("persqueue") {
     "//ydb/core/persqueue/pqrb",
     "//ydb/core/persqueue/pqtablet/batching",
     "//ydb/core/persqueue/pqtablet/blob",
-    # "//ydb/core/persqueue/pqtablet/cache",
+    "//ydb/core/persqueue/pqtablet/cache",
     "//ydb/core/persqueue/pqtablet/quota",
     "//ydb/core/persqueue/public",
     # "//ydb/core/persqueue/public/cluster_tracker",

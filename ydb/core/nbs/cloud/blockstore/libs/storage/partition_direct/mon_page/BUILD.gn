@@ -3,7 +3,7 @@ library("mon_page") {
     "//ydb/core/mind/bscontroller:group_mapper",
     # "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",
     # "//ydb/core/nbs/cloud/blockstore/libs/common/memory",
-    # "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
+    "//ydb/core/nbs/cloud/blockstore/libs/diagnostics",
     "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map",
     "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model",
   ]

@@ -26,13 +26,16 @@ linked_executable("ydbd") {
 
     deps = [
         ":export",
+        "//ydb/core/driver_lib/run",  # TModuleFactories (factories.cpp)
         "//ydb/core/driver_lib/run:main",
         "//ydb/core/http_proxy",
         "//ydb/core/security",
         "//ydb/core/security/token_manager",
         "//ydb/core/transfer",
+        "//ydb/core/tx/schemeshard",  # DefaultOperationFactory
         "//ydb/core/ymq/actor",
         "//ydb/library/pdisk_io",
+        "//ydb/library/yaml_config",  # CreateDefaultConfigSwissKnife
     ]
 
     sources = [ "main.cpp" ]

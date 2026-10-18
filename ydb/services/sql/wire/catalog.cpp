@@ -2,6 +2,8 @@
 
 #include "protocol.h"
 
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <util/string/ascii.h>
 
 namespace NKikimr::NSql {
@@ -35,12 +37,30 @@ TString TextColumn(TStringBuf name, TStringBuf value) {
 
 } // namespace
 
+TString VersionText() {
+    const char* chosen = nullptr;
+    if (const char* release = GetReleaseVersion(); release && *release) {
+        chosen = release;
+    } else if (const char* tag = GetTag(); tag && *tag) {
+        chosen = tag;
+    } else if (const char* branch = GetBranch(); branch && *branch) {
+        chosen = branch;
+    }
+    TString version = chosen ? chosen : "unknown";
+    for (const char* prefix : {"tags/releases/", "releases/", "tags/", "ydb/"}) {
+        if (version.StartsWith(prefix)) {
+            version = TString(version.substr(strlen(prefix)));
+        }
+    }
+    return "YDB " + version;
+}
+
 bool TryAnswerCatalog(TStringBuf sql, TString& reply) {
     const TString query = Normalize(sql);
     // psql 16.9 and PostgreSQL 18 libpq send no SQL before the prompt.
     // These are the catalog reads named for the handshake stub.
     if (query == "select version()" || query == "select pg_catalog.version()") {
-        reply = TextColumn("version", "PostgreSQL 18.0");
+        reply = TextColumn("version", VersionText());
         return true;
     }
     if (query == "select oid, typname from pg_catalog.pg_type") {

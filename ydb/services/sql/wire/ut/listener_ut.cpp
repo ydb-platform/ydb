@@ -5,6 +5,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/services/sql/wire/catalog.h>
 
 #include <poll.h>
 
@@ -297,7 +298,7 @@ Y_UNIT_TEST_SUITE(SqlListener) {
 
         UNIT_ASSERT(SendAll(*session, QueryMessage("SELECT version()")));
         const TString version = ReadReply(*session);
-        UNIT_ASSERT_C(version.Contains("PostgreSQL 18.0"), version);
+        UNIT_ASSERT_C(version.Contains(NKikimr::NSql::VersionText()), version);
         UNIT_ASSERT(HasReadyForQuery(version));
         UNIT_ASSERT(!version.Contains("0A000"));
 

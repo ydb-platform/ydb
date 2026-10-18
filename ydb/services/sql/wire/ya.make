@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/raw_socket
     ydb/core/tx/scheme_cache
+    library/cpp/svnversion
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/services

@@ -1,7 +1,7 @@
 # ALTER TABLE ADD COLUMN
 
-status: pending
-commit:
+status: done
+commit: 13061fbd90f8336c337a793613f2b64426cd85af
 id: alter-add-column
 depends: create-table
 

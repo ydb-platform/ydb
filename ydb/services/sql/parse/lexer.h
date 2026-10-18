@@ -10,6 +10,7 @@ enum class ETokenKind {
     Star,
     Comma,
     Semicolon,
+    Dot,
     Operator,
     Number,
     String,

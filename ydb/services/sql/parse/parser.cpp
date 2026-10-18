@@ -58,8 +58,19 @@ public:
         if (Current.Kind != ETokenKind::Identifier) {
             return Unsupported(Current.Text);
         }
-        select.From = Identifier();
+        const TIdentifier first = Identifier();
         Advance();
+        if (Current.Kind == ETokenKind::Dot) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            select.Schema = first;
+            select.From = Identifier();
+            Advance();
+        } else {
+            select.From = first;
+        }
 
         if (IsKeyword("where")) {
             Advance();

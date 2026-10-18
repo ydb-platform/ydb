@@ -46,6 +46,10 @@ TToken TLexer::Next() {
         ++Position;
         return {ETokenKind::Semicolon, ";", false};
     }
+    if (ch == '.') {
+        ++Position;
+        return {ETokenKind::Dot, ".", false};
+    }
     if (ch == '\'' ) {
         ++Position;
         TString text;

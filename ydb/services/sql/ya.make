@@ -1,4 +1,5 @@
 RECURSE(
+    analyze
     parse
     wire
 )

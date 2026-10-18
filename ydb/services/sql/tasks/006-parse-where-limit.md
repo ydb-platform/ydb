@@ -1,7 +1,7 @@
 # Разбор WHERE и LIMIT
 
-status: pending
-commit:
+status: done
+commit: 67118e418861875f2dd9018e7273e6becf99616c
 id: parse-where-limit
 depends: parse-select
 

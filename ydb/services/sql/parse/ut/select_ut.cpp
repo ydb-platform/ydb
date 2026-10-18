@@ -64,6 +64,14 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(*parsed.Select->Limit, 10u);
     }
 
+    Y_UNIT_TEST(QualifiedTableName) {
+        const TParseResult parsed = Parse("SELECT a FROM app.t");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Select->Schema);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Schema->Name, "app");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "t");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

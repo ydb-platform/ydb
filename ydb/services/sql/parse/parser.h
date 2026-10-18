@@ -40,6 +40,7 @@ struct TComparison {
 struct TSelectStmt {
     bool Star = false;
     TVector<TIdentifier> Columns;
+    std::optional<TIdentifier> Schema;
     TIdentifier From;
     TVector<TComparison> Where;
     std::optional<ui64> Limit;

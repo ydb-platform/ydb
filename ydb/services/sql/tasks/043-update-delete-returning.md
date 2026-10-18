@@ -1,7 +1,7 @@
 # RETURNING у UPDATE и DELETE
 
-status: pending
-commit:
+status: done
+commit: 327464ef22b67461680b7240af357eb1fda14c40
 id: update-delete-returning
 depends: delete
 

@@ -30,6 +30,8 @@ struct TEvExecuteResult : public NActors::TEventLocal<TEvExecuteResult, EvExecut
     TVector<TQueryColumn> Columns;
     TVector<TVector<TQueryCell>> Rows;
     char TxStatus = 'I';
+    TString GucName;
+    TString GucValue;
 };
 
 NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries);

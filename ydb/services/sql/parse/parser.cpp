@@ -56,7 +56,64 @@ public:
             || IsKeyword("rollback") || IsKeyword("abort")) {
             return TransactionStmt();
         }
+        if (IsKeyword("set")) {
+            return SetStmt();
+        }
+        if (IsKeyword("show")) {
+            return ShowStmt();
+        }
         return Unsupported(Current.Text);
+    }
+
+    TParseResult SetStmt() {
+        Advance();
+        if (IsKeyword("transaction") || IsKeyword("session") || IsKeyword("local")) {
+            return Unsupported(Current.Text);
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        TSetStmt set;
+        set.Name = Identifier().Name;
+        Advance();
+        if (IsKeyword("to")) {
+            Advance();
+        } else if (Current.Kind == ETokenKind::Operator && Current.Text == "=") {
+            Advance();
+        } else {
+            return Unsupported(Current.Text);
+        }
+        if (Current.Kind == ETokenKind::String || Current.Kind == ETokenKind::Number) {
+            set.Value = Current.Text;
+            Advance();
+        } else if (Current.Kind == ETokenKind::Identifier) {
+            set.Value = Identifier().Name;
+            Advance();
+        } else {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Set = std::move(set);
+        return result;
+    }
+
+    TParseResult ShowStmt() {
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        TShowStmt show;
+        show.Name = Identifier().Name;
+        Advance();
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Show = std::move(show);
+        return result;
     }
 
     TParseResult TransactionStmt() {

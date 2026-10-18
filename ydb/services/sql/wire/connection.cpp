@@ -531,6 +531,9 @@ private:
             }
             reply = MakeTextResult(columns, rows, result.CommandTag, !Extended, TxState);
         }
+        if (result.Ok && !result.GucName.empty()) {
+            reply.prepend(MakeParameterStatus(result.GucName, result.GucValue));
+        }
         Extended = false;
         const bool written = Write(reply);
         Become(&TSqlConnection::StateQuery);

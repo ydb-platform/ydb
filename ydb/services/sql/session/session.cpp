@@ -89,6 +89,10 @@ public:
         : Database(std::move(database))
         , InternalErrorRetries(internalErrorRetries)
     {
+        Remember("DateStyle", "ISO, MDY");
+        Remember("TimeZone", "UTC");
+        Remember("standard_conforming_strings", "on");
+        Remember("client_encoding", "UTF8");
     }
 
     void Bootstrap() {
@@ -124,14 +128,57 @@ private:
         Reply(result.Release());
     }
 
-    void Succeed(TString tag, TVector<TQueryColumn> columns, TVector<TVector<TQueryCell>> rows) {
+    void Succeed(TString tag, TVector<TQueryColumn> columns, TVector<TVector<TQueryCell>> rows, TString gucName = {}, TString gucValue = {}) {
         auto result = MakeHolder<TEvExecuteResult>();
         result->Ok = true;
         result->CommandTag = std::move(tag);
         result->Columns = std::move(columns);
         result->Rows = std::move(rows);
         result->TxStatus = StatusChar();
+        result->GucName = std::move(gucName);
+        result->GucValue = std::move(gucValue);
         Reply(result.Release());
+    }
+
+    static TString Lower(TString text) {
+        for (char& ch : text) {
+            if (ch >= 'A' && ch <= 'Z') {
+                ch = static_cast<char>(ch - 'A' + 'a');
+            }
+        }
+        return text;
+    }
+
+    void Remember(const TString& name, const TString& value) {
+        Gucs[Lower(name)] = {name, value};
+    }
+
+    void RunSet(const TSetStmt& set) {
+        const TString key = Lower(set.Name);
+        TGuc* guc = Gucs.FindPtr(key);
+        if (key == "search_path" || !guc) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (key == "client_encoding") {
+            if (Lower(set.Value) != "utf8") {
+                Fail("0A000", "not supported");
+                return;
+            }
+            Succeed("SET", {}, {}, guc->Name, guc->Value);
+            return;
+        }
+        guc->Value = set.Value;
+        Succeed("SET", {}, {}, guc->Name, guc->Value);
+    }
+
+    void RunShow(const TShowStmt& show) {
+        const TGuc* guc = Gucs.FindPtr(Lower(show.Name));
+        if (!guc) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        Succeed("SHOW", {{guc->Name, 25, -1}}, {{{false, guc->Value}}});
     }
 
     bool IsDdl(const TParseResult& parsed) const {
@@ -203,6 +250,14 @@ private:
         }
         if (parsed.Tx) {
             RunTx(*parsed.Tx);
+            return;
+        }
+        if (parsed.Set) {
+            RunSet(*parsed.Set);
+            return;
+        }
+        if (parsed.Show) {
+            RunShow(*parsed.Show);
             return;
         }
         if (Tx == ETx::Open && (IsDdl(parsed) || (parsed.Insert && parsed.Insert->Source))) {
@@ -387,7 +442,13 @@ private:
     TVector<TRequest> Queue;
     TVector<TDeferredWrite> Pending;
     TVector<NKikimrDataEvents::TLock> Locks;
+    struct TGuc {
+        TString Name;
+        TString Value;
+    };
+
     THashMap<TString, TParseResult> Parsed;
+    THashMap<TString, TGuc> Gucs;
     NActors::TActorId Client;
     ETx Tx = ETx::Idle;
     ui64 TxId = 0;

@@ -213,6 +213,15 @@ struct TUpdateStmt {
     TVector<TReturningItem> Returning;
 };
 
+struct TSetStmt {
+    TString Name;
+    TString Value;
+};
+
+struct TShowStmt {
+    TString Name;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
@@ -226,6 +235,8 @@ struct TParseResult {
     std::optional<TTxStmt> Tx;
     std::optional<TUpdateStmt> Update;
     std::optional<TDeleteStmt> Delete;
+    std::optional<TSetStmt> Set;
+    std::optional<TShowStmt> Show;
     TString SqlState;
     TString Message;
 };

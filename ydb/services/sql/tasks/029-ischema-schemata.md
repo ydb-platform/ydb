@@ -1,7 +1,7 @@
 # information_schema.schemata
 
-status: pending
-commit:
+status: done
+commit: aebd1daae38db0b2dddc58be001cfb2842fdcfc8
 id: ischema-schemata
 depends: select-where-limit
 

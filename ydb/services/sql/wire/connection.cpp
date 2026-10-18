@@ -6,6 +6,7 @@
 #include <ydb/services/sql/datashard/events.h>
 #include <ydb/services/sql/ddl/events.h>
 #include <ydb/services/sql/ischema/schemata.h>
+#include <ydb/services/sql/ischema/tables.h>
 #include <ydb/services/sql/parse/parser.h>
 
 #include <ydb/core/base/path.h>
@@ -254,6 +255,8 @@ private:
                 if (parsed.Select) {
                     if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "schemata") {
                         Register(CreateSchemataActor(SelfId(), DatabasePath, *parsed.Select));
+                    } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "tables") {
+                        Register(CreateTablesActor(SelfId(), DatabasePath, *parsed.Select));
                     } else {
                         Register(CreateSelectActor(SelfId(), DatabasePath, TString(sql), *parsed.Select, InternalErrorRetries));
                     }

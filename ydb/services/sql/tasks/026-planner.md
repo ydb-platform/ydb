@@ -1,7 +1,7 @@
 # Планировщик point и prefix
 
-status: pending
-commit:
+status: done
+commit: ba85dcebcfff7402768fa216f494d317192921f4
 id: planner
 depends: analyze-scheme
 

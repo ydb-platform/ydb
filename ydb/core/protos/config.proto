@@ -3446,6 +3446,7 @@ message TSqlConfig {
     optional bool Enable = 1 [default = false];
     optional int32 ListeningPort = 2 [default = 5432];
     optional string ListeningAddress = 3 [default = "::"];
+    optional uint32 InternalErrorRetries = 4 [default = 3];
 }
 
 message TAwsCompatibilityConfig {

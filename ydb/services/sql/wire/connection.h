@@ -7,6 +7,7 @@ namespace NKikimr::NSql {
 
 NActors::IActor* CreateSqlConnection(const NActors::TActorId& listenerActorId,
                                      TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
-                                     NRawSocket::TNetworkConfig::TSocketAddressType address);
+                                     NRawSocket::TNetworkConfig::TSocketAddressType address,
+                                     ui32 internalErrorRetries);
 
 } // namespace NKikimr::NSql

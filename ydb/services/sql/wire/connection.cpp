@@ -3,6 +3,7 @@
 #include "catalog.h"
 #include "protocol.h"
 
+#include <ydb/services/sql/datashard/events.h>
 #include <ydb/services/sql/ddl/events.h>
 #include <ydb/services/sql/parse/parser.h>
 
@@ -21,10 +22,12 @@ class TSqlConnection: public NActors::TActorBootstrapped<TSqlConnection> {
 public:
     TSqlConnection(const NActors::TActorId& listenerActorId,
                    TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
-                   NRawSocket::TNetworkConfig::TSocketAddressType address)
+                   NRawSocket::TNetworkConfig::TSocketAddressType address,
+                   ui32 internalErrorRetries)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(std::move(address))
+        , InternalErrorRetries(internalErrorRetries)
     {
     }
 
@@ -110,7 +113,7 @@ private:
             }
             return;
         }
-        if (CurrentStateFunc() == &TSqlConnection::StateScheme) {
+        if (CurrentStateFunc() == &TSqlConnection::StateScheme || CurrentStateFunc() == &TSqlConnection::StateRead) {
             RequestRead();
             return;
         }
@@ -247,6 +250,12 @@ private:
                     RequestRead();
                     return false;
                 }
+                if (parsed.Select) {
+                    Register(CreateSelectActor(SelfId(), DatabasePath, TString(sql), *parsed.Select, InternalErrorRetries));
+                    Become(&TSqlConnection::StateRead);
+                    RequestRead();
+                    return false;
+                }
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());
@@ -270,8 +279,44 @@ private:
             }
         }
         const auto state = CurrentStateFunc();
-        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery || state == &TSqlConnection::StateScheme)) {
+        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery || state == &TSqlConnection::StateScheme || state == &TSqlConnection::StateRead)) {
             ReadSocket();
+        }
+    }
+
+    void HandleQuery(TEvQueryResult::TPtr& ev) {
+        const TEvQueryResult& result = *ev->Get();
+        TString reply;
+        if (result.Ok) {
+            TVector<TResultColumn> columns;
+            columns.reserve(result.Columns.size());
+            for (const TQueryColumn& column : result.Columns) {
+                columns.push_back({column.Name, column.TypeOid, column.TypeSize});
+            }
+            TVector<TVector<TTextCell>> rows;
+            rows.reserve(result.Rows.size());
+            for (const TVector<TQueryCell>& row : result.Rows) {
+                TVector<TTextCell> line;
+                line.reserve(row.size());
+                for (const TQueryCell& cell : row) {
+                    line.push_back({cell.Null, cell.Text});
+                }
+                rows.push_back(std::move(line));
+            }
+            reply = MakeTextResult(columns, rows);
+        } else {
+            const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
+            const TString message = result.Message.empty() ? TString("not supported") : result.Message;
+            reply = MakeErrorResponse(sqlState, message);
+            reply.append(MakeReadyForQuery());
+        }
+        const bool written = Write(reply);
+        Become(&TSqlConnection::StateQuery);
+        if (!written) {
+            return;
+        }
+        if (HandleQueries()) {
+            RequestRead();
         }
     }
 
@@ -327,6 +372,14 @@ private:
         }
     }
 
+    STATEFN(StateRead) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvQueryResult, HandleQuery);
+            hFunc(NActors::TEvPollerReady, HandleReady);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
     const NActors::TActorId ListenerActorId;
     TIntrusivePtr<NRawSocket::TSocketDescriptor> Socket;
     NRawSocket::TNetworkConfig::TSocketAddressType Address;
@@ -334,6 +387,7 @@ private:
     TString Inbox;
     TString Outbox;
     TString DatabasePath;
+    ui32 InternalErrorRetries = 3;
     bool CloseAfterWrite = false;
 };
 
@@ -341,8 +395,9 @@ private:
 
 NActors::IActor* CreateSqlConnection(const NActors::TActorId& listenerActorId,
                                      TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
-                                     NRawSocket::TNetworkConfig::TSocketAddressType address) {
-    return new TSqlConnection(listenerActorId, std::move(socket), std::move(address));
+                                     NRawSocket::TNetworkConfig::TSocketAddressType address,
+                                     ui32 internalErrorRetries) {
+    return new TSqlConnection(listenerActorId, std::move(socket), std::move(address), internalErrorRetries);
 }
 
 } // namespace NKikimr::NSql

@@ -10,6 +10,7 @@ ENDIF()
 SRCS(
     create_table_ut.cpp
     listener_ut.cpp
+    select_ut.cpp
 )
 
 PEERDIR(

@@ -166,6 +166,20 @@ TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message) {
 }
 
 TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TString>> rows) {
+    TVector<TVector<TTextCell>> cells;
+    cells.reserve(rows.size());
+    for (const TVector<TString>& row : rows) {
+        TVector<TTextCell> line;
+        line.reserve(row.size());
+        for (const TString& value : row) {
+            line.push_back({false, value});
+        }
+        cells.push_back(std::move(line));
+    }
+    return MakeTextResult(columns, cells);
+}
+
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows) {
     TString description;
     AppendBe16(description, static_cast<ui16>(columns.size()));
     for (const TResultColumn& column : columns) {
@@ -179,12 +193,16 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
     }
 
     TString out = MakeMessage('T', description);
-    for (const TVector<TString>& row : rows) {
+    for (const TVector<TTextCell>& row : rows) {
         TString data;
         AppendBe16(data, static_cast<ui16>(row.size()));
-        for (const TString& value : row) {
-            AppendBe32(data, static_cast<ui32>(value.size()));
-            data.append(value);
+        for (const TTextCell& value : row) {
+            if (value.Null) {
+                AppendBe32(data, static_cast<ui32>(-1));
+                continue;
+            }
+            AppendBe32(data, static_cast<ui32>(value.Text.size()));
+            data.append(value.Text);
         }
         out.append(MakeMessage('D', data));
     }

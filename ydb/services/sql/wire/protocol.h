@@ -42,7 +42,13 @@ struct TResultColumn {
     i16 TypeSize = -1;
 };
 
+struct TTextCell {
+    bool Null = false;
+    TString Text;
+};
+
 // Text-format result: RowDescription, DataRow per row, CommandComplete, ReadyForQuery.
 TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TString>> rows);
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows);
 
 } // namespace NKikimr::NSql

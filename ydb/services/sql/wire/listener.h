@@ -6,6 +6,7 @@
 namespace NKikimr::NSql {
 
 NActors::IActor* CreateSqlListener(const NActors::TActorId& poller,
-                                   const NRawSocket::TListenerSettings& settings);
+                                   const NRawSocket::TListenerSettings& settings,
+                                   ui32 internalErrorRetries);
 
 } // namespace NKikimr::NSql

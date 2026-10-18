@@ -1,6 +1,7 @@
 RECURSE(
     analyze
     codec
+    datashard
     ddl
     parse
     plan

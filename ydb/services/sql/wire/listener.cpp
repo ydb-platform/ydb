@@ -7,14 +7,15 @@
 namespace NKikimr::NSql {
 
 NActors::IActor* CreateSqlListener(const NActors::TActorId& poller,
-                                   const NRawSocket::TListenerSettings& settings) {
+                                   const NRawSocket::TListenerSettings& settings,
+                                   ui32 internalErrorRetries) {
     return NRawSocket::CreateSocketListener(
         poller,
         settings,
-        [](const NActors::TActorId& listenerActorId,
+        [internalErrorRetries](const NActors::TActorId& listenerActorId,
            TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
            NRawSocket::TNetworkConfig::TSocketAddressType address) {
-            return CreateSqlConnection(listenerActorId, std::move(socket), std::move(address));
+            return CreateSqlConnection(listenerActorId, std::move(socket), std::move(address), internalErrorRetries);
         },
         NKikimrServices::PGWIRE);
 }

@@ -504,6 +504,8 @@ namespace {
             hFunc(TEvents::TEvGone, HandleGone)
 
             hFunc(TEvReadResult, Handle)
+            hFunc(TEvInterconnect::TEvNodeConnected, Handle)
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)

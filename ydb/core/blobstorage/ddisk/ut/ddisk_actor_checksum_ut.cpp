@@ -3029,6 +3029,95 @@ Y_UNIT_TEST_SUITE(TDDiskSyncSessionLoss) {
         UNIT_ASSERT_VALUES_EQUAL(record.SegmentResultsSize(), 1);
         UNIT_ASSERT_C(record.GetSegmentResults(0).GetStatus() == TReplyStatus::ERROR, record.ShortDebugString());
     }
+
+    // The destination subscribes to the session of a remote source read. When no read waits for the source node
+    // any more, the destination unsubscribes, so recreated DDisk actors leave no subscriptions behind.
+    Y_UNIT_TEST(SyncUnsubscribesFromSourceNode) {
+        constexpr ui32 DestinationNodeId = NodeId;
+        constexpr ui32 SourceNodeId = NodeId + 1;
+        TTestContext ctx(2);
+        const TDiskHandle destination = ctx.CreateDDisk(50, 1);
+        const TDiskHandle source = ctx.CreateDDisk(60, 1, {}, TTestContext::ChunkSize, std::nullopt, SourceNodeId);
+
+        TFakeDiskStorage destinationStorage;
+        TFakeDiskStorage sourceStorage;
+        const NDDisk::TBlockSelector selector{0, 0, 2 * BlockSize};
+        const TString payload = MakeData('S', selector.Size);
+        const auto sourceCreds = Connect(ctx, source.ServiceId, 100, 1);
+        AssertStatus(WriteDirect(ctx, source, sourceStorage, sourceCreds, selector.VChunkIndex,
+            selector.OffsetInBytes, payload), TReplyStatus::OK);
+        const auto destinationCreds = Connect(ctx, destination.ServiceId, 100, 1);
+
+        const TActorId proxy = ctx.Runtime.GetNode(DestinationNodeId)->ActorSystem->InterconnectProxy(SourceNodeId);
+        ui32 connected = 0;
+        ui32 unsubscribes = 0;
+        ctx.Runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == DestinationNodeId && ev->GetTypeRewrite() == TEvInterconnect::TEvNodeConnected::EventType) {
+                ++connected;
+            }
+            if (nodeId == DestinationNodeId && ev->GetTypeRewrite() == TEvents::TSystem::Unsubscribe
+                    && ev->GetRecipientRewrite() == proxy) {
+                ++unsubscribes;
+            }
+            return true;
+        };
+
+        auto sync = std::make_unique<NDDisk::TEvSync>(destinationCreds);
+        sync->AddSegmentFromDDisk({SourceNodeId, source.PDiskId, source.SlotId},
+            *sourceCreds.DDiskInstanceGuid, selector);
+        SendToDDisk(ctx, destination.ServiceId, sync.release());
+
+        ui32 nextChunkId = 800000;
+        std::unique_ptr<IEventHandle> result;
+        while (!result) {
+            auto ev = ctx.Runtime.WaitForEdgeActorEvent({ctx.Edge, source.PDiskEdge, destination.PDiskEdge});
+            if (ev->Recipient == ctx.Edge) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->GetTypeRewrite(), NDDisk::TEvSyncResult::EventType);
+                result = std::move(ev);
+                continue;
+            }
+            TFakeDiskStorage& storage = ev->GetRecipientRewrite() == source.PDiskEdge
+                ? sourceStorage : destinationStorage;
+            std::unique_ptr<IEventBase> response;
+            switch (ev->GetTypeRewrite()) {
+                case NPDisk::TEvChunkReadRaw::EventType:
+                    response = std::make_unique<NPDisk::TEvChunkReadRawResult>(
+                        storage.Read(*ev->Get<NPDisk::TEvChunkReadRaw>()));
+                    break;
+                case NPDisk::TEvChunkWriteRaw::EventType:
+                    storage.Write(*ev->Get<NPDisk::TEvChunkWriteRaw>());
+                    response = std::make_unique<NPDisk::TEvChunkWriteRawResult>(NKikimrProto::OK, "");
+                    break;
+                case NPDisk::TEvLog::EventType: {
+                    const auto& log = *ev->Get<NPDisk::TEvLog>();
+                    auto logResult = std::make_unique<NPDisk::TEvLogResult>(NKikimrProto::OK, 0, "", 0);
+                    logResult->Results.emplace_back(log.Lsn, log.Cookie);
+                    response = std::move(logResult);
+                    break;
+                }
+                case NPDisk::TEvChunkReserve::EventType: {
+                    auto reserveResult = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, 0);
+                    for (ui32 i = 0; i < ev->Get<NPDisk::TEvChunkReserve>()->SizeChunks; ++i) {
+                        reserveResult->ChunkIds.push_back(nextChunkId++);
+                    }
+                    response = std::move(reserveResult);
+                    break;
+                }
+                case NPDisk::TEvCheckSpace::EventType:
+                    response = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0);
+                    break;
+                default:
+                    UNIT_FAIL("unexpected PDisk event " << ev->GetTypeRewrite());
+            }
+            ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
+                ev->Recipient.NodeId());
+        }
+
+        const auto& record = result->Get<NDDisk::TEvSyncResult>()->Record;
+        UNIT_ASSERT_C(record.GetStatus() == TReplyStatus::OK, record.ShortDebugString());
+        UNIT_ASSERT_C(connected > 0, "the source read must subscribe to its session");
+        UNIT_ASSERT_VALUES_EQUAL_C(unsubscribes, 1, "the destination must unsubscribe once no read waits for the source node");
+    }
 }
 
 } // anonymous namespace

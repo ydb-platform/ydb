@@ -311,10 +311,6 @@ public:
                 Fail("0A000", "not supported");
                 return false;
             }
-            if (Statement.Conflict != EConflictAction::None) {
-                Fail("0A000", "not supported");
-                return false;
-            }
             TIndexPlan plan;
             plan.Name = index.GetName();
             plan.ImplPath = Path + "/" + plan.Name + "/indexImplTable";
@@ -391,6 +387,9 @@ public:
         std::sort(keys.begin(), keys.end(), [](const auto* left, const auto* right) {
             return left->KeyOrder < right->KeyOrder;
         });
+        for (const auto* info : keys) {
+            PkNames.push_back(info->Name);
+        }
         if (keys.empty()) {
             Fail("0A000", "not supported");
             return false;
@@ -442,13 +441,26 @@ public:
             for (const TIdentifier& name : Statement.ConflictTarget) {
                 target.insert(name.Name);
             }
-            if (target.size() != keys.size()) {
-                Fail("0A000", "not supported");
-                return false;
-            }
+            bool primary = target.size() == keys.size();
             for (const auto* info : keys) {
-                if (!target.contains(info->Name)) {
-                    Fail("0A000", "not supported");
+                primary = primary && target.contains(info->Name);
+            }
+            if (!primary) {
+                for (size_t i = 0; i < IndexPlans.size(); ++i) {
+                    const TIndexPlan& plan = IndexPlans[i];
+                    if (!plan.Unique || plan.Keys.size() != Statement.ConflictTarget.size()) {
+                        continue;
+                    }
+                    bool match = true;
+                    for (size_t column = 0; column < plan.Keys.size(); ++column) {
+                        match = match && plan.Keys[column] == Statement.ConflictTarget[column].Name;
+                    }
+                    if (match) {
+                        Arbiter = static_cast<int>(i);
+                    }
+                }
+                if (Arbiter < 0) {
+                    Fail("42P10", "invalid column reference");
                     return false;
                 }
             }
@@ -553,6 +565,26 @@ public:
                 ReadColumns.push_back(PreparedColumns[Statement.ConflictWhere->Column.Name]);
             }
         }
+        if (Statement.Conflict != EConflictAction::None) {
+            for (const TIndexPlan& plan : IndexPlans) {
+                auto ensure = [&](const TString& name) {
+                    for (const TPrepared& column : ReadColumns) {
+                        if (column.Name == name) {
+                            return;
+                        }
+                    }
+                    if (const TPrepared* column = MapFindPtr(PreparedColumns, name)) {
+                        ReadColumns.push_back(*column);
+                    }
+                };
+                for (const TString& name : plan.Keys) {
+                    ensure(name);
+                }
+                for (const TString& name : plan.Data) {
+                    ensure(name);
+                }
+            }
+        }
         if (Statement.Conflict == EConflictAction::Update && !Statement.Returning.empty()) {
             ReadColumns.clear();
             for (const auto& [name, column] : PreparedColumns) {
@@ -623,7 +655,7 @@ public:
             if (column.KeyOrder < 0) {
                 continue;
             }
-            const TCell* key = MapFindPtr(Proposed, column.Name);
+            const TCell* key = MapFindPtr(Arbiter >= 0 ? FoundCells : Proposed, column.Name);
             if (!key || key->IsNull()) {
                 Fail("23502", "null value in column " + column.Name);
                 return false;
@@ -748,6 +780,19 @@ public:
             return;
         }
         TabletId = partitions[0].ShardId;
+        if (ArbiterResolve) {
+            ArbiterResolve = false;
+            ArbiterTablet = TabletId;
+            ReadArbiter();
+            return;
+        }
+        if (UpdatingResolve) {
+            UpdatingResolve = false;
+            IndexWrites[PendingPos].TabletId = TabletId;
+            ++PendingPos;
+            ResolvePending();
+            return;
+        }
         if (IndexResolve) {
             IndexWrites.back().TabletId = partitions[0].ShardId;
             if (IndexPlans[IndexPos].Unique) {
@@ -759,6 +804,10 @@ public:
             return;
         }
         MainTabletId = TabletId;
+        if (Statement.Conflict != EConflictAction::None && Arbiter >= 0 && !ArbiterDone) {
+            OpenArbiter();
+            return;
+        }
         if (Statement.Conflict == EConflictAction::None) {
             UseInsert();
             if (!RememberImage(Proposed)) {
@@ -801,6 +850,11 @@ public:
             if (!RememberImage(Proposed)) {
                 return;
             }
+            if (!IndexPlans.empty()) {
+                IndexPos = 0;
+                StartIndex();
+                return;
+            }
             Allocate();
             return;
         }
@@ -818,7 +872,18 @@ public:
         if (!RememberImage(image)) {
             return;
         }
-        Allocate();
+        if (IndexPlans.empty() || !IndexKeyChanged()) {
+            Allocate();
+            return;
+        }
+        IndexPos = 0;
+        IndexWrites.clear();
+        PendingKeys.clear();
+        PendingTypes.clear();
+        IndexByteStorage.clear();
+        IndexByteStorage.reserve(64);
+        UpdatingIndexes = true;
+        StartIndexUpdate();
     }
 
     void HandleAllocate(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
@@ -1036,6 +1101,353 @@ public:
         Allocate();
     }
 
+    bool SameCell(const TCell* left, const TCell* right) const {
+        if (!left || !right || left->IsNull() || right->IsNull()) {
+            return (!left || left->IsNull()) && (!right || right->IsNull());
+        }
+        return left->AsBuf() == right->AsBuf();
+    }
+
+    const TCell* NewCell(const TString& name) const {
+        if (const TCell* assigned = MapFindPtr(Assigned, name)) {
+            return assigned;
+        }
+        return MapFindPtr(FoundCells, name);
+    }
+
+    bool IndexKeyChanged() const {
+        for (const TIndexPlan& plan : IndexPlans) {
+            for (const TString& name : plan.Keys) {
+                if (!SameCell(MapFindPtr(FoundCells, name), NewCell(name))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void OpenArbiter() {
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(IndexPlans[Arbiter].ImplPath);
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.ShowPrivatePath = true;
+        request->ResultSet.emplace_back(std::move(entry));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Become(&TInsertActor::StateArbiterNavigate);
+    }
+
+    void HandleArbiterNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* request = ev->Get()->Request.Get();
+        if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+            || request->ResultSet[0].Kind != NSchemeCache::TSchemeCacheNavigate::KindTable)
+        {
+            Fail("42P01", IndexPlans[Arbiter].ImplPath);
+            return;
+        }
+        const auto& entry = request->ResultSet[0];
+        const TIndexPlan& plan = IndexPlans[Arbiter];
+        ArbiterNames = plan.Keys;
+        for (const TString& name : PkNames) {
+            bool present = false;
+            for (const TString& key : plan.Keys) {
+                present = present || key == name;
+            }
+            if (!present) {
+                ArbiterNames.push_back(name);
+            }
+        }
+        ArbiterIds.clear();
+        ArbiterTypes.clear();
+        ArbiterFrom.clear();
+        ArbiterTo.clear();
+        bool nullKey = false;
+        for (size_t i = 0; i < ArbiterNames.size(); ++i) {
+            const auto* info = FindColumn(entry, ArbiterNames[i]);
+            if (!info) {
+                Fail("42703", ArbiterNames[i]);
+                return;
+            }
+            ArbiterIds.push_back(info->Id);
+            ArbiterTypes.push_back(info->PType);
+            if (i < plan.Keys.size()) {
+                const TCell* proposed = MapFindPtr(Proposed, ArbiterNames[i]);
+                if (!proposed || proposed->IsNull()) {
+                    nullKey = true;
+                    ArbiterFrom.emplace_back();
+                    ArbiterTo.emplace_back();
+                } else {
+                    ArbiterFrom.push_back(*proposed);
+                    ArbiterTo.push_back(*proposed);
+                }
+            }
+        }
+        ArbiterTable = entry.TableId;
+        if (nullKey) {
+            ArbiterDone = true;
+            TabletId = MainTabletId;
+            UseInsert();
+            if (!RememberImage(Proposed)) {
+                return;
+            }
+            IndexPos = 0;
+            StartIndex();
+            return;
+        }
+        TVector<TCell> from = ArbiterFrom;
+        for (size_t i = plan.Keys.size(); i < ArbiterNames.size(); ++i) {
+            from.emplace_back();
+        }
+        ArbiterFrom = std::move(from);
+        TVector<TKeyDesc::TColumnOp> columns;
+        for (size_t i = 0; i < ArbiterIds.size(); ++i) {
+            TKeyDesc::TColumnOp operation;
+            operation.Column = ArbiterIds[i];
+            operation.Operation = TKeyDesc::EColumnOperation::Read;
+            operation.ExpectedType = ArbiterTypes[i];
+            columns.push_back(operation);
+        }
+        const bool point = plan.Keys.size() == ArbiterNames.size();
+        auto description = MakeHolder<TKeyDesc>(
+            ArbiterTable,
+            point ? TTableRange(ArbiterFrom) : TTableRange(ArbiterFrom, true, ArbiterTo, true),
+            TKeyDesc::ERowOperation::Read,
+            ArbiterTypes,
+            columns);
+        auto resolve = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        resolve->DatabaseName = Database;
+        resolve->ResultSet.emplace_back(std::move(description));
+        ArbiterResolve = true;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolve.Release()));
+        Become(&TInsertActor::StateResolve);
+    }
+
+    void ReadArbiter() {
+        auto request = MakeHolder<TEvDataShard::TEvRead>();
+        request->Record.SetReadId(++ReadId);
+        request->Record.MutableTableId()->SetOwnerId(ArbiterTable.PathId.OwnerId);
+        request->Record.MutableTableId()->SetTableId(ArbiterTable.PathId.LocalPathId);
+        request->Record.MutableTableId()->SetSchemaVersion(ArbiterTable.SchemaVersion);
+        request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        for (ui32 id : ArbiterIds) {
+            request->Record.AddColumns(id);
+        }
+        if (IndexPlans[Arbiter].Keys.size() == ArbiterNames.size()) {
+            request->Keys.push_back(TSerializedCellVec(ArbiterFrom));
+        } else {
+            request->Ranges.emplace_back(ArbiterFrom, true, ArbiterTo, true);
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), ArbiterTablet, true));
+        Linked = true;
+        Become(&TInsertActor::StateArbiter);
+    }
+
+    void MissArbiter() {
+        Unlink();
+        ArbiterDone = true;
+        TabletId = MainTabletId;
+        UseInsert();
+        if (!RememberImage(Proposed)) {
+            return;
+        }
+        if (!IndexPlans.empty()) {
+            IndexPos = 0;
+            StartIndex();
+            return;
+        }
+        Allocate();
+    }
+
+    void HandleArbiter(TEvDataShard::TEvReadResult::TPtr& ev) {
+        const auto code = ev->Get()->Record.GetStatus().GetCode();
+        if (code != Ydb::StatusIds::SUCCESS) {
+            Fail(code == Ydb::StatusIds::SCHEME_ERROR ? TString("42P01") : TString("XX000"), IndexPlans[Arbiter].Name);
+            return;
+        }
+        if (ev->Get()->GetRowsCount() > 0) {
+            const TConstArrayRef<TCell> cells = ev->Get()->GetCells(0);
+            if (cells.size() != ArbiterNames.size()) {
+                Fail("XX000", "internal error");
+                return;
+            }
+            ArbiterStorage.clear();
+            ArbiterStorage.reserve(cells.size());
+            absl::flat_hash_map<TString, TCell> byName;
+            for (size_t i = 0; i < cells.size(); ++i) {
+                if (cells[i].IsNull()) {
+                    byName[ArbiterNames[i]] = TCell();
+                    continue;
+                }
+                ArbiterStorage.push_back(TString(cells[i].AsBuf()));
+                byName[ArbiterNames[i]] = TCell(ArbiterStorage.back().data(), ArbiterStorage.back().size());
+            }
+            KeyCells.clear();
+            for (const TString& name : PkNames) {
+                const TCell* cell = MapFindPtr(byName, name);
+                if (!cell || cell->IsNull()) {
+                    Fail("XX000", "internal error");
+                    return;
+                }
+                KeyCells.push_back(*cell);
+            }
+            Unlink();
+            ArbiterDone = true;
+            Resolve();
+            return;
+        }
+        if (!ev->Get()->Record.GetFinished()) {
+            auto ack = MakeHolder<TEvDataShard::TEvReadAck>();
+            ack->Record.SetReadId(ev->Get()->Record.GetReadId());
+            ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(ack.Release(), ArbiterTablet, false));
+            return;
+        }
+        MissArbiter();
+    }
+
+    bool AddImplOp(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIndexPlan& plan, bool newest, ui32 operation) {
+        TVector<TString> names = plan.Keys;
+        for (const TString& name : PkNames) {
+            bool present = false;
+            for (const TString& key : plan.Keys) {
+                present = present || key == name;
+            }
+            if (!present) {
+                names.push_back(name);
+            }
+        }
+        const size_t keyCount = names.size();
+        if (operation == static_cast<ui32>(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT)) {
+            for (const TString& column : plan.Data) {
+                bool present = false;
+                for (const TString& name : names) {
+                    present = present || name == column;
+                }
+                if (!present) {
+                    names.push_back(column);
+                }
+            }
+        }
+        TVector<TCell> cells;
+        std::vector<ui32> ids;
+        TVector<TCell> key;
+        TVector<NScheme::TTypeInfo> keyTypes;
+        for (size_t i = 0; i < names.size(); ++i) {
+            const auto* info = FindColumn(entry, names[i]);
+            if (!info) {
+                Fail("42703", names[i]);
+                return false;
+            }
+            const TCell* source = newest ? NewCell(names[i]) : MapFindPtr(FoundCells, names[i]);
+            TCell cell;
+            if (!source || source->IsNull()) {
+                cell = TCell();
+            } else {
+                IndexByteStorage.push_back(TString(source->AsBuf()));
+                cell = TCell(IndexByteStorage.back().data(), IndexByteStorage.back().size());
+            }
+            cells.push_back(cell);
+            ids.push_back(info->Id);
+            if (i < keyCount) {
+                key.push_back(cell);
+                keyTypes.push_back(info->PType);
+            }
+        }
+        TSerializedCellMatrix matrix(cells, 1, static_cast<ui16>(cells.size()));
+        TDeferredWrite write;
+        write.OwnerId = entry.TableId.PathId.OwnerId;
+        write.LocalPathId = entry.TableId.PathId.LocalPathId;
+        write.SchemaVersion = entry.TableId.SchemaVersion;
+        write.Operation = operation;
+        write.ColumnIds = std::move(ids);
+        write.Payload = matrix.ReleaseBuffer();
+        IndexWrites.push_back(std::move(write));
+        IndexTable = entry.TableId;
+        IndexKeyCells = std::move(key);
+        IndexKeyTypes = std::move(keyTypes);
+        return true;
+    }
+
+    void StartIndexUpdate() {
+        if (IndexPos >= IndexPlans.size()) {
+            UpdatingIndexes = false;
+            Allocate();
+            return;
+        }
+        const TIndexPlan& plan = IndexPlans[IndexPos];
+        bool changed = false;
+        for (const TString& name : plan.Keys) {
+            if (!SameCell(MapFindPtr(FoundCells, name), NewCell(name))) {
+                changed = true;
+            }
+        }
+        if (!changed) {
+            ++IndexPos;
+            StartIndexUpdate();
+            return;
+        }
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(plan.ImplPath);
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.ShowPrivatePath = true;
+        request->ResultSet.emplace_back(std::move(entry));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Become(&TInsertActor::StateIndexUpdate);
+    }
+
+    void HandleIndexUpdate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* request = ev->Get()->Request.Get();
+        if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
+            || request->ResultSet[0].Kind != NSchemeCache::TSchemeCacheNavigate::KindTable)
+        {
+            Fail("42P01", IndexPlans[IndexPos].ImplPath);
+            return;
+        }
+        const auto& entry = request->ResultSet[0];
+        const size_t before = IndexWrites.size();
+        if (!AddImplOp(entry, IndexPlans[IndexPos], false, static_cast<ui32>(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE))) {
+            return;
+        }
+        PendingKeys.push_back(IndexKeyCells);
+        PendingTypes.push_back(IndexKeyTypes);
+        if (!AddImplOp(entry, IndexPlans[IndexPos], true, static_cast<ui32>(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT))) {
+            return;
+        }
+        PendingKeys.push_back(IndexKeyCells);
+        PendingTypes.push_back(IndexKeyTypes);
+        PendingPos = before;
+        ResolvePending();
+    }
+
+    void ResolvePending() {
+        if (PendingPos >= IndexWrites.size()) {
+            ++IndexPos;
+            StartIndexUpdate();
+            return;
+        }
+        IndexKeyCells = PendingKeys[PendingPos];
+        IndexKeyTypes = PendingTypes[PendingPos];
+        TVector<TKeyDesc::TColumnOp> columns;
+        const size_t count = std::min(IndexWrites[PendingPos].ColumnIds.size(), IndexKeyTypes.size());
+        for (size_t i = 0; i < count; ++i) {
+            TKeyDesc::TColumnOp operation;
+            operation.Column = IndexWrites[PendingPos].ColumnIds[i];
+            operation.Operation = TKeyDesc::EColumnOperation::Read;
+            operation.ExpectedType = IndexKeyTypes[i];
+            columns.push_back(operation);
+        }
+        auto description = MakeHolder<TKeyDesc>(IndexTable, TTableRange(IndexKeyCells), TKeyDesc::ERowOperation::Read, IndexKeyTypes, columns);
+        auto resolve = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        resolve->DatabaseName = Database;
+        resolve->ResultSet.emplace_back(std::move(description));
+        UpdatingResolve = true;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolve.Release()));
+        Become(&TInsertActor::StateResolve);
+    }
+
     void StartIndex() {
         IndexResolve = false;
         if (IndexPos >= IndexPlans.size()) {
@@ -1202,6 +1614,28 @@ public:
         }
     }
 
+    STATEFN(StateArbiterNavigate) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleArbiterNavigate);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateArbiter) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvDataShard::TEvReadResult, HandleArbiter);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, HandleDelivery);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateIndexUpdate) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexUpdate);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
     STATEFN(StateCommit) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvQueryResult, HandleCommit);
@@ -1243,9 +1677,27 @@ public:
     TVector<NScheme::TTypeInfo> KeyTypes;
     bool HoldWrite = false;
     bool IndexResolve = false;
+    bool ArbiterResolve = false;
+    bool ArbiterDone = false;
+    bool UpdatingIndexes = false;
+    bool UpdatingResolve = false;
+    int Arbiter = -1;
     bool Linked = false;
     size_t IndexPos = 0;
+    TVector<TString> PkNames;
     TVector<TIndexPlan> IndexPlans;
+    TVector<TString> ArbiterNames;
+    TVector<ui32> ArbiterIds;
+    TVector<NScheme::TTypeInfo> ArbiterTypes;
+    TVector<TCell> ArbiterFrom;
+    TVector<TCell> ArbiterTo;
+    TVector<TString> ArbiterStorage;
+    TTableId ArbiterTable;
+    ui64 ArbiterTablet = 0;
+    TVector<TString> IndexByteStorage;
+    TVector<TVector<TCell>> PendingKeys;
+    TVector<TVector<NScheme::TTypeInfo>> PendingTypes;
+    size_t PendingPos = 0;
     TVector<TDeferredWrite> IndexWrites;
     TTableId IndexTable;
     TVector<TCell> IndexKeyCells;

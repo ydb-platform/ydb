@@ -154,4 +154,52 @@ Y_UNIT_TEST_SUITE(IndexScan) {
         UNIT_ASSERT_C(after.Ok, after.SqlState + " " + after.Message);
         UNIT_ASSERT_VALUES_EQUAL(after.Rows.size(), 0u);
     }
+
+    Y_UNIT_TEST(ConflictOnTheUniqueIndexUpdatesTheExistingPrimaryKey) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        const auto created = sql.Exec("CREATE TABLE items (id int8 PRIMARY KEY, note text, extra text)");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+        const auto index = sql.Exec("CREATE UNIQUE INDEX note_idx ON items (note)");
+        UNIT_ASSERT_C(index.Ok, index.SqlState + " " + index.Message);
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO items (id, note, extra) VALUES (1, 'hello', 'body')").Ok, "insert");
+
+        const auto updated = sql.Exec(
+            "INSERT INTO items (id, note, extra) VALUES (2, 'hello', 'other') ON CONFLICT (note) DO UPDATE SET extra = EXCLUDED.extra");
+        UNIT_ASSERT_C(updated.Ok, updated.SqlState + " " + updated.Message);
+        UNIT_ASSERT_VALUES_EQUAL(updated.CommandTag, "INSERT 0 1");
+
+        const auto kept = sql.Exec("SELECT extra FROM items WHERE id = 1");
+        UNIT_ASSERT_C(kept.Ok, kept.SqlState + " " + kept.Message);
+        UNIT_ASSERT_VALUES_EQUAL(kept.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(kept.Rows[0][0].Text, "other");
+        const auto absent = sql.Exec("SELECT extra FROM items WHERE id = 2");
+        UNIT_ASSERT_C(absent.Ok, absent.SqlState + " " + absent.Message);
+        UNIT_ASSERT_VALUES_EQUAL(absent.Rows.size(), 0u);
+        const auto indexed = sql.Exec("SELECT extra FROM items WHERE note = 'hello'");
+        UNIT_ASSERT_C(indexed.Ok, indexed.SqlState + " " + indexed.Message);
+        UNIT_ASSERT_VALUES_EQUAL(indexed.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(indexed.Rows[0][0].Text, "other");
+
+        const auto skipped = sql.Exec(
+            "INSERT INTO items (id, note, extra) VALUES (3, 'hello', 'no') ON CONFLICT (note) DO NOTHING");
+        UNIT_ASSERT_C(skipped.Ok, skipped.SqlState + " " + skipped.Message);
+        UNIT_ASSERT_VALUES_EQUAL(skipped.CommandTag, "INSERT 0 0");
+        const auto still = sql.Exec("SELECT extra FROM items WHERE id = 1");
+        UNIT_ASSERT_VALUES_EQUAL(still.Rows[0][0].Text, "other");
+
+        const auto fresh = sql.Exec(
+            "INSERT INTO items (id, note, extra) VALUES (4, 'next', 'row') ON CONFLICT (note) DO NOTHING");
+        UNIT_ASSERT_C(fresh.Ok, fresh.SqlState + " " + fresh.Message);
+        UNIT_ASSERT_VALUES_EQUAL(fresh.CommandTag, "INSERT 0 1");
+
+        const auto mismatch = sql.Exec("INSERT INTO items (id, note) VALUES (5, 'z') ON CONFLICT (extra) DO NOTHING");
+        UNIT_ASSERT(!mismatch.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(mismatch.SqlState, "42P10");
+    }
 }

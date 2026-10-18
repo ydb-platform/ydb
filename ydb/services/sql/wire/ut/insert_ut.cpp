@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(InsertRow) {
 
         const auto wrongTarget = sql.Exec("INSERT INTO items (id, note) VALUES (8, 'x') ON CONFLICT (note) DO NOTHING");
         UNIT_ASSERT(!wrongTarget.Ok);
-        UNIT_ASSERT_VALUES_EQUAL(wrongTarget.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(wrongTarget.SqlState, "42P10");
     }
 
     Y_UNIT_TEST(ReturningShowsTheWrittenRow) {

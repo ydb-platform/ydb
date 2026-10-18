@@ -13,6 +13,7 @@ SRCS(
     create_table_ut.cpp
     listener_ut.cpp
     schemata_ut.cpp
+    sequences_ut.cpp
     select_ut.cpp
     session_ut.cpp
 )

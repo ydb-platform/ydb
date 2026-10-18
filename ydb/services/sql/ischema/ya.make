@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     columns.cpp
     constraints.cpp
+    sequences.cpp
     schemata.cpp
     tables.cpp
 )

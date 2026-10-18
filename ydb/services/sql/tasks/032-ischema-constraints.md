@@ -1,7 +1,7 @@
 # Ограничения information_schema
 
-status: pending
-commit:
+status: done
+commit: 8adbb02bac9b30f41f2f6a51789f270337c3cb28
 id: ischema-constraints
 depends: ischema-columns
 

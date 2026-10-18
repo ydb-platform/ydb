@@ -2,6 +2,8 @@ unittest_executable("all_flags") {
   deps = [
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/ut/common",
+    "//ydb/library/yql/udfs/common/hybrid_search",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/sql/pg_dummy",  # peerdir only

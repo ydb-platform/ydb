@@ -109,6 +109,12 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>()))
 {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    BackgroundController.SetTryScheduleCompactionCallback([this]() {
+        TryScheduleCompaction({});
+    });
+    AddEventForLockCallback = [this](const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+        GetOperationsManager().AddEventForLock(*this, lockId, writer);
+    };
 }
 
 TColumnShard::~TColumnShard() = default;
@@ -215,14 +221,6 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersionForSchema(const ui64 schemaVersi
     // A newer schema already exists. The scan must resolve exactly the schema the
     // write was built against, so pin the read to the last snapshot where that schema is still active.
     return std::min(maxReadVersion, nextSchemaChange->GetPreviousSnapshot());
-}
-
-ui64 TColumnShard::GetOutdatedStep() const {
-    ui64 step = LastPlannedStep;
-    if (MediatorTimeCastEntry) {
-        step = Max(step, MediatorTimeCastEntry->Get(TabletID()));
-    }
-    return step;
 }
 
 void TColumnShard::PublishMinSnapshotForNewScans(const IScanSnapshotGuard& guard) const {

@@ -49,7 +49,7 @@ public:
         const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& contextMemory);
 
     TBuildFilterContext(TBuildFilterContext&& other) = default;
-    TBuildFilterContext& operator=(TBuildFilterContext&& other) = default;
+    TBuildFilterContext& operator=(TBuildFilterContext&& other) = delete;
 
     std::set<ui32> GetFetchingColumnIds() const;
     TString DebugString() const;

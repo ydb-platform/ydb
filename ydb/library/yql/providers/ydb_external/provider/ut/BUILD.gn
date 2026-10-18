@@ -7,7 +7,7 @@ unittest_executable("ut") {
     "//ydb/library/yql/dq/expr_nodes",
     "//ydb/library/yql/providers/dq/expr_nodes",
     "//ydb/library/yql/providers/ydb_external/common",
-    # "//ydb/library/yql/providers/ydb_external/expr_nodes",  # no target
+    "//ydb/library/yql/providers/ydb_external/expr_nodes",
     "//ydb/library/yql/providers/ydb_external/proto",
     "//ydb/library/yql/providers/ydb_external/provider",
     "//ydb/public/api/grpc",

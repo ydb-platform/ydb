@@ -20,7 +20,6 @@ library("ut_helpers") {
     "//ydb/core/tx/datashard",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
-    # "//ydb/core/tx/schemeshard/index",
     # "//ydb/library/actors/core",
     # "//ydb/library/login",
     "//ydb/library/ydb_issue/proto",

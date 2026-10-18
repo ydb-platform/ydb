@@ -1,7 +1,7 @@
 library("backtrace") {
   deps = [
     "//contrib/libs/backtrace",
-    "//contrib/libs/libunwind",  # peerdir only
+    "//contrib/libs/libunwind",
     "//library/cpp/deprecated/atomic",
     "//library/cpp/malloc/api",
   ]

@@ -10,6 +10,7 @@ linked_executable("kqprun") {
     "//library/cpp/monlib/dynamic_counters",
     "//ydb/apps/ydbd:export",
     "//ydb/core/blob_depot",
+    "//ydb/core/formats/arrow/program/olap_kernels",  # peerdir only
     "//ydb/core/protos",
     "//ydb/library/aclib",
     "//ydb/library/testlib/common",
@@ -20,6 +21,13 @@ linked_executable("kqprun") {
     "//yql/essentials/minikql",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/compress_base",  # peerdir only
+    "//yql/essentials/udfs/common/datetime2",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
+    "//yql/essentials/udfs/common/string",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
     "//yt/yql/providers/yt/gateway/file",
     "//yt/yql/providers/yt/lib/yt_download",
   ]

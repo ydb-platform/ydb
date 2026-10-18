@@ -1,9 +1,9 @@
 library("recovery") {
   public_deps = [
+    # "//ydb/core/blobstorage/vdisk/hulldb",
     "//ydb/core/blobstorage/vdisk/hulldb/barriers",
     "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",
     "//ydb/core/blobstorage/vdisk/hulldb/cache_block",
-    # "//ydb/core/blobstorage/vdisk/hulldb:_self",
     "//ydb/core/blobstorage/vdisk/protos",
   ]
 

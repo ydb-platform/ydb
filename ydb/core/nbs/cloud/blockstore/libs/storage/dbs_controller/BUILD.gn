@@ -1,19 +1,19 @@
 library("dbs_controller") {
   public_deps = [
     # "//ydb/core/base",
-    # "//ydb/core/nbs/cloud/blockstore/libs/kikimr",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
+    "//ydb/core/nbs/cloud/blockstore/libs/kikimr",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/core",
     "//ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/protos",
     # "//ydb/core/tablet",
-    # "//ydb/core/tablet_flat",
-    # "//ydb/library/actors/core",
+    "//ydb/core/tablet_flat",
+    "//ydb/library/actors/core",
     "//ydb/library/services",
   ]
 
   deps = [
     # "//ydb/core/nbs/cloud/blockstore/libs/common",
     # "//ydb/core/nbs/cloud/storage/core/libs/actors",
-    # "//ydb/core/node_whiteboard",
+    "//ydb/core/node_whiteboard",
     # "//ydb/core/protos",  # peerdir only
   ]
 

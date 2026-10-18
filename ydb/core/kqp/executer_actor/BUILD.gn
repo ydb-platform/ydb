@@ -9,7 +9,7 @@ library("executer_actor") {
     # "//ydb/core/kqp/counters",
     # "//ydb/core/kqp/federated_query",
     "//ydb/core/kqp/gateway:interface",
-    # "//ydb/core/kqp/node_service",
+    "//ydb/core/kqp/node_service",
     # "//ydb/core/kqp/provider",
     # "//ydb/core/kqp/proxy_service",
     # "//ydb/core/kqp/rm_service",
@@ -31,7 +31,7 @@ library("executer_actor") {
     # "//library/cpp/containers/absl",  # peerdir only
     # "//library/cpp/html/pcdata",
     # "//library/cpp/monlib/dynamic_counters",
-    # "//library/cpp/protobuf/interop",
+    "//library/cpp/protobuf/interop",
     # "//ydb/core/actorlib_impl",
     # "//ydb/core/client/minikql_compile",  # peerdir only
     # "//ydb/core/client/minikql_compile:db_key_resolver",
@@ -52,7 +52,7 @@ library("executer_actor") {
     # "//ydb/core/kqp/query_compiler",  # peerdir only
     "//ydb/core/kqp/query_data",
     "//ydb/core/kqp/runtime",
-    # "//ydb/core/kqp/script_executions/common",
+    "//ydb/core/kqp/script_executions/common",
     "//ydb/core/kqp/session_actor:worker_common",
     "//ydb/core/kqp/topics",  # peerdir only
     # "//ydb/core/kqp/tracing",
@@ -67,13 +67,12 @@ library("executer_actor") {
     # "//ydb/core/tx/program",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/core/tx/schemeshard",
-    # "//ydb/core/tx/schemeshard/index",
     # "//ydb/core/tx/schemeshard/olap/schema",
     # "//ydb/core/tx/tx_proxy:public",
     # "//ydb/core/util",
     "//ydb/core/ydb_convert",
     "//ydb/library/actors/async",
-    # "//ydb/library/json_index",
+    "//ydb/library/json_index",
     # "//ydb/library/mkql_proto",
     # "//ydb/library/mkql_proto/protos",  # peerdir only
     "//ydb/library/plan2svg",

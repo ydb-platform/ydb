@@ -1,0 +1,9 @@
+library("pire") {
+  deps = [
+    # "//library/cpp/regex/pire",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "pire_udf.cpp" ]
+}

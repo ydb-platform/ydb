@@ -111,22 +111,22 @@ library("_self") {
     "//ydb/core/mind:tenant_node_enumeration",
     # "//ydb/core/mon",
     "//ydb/core/mon_alloc",
-    # "//ydb/core/nbs/cloud/blockstore/bootstrap",
+    "//ydb/core/nbs/cloud/blockstore/bootstrap",
     "//ydb/core/nbs/cloud/blockstore/config/protos",
     # "//ydb/core/nbs/cloud/blockstore/libs/storage/api",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/volume",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/volume",
     # "//ydb/core/node_whiteboard",
-    # "//ydb/core/path_aliasing",
+    "//ydb/core/path_aliasing",
     "//ydb/core/persqueue",
     # "//ydb/core/persqueue/deferred_publish",
     # "//ydb/core/persqueue/pqtablet/blob",
     "//ydb/core/public_http",
     "//ydb/core/quoter",
     # "//ydb/core/raw_socket",
-    # "//ydb/core/retro_tracing_impl/distributed_collector",
+    "//ydb/core/retro_tracing_impl/distributed_collector",
     # "//ydb/core/retro_tracing_impl/spans",  # link slot
     # "//ydb/core/scheme",
     "//ydb/core/security",
@@ -135,9 +135,9 @@ library("_self") {
     "//ydb/core/statistics/aggregator",
     "//ydb/core/statistics/service",  # peerdir only
     "//ydb/core/statistics/service:service_id",
-    # "//ydb/core/subsystems/actor_system_monitoring",
-    # "//ydb/core/subsystems/inmemory_metrics_monitoring",
-    # "//ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart",
+    "//ydb/core/subsystems/actor_system_monitoring",
+    "//ydb/core/subsystems/inmemory_metrics_monitoring",
+    "//ydb/core/subsystems/inmemory_metrics_monitoring/metric_chart",
     "//ydb/core/sys_view/processor",
     "//ydb/core/sys_view/service",
     "//ydb/core/tablet_flat",
@@ -180,7 +180,7 @@ library("_self") {
     # "//ydb/library/actors/http",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/actors/interconnect/rdma",
-    # "//ydb/library/actors/interconnect/rdma/cq_actor",
+    "//ydb/library/actors/interconnect/rdma/cq_actor",
     # "//ydb/library/actors/memory_log",  # peerdir only
     # "//ydb/library/actors/prof",
     "//ydb/library/actors/protos",
@@ -207,7 +207,7 @@ library("_self") {
     "//ydb/services/datastreams",
     "//ydb/services/deprecated/persqueue_v0",
     "//ydb/services/discovery",
-    # "//ydb/services/distributed_storage",
+    "//ydb/services/distributed_storage",
     "//ydb/services/dynamic_config",
     "//ydb/services/fq",
     "//ydb/services/kesus",
@@ -217,7 +217,7 @@ library("_self") {
     # "//ydb/services/metadata",
     "//ydb/services/metadata/ds_table",
     "//ydb/services/monitoring",
-    # "//ydb/services/nbs",
+    "//ydb/services/nbs",
     "//ydb/services/persqueue_cluster_discovery",
     "//ydb/services/persqueue_v1",
     "//ydb/services/rate_limiter",
@@ -226,7 +226,7 @@ library("_self") {
     "//ydb/services/tablet",
     "//ydb/services/test_shard",
     "//ydb/services/udf_store",
-    # "//ydb/services/udf_store/compile_controller",
+    "//ydb/services/udf_store/compile_controller",
     "//ydb/services/view",
     # "//ydb/services/workload_manager/service",
     "//ydb/services/ydb",
@@ -269,7 +269,9 @@ library("config") {
 }
 
 library("main") {
-  public_deps = [ ":_self" ]
+  public_deps = [
+    # ":_self",
+  ]
 
   deps = [
     ":config",  # peerdir only

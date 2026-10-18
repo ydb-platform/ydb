@@ -5,7 +5,7 @@ library("ds_table") {
     # "//ydb/library/accessor",
     # "//ydb/library/actors/core",
     "//ydb/public/api/protos",
-    # "//ydb/services/metadata",
+    "//ydb/services/metadata",
     "//ydb/services/metadata/abstract",
     # "//ydb/services/metadata/common",
     "//ydb/services/metadata/initializer",
@@ -17,7 +17,7 @@ library("ds_table") {
 
   deps = [
     # "//ydb/core/base",
-    # "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services",
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/grpc_services/local_rpc",
     # "//ydb/core/tx/scheme_cache",

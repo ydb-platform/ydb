@@ -11,7 +11,6 @@ unittest_executable("ut") {
     "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/engines/protos",
     "//ydb/core/tx/columnshard/engines/scheme",
-    "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
     "//ydb/core/tx/columnshard/hooks/testing",  # peerdir only
     "//ydb/core/tx/columnshard/test_helper",

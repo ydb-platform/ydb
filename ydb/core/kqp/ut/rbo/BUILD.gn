@@ -36,6 +36,7 @@ unittest_executable("rbo") {
     "//ydb/library/actors/testlib",
     "//ydb/library/benchmarks/queries/tpch",  # peerdir only
     "//ydb/library/plan2svg",
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
     "//ydb/public/lib/ut_helpers",
     "//ydb/public/lib/ydb_cli/common",
     "//yql/essentials/core",
@@ -43,10 +44,13 @@ unittest_executable("rbo") {
     "//yql/essentials/minikql",
     "//yql/essentials/minikql/invoke_builtins",
     "//yql/essentials/parser/pg_catalog",
-    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",
     "//yql/essentials/parser/pg_wrapper/interface",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
+    "//yql/essentials/udfs/common/url_base",  # peerdir only
     "//yql/essentials/utils/log",
   ]
 

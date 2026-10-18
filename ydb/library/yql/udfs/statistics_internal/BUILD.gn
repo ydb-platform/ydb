@@ -1,0 +1,18 @@
+library("statistics_internal") {
+  public_deps = [
+    "//library/cpp/hyperloglog",
+    "//yql/essentials/core/histogram",
+    "//yql/essentials/core/minsketch",
+    "//yql/essentials/public/udf",
+  ]
+
+  deps = [
+    "//yql/essentials/minikql/computation",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [
+    "all_agg_funcs.cpp",
+    "udf.cpp",
+  ]
+}

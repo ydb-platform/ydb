@@ -61,6 +61,8 @@ unittest_executable("datastreams") {
     "//yql/essentials/providers/common/proto",
     "//yql/essentials/providers/common/structured_token",
     "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/stat",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
   ]
 
   data_deps = [ "//ydb/apps/ydbd" ]

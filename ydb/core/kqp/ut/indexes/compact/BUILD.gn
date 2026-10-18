@@ -9,8 +9,9 @@ unittest_executable("compact") {
     "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",
     "//ydb/core/tx/datashard",
-    "//ydb/core/tx/schemeshard/index",
+    "//ydb/core/tx/schemeshard",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/proto",
     "//ydb/public/sdk/cpp/src/client/table",

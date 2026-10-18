@@ -1,0 +1,9 @@
+library("json") {
+  deps = [
+    # "//library/cpp/json/easy_parse",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "json_udf.cpp" ]
+}

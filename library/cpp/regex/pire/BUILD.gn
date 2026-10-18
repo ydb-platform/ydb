@@ -4,11 +4,8 @@ config("pire_public_config") {
 
 library("pire") {
   public_deps = [
+    "//library/cpp/charset",
     # "//library/cpp/charset/lite",
-  ]
-
-  deps = [
-    "//library/cpp/charset",  # peerdir only
   ]
 
   sources = [

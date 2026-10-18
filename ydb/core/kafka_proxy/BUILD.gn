@@ -59,8 +59,8 @@ library("kafka_proxy") {
     # "//ydb/public/lib/base",
     "//ydb/public/sdk/cpp/src/client/params",
     # "//ydb/public/sdk/cpp/src/client/topic",
-    "//ydb/services/persqueue_v1",
     "//ydb/services/metadata/initializer",  # peerdir only
+    "//ydb/services/persqueue_v1",
   ]
 
   sources = [

@@ -26,6 +26,7 @@ unittest_executable("pushdown") {
     "//yql/essentials/public/udf/service/stub",  # peerdir only
     "//yql/essentials/sql",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
     "//yql/essentials/utils/log",
   ]
 

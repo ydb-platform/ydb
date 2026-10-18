@@ -19,6 +19,7 @@ library("ydb") {
     "//ydb/core/grpc_services/counters",
     # "//ydb/core/grpc_streaming",
     "//ydb/core/kqp/compute_actor:events",
+    "//ydb/core/kqp/proxy_service",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
     # "//ydb/core/scheme",  # peerdir only
     # "//ydb/core/security",  # peerdir only
@@ -26,7 +27,7 @@ library("ydb") {
     # "//ydb/core/tablet_flat",
     # "//ydb/core/tx/datashard",
     "//ydb/core/tx/scheme_cache",
-    # "//ydb/core/udf_api",  # peerdir only
+    "//ydb/core/udf_api",  # peerdir only
     # "//ydb/library/aclib",  # peerdir only
     # "//ydb/library/ydb_issue",
     "//ydb/public/api/protos",

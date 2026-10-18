@@ -30,7 +30,7 @@ library("load_test") {
     "//ydb/core/load_test/keyvalue",  # peerdir only
     "//ydb/core/load_test/kqp",
     "//ydb/core/load_test/ycsb",
-    # "//ydb/core/mind/hive",
+    "//ydb/core/mind/hive",
     "//ydb/core/mon",
     # "//ydb/core/nbs/cloud/blockstore/libs/common",  # peerdir only
     "//ydb/core/nbs/cloud/blockstore/libs/common/block_range",

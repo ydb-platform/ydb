@@ -11,6 +11,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/index_info_ext.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 
 #include <util/string/builder.h>
@@ -109,7 +110,7 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
         if (indexProcessor && source.GetSourceSchemaOptional()) {
             const auto& idxCtx = indexProcessor->GetIndexContext();
             NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
-            auto skipIndexes = source.GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
+            auto skipIndexes = NIndexes::FindSkipIndexes(source.GetSourceSchemaOptional()->GetIndexInfo(), addr, idxCtx.GetOperation());
             bool hasActualIndexData = false;
             if (!skipIndexes.empty() && source.HasPortionAccessor()) {
                 std::set<ui32> indexEntityIds;
@@ -190,7 +191,7 @@ void TProgramStep::ReportTracing(IDataSource& source, const NArrow::NAccessor::T
                         for (auto&& [subCol, ops] : idxCtx.GetOperationsBySubColumn().GetData()) {
                             NIndexes::NRequest::TOriginalDataAddress addr(colId, subCol);
                             for (auto&& op : ops) {
-                                for (auto&& skipIdx : indexInfo.FindSkipIndexes(addr, op)) {
+                                for (auto&& skipIdx : NIndexes::FindSkipIndexes(indexInfo, addr, op)) {
                                     indexEntityIds.insert(skipIdx->GetIndexId());
                                 }
                             }

@@ -1,0 +1,3 @@
+library("base32") {
+  sources = [ "base32.cpp" ]
+}

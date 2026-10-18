@@ -1,0 +1,9 @@
+library("roaring") {
+  deps = [
+    # "//contrib/libs/croaring",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "roaring.cpp" ]
+}

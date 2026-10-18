@@ -1,0 +1,25 @@
+library("lib") {
+  public_deps = [
+    # "//library/cpp/charset",
+    # "//library/cpp/string_utils/quote",
+    # "//library/cpp/string_utils/url",
+    # "//library/cpp/tld",
+    # "//library/cpp/unicode/punycode",
+    # "//library/cpp/uri",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+  ]
+
+  deps = [
+    # "//contrib/libs/apache/arrow",  # peerdir only
+    # "//library/cpp/charset/lite",  # peerdir only
+  ]
+
+  sources = [
+    "url_base_udf.cpp",
+    "url_parse.cpp",
+    "url_query.cpp",
+  ]
+
+  yql_abi_version = "2.46.0"
+}

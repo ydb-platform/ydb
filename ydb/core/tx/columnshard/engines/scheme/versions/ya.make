@@ -1,11 +1,11 @@
 LIBRARY()
 
 SRCS(
-    abstract_scheme.cpp
-    snapshot_scheme.cpp
-    filtered_scheme.cpp
-    versioned_index.cpp
-    preset_schemas.cpp
+    abstract_scheme.cpp  # gn: into ydb/core/tx/columnshard/engines/portions
+    snapshot_scheme.cpp  # gn: into ydb/core/tx/columnshard/engines/portions
+    filtered_scheme.cpp  # gn: into ydb/core/tx/columnshard/engines/portions
+    versioned_index.cpp  # gn: into ydb/core/tx/columnshard/engines/portions
+    preset_schemas.cpp  # gn: into ydb/core/tx/columnshard/engines/portions
 )
 
 PEERDIR(

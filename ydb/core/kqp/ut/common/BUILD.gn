@@ -32,6 +32,7 @@ library("common") {
     # "//library/cpp/logger",
     # "//library/cpp/testing/common",
     # "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow/program/olap_kernels",  # peerdir only
     # "//ydb/core/fq/libs/checkpointing",
     # "//ydb/core/kqp/counters",
     # "//ydb/core/kqp/provider",
@@ -45,6 +46,13 @@ library("common") {
     "//yql/essentials/minikql/invoke_builtins",
     # "//yql/essentials/parser/pg_wrapper",
     # "//yql/essentials/public/udf",
+    "//yql/essentials/udfs/common/datetime2",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
+    # "//yql/essentials/udfs/common/math",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
+    "//yql/essentials/udfs/common/string",  # peerdir only
+    "//yql/essentials/udfs/common/unicode_base",  # peerdir only
     # "//yql/essentials/utils",
     # "//yql/essentials/utils/backtrace",
   ]

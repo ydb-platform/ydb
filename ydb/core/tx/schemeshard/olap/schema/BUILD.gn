@@ -8,7 +8,6 @@ library("schema") {
 
   deps = [
     # "//ydb/core/tx/schemeshard/common",
-    # "//ydb/core/tx/schemeshard/olap/ttl",
   ]
 
   sources = [

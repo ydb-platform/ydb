@@ -1,0 +1,8 @@
+library("trie") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "trie_native_udf.cpp" ]
+}

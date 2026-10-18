@@ -17,6 +17,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/fetcher.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/index_info_ext.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -232,7 +233,7 @@ THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>>
             TCheckIndexContext checkAddr(indexContext.GetColumnId(), i.first, op);
             std::shared_ptr<NIndexes::IIndexMeta> indexMeta = GetStageData().GetIndexes()->FindIndexFor(addr, op);
             if (!indexMeta) {
-                indexMeta = SelectOptimalIndex(GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op), op);
+                indexMeta = SelectOptimalIndex(NIndexes::FindSkipIndexes(GetSourceSchema()->GetIndexInfo(), addr, op), op);
             }
             AFL_VERIFY(result.emplace(checkAddr, indexMeta).second);
         }

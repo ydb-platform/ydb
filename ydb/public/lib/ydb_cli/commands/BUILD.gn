@@ -51,6 +51,7 @@ library("commands") {
     # "//ydb/library/workload",  # peerdir only
     "//ydb/library/workload/benchmark_base",
     "//ydb/library/yaml_config/public",
+    # "//ydb/library/yql/udfs/common/knn",
     # "//ydb/library/yverify_stream",
     "//ydb/public/api/grpc",
     "//ydb/public/api/protos",

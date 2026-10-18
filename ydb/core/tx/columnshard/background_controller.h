@@ -6,6 +6,8 @@
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
 
+#include <functional>
+
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;
 }
@@ -26,6 +28,8 @@ private:
     bool ActiveCleanupInsertTable = false;
     bool ActiveCleanupSchemas = false;
     YDB_READONLY(TMonotonic, LastIndexationInstant, TMonotonic::Zero());
+    // Set by TColumnShard: lets engines (compaction changes) trigger scheduling without linking against columnshard
+    std::function<void()> TryScheduleCompactionCallback;
 
 public:
     TBackgroundController(std::shared_ptr<TBackgroundControllerCounters> counters)
@@ -62,6 +66,15 @@ public:
 
     std::optional<ui64> GetWaitingPriorityOptional() {
         return WaitingCompactionPriority;
+    }
+
+    void SetTryScheduleCompactionCallback(std::function<void()> callback) {
+        TryScheduleCompactionCallback = std::move(callback);
+    }
+
+    void TryScheduleCompaction() const {
+        AFL_VERIFY(TryScheduleCompactionCallback);
+        TryScheduleCompactionCallback();
     }
 
     void CheckDeadlines();

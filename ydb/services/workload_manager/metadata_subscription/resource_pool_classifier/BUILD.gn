@@ -9,13 +9,13 @@ library("resource_pool_classifier") {
     # "//library/cpp/json",
     # "//ydb/core/base",
     "//ydb/core/cms/console",
+    "//ydb/core/grpc_services",  # peerdir only
     "//ydb/core/protos",
     "//ydb/library/query_actor",
     # "//ydb/services/metadata/abstract:request_features",
     "//ydb/services/metadata/initializer",  # peerdir only
     "//ydb/services/workload_manager/actors",
     # "//ydb/services/workload_manager/common",
-    "//ydb/core/grpc_services",  # peerdir only
   ]
 
   sources = [

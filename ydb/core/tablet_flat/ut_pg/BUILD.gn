@@ -6,7 +6,7 @@ unittest_executable("ut_pg") {
     "//ydb/core/tablet_flat/protos",
     "//ydb/core/tablet_flat/test/libs/rows",
     "//ydb/core/tablet_flat/test/libs/table",
-    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
   ]

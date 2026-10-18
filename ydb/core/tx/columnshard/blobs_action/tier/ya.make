@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/tiering
     ydb/core/tx/columnshard/data_sharing/protos
     ydb/core/tx/columnshard/blobs_action/abstract
+    ydb/core/tx/columnshard/hooks/abstract
 )
 
 END()

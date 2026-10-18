@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     schema.cpp
     update.cpp
+    schema_ttl.cpp  # gn: into ydb/core/tx/schemeshard
 )
 
 PEERDIR(

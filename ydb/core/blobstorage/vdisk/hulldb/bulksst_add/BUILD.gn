@@ -1,7 +1,7 @@
 library("bulksst_add") {
   public_deps = [
+    "//ydb/core/blobstorage/vdisk/hulldb",
     # "//ydb/core/blobstorage/vdisk/hulldb/generic",
-    "//ydb/core/blobstorage/vdisk/hulldb:_self",
   ]
 
   deps = [

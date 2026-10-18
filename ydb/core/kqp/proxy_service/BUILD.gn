@@ -10,8 +10,8 @@ library("proxy_service") {
     "//ydb/core/protos",
     # "//ydb/library/actors/core",
     "//ydb/library/yql/providers/s3/actors_factory",
-    # "//ydb/services/workload_manager",
-    # "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
+    "//ydb/services/workload_manager",
+    "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
     # "//ydb/services/workload_manager/service",
   ]
 
@@ -34,14 +34,14 @@ library("proxy_service") {
     "//ydb/core/kqp/compile_service",
     "//ydb/core/kqp/compute_actor",
     "//ydb/core/kqp/executer_actor",
-    # "//ydb/core/kqp/federated_query/actors",
-    # "//ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration",
+    "//ydb/core/kqp/federated_query/actors",
+    "//ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration",
     "//ydb/core/kqp/gateway/behaviour/streaming_query",
     "//ydb/core/kqp/node_service",
-    # "//ydb/core/kqp/script_executions/common",
-    # "//ydb/core/kqp/script_executions/finalization",
-    # "//ydb/core/kqp/script_executions/table_queries",
-    # "//ydb/core/kqp/session_actor",
+    "//ydb/core/kqp/script_executions/common",
+    "//ydb/core/kqp/script_executions/finalization",
+    "//ydb/core/kqp/script_executions/table_queries",
+    "//ydb/core/kqp/session_actor",
     "//ydb/core/kqp/session_actor:worker_common",
     # "//ydb/core/mind",  # peerdir only
     # "//ydb/core/mon",
@@ -70,7 +70,7 @@ library("proxy_service") {
     # "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
     # "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
     "//ydb/public/sdk/cpp/src/library/operation_id/protos",
-    # "//ydb/services/workload_manager/actors",
+    "//ydb/services/workload_manager/actors",
     "//yql/essentials/core/services/mounts",
     # "//yql/essentials/providers/common/proto",  # peerdir only
     # "//yql/essentials/providers/common/provider",

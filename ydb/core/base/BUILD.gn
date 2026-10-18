@@ -36,6 +36,7 @@ library("base") {
     "//ydb/library/login",
     # "//ydb/library/pdisk_io",
     "//ydb/library/pdisk_io:device_type",
+    "//ydb/library/pretty_types_print/protobuf",  # peerdir only
     # "//ydb/library/yql/dq/actors",
     # "//ydb/library/yverify_stream",
     "//ydb/public/api/protos",
@@ -68,12 +69,12 @@ library("base") {
     "//ydb/library/actors/helpers",
     "//ydb/library/actors/protos",
     "//ydb/library/login/protos",
-    "//ydb/library/pretty_types_print/protobuf",  # peerdir only
     "//ydb/library/services",
     "//ydb/library/superlemmer_stub",  # peerdir only
     "//ydb/library/vector_distance",  # peerdir only
     # "//ydb/library/wilson_ids",
     "//ydb/library/ydb_issue",  # peerdir only
+    # "//ydb/library/yql/udfs/common/knn",
     "//yql/essentials/minikql/aligned_page_pool",
   ]
 

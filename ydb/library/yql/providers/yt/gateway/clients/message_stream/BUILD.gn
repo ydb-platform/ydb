@@ -1,13 +1,13 @@
 library("message_stream") {
   public_deps = [
-    # "//library/cpp/threading/future",
-    # "//ydb/library/yql/providers/abstract/message_stream",
-    # "//yt/yt/client",
+    "//library/cpp/threading/future",
+    "//ydb/library/yql/providers/abstract/message_stream",
+    "//yt/yt/client",
   ]
 
   deps = [
     # "//library/cpp/yt/logging",
-    # "//yt/yt/core",
+    "//yt/yt/core",
   ]
 
   sources = [

@@ -10,7 +10,6 @@ unittest_executable("ut_base") {
     "//ydb/core/testlib/pg",  # peerdir only
     "//ydb/core/tx",  # peerdir only
     "//ydb/core/tx/schemeshard",
-    "//ydb/core/tx/schemeshard/index",
     "//ydb/core/tx/schemeshard/ut_helpers",
     "//ydb/public/api/protos",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only

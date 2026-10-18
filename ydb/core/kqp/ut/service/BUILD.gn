@@ -22,7 +22,7 @@ unittest_executable("service") {
     "//ydb/core/tx/columnshard/hooks/abstract",
     "//ydb/core/tx/columnshard/hooks/testing",
     "//ydb/core/tx/datashard",
-    "//ydb/core/tx/schemeshard/index",
+    "//ydb/core/tx/schemeshard",
     "//ydb/core/util",
     "//ydb/library/aclib",
     "//ydb/library/actors/interconnect",

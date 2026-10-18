@@ -980,7 +980,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
         auto cb = CreateWaitSessionCbForSyncWithPBuffer(
             std::move(promise),
-            std::move(weak_from_this()),
+            weak_from_this(),
             vChunkIndex,
             pbufferHostIndex,
             ddiskHostIndex,

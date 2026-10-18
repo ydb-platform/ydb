@@ -1,0 +1,9 @@
+library("stat") {
+  deps = [
+    # "//yql/essentials/public/udf",  # peerdir only
+    # "//yql/essentials/public/udf/support",  # peerdir only
+    # "//yql/essentials/udfs/common/stat/static",
+  ]
+
+  sources = [ "stat_udf.cpp" ]
+}

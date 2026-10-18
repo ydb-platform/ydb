@@ -6,6 +6,7 @@ library("wasm") {
   ]
 
   deps = [
+    # "//contrib/restricted/wavm_llvm16",
     "//contrib/restricted/wavm_llvm16/Lib",  # peerdir only
     # "//library/cpp/json",
     "//library/cpp/yt/assert",

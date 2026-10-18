@@ -1,0 +1,9 @@
+library("top") {
+  deps = [
+    # "//library/cpp/containers/top_keeper",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "top_udf.cpp" ]
+}

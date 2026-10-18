@@ -1,0 +1,15 @@
+library("lib") {
+  public_deps = [
+    # "//contrib/libs/snappy",
+    # "//library/cpp/streams/brotli",
+    # "//library/cpp/streams/bzip2",
+    # "//library/cpp/streams/lzma",
+    # "//library/cpp/streams/xz",
+    # "//library/cpp/streams/zstd",
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "compress_base_udf.cpp" ]
+
+  yql_abi_version = "2.23.0"
+}

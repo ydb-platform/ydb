@@ -22,6 +22,10 @@
 
 namespace NKikimr::NOlap {
 class IDataReader;
+
+namespace NIndexes {
+class TSkipIndex;
+}
 }
 
 namespace NKikimr::NOlap::NReader::NTrivial {

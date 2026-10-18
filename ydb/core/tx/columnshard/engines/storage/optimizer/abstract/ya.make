@@ -4,6 +4,7 @@ SRCS(
     optimizer.cpp
     counters.cpp
 )
+# gn: constructor headers constructor.h
 
 PEERDIR(
     contrib/libs/apache/arrow

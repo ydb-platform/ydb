@@ -1,9 +1,9 @@
 library("native") {
   public_deps = [
-    # "//contrib/libs/apache/arrow",
+    "//contrib/libs/apache/arrow",
     # "//library/cpp/threading/cancellation",
-    # "//library/cpp/threading/future",
-    # "//ydb/library/yql/dq/actors/compute",
+    "//library/cpp/threading/future",
+    "//ydb/library/yql/dq/actors/compute",
   ]
 
   deps = [

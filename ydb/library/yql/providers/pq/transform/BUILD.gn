@@ -1,10 +1,8 @@
 library("transform") {
-  public_deps = [
-    # "//yql/essentials/core/dq_integration/transform",
-  ]
+  public_deps = [ "//yql/essentials/core/dq_integration/transform" ]
 
   deps = [
-    # "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/common",
     "//ydb/library/yql/providers/pq/proto",
     # "//yql/essentials/minikql",
     # "//yql/essentials/utils",

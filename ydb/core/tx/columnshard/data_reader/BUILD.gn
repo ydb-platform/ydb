@@ -18,7 +18,6 @@ library("data_reader") {
   deps = [
     # "//ydb/core/kqp/compute_actor",  # peerdir only
     # "//ydb/core/tx/columnshard/blobs_action/abstract",  # peerdir only
-    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/core/tx/columnshard/engines/writer",  # peerdir only
     # "//ydb/library/actors/prof",
   ]

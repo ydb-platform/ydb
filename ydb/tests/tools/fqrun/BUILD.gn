@@ -6,12 +6,20 @@ linked_executable("fqrun") {
     "//library/cpp/getopt",
     "//library/cpp/lfalloc/alloc_profiler",
     "//ydb/core/blob_depot",
+    "//ydb/core/formats/arrow/program/olap_kernels",  # peerdir only
     "//ydb/library/testlib/common",
     "//ydb/library/yql/providers/pq/gateway/dummy",
     "//ydb/tests/tools/fqrun/src",
     "//ydb/tests/tools/kqprun/runlib",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/compress_base",  # peerdir only
+    "//yql/essentials/udfs/common/datetime2",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
+    "//yql/essentials/udfs/common/string",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
   ]
 
   sources = [ "fqrun.cpp" ]

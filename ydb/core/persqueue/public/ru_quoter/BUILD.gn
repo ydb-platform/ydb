@@ -1,6 +1,6 @@
 library("ru_quoter") {
   public_deps = [
-    # "//ydb/core/persqueue/events",
+    "//ydb/core/persqueue/events",
     # "//ydb/core/persqueue/public",
     # "//ydb/library/actors/core",
     "//ydb/public/api/protos",

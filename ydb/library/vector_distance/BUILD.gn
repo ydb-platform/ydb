@@ -1,6 +1,9 @@
 library("vector_distance") {
-  deps = [
+  public_deps = [
     # "//library/cpp/dot_product",
+  ]
+
+  deps = [
     # "//library/cpp/sse",
   ]
 

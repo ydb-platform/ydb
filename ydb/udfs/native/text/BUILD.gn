@@ -1,0 +1,8 @@
+library("text") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "text_native_udf.cpp" ]
+}

@@ -1,4 +1,8 @@
 library("engine") {
+  public_deps = [
+    # "//contrib/restricted/wavm_llvm16",
+  ]
+
   deps = [
     "//contrib/restricted/wavm_llvm16/Lib",
     "//library/cpp/resource",

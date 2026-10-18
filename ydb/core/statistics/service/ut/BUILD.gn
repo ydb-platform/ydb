@@ -15,7 +15,10 @@ unittest_executable("ut") {
     "//ydb/core/util",
     "//ydb/library/actors/core",
     "//ydb/library/actors/testlib",
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
     "//yql/essentials/core/histogram",
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
   ]
 
   sources = [

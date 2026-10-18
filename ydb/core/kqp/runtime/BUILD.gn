@@ -13,7 +13,7 @@ library("runtime") {
     "//ydb/core/kqp/counters",
     # "//ydb/core/kqp/gateway:interface",
     "//ydb/core/kqp/rm_service",
-    # "//ydb/core/kqp/runtime/common",
+    "//ydb/core/kqp/runtime/common",
     "//ydb/core/protos",
     # "//ydb/core/resource_pools",
     "//ydb/core/scheme",
@@ -48,6 +48,7 @@ library("runtime") {
     # "//ydb/core/kqp/common/simple",
     # "//ydb/core/kqp/common:types",
     "//ydb/core/kqp/runtime/streaming",
+    "//ydb/core/kqp/topics",  # peerdir only
     "//ydb/core/kqp/tracing",
     # "//ydb/core/mon",
     # "//ydb/core/persqueue/events",
@@ -88,7 +89,6 @@ library("runtime") {
     # "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/arrow",
     "//yt/yt/core",
-    "//ydb/core/kqp/topics",  # peerdir only
   ]
 
   sources = [

@@ -1,0 +1,15 @@
+library("datetime2") {
+  deps = [
+    # "//library/cpp/type_info/tz",  # peerdir only
+    # "//util/draft",  # peerdir only
+    # "//yql/essentials/core/langver",  # peerdir only
+    # "//yql/essentials/minikql",
+    # "//yql/essentials/minikql/datetime",
+    # "//yql/essentials/public/langver",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "datetime_udf.cpp" ]
+}

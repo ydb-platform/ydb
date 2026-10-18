@@ -16,7 +16,6 @@ unittest_executable("ut_index_build") {
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/schemeshard",
-    "//ydb/core/tx/schemeshard/index",
     "//ydb/core/tx/schemeshard/ut_helpers",
     "//ydb/core/tx/sequenceproxy:public",
     "//ydb/core/tx/tx_proxy:public",

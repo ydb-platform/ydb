@@ -2,7 +2,7 @@ gtest_executable("ut") {
   deps = [
     "//library/cpp/testing/gtest",
     "//ydb/library/yql/providers/dq/expr_nodes",
-    # "//ydb/library/yql/providers/yt/expr_nodes",  # no target
+    "//ydb/library/yql/providers/yt/expr_nodes",
     "//ydb/library/yql/providers/yt/provider",
     "//yql/essentials/core",
     "//yql/essentials/minikql/computation/llvm16",  # peerdir only

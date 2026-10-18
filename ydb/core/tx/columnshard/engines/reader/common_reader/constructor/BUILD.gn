@@ -1,9 +1,9 @@
-library("_self") {
+library("constructor") {
   public_deps = [
     "//ydb/core/formats/arrow",
     "//ydb/core/formats/arrow/program",
     # "//ydb/core/tx/columnshard/common",
-    # "//ydb/core/tx/columnshard/data_locks:manager",
+    "//ydb/core/tx/columnshard/data_locks:manager",
     "//ydb/core/tx/columnshard/engines/reader/abstract",
     "//ydb/core/tx/columnshard/engines/reader/common",
     # "//ydb/core/tx/columnshard/engines/scheme",
@@ -14,24 +14,17 @@ library("_self") {
     # "//ydb/core/kqp/compute_actor",  # peerdir only
     # "//ydb/core/kqp/compute_actor:events",
     # "//ydb/core/tx/columnshard",
-    # "//ydb/core/tx/columnshard/data_locks/locks",
+    "//ydb/core/tx/columnshard/data_locks/locks",
     # "//ydb/core/tx/columnshard/engines/portions",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     # "//ydb/core/tx/columnshard/engines/reader/plain_reader/iterator",
     # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
-    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections",
-    # "//ydb/core/tx/columnshard/transactions/locks",
+    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator",
+    "//ydb/core/tx/columnshard/transactions/locks",
   ]
 
   sources = [
     "read_metadata.cpp",
     "resolver.cpp",
-  ]
-}
-
-group("constructor") {
-  public_deps = [
-    ":_self",
-    # "//ydb/core/kqp/compute_actor",  # peerdir only
   ]
 }

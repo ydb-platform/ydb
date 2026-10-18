@@ -1,5 +1,6 @@
 library("min_max") {
   public_deps = [
+    "//ydb/core/tx/columnshard/engines/scheme",
     "//ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc",
     "//ydb/core/tx/columnshard/engines/storage/indexes/skip_index",
   ]
@@ -8,15 +9,16 @@ library("min_max") {
     # "//ydb/core/formats/arrow",  # peerdir only
     # "//ydb/core/formats/arrow/program",
     # "//ydb/core/protos",  # peerdir only
-    # "//ydb/core/tx/columnshard/engines/scheme",
+    "//ydb/core/tx/columnshard/engines/portions",  # peerdir only
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions",  # peerdir only
-    # "//ydb/core/tx/schemeshard/olap/schema",
+    "//ydb/core/tx/schemeshard/olap/schema",
     # "//ydb/library/arrow_kernels",
     # "//ydb/library/formats/arrow:scalar",
   ]
 
   sources = [
     "constructor.cpp",
+    "index_info_ext.cpp",
     "meta.cpp",
   ]
 }

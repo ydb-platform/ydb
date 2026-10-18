@@ -1,17 +1,17 @@
 library("actors") {
   public_deps = [
-    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/compute",
     # "//ydb/library/yql/providers/common/token_accessor/client",
-    # "//ydb/library/yql/providers/native",
+    "//ydb/library/yql/providers/native",
     # "//ydb/library/yql/providers/ydb_external/common",
     "//ydb/library/yql/providers/ydb_external/proto",
-    # "//ydb/public/sdk/cpp/src/client/driver",
-    # "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/query",
   ]
 
   deps = [
     # "//contrib/libs/apache/arrow",
-    # "//ydb/public/sdk/cpp/src/client/arrow",
+    "//ydb/public/sdk/cpp/src/client/arrow",
     # "//yql/essentials/core",
     # "//yql/essentials/public/udf/arrow",
     # "//yql/essentials/utils",

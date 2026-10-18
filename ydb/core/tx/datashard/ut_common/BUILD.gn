@@ -24,7 +24,7 @@ library("ut_common") {
     # "//ydb/core/testlib/basics",
     # "//ydb/core/tx/balance_coverage",
     # "//ydb/core/tx/data_events",
-    # "//ydb/core/tx/schemeshard/index",
+    # "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_allocator",
     # "//ydb/core/tx/tx_proxy:public",
     "//ydb/core/tx/tx_proxy:upload_rows",

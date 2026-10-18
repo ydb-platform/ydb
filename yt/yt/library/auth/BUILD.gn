@@ -2,7 +2,7 @@ library("auth") {
   public_deps = [
     "//library/cpp/yt/memory",
     "//yt/yt/core",
-    # "//yt/yt/library/tvm",
+    "//yt/yt/library/tvm",
   ]
 
   deps = [ "//yt/yt_proto/yt/core" ]

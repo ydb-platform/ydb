@@ -77,6 +77,8 @@ group("all") {
         "//ydb/tools/ydb_bench/background:background_load",
         "//ydb/tools/ydb_bench/memory:memory_benchmark",
         "//ydb/tools/ydb_bench/process_guard:ydb_bench_process_guard",
+        "//ydb/udfs/native/text",
+        "//ydb/udfs/native/trie",
     ]
 }
 

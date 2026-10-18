@@ -1,7 +1,7 @@
 library("actor_system_monitoring") {
   public_deps = [
     # "//library/cpp/time_provider",
-    # "//ydb/library/actors/core",
+    "//ydb/library/actors/core",
     # "//ydb/library/actors/metrics",
   ]
 

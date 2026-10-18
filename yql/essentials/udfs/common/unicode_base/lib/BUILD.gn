@@ -1,0 +1,15 @@
+library("lib") {
+  public_deps = [
+    # "//library/cpp/deprecated/split",
+    # "//library/cpp/string_utils/levenshtein_diff",
+    # "//library/cpp/unicode/normalization",
+    # "//library/cpp/unicode/set",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/utils",
+  ]
+
+  sources = [ "unicode_base_udf.cpp" ]
+
+  yql_abi_version = "2.37.0"
+}

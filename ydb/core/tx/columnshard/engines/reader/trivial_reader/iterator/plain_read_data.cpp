@@ -35,7 +35,7 @@ std::vector<std::unique_ptr<TPartialReadResult>> TPlainReadData::DoExtractReadyR
         {"result", result.size()},
         {"count", count},
         {"finished", Scanner->IsFinished()});
-    return std::move(result);
+    return result;
 }
 
 TConclusion<bool> TPlainReadData::DoReadNextInterval() {

@@ -6,7 +6,7 @@ library("distributed_storage") {
   ]
 
   deps = [
-    # "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services",
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/jaeger_tracing",
   ]

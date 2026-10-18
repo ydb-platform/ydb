@@ -13,10 +13,10 @@ config("arrow_clickhouse_public_config") {
 }
 
 library("arrow_clickhouse") {
-  public_deps = [ "//contrib/libs/apache/arrow" ]
-
-  deps = [
-    "//contrib/restricted/cityhash-1.0.2",  # peerdir only
+  public_deps = [
+    "//contrib/libs/apache/arrow",
+    "//contrib/restricted/cityhash-1.0.2",
+    # "//ydb/library/yql/udfs/common/clickhouse/client",
   ]
 
   sources = [

@@ -46,6 +46,7 @@ library("viewer") {
     # "//ydb/core/health_check",  # peerdir only
     # "//ydb/core/kqp/common",
     # "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/gateway",  # peerdir only
     "//ydb/core/kqp/proxy_service",  # peerdir only
     "//ydb/core/kqp/script_executions/table_queries",
     # "//ydb/core/mon",

@@ -1,4 +1,8 @@
 library("nmslib") {
+  public_deps = [
+    # "//library/cpp/testing/common",
+  ]
+
   sources = [
     "src/distcomp_bregman.cc",
     "src/distcomp_diverg.cc",

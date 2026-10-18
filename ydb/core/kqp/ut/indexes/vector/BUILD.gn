@@ -13,8 +13,8 @@ unittest_executable("vector") {
     "//ydb/core/testlib/actors",
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/schemeshard",
-    "//ydb/core/tx/schemeshard/index",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",
     "//ydb/public/sdk/cpp/src/client/operation",
     "//ydb/public/sdk/cpp/src/client/proto",

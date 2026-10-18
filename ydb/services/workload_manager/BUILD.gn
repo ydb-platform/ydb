@@ -1,26 +1,26 @@
 library("workload_manager") {
   public_deps = [
-    # "//ydb/core/base",
-    # "//ydb/core/kqp/common",
-    # "//ydb/core/kqp/common/simple",
-    # "//ydb/core/kqp/query_data",
+    "//ydb/core/base",
+    "//ydb/core/kqp/common",
+    "//ydb/core/kqp/common/simple",
+    "//ydb/core/kqp/query_data",
     "//ydb/core/protos",
-    # "//ydb/core/resource_pools",
-    # "//ydb/core/scheme",
-    # "//ydb/library/aclib",
-    # "//ydb/library/actors/core",
+    "//ydb/core/resource_pools",
+    "//ydb/core/scheme",
+    "//ydb/library/aclib",
+    "//ydb/library/actors/core",
     "//ydb/public/api/protos",
-    # "//ydb/services/workload_manager/common",
-    # "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
-    # "//yql/essentials/core/issue",
-    # "//yql/essentials/public/issue",
+    "//ydb/services/workload_manager/common",
+    "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
+    "//yql/essentials/core/issue",
+    "//yql/essentials/public/issue",
   ]
 
   deps = [
     # "//contrib/libs/protobuf",
     # "//ydb/core/cms/console",  # peerdir only
     # "//ydb/core/mind",  # peerdir only
-    # "//ydb/library/yql/providers/pq/common",
+    "//ydb/library/yql/providers/pq/common",
     "//ydb/library/yql/providers/pq/proto",
   ]
 

@@ -1,0 +1,8 @@
+library("set") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "set_udf.cpp" ]
+}

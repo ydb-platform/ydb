@@ -22,6 +22,7 @@ unittest_executable("ut") {
     "//ydb/core/tx/scheme_board",
     "//ydb/core/tx/scheme_cache",
     "//ydb/library/actors/testlib",
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
     "//ydb/public/api/grpc",
     "//ydb/public/lib/scheme_types",
     "//ydb/public/sdk/cpp/src/client/params",  # peerdir only
@@ -30,6 +31,8 @@ unittest_executable("ut") {
     "//yql/essentials/core/histogram",
     "//yql/essentials/parser/pg_wrapper/interface/type_desc",
     "//yql/essentials/types/dynumber",
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
   ]
 
   sources = [

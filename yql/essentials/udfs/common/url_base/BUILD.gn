@@ -1,0 +1,9 @@
+library("url_base") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+    # "//yql/essentials/udfs/common/url_base/lib",
+  ]
+
+  sources = [ "url_base.cpp" ]
+}

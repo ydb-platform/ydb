@@ -1,0 +1,3 @@
+library("sfh") {
+  sources = [ "sfh.cpp" ]
+}

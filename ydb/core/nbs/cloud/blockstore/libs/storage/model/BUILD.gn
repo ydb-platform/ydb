@@ -1,12 +1,12 @@
 library("model") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
-    # "//ydb/core/nbs/cloud/blockstore/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/common",
   ]
 
   deps = [
-    # "//ydb/core/base",
-    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/base",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
   ]
 
   sources = [

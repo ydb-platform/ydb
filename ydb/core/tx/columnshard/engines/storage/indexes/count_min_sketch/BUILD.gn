@@ -1,9 +1,4 @@
 library("count_min_sketch") {
-  public_deps = [
-    "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
-    # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
-  ]
-
   deps = [
     # "//contrib/libs/apache/arrow",
     # "//library/cpp/deprecated/atomic",
@@ -11,6 +6,8 @@ library("count_min_sketch") {
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/tx/columnshard/engines/portions",
     "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
+    # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
     # "//ydb/core/tx/program",
     "//ydb/core/tx/schemeshard/olap/schema",
     # "//ydb/library/formats/arrow/hash",

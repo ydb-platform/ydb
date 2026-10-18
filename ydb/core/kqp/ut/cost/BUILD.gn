@@ -7,6 +7,7 @@ unittest_executable("cost") {
     "//ydb/core/kqp/ut/common",
     "//ydb/core/tx/schemeshard",
     "//ydb/core/tx/tx_proxy:public",
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/proto",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]

@@ -103,7 +103,7 @@ library("group_mapper") {
     "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/groupinfo",
     "//ydb/core/protos",
-    # "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat",
     # "//ydb/library/actors/core",
   ]
 

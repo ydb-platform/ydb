@@ -1,0 +1,9 @@
+library("histogram") {
+  deps = [
+    # "//library/cpp/histogram/adaptive",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "histogram_udf.cpp" ]
+}

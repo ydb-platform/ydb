@@ -1,7 +1,5 @@
 linked_executable("bench_distfunc") {
-  deps = [
-    "//ydb/library/nmslib",  # peerdir only
-  ]
+  deps = [ "//ydb/library/nmslib" ]
 
   sources = [ "bench_distfunc.cc" ]
 

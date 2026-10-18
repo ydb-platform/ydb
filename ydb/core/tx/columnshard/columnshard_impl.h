@@ -127,6 +127,10 @@ class TGeneralCompactColumnEngineChanges;
 }
 }   // namespace NKikimr::NOlap
 
+namespace NKikimr::NOlap::NTxInteractions {
+class ITxEventWriter;
+}   // namespace NKikimr::NOlap::NTxInteractions
+
 namespace NKikimr::NColumnShard {
 
 class TArrowData;
@@ -470,6 +474,8 @@ private:
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
+    // Set in the constructor to OperationsManager->AddEventForLock(): see AddEventForLock() below
+    std::function<void(const ui64, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>&)> AddEventForLockCallback;
     std::shared_ptr<NOlap::NDataSharing::TSessionsManager> SharingSessionsManager;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NBackground::TSessionsManager> BackgroundSessionsManager;
@@ -567,7 +573,14 @@ private:
     NOlap::TSnapshot GetMinSnapshotForNewReads() const;
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const NColumnShard::TSchemeShardLocalPathId& schemeShardLocalPathId) const;
     std::unique_ptr<NOlap::ISnapshotHolders> GetSnapshotHolders() const;
-    ui64 GetOutdatedStep() const;
+    // Inline: GetCurrentSnapshotForInternalModification() below calls it from libraries under columnshard (operations)
+    ui64 GetOutdatedStep() const {
+        ui64 step = LastPlannedStep;
+        if (MediatorTimeCastEntry) {
+            step = Max(step, MediatorTimeCastEntry->Get(TabletID()));
+        }
+        return step;
+    }
 
     TDuration GetTxCompleteLag() const {
         ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
@@ -705,6 +718,13 @@ public:
     TOperationsManager& GetOperationsManager() const {
         AFL_VERIFY(OperationsManager);
         return *OperationsManager;
+    }
+
+    // TOperationsManager::AddEventForLock() through a callback: lets the readers (common_reader/constructor) call it
+    // without linking against columnshard/operations
+    void AddEventForLock(const ui64 lockId, const std::shared_ptr<NOlap::NTxInteractions::ITxEventWriter>& writer) {
+        AFL_VERIFY(AddEventForLockCallback);
+        AddEventForLockCallback(lockId, writer);
     }
 
     bool HasIndex() const {

@@ -13,12 +13,16 @@ unittest_executable("indexes") {
     "//ydb/core/testlib",
     "//ydb/core/tx/datashard",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",
     "//ydb/public/sdk/cpp/src/client/proto",
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/core/services/mounts",
     "//yql/essentials/providers/common/provider",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
   ]
 
   sources = [

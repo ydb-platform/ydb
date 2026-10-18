@@ -14,6 +14,7 @@ linked_executable("cbo_latency_dataset") {
     "//ydb/public/sdk/cpp/src/client/result",
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
   ]
 
   sources = [ "main.cpp" ]

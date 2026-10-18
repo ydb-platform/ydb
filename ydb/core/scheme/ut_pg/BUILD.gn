@@ -2,7 +2,7 @@ unittest_executable("ut_pg") {
   deps = [
     "//library/cpp/testing/unittest",
     "//ydb/core/scheme",
-    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
   ]
 

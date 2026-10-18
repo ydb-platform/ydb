@@ -1,7 +1,5 @@
 library("comp_nodes") {
-  public_deps = [
-    # "//yql/essentials/minikql/computation",
-  ]
+  public_deps = [ "//yql/essentials/minikql/computation" ]
 
   deps = [
     # "//yql/essentials/minikql",

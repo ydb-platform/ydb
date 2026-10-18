@@ -1,6 +1,6 @@
 group("message_stream") {
   public_deps = [
     # "//library/cpp/threading/future",
-    # "//yql/essentials/public/issue",
+    "//yql/essentials/public/issue",
   ]
 }

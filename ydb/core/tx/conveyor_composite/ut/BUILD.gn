@@ -27,6 +27,7 @@ unittest_executable("ut") {
     "//ydb/library/signals",
     "//yql/essentials/core/arrow_kernels/request",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
   ]
 
   sources = [

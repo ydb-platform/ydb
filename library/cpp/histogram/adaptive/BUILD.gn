@@ -1,0 +1,14 @@
+library("adaptive") {
+  public_deps = [ "//library/cpp/histogram/adaptive/protos" ]
+
+  deps = [
+    # "//contrib/libs/protobuf",  # peerdir only
+  ]
+
+  sources = [
+    "adaptive_histogram.cpp",
+    "block_histogram.cpp",
+    "common.cpp",
+    "fixed_bin_histogram.cpp",
+  ]
+}

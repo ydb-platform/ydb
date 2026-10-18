@@ -9,7 +9,7 @@ library("common") {
     "//ydb/core/tx/columnshard/engines/predicate",
     # "//ydb/core/tx/columnshard/operations",
     "//ydb/core/tx/conveyor/usage",
-    # "//ydb/core/tx/limiter/grouped_memory/service",
+    "//ydb/core/tx/limiter/grouped_memory/service",
     # "//ydb/core/tx/program",
     # "//ydb/library/accessor",
     # "//ydb/library/conclusion",

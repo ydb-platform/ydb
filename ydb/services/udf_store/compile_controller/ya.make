@@ -21,10 +21,12 @@ PEERDIR(
     ydb/core/base
     ydb/core/cms/console
     ydb/core/engine/minikql
+    ydb/core/grpc_services
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/library/aclib
+    ydb/library/yql/public/ydb_issue
     ydb/library/actors/core
     ydb/services/metadata
     ydb/services/metadata/request

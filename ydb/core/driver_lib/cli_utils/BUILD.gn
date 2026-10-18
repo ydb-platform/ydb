@@ -23,10 +23,10 @@ library("cli_utils") {
     "//ydb/core/blobstorage/pdisk/metadata",
     # "//ydb/core/client/minikql_compile",  # peerdir only
     # "//ydb/core/client/scheme_cache_lib",  # peerdir only
-    # "//ydb/core/config/init",
+    "//ydb/core/config/init",
     "//ydb/core/config/validation",
     # "//ydb/core/driver_lib/cli_config_base",
-    # "//ydb/core/driver_lib/run:config",
+    "//ydb/core/driver_lib/run:config",
     # "//ydb/core/driver_lib/version",
     # "//ydb/core/engine",  # peerdir only
     # "//ydb/core/erasure",  # peerdir only

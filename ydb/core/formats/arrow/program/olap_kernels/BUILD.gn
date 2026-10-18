@@ -1,0 +1,10 @@
+library("olap_kernels") {
+  deps = [
+    # "//ydb/core/formats/arrow/program/ascii_contains",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/arrow",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "olap_kernels_udf.cpp" ]
+}

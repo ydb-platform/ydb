@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     GLOBAL constructor.cpp  # gn: into ydb/core/tx/columnshard
-    read_metadata.cpp  # gn: into ydb/core/tx/columnshard
+    read_metadata.cpp  # gn: into ydb/core/tx/columnshard/engines/reader/plain_reader/iterator
 )
 
 PEERDIR(

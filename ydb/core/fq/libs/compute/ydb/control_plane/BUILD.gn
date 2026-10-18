@@ -22,6 +22,7 @@ library("control_plane") {
     "//ydb/library/actors/http",
     # "//ydb/library/actors/protos",  # peerdir only
     # "//ydb/library/db_pool/protos",  # peerdir only
+    "//ydb/library/protobuf_printer",  # peerdir only
     "//ydb/library/services",
     "//ydb/library/ycloud/api",
     "//ydb/library/yql/utils/actors",
@@ -30,9 +31,9 @@ library("control_plane") {
     "//ydb/public/lib/fq",
     # "//ydb/public/sdk/cpp/src/client/operation",
     # "//ydb/public/sdk/cpp/src/client/query",
-    # "//ydb/public/sdk/cpp/src/client/resources",
+    "//ydb/public/sdk/cpp/src/client/resources",
     # "//ydb/public/sdk/cpp/src/library/operation_id/protos",  # peerdir only
-    # "//ydb/services/workload_manager/common",
+    "//ydb/services/workload_manager/common",
     # "//yql/essentials/public/issue",
     # "//yql/essentials/utils",
   ]

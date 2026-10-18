@@ -33,9 +33,7 @@ library("monitoring_settings") {
     "//ydb/public/api/protos",
   ]
 
-  deps = [
-    "//library/cpp/json",
-  ]
+  deps = [ "//library/cpp/json" ]
 
   sources = [ "consumers_advanced_monitoring_settings.cpp" ]
 }

@@ -14,7 +14,6 @@ library("iterator") {
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates",
     # "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
-    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/columnshard/hooks/abstract",
     # "//ydb/core/tx/columnshard/resource_subscriber",
     # "//ydb/core/tx/limiter/grouped_memory/service",

@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    contrib/libs/tcmalloc/malloc_extension
     ydb/core/cms/console
     ydb/core/mon_alloc
     ydb/core/node_whiteboard

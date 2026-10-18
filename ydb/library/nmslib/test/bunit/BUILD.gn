@@ -1,7 +1,7 @@
 linked_executable("bunit") {
   deps = [
     "//library/cpp/testing/common",  # peerdir only
-    "//ydb/library/nmslib",  # peerdir only
+    "//ydb/library/nmslib",
   ]
 
   sources = [

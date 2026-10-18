@@ -20,6 +20,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/data_events/common
     ydb/core/tx/columnshard/engines/scheme
+    ydb/core/tx/columnshard/engines/predicate
 )
 
 END()

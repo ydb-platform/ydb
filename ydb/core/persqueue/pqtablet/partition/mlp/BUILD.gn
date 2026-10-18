@@ -24,13 +24,13 @@ library("mlp") {
     # "//ydb/core/persqueue/common/proxy",  # peerdir only
     # "//ydb/core/persqueue/pqtablet/common",  # peerdir only
     "//ydb/core/persqueue/public/describer",
+    "//ydb/core/persqueue/public/partition_key_range",  # peerdir only
     # "//ydb/core/persqueue/public/write_meta",  # peerdir only
     "//ydb/core/persqueue/writer",
     # "//ydb/core/ymq/actor",
     # "//ydb/core/ymq/proto",  # peerdir only
     # "//ydb/library/persqueue/counter_time_keeper",
     # "//ydb/public/lib/base",
-    "//ydb/core/persqueue/public/partition_key_range",  # peerdir only
   ]
 
   sources = [

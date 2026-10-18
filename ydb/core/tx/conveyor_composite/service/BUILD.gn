@@ -4,7 +4,7 @@ library("service") {
     "//ydb/core/cms/console",
     "//ydb/core/kqp/runtime",
     "//ydb/core/tx/conveyor/usage",
-    # "//ydb/core/tx/conveyor_composite/common/config",
+    "//ydb/core/tx/conveyor_composite/common/config",
     "//ydb/core/tx/conveyor_composite/usage",
     "//ydb/library/accessor",
     # "//ydb/library/actors/core",
@@ -17,12 +17,12 @@ library("service") {
   deps = [
     "//library/cpp/lwtrace/mon",
     # "//ydb/core/base",
-    # "//ydb/core/config/validation",
+    "//ydb/core/config/validation",
     # "//ydb/core/kqp/common/simple",
     "//ydb/core/kqp/query_data",
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/tx/conveyor_composite/tracing",
-    # "//ydb/library/actors/async",
+    "//ydb/library/actors/async",
   ]
 
   sources = [

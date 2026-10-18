@@ -1,3 +1,10 @@
+config("actors_private_config") {
+  defines = [
+    "ARCADIA_BUILD",
+    "USE_PARQUET",
+  ]
+}
+
 library("actors") {
   public_deps = [
     # "//contrib/libs/apache/arrow",
@@ -69,4 +76,6 @@ library("actors") {
     "yql_s3_source_queue.cpp",
     "yql_s3_write_actor.cpp",
   ]
+
+  configs = [ ":actors_private_config" ]
 }

@@ -81,8 +81,14 @@ ui64 IOptimizerPlanner::GetBadPortionsLimit() const {
     return 2 * GetNodePortionsCountLimit();
 }
 
-std::shared_ptr<IOptimizerPlannerConstructor> IOptimizerPlannerConstructor::BuildDefault() {
-    return BuildDefault(NKikimrConfig::TColumnShardConfig::default_instance().GetDefaultCompactionPreset());
+TConclusion<std::shared_ptr<IOptimizerPlanner>> IOptimizerPlannerConstructor::BuildPlanner(const TBuildContext& context) const {
+    auto result = DoBuildPlanner(context);
+    if (result.IsFail()) {
+        return result;
+    }
+    (*result)->WeightKff = WeightKff;
+    (*result)->SetRuntimeSettings(context.GetRuntimeSettings());
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer

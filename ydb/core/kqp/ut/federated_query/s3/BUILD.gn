@@ -23,6 +23,7 @@ unittest_executable("s3") {
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/public/sdk/cpp/src/client/types/operation",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
     "//yql/essentials/utils/log",
   ]
 

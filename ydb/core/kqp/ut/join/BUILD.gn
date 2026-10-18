@@ -9,6 +9,7 @@ unittest_executable("join") {
     "//ydb/public/lib/yson_value",
     "//ydb/public/sdk/cpp/src/client/proto",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
   ]
 
   sources = [

@@ -4,6 +4,7 @@ LIBRARY()
 
 SRCS(
     modification.cpp
+    modification_tx.cpp  # gn: into ydb/core/tx/columnshard
 )
 
 PEERDIR(

@@ -1,0 +1,8 @@
+library("hybrid_search") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "hybrid_search.cpp" ]
+}

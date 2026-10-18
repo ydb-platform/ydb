@@ -10,7 +10,7 @@ library("show_create") {
     # "//ydb/core/base",  # peerdir only
     # "//ydb/core/scheme",
     "//ydb/core/sys_view/common",
-    # "//ydb/core/sys_view/show_create/formatters",
+    "//ydb/core/sys_view/show_create/formatters",
     # "//ydb/core/tablet",
     "//ydb/core/tx/columnshard/engines/scheme/defaults/protos",  # peerdir only
     # "//ydb/core/tx/scheme_cache",

@@ -1,0 +1,9 @@
+library("ip_base") {
+  deps = [
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+    # "//yql/essentials/udfs/common/ip_base/lib",
+  ]
+
+  sources = [ "ip_base.cpp" ]
+}

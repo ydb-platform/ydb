@@ -24,6 +24,7 @@ unittest_executable("query") {
     "//ydb/library/ydb_issue/proto",
     "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/draft",
     "//ydb/public/sdk/cpp/src/client/operation",
     "//ydb/public/sdk/cpp/src/client/proto",
@@ -35,6 +36,8 @@ unittest_executable("query") {
     "//yql/essentials/core",
     "//yql/essentials/public/udf",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
   ]
 
   sources = [

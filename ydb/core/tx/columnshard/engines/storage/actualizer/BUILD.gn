@@ -5,10 +5,6 @@ library("abstract") {
     # "//ydb/library/accessor",
   ]
 
-  deps = [
-    # "//ydb/core/tx/columnshard/engines/scheme/versions",  # peerdir only
-  ]
-
   sources = [
     "abstract/abstract.cpp",
     "abstract/context.cpp",

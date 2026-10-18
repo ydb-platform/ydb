@@ -1,0 +1,12 @@
+group("transactions") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard",
+    # "//ydb/core/tx/columnshard/common",
+  ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/blobs_action/protos",  # peerdir only
+    # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    # "//ydb/services/metadata/abstract",  # peerdir only
+  ]
+}

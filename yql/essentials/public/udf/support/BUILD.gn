@@ -1,0 +1,7 @@
+library("support") {
+  deps = [
+    # "//yql/essentials/public/udf",
+  ]
+
+  sources = [ "udf_support.cpp" ]
+}

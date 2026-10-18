@@ -5,14 +5,14 @@ library("common") {
     "//ydb/core/protos",
     # "//ydb/library/aclib",
     "//ydb/public/api/protos",
-    # "//ydb/public/sdk/cpp/src/library/operation_id",
+    "//ydb/public/sdk/cpp/src/library/operation_id",
     # "//yql/essentials/public/issue",
   ]
 
   deps = [
     # "//library/cpp/blockcodecs",
-    # "//library/cpp/protobuf/interop",
-    # "//library/cpp/protobuf/json",
+    "//library/cpp/protobuf/interop",
+    "//library/cpp/protobuf/json",
     "//ydb/core/base",
     "//ydb/core/tx/datashard",
     # "//ydb/library/yverify_stream",

@@ -11,6 +11,8 @@ unittest_executable("hybrid") {
     "//ydb/core/tx/datashard",
     "//ydb/core/tx/schemeshard",
     "//ydb/library/yql/providers/common/http_gateway",  # peerdir only
+    "//ydb/library/yql/udfs/common/hybrid_search",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/adapters/issue",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/query",
     "//yql/essentials/sql/pg_dummy",  # peerdir only

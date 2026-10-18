@@ -134,7 +134,7 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/login
     ydb/library/pdisk_io  # gn: :device_type
-    ydb/library/pretty_types_print/protobuf
+    ydb/library/pretty_types_print/protobuf  # gn: public dep
     ydb/library/vector_distance
     ydb/library/ydb_issue
     ydb/public/api/protos/out

@@ -16,7 +16,6 @@ library("engines") {
     "//ydb/core/tx/columnshard/engines/protos",
     # "//ydb/core/tx/columnshard/engines/scheme",
     "//ydb/core/tx/columnshard/engines/scheme/tiering",
-    # "//ydb/core/tx/columnshard/engines/scheme/versions",
     # "//ydb/core/tx/columnshard/engines/storage/actualizer:abstract",
     "//ydb/core/tx/columnshard/engines/storage/actualizer:common",
     # "//ydb/core/tx/columnshard/engines/storage/actualizer:counters",
@@ -36,10 +35,11 @@ library("engines") {
 
   deps = [
     # "//contrib/libs/apache/arrow",  # peerdir only
+    "//library/cpp/protobuf/json",
     # "//library/cpp/time_provider",
     # "//ydb/core/formats",  # peerdir only
     "//ydb/core/protos",
-    # "//ydb/core/scheme",  # peerdir only
+    # "//ydb/core/scheme",
     # "//ydb/core/tablet",  # peerdir only
     # "//ydb/core/tablet_flat",
     # "//ydb/core/tx/columnshard/blobs_action",
@@ -48,26 +48,33 @@ library("engines") {
     # "//ydb/core/tx/columnshard/engines/changes/actualization",  # peerdir only
     "//ydb/core/tx/columnshard/engines/changes/compaction",
     # "//ydb/core/tx/columnshard/engines/changes/counters",
-    # "//ydb/core/tx/columnshard/engines/reader/common",
+    "//ydb/core/tx/columnshard/engines/reader/common",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
-    # "//ydb/core/tx/columnshard/engines/reader/plain_reader/iterator",
-    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
-    # "//ydb/core/tx/columnshard/engines/reader/tracing",
-    # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections",
+    "//ydb/core/tx/columnshard/engines/reader/plain_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
+    # "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/abstract",
+    "//ydb/core/tx/columnshard/engines/reader/tracing",
+    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator",
     "//ydb/core/tx/columnshard/engines/storage/indexes/max",
-    # "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",
+    "//ydb/core/tx/columnshard/engines/storage/indexes/min_max",
     # "//ydb/core/tx/columnshard/splitter",
     "//ydb/core/tx/columnshard/subscriber/events:tables_erased",
     "//ydb/core/tx/columnshard/tracing",
+    # "//ydb/core/tx/columnshard/transactions/transactions",
     "//ydb/core/tx/columnshard:background_controller",  # peerdir only
     # "//ydb/core/tx/conveyor_composite/usage",
     # "//ydb/core/tx/program",  # peerdir only
     # "//ydb/core/tx/sharding",
+    # "//ydb/library/actors/struct_log",
     # "//ydb/library/conclusion",
     # "//yql/essentials/public/udf/service/exception_policy",  # link slot
   ]
 
   sources = [
+    "//ydb/core/tx/columnshard/tables_manager.cpp",
+    "//ydb/core/tx/columnshard/transactions/transactions/tx_add_sharding_info.cpp",
+    "changes/abstract/move_portions.cpp",
+    "changes/abstract/remove_portions.cpp",
     "changes/actualization/construction/context.cpp",
     "changes/cleanup_portions.cpp",
     "changes/cleanup_tables.cpp",

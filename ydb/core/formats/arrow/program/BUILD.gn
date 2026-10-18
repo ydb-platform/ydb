@@ -18,7 +18,7 @@ library("program") {
   deps = [
     "//ydb/core/formats/arrow/accessor/sparsed",
     # "//ydb/library/actors/core",
-    "//ydb/library/arrow_clickhouse",  # peerdir only
+    "//ydb/library/arrow_clickhouse",
     # "//ydb/library/formats/arrow",
     # "//ydb/library/formats/arrow/switch",
     "//ydb/library/formats/arrow:modifier",  # peerdir only

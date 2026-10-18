@@ -1,16 +1,15 @@
 library("lookup_actor") {
-  public_deps = [
-    # "//ydb/library/yql/dq/actors/compute",
-  ]
+  public_deps = [ "//ydb/library/yql/dq/actors/compute" ]
 
   deps = [
-    # "//ydb/core/base",
+    "//ydb/core/base",
     # "//ydb/core/control/lib",  # peerdir only
-    # "//ydb/core/formats/arrow",
-    # "//ydb/core/grpc_services/base",
-    # "//ydb/core/grpc_services/local_rpc",
+    "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",  # peerdir only
+    "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/protos",
-    # "//ydb/core/util",
+    "//ydb/core/util",
     # "//ydb/library/aclib/protos",  # peerdir only
     # "//ydb/library/actors/core",
     # "//ydb/library/mkql_proto",

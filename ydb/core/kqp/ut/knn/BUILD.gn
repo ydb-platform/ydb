@@ -3,6 +3,7 @@ unittest_executable("knn") {
     "//ydb/core/kqp",  # peerdir only
     "//ydb/core/kqp/ut/common",
     "//ydb/core/tx/datashard",
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]

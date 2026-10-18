@@ -27,7 +27,7 @@ SRCS(
     defs.cpp
     inflight_request_tracker.cpp
     scan_snapshot_guard.cpp
-    tables_manager.cpp
+    tables_manager.cpp  # gn: into ydb/core/tx/columnshard/engines
     write_actor.cpp  # gn: write_actor
 )
 # gn: background_controller headers background_controller.h
@@ -92,7 +92,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/public/api/protos
 )
-# gn: peerdir ydb/core/tx/columnshard/data_sharing/manager:shared_blobs ydb/core/tx/columnshard/operations/slice_builder
+# gn: peerdir ydb/core/tx/columnshard/data_sharing/manager:shared_blobs ydb/core/tx/columnshard/operations/slice_builder ydb/core/tx/schemeshard:find_subdomain_path_id
 
 IF (OS_WINDOWS)
     CFLAGS(

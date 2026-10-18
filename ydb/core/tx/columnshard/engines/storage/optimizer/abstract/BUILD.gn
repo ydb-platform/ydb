@@ -1,5 +1,6 @@
 library("abstract") {
   public_deps = [
+    ":constructor",
     # "//contrib/libs/apache/arrow",
     # "//ydb/core/base",
     # "//ydb/core/formats/arrow",
@@ -21,5 +22,17 @@ library("abstract") {
   sources = [
     "counters.cpp",
     "optimizer.cpp",
+  ]
+}
+
+group("constructor") {
+  public_deps = [
+    # "//library/cpp/json",
+    "//ydb/core/protos",
+    # "//ydb/core/tx/columnshard/common",
+    # "//ydb/library/accessor",
+    # "//ydb/library/actors/core",
+    # "//ydb/library/conclusion",
+    # "//ydb/services/bg_tasks/abstract",
   ]
 }

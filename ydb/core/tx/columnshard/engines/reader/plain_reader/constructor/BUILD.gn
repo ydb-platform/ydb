@@ -1,0 +1,10 @@
+group("constructor") {
+  public_deps = [
+    # "//ydb/core/tx/columnshard/engines/reader/abstract",
+    # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
+  ]
+
+  deps = [
+    # "//ydb/core/kqp/compute_actor",  # peerdir only
+  ]
+}

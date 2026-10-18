@@ -1,7 +1,5 @@
 library("topic") {
-  public_deps = [
-    "//ydb/core/grpc_services/base",
-  ]
+  public_deps = [ "//ydb/core/grpc_services/base" ]
 
   deps = [
     # "//contrib/restricted/abseil-cpp",

@@ -1,6 +1,6 @@
 library("inmemory_metrics_monitoring") {
   public_deps = [
-    # "//ydb/library/actors/core",
+    "//ydb/library/actors/core",
     # "//ydb/library/actors/metrics",
   ]
 

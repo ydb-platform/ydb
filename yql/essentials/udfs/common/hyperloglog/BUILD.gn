@@ -1,0 +1,9 @@
+library("hyperloglog") {
+  deps = [
+    # "//library/cpp/hyperloglog",
+    # "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+  ]
+
+  sources = [ "hyperloglog_udf.cpp" ]
+}

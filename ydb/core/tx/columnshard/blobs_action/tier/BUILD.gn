@@ -20,6 +20,7 @@ library("tier") {
     "//ydb/core/tx/columnshard/blobs_action",
     "//ydb/core/tx/columnshard/blobs_action/counters",
     # "//ydb/core/tx/columnshard/data_sharing/protos",  # peerdir only
+    "//ydb/core/tx/columnshard/hooks/abstract",  # peerdir only
     "//ydb/core/wrappers/events",
   ]
 

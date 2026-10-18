@@ -21,6 +21,7 @@ PEERDIR(
     ydb/library/actors/protos
     ydb/library/db_pool/protos
     ydb/library/grpc/actor_client
+    ydb/library/protobuf_printer
     ydb/library/yql/utils/actors
     ydb/public/api/grpc
     ydb/public/api/grpc/draft

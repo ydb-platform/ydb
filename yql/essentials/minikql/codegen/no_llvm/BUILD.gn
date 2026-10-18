@@ -3,6 +3,10 @@ config("no_llvm_private_config") {
 }
 
 library("no_llvm") {
+  deps = [
+    # "//yql/essentials/minikql",
+  ]
+
   sources = [ "codegen_dummy.cpp" ]
 
   link_slot_provides = [ "minikql_codegen" ]

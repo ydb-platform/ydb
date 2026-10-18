@@ -27,6 +27,7 @@ PEERDIR(
     ydb/core/grpc_services/base
     ydb/core/security
     ydb/core/grpc_streaming
+    ydb/core/kqp/proxy_service
     ydb/core/protos
     ydb/core/scheme
     ydb/core/udf_api

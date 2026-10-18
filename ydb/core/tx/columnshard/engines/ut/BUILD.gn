@@ -24,10 +24,9 @@ unittest_executable("ut") {
     "//ydb/core/tx/columnshard/engines/reader/actor",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
     "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
+    "//ydb/core/tx/columnshard/engines/reader/plain_reader/constructor",
     "//ydb/core/tx/columnshard/engines/reader/simple_reader/iterator",
-    "//ydb/core/tx/columnshard/engines/reader/trivial_reader/constructor",
     "//ydb/core/tx/columnshard/engines/scheme",
-    "//ydb/core/tx/columnshard/engines/scheme/versions",
     "//ydb/core/tx/columnshard/engines/storage/indexes/bits_storage",
     "//ydb/core/tx/columnshard/engines/storage/indexes/bloom",
     "//ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm",
@@ -49,6 +48,7 @@ unittest_executable("ut") {
     "//yql/essentials/minikql/comp_nodes",
     "//yql/essentials/minikql/invoke_builtins",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
   ]
 
   sources = [

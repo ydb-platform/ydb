@@ -1,9 +1,9 @@
 library("abstract") {
   public_deps = [
-    # "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow",
     # "//ydb/core/tablet_flat",
     # "//ydb/core/tx/columnshard/common",
-    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/constructor",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",
     # "//ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator",

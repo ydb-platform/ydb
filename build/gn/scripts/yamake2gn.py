@@ -108,6 +108,15 @@ GOOGLEAPIS_COMMON_PROTOS_LABEL = "//contrib/libs/googleapis-common-protos"
 # Its headers need YQL_LAST_ABI_VERSION() / YQL_ABI_VERSION() in the includer's
 # ya.make (udf_version.h #errors otherwise); a module without either is reported.
 UDF_MODULE = "yql/essentials/public/udf"
+# YQL_UDF*(name): a multimodule -- the UDF as a shared object (YQL_UDF_SHARED)
+# and, for its PEERDIRs, static libraries at the module's and at the current
+# UDF ABI, every SRCS of them GLOBAL_SRCS (the UDF registers itself), with the
+# PEERDIRs below added (_ADD_YQL_UDF_*DEPS in
+# build/conf/project_specific/yql_udf.conf). GN builds the static one at the
+# current ABI (its consumers -- ydbd, ... -- are YQL_LAST_ABI_VERSION): a
+# LIBRARY of global sources.
+YQL_UDF_MACROS = {"YQL_UDF", "YQL_UDF_YDB", "YQL_UDF_CONTRIB"}
+YQL_UDF_PEERDIRS = (UDF_MODULE, UDF_MODULE + "/support")
 # Macros that declare an artifact-producing (non-test) module.
 ARTIFACT_MACROS = KIND_MACROS | {
     "PY3_LIBRARY", "PY23_LIBRARY", "PY3_PROGRAM",
@@ -367,6 +376,8 @@ class Module:
         self.use_common_google_apis = False
         self.resource_macros = []    # (macro, raw args) of RESOURCE* in file order
         self.global_srcs = False     # SRCS(GLOBAL ...): linked whenever PEERDIRed, see gen_spec
+        self.yql_udf = False         # YQL_UDF*(), see YQL_UDF_MACROS
+        self.addincl = []            # ADDINCL dirs of C++ (GLOBAL or not), repo-relative: see IncludeGraph
         self.resources = []          # converted, see convert_resources
         self.resources_missing = []  # input paths found nowhere in the source tree
         self.src_parts = {}          # SRCS entry (as written) -> part name, `# gn: <part>`
@@ -842,6 +853,25 @@ def resolve_includes(text, root, directory, cond_eval=_COND_EVAL, _seen=frozense
     return "".join(out)
 
 
+def _addincl_dirs(args):
+    """The C++ include dirs of ADDINCL([GLOBAL|ONE_LEVEL] dir... [FOR <lang> dir]),
+    repo-relative. A dir of another language (FOR proto ...) and one in the build
+    root (${ARCADIA_BUILD_ROOT}/...: generated files) are left out."""
+    out, it = [], iter(args)
+    for a in it:
+        if a in ("GLOBAL", "ONE_LEVEL"):
+            continue
+        if a == "FOR":
+            next(it, None), next(it, None)
+            continue
+        if a.startswith("${ARCADIA_ROOT}/"):
+            a = a[len("${ARCADIA_ROOT}/"):]
+        if a.startswith("$"):
+            continue
+        out.append(os.path.normpath(a))
+    return out
+
+
 def parse_yamake(path, directory, root):
     with open(path, encoding="utf-8") as f:
         text = f.read()
@@ -861,6 +891,10 @@ def parse_yamake(path, directory, root):
             # GN builds the current one (as LIBRARY + YQL_LAST_ABI_VERSION)
             name = "LIBRARY"
             mod.yql_abi = mod.yql_abi or "current"
+        elif name in YQL_UDF_MACROS:
+            name = "LIBRARY"
+            mod.yql_udf = True
+            mod.yql_abi = "current"
         args = _take_gn_directives(mod, name, args)
         if name == "SET" and args and args[0] in _IGNORED_SET_VARS:
             if (args[0] == "PROTOC_TRANSITIVE_HEADERS"
@@ -894,12 +928,14 @@ def parse_yamake(path, directory, root):
                 mod.peerdirs.append(mod.test_for)
         elif name == "SRCS":
             mod.srcs.extend(a for a in args if a != "GLOBAL")
-            mod.global_srcs |= "GLOBAL" in args
+            mod.global_srcs |= "GLOBAL" in args or (mod.yql_udf and bool(args))
         elif name == "SRC":
             if args:
                 mod.srcs.append(args[0])  # per-file flags (remaining args) are ignored
         elif name == "SRCDIR":
             mod.srcdirs.extend(args)
+        elif name == "ADDINCL":
+            mod.addincl.extend(d for d in _addincl_dirs(args) if d not in mod.addincl)
         elif name == "PEERDIR":
             mod.peerdirs.extend(args)
         elif name == "GENERATE_ENUM_SERIALIZATION" or name == "GENERATE_ENUM_SERIALIZATION_WITH_HEADER": # TODO: improve WITH_HEADER macros
@@ -924,6 +960,8 @@ def parse_yamake(path, directory, root):
             mod.generated.extend(_generated_outputs(name, args, directory, mod.set_vars))
         elif name == "YQL_LAST_ABI_VERSION":
             mod.yql_abi = "current"
+        elif name == "YQL_ABI_VERSION" and mod.yql_udf:
+            pass   # the shared UDF's and the stable static's; GN builds the current one
         elif name == "YQL_ABI_VERSION":
             if len(args) == 3 and all(a.isdigit() for a in args):
                 mod.yql_abi = ".".join(args)
@@ -943,6 +981,8 @@ def parse_yamake(path, directory, root):
             mod.resource_macros.append((name, raw))
     if mod.name is None:
         mod.name = os.path.basename(directory)
+    if mod.yql_udf:
+        mod.peerdirs.extend(d for d in YQL_UDF_PEERDIRS if d not in mod.peerdirs)
     _check_gn_parts(mod)
     convert_resources(mod, root)
     return mod
@@ -1472,7 +1512,7 @@ class Resolver:
 
     def is_module(self, d):
         """True if d's ya.make module has a GN target: a buildable kind
-        (LIBRARY/PROGRAM/PROTO_LIBRARY), or any kind (YQL_UDF_YDB, ...) whose
+        (LIBRARY/PROGRAM/PROTO_LIBRARY, YQL_UDF* among them), or any kind whose
         hand-written keep-marked BUILD.gn declares the target."""
         if d not in self._modules:
             mod = self.mods.get(d)
@@ -1706,7 +1746,7 @@ class IncludeGraph:
         self.files = defaultdict(list)
         self.consumed = set()
         self._file_set = defaultdict(set)
-        self.include_dirs = {}   # file -> extra include dirs (a test's UNITTEST_FOR dir)
+        self.include_dirs = {}   # file -> extra include dirs: a test's UNITTEST_FOR dir, ADDINCL of its module
         self._includes = {}
         self._imports = {}
 
@@ -1782,9 +1822,13 @@ class IncludeGraph:
 
     def _add(self, d, f, queue):
         if f not in self._file_set[d]:
+            # what the compiler searches besides the root, for the module that
+            # owns f: ADDINCL -- a header is resolved as its owner compiles it
             mod = self.resolver.mods.get(d)
-            if mod is not None and mod.test_for and is_gen_test(mod) and f not in self._includes:
-                self.include_dirs[f] = (mod.test_for,)
+            extra = [] if mod is None else (
+                ([mod.test_for] if mod.test_for and is_gen_test(mod) else []) + mod.addincl)
+            if extra and f not in self._includes:
+                self.include_dirs[f] = tuple(extra)
             self._file_set[d].add(f)
             self.files[d].append(f)
             queue.append((d, f))

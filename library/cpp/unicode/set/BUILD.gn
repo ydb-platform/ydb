@@ -1,0 +1,13 @@
+library("set") {
+  sources = [
+    "generated/category_ranges.cpp",
+    "quoted_pair.cpp",
+    "set.cpp",
+    "unicode_set.cpp",
+    "unicode_set_lexer.rl6",
+    "unicode_set_parser.cpp",
+    "unicode_set_token.cpp",
+  ]
+
+  serialize_enum_headers = [ "unicode_set_token.h" ]
+}

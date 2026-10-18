@@ -861,6 +861,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/kqp/proxy_service
+    ydb/core/kqp/gateway
     ydb/core/health_check
     ydb/core/mon
     ydb/core/node_whiteboard

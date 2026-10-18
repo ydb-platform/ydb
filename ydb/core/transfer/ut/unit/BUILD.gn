@@ -26,6 +26,7 @@ unittest_executable("unit") {
     "//yql/essentials/public/purecalc/common",
     "//yql/essentials/public/udf/service/exception_policy",  # peerdir only
     "//yql/essentials/sql/pg_dummy",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
   ]
 
   sources = [

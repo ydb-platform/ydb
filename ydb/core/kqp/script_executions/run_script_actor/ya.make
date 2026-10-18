@@ -1,10 +1,10 @@
 LIBRARY()
 
 SRCS(
-    kqp_run_script_actor.cpp
-    kqp_run_script_actor_impl.cpp
-    kqp_script_lease_watcher_actor.cpp
-    kqp_script_result_handler.cpp
+    kqp_run_script_actor.cpp  # gn: into ydb/core/kqp/script_executions/table_queries
+    kqp_run_script_actor_impl.cpp  # gn: into ydb/core/kqp/script_executions/table_queries
+    kqp_script_lease_watcher_actor.cpp  # gn: into ydb/core/kqp/script_executions/table_queries
+    kqp_script_result_handler.cpp  # gn: into ydb/core/kqp/script_executions/table_queries
 )
 
 PEERDIR(

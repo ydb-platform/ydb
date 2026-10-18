@@ -1,0 +1,3 @@
+library("lib") {
+  sources = [ "erfinv.cpp" ]
+}

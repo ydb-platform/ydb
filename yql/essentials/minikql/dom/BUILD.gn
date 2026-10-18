@@ -2,13 +2,13 @@ library("dom") {
   public_deps = [
     # "//library/cpp/deprecated/enum_codegen",
     "//yql/essentials/public/udf",
+    "//yql/essentials/utils",
   ]
 
   deps = [
     "//library/cpp/containers/stack_vector",
     "//library/cpp/json",
     "//library/cpp/yson_pull",
-    "//yql/essentials/utils",
   ]
 
   sources = [

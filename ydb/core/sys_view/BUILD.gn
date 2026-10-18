@@ -78,10 +78,10 @@ library("resource_pool_classifiers") {
     "//ydb/core/sys_view/common",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/yql/dq/actors/compute",
-    # "//ydb/services/metadata",
+    "//ydb/services/metadata",
     # "//ydb/services/workload_manager/actors",
     "//ydb/services/workload_manager/actors:scheme_actors",  # peerdir only
-    # "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
+    "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
     # "//yql/essentials/types/binary_json",
   ]
 
@@ -141,12 +141,12 @@ library("streaming_queries") {
   deps = [
     "//contrib/libs/fmt",
     "//library/cpp/protobuf/json",
-    # "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/common/events",
     "//ydb/core/kqp/gateway/behaviour/streaming_query/common",
-    # "//ydb/core/kqp/script_executions/common",
+    "//ydb/core/kqp/script_executions/common",
     "//ydb/core/sys_view/common",
     "//ydb/library/query_actor",
-    # "//ydb/services/workload_manager/actors",
+    "//ydb/services/workload_manager/actors",
   ]
 
   sources = [ "streaming_queries/streaming_queries.cpp" ]
@@ -176,7 +176,7 @@ library("sys_view") {
     # "//ydb/core/sys_view/service",  # peerdir only
     "//ydb/core/sys_view/show_create",
     "//ydb/core/sys_view/storage",
-    # "//ydb/core/sys_view/udf_modules",
+    "//ydb/core/sys_view/udf_modules",
     # "//ydb/core/tx/schemeshard",  # peerdir only
     # "//ydb/core/tx/tx_proxy",  # peerdir only
     # "//ydb/core/wrappers",  # peerdir only

@@ -1,7 +1,5 @@
 library("pqv1") {
-  public_deps = [
-    "//ydb/core/grpc_services/base",
-  ]
+  public_deps = [ "//ydb/core/grpc_services/base" ]
 
   deps = [
     # "//ydb/core/base",

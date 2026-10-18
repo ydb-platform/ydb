@@ -2,7 +2,12 @@
 
 #include <common/defines.h>
 
-#include <sanitizer/asan_interface.h>
+#if __has_include(<sanitizer/asan_interface.h>)
+#   include <sanitizer/asan_interface.h>
+#else
+#   define ASAN_UNPOISON_MEMORY_REGION(a, b)
+#   define ASAN_POISON_MEMORY_REGION(a, b)
+#endif
 
 #define DBMS_DEFAULT_HOST "localhost"
 #define DBMS_DEFAULT_PORT 9000

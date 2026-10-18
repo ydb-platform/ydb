@@ -1,6 +1,7 @@
 library("max") {
   public_deps = [
     # "//ydb/core/formats/arrow",
+    "//ydb/core/tx/columnshard/engines/scheme",
     "//ydb/core/tx/columnshard/engines/storage/indexes/portions",
     # "//ydb/core/tx/columnshard/engines/storage/indexes/portions:extractor",
     # "//ydb/library/formats/arrow/switch",
@@ -11,7 +12,6 @@ library("max") {
     # "//library/cpp/deprecated/atomic",
     # "//ydb/core/protos",  # peerdir only
     "//ydb/core/tx/columnshard/engines/portions",
-    "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/scheme/indexes/abstract",
     # "//ydb/core/tx/program",
     "//ydb/core/tx/schemeshard/olap/schema",
@@ -20,6 +20,7 @@ library("max") {
 
   sources = [
     "constructor.cpp",
+    "index_info_ext.cpp",
     "meta.cpp",
   ]
 }

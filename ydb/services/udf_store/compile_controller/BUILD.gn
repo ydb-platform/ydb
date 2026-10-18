@@ -20,6 +20,8 @@ library("compile_controller") {
     "//ydb/services/udf_store",
     "//ydb/services/udf_store/metadata_subscription",
     "//ydb/services/udf_store/wasm",
+    "//ydb/core/grpc_services",  # peerdir only
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
   ]
 
   sources = [

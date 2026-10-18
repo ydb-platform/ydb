@@ -27,6 +27,7 @@ library("aggregator") {
     "//ydb/core/tx",
     "//ydb/core/ydb_convert",
     "//ydb/library/query_actor",
+    "//ydb/library/yql/udfs/statistics_internal",
     # "//ydb/public/lib/scheme_types",
     "//yql/essentials/core/histogram",
     "//yql/essentials/public/udf",

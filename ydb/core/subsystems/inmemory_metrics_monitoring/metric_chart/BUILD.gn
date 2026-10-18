@@ -1,7 +1,7 @@
 library("metric_chart") {
   deps = [
     # "//library/cpp/monlib/service/pages",
-    # "//ydb/core/mon",
+    "//ydb/core/mon",
   ]
 
   sources = [ "resources.cpp" ]

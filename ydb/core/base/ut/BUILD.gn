@@ -29,6 +29,7 @@ unittest_executable("ut") {
     "//ydb/core/tx/columnshard",
     "//ydb/core/tx/mediator",
     "//ydb/library/superlemmer_stub",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",
     "//ydb/public/api/protos",
     "//yql/essentials/sql/pg_dummy",  # peerdir only
   ]

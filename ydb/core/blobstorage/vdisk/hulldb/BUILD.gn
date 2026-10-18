@@ -1,4 +1,4 @@
-library("_self") {
+library("hulldb") {
   public_deps = [
     "//ydb/core/blobstorage/vdisk/hulldb/barriers",
     "//ydb/core/blobstorage/vdisk/hulldb/base",
@@ -9,24 +9,14 @@ library("_self") {
   deps = [
     # "//ydb/core/blobstorage/base",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
-    # "//ydb/core/blobstorage/vdisk/hulldb/fresh",  # peerdir only
-    # "//ydb/core/protos",  # peerdir only
-  ]
-
-  sources = [ "//ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h" ]
-}
-
-group("hulldb") {
-  public_deps = [
-    ":_self",
-    # "//ydb/core/blobstorage/base",  # peerdir only
-    # "//ydb/core/blobstorage/vdisk/common",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/hulldb/bulksst_add",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/hulldb/compstrat",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/hulldb/fresh",  # peerdir only
     # "//ydb/core/blobstorage/vdisk/hulldb/recovery",  # peerdir only
     # "//ydb/core/protos",  # peerdir only
   ]
+
+  sources = [ "//ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h" ]
 }
 
 library("test") {

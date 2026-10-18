@@ -9,31 +9,42 @@ library("table_queries") {
   ]
 
   deps = [
-    # "//contrib/libs/fmt",
+    "//contrib/libs/fmt",
     # "//library/cpp/json",
-    # "//library/cpp/protobuf/interop",
-    # "//library/cpp/protobuf/json",
+    "//library/cpp/protobuf/interop",
+    "//library/cpp/protobuf/json",
     # "//library/cpp/retry",
+    # "//ydb/core/base",  # peerdir only
+    # "//ydb/core/fq/libs/checkpointing/events",
     "//ydb/core/fq/libs/common",
-    # "//ydb/core/grpc_services",
-    # "//ydb/core/kqp/common",
+    "//ydb/core/grpc_services",
+    "//ydb/core/kqp/common",
     # "//ydb/core/kqp/common/simple",
+    # "//ydb/core/kqp/executer_actor",
+    "//ydb/core/kqp/federated_query",
     "//ydb/core/kqp/script_executions/common",
     "//ydb/core/kqp/script_executions/proto",
-    "//ydb/core/kqp/script_executions/run_script_actor",
     # "//ydb/core/util",
     # "//ydb/library/aclib",
+    # "//ydb/library/actors/wilson",
     "//ydb/library/query_actor",
     "//ydb/library/services",
     "//ydb/library/table_creator",
     "//ydb/library/yql/providers/pq/proto",
+    # "//ydb/library/yverify_stream",
     # "//ydb/public/lib/scheme_types",
     # "//ydb/public/sdk/cpp/src/client/params",
     # "//ydb/public/sdk/cpp/src/client/result",
     "//ydb/public/sdk/cpp/src/library/operation_id",  # peerdir only
   ]
 
-  sources = [ "kqp_script_executions.cpp" ]
+  sources = [
+    "//ydb/core/kqp/script_executions/run_script_actor/kqp_run_script_actor.cpp",
+    "//ydb/core/kqp/script_executions/run_script_actor/kqp_run_script_actor_impl.cpp",
+    "//ydb/core/kqp/script_executions/run_script_actor/kqp_script_lease_watcher_actor.cpp",
+    "//ydb/core/kqp/script_executions/run_script_actor/kqp_script_result_handler.cpp",
+    "kqp_script_executions.cpp",
+  ]
 
   serialize_enum_headers = [ "kqp_script_executions_impl.h" ]
 }

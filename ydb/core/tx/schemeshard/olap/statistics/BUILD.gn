@@ -1,14 +1,14 @@
 library("statistics") {
   public_deps = [
     "//ydb/core/protos",
-    # "//ydb/core/tx/schemeshard/olap/common",
-    # "//ydb/library/accessor",
+    "//ydb/core/tx/schemeshard/olap/common",
+    "//ydb/library/accessor",
   ]
 
   deps = [
-    # "//ydb/core/scheme",
-    # "//ydb/core/tx/schemeshard/olap/schema",
-    # "//ydb/public/lib/scheme_types",
+    "//ydb/core/scheme",
+    "//ydb/core/tx/schemeshard/olap/schema",
+    "//ydb/public/lib/scheme_types",
   ]
 
   sources = [

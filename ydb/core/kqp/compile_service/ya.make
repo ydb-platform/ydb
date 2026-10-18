@@ -22,6 +22,7 @@ PEERDIR(
     ydb/library/query_actor
     ydb/library/ydb_issue
     ydb/library/security
+    ydb/core/kqp/query_data
     library/cpp/protobuf/json
 )
 # gn: peerdir ydb/core/kqp/session_actor:worker_common

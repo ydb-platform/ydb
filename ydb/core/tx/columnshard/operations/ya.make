@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     ydb/core/protos
     ydb/core/tx/data_events
+    ydb/core/tx/time_cast
     ydb/services/metadata
     ydb/core/tx/columnshard/data_sharing/destination/events
     ydb/core/tx/columnshard/data_reader

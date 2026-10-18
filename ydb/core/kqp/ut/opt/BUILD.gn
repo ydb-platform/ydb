@@ -16,9 +16,10 @@ unittest_executable("opt") {
     "//yql/essentials/core",
     "//yql/essentials/core/expr_nodes_gen",
     "//yql/essentials/parser/pg_catalog",
-    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",
     "//yql/essentials/parser/pg_wrapper/interface",
     "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
     "//yql/essentials/utils/log",
   ]
 

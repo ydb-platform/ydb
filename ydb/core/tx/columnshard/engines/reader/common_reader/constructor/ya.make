@@ -2,9 +2,9 @@ LIBRARY()
 
 SRCS(
     read_metadata.cpp
+    read_metadata_owner.cpp  # gn: into ydb/core/tx/columnshard
     resolver.cpp
 )
-# gn: anti-cycle facade
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/reader/abstract

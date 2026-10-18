@@ -112,7 +112,9 @@ TOperator::TOperator(const TString& storageId, const NColumnShard::TColumnShard&
     , Generation(shard.Executor()->Generation())
     , ExternalStorageOperator(std::make_shared<TExternalStorageOperatorHolder>())
 {
-    InitNewExternalOperator(shard.GetTierManagerPointer(storageId));
+    // TODO: copy-paste of TColumnShard::GetTierManagerPointer(): calling it would make this library depend on columnshard (cycle)
+    Y_ABORT_UNLESS(!!shard.Tiers);
+    InitNewExternalOperator(shard.Tiers->GetManagerOptional(NColumnShard::NTiers::TExternalStorageId::FromString(storageId)));
 }
 
 TOperator::TOperator(const TString& storageId, const TActorId& shardActorId,

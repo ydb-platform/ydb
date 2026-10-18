@@ -1,18 +1,18 @@
 library("nbs") {
   public_deps = [
     # "//contrib/libs/grpc",
-    # "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service",
     # "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
     "//ydb/public/api/grpc/draft",
   ]
 
   deps = [
-    # "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services",
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/jaeger_tracing",
-    # "//ydb/core/nbs/cloud/blockstore/libs/service",
-    # "//ydb/core/nbs/cloud/storage/core/libs/common",
+    "//ydb/core/nbs/cloud/blockstore/libs/service",
+    "//ydb/core/nbs/cloud/storage/core/libs/common",
     "//ydb/core/nbs/nbs1_compat_api/cloud/storage/core/protos",
     # "//ydb/public/api/grpc",  # peerdir only
   ]

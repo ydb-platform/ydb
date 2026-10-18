@@ -31,10 +31,12 @@ library("session_actor") {
     # "//ydb/core/kqp/executer_actor:shards_resolver",
     "//ydb/core/kqp/gateway",
     "//ydb/core/kqp/gateway/actors",
-    # "//ydb/core/kqp/host",
+    "//ydb/core/kqp/host",
     "//ydb/core/kqp/opt",
     # "//ydb/core/kqp/provider",
+    "//ydb/core/kqp/query_data",  # peerdir only
     "//ydb/core/kqp/rm_service",
+    "//ydb/core/kqp/topics",  # peerdir only
     "//ydb/core/protos/schemeshard",
     # "//ydb/core/sys_view/common",
     # "//ydb/core/sys_view/service",
@@ -47,7 +49,7 @@ library("session_actor") {
     # "//ydb/library/aclib",
     "//ydb/library/actors/async",
     "//ydb/library/persqueue/topic_parser",
-    # "//ydb/library/security",
+    "//ydb/library/security",
     "//ydb/library/ydb_issue",
     "//ydb/library/yql/utils/actor_log",
     # "//ydb/public/sdk/cpp/src/library/operation_id",

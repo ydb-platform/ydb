@@ -1,7 +1,7 @@
 # CREATE TABLE
 
-status: pending
-commit:
+status: done
+commit: e7a8c0702de34772528838cd230f079457c071c4
 id: create-table
 depends: analyze-scheme
 

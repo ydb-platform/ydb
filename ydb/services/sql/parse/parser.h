@@ -67,6 +67,7 @@ struct TCreateTableStmt {
     TIdentifier Name;
     TVector<TColumnDef> Columns;
     TVector<TIdentifier> PrimaryKey;
+    TVector<TVector<TIdentifier>> Unique;
 };
 
 struct TParseResult {

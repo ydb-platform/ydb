@@ -82,6 +82,27 @@ private:
                 }
             }
         }
+        for (const TVector<TIdentifier>& columns : Statement.Unique) {
+            TString indexName = Statement.Name.Name;
+            auto* index = Table.AddTableIndexes();
+            for (const TIdentifier& column : columns) {
+                bool known = false;
+                for (const TColumnDef& defined : Statement.Columns) {
+                    if (defined.Name.Name == column.Name) {
+                        known = true;
+                    }
+                }
+                if (!known) {
+                    error = column.Name;
+                    return false;
+                }
+                indexName += "_" + column.Name;
+                index->AddKeyColumnNames(column.Name);
+            }
+            index->SetName(indexName + "_key");
+            index->SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+            index->SetState(NKikimrSchemeOp::EIndexStateReady);
+        }
         return true;
     }
 
@@ -123,10 +144,26 @@ private:
         auto event = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         event->Record.SetDatabaseName(Database);
         auto* modify = event->Record.MutableTransaction()->MutableModifyScheme();
-        modify->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
         modify->SetWorkingDir(WorkingDir(Database, Statement));
         modify->SetFailOnExist(!Statement.IfNotExists);
-        *modify->MutableCreateTable() = Table;
+        if (Table.TableIndexesSize() == 0) {
+            modify->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
+            *modify->MutableCreateTable() = Table;
+        } else {
+            modify->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable);
+            auto* indexed = modify->MutableCreateIndexedTable();
+            *indexed->MutableTableDescription() = Table;
+            indexed->MutableTableDescription()->ClearTableIndexes();
+            for (const auto& index : Table.GetTableIndexes()) {
+                auto* created = indexed->AddIndexDescription();
+                created->SetName(index.GetName());
+                created->SetType(index.GetType());
+                created->SetState(index.GetState());
+                for (const auto& column : index.GetKeyColumnNames()) {
+                    created->AddKeyColumnNames(column);
+                }
+            }
+        }
         Send(MakeTxProxyID(), event.Release());
         Become(&TCreateTableActor::StatePropose);
     }

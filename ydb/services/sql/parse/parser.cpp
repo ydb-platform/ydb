@@ -162,16 +162,21 @@ public:
 
         TVector<TIdentifier> inlineKey;
         while (Current.Kind != ETokenKind::RightParen) {
-            if (IsTableConstraint()) {
-                if (!IsKeyword("primary")) {
-                    return Unsupported(Current.Text);
+            if (IsKeyword("unique")) {
+                TVector<TIdentifier> columns;
+                if (auto error = ParseColumnList(columns)) {
+                    return *error;
                 }
+                create.Unique.push_back(std::move(columns));
+            } else if (IsKeyword("primary")) {
                 if (!create.PrimaryKey.empty() || !inlineKey.empty()) {
                     return Unsupported("primary key");
                 }
                 if (auto error = ParsePrimaryKey(create.PrimaryKey)) {
                     return *error;
                 }
+            } else if (IsTableConstraint()) {
+                return Unsupported(Current.Text);
             } else if (Current.Kind == ETokenKind::Identifier) {
                 TColumnDef column;
                 bool inlinePrimary = false;
@@ -253,11 +258,7 @@ private:
         return std::nullopt;
     }
 
-    std::optional<TParseResult> ParsePrimaryKey(TVector<TIdentifier>& key) {
-        Advance();
-        if (!IsKeyword("key")) {
-            return Unsupported(Current.Text);
-        }
+    std::optional<TParseResult> ParseColumnList(TVector<TIdentifier>& columns) {
         Advance();
         if (Current.Kind != ETokenKind::LeftParen) {
             return Unsupported(Current.Text);
@@ -266,20 +267,31 @@ private:
         if (Current.Kind != ETokenKind::Identifier) {
             return Unsupported(Current.Text);
         }
-        key.push_back(Identifier());
+        columns.push_back(Identifier());
         Advance();
         while (Current.Kind == ETokenKind::Comma) {
             Advance();
             if (Current.Kind != ETokenKind::Identifier) {
                 return Unsupported(Current.Text);
             }
-            key.push_back(Identifier());
+            columns.push_back(Identifier());
             Advance();
         }
         if (Current.Kind != ETokenKind::RightParen) {
             return Unsupported(Current.Text);
         }
         Advance();
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ParsePrimaryKey(TVector<TIdentifier>& key) {
+        Advance();
+        if (!IsKeyword("key")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = ParseColumnList(key)) {
+            return error;
+        }
         return std::nullopt;
     }
 

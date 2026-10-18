@@ -33,4 +33,12 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(check.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(check.Message, "check");
     }
+
+    Y_UNIT_TEST(UniqueColumnList) {
+        const TParseResult parsed = Parse("CREATE TABLE t (id int4 PRIMARY KEY, email text, UNIQUE (email))");
+        UNIT_ASSERT(parsed.CreateTable);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateTable->Unique.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateTable->Unique[0].size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateTable->Unique[0][0].Name, "email");
+    }
 }

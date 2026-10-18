@@ -112,6 +112,134 @@ Y_UNIT_TEST(Mirror3of4TwoFailedDisksAndEmptyRemainderReturnNoData) {
     CheckMirror3of4PendingPages(NKikimrProto::ERROR, false);
 }
 
+void CheckOtherErasurePendingPages(TErasureType::EErasureSpecies erasure,
+        NKikimrProto::EReplyStatus firstPageStatus, bool trailingFailures) {
+    const bool mirror = erasure == TErasureType::ErasureMirror3dc;
+    TBlobStorageGroupType type(erasure);
+    TTestBasicRuntime runtime;
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, type, 0, 0, TBlobStorageGroupInfo::EEM_NONE);
+    TTestState state(runtime, env.Info);
+    auto& group = state.GetGroupMock();
+    const ui64 tabletId = 72075186224047637;
+    const TLogoBlobID anchor(tabletId, 1, 2, 0, state.BlobSize, 0);
+    const TVector<ui32> slots = mirror ? TVector<ui32>{0, 3, 6} : TVector<ui32>{0, 6, 7};
+    TVector<TVDiskMock*> pageDisks;
+    THashSet<TVDiskID> pageDiskIds;
+    for (ui32 slot : slots) {
+        auto& disk = group.GetVDiskInSubgroup(anchor, slot);
+        pageDisks.push_back(&disk);
+        pageDiskIds.insert(disk.GetVDiskId());
+    }
+    const ui32 pageSize = mirror ? 100 : 10;
+    TVector<TLogoBlobID> ids;
+    for (ui32 step = 2; ids.size() < pageSize && step < 100000; ++step) {
+        const TLogoBlobID id(tabletId, 1, step, 0, state.BlobSize, 0);
+        bool valid = true;
+        for (auto* disk : pageDisks) {
+            valid &= bool(TIngress::CreateIngressWithLocal(&env.Info->GetTopology(),
+                disk->GetVDiskId(), TLogoBlobID(id, 1)));
+        }
+        if (!valid) {
+            continue;
+        }
+        ids.push_back(id);
+        for (auto* disk : pageDisks) {
+            UNIT_ASSERT_VALUES_EQUAL(disk->Put(TLogoBlobID(id, 1),
+                TString(type.PartSize(id), 'x')), NKikimrProto::OK);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ids.size(), pageSize);
+    // block-4-2: three copies of one part are still an unrecoverable fragment.
+    // mirror-3dc: copies in only one realm are recoverable but not fully written.
+    // Two initial failures in a different realm still fit its failure model.
+    group.GetVDiskInSubgroup(anchor, mirror ? 1 : 4).SetError(NKikimrProto::ERROR);
+    if (mirror) {
+        group.GetVDiskInSubgroup(anchor, 4).SetError(NKikimrProto::ERROR);
+    }
+    auto discover = std::make_unique<TEvBlobStorage::TEvDiscover>(
+        tabletId, 1, true, false, TInstant::Max(), 0, true);
+    runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, discover.release()), 0, true);
+    TVector<TEvBlobStorage::TEvVGet::TPtr> initial;
+    for (ui32 i = 0; i < env.Info->GetTotalVDisksNum(); ++i) {
+        initial.push_back(state.GrabEventPtr<TEvBlobStorage::TEvVGet>());
+    }
+    for (auto& request : initial) {
+        UNIT_ASSERT(request->Get()->Record.HasRangeQuery());
+        auto reply = state.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
+        group.OnVGet(*request->Get(), *reply->Get());
+        const auto disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
+        if (pageDiskIds.contains(disk)) {
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.ResultSize(), pageSize);
+            UNIT_ASSERT(reply->Get()->Record.GetIsRangeOverflow());
+        }
+        runtime.Send(reply.Release());
+    }
+    if (mirror) {
+        // Lose the unconfirmed copies after the index read, before body reads.
+        // Get must return NODATA for each phantom before Discover asks for more.
+        for (auto* disk : pageDisks) {
+            disk->Wipe();
+        }
+    }
+    TVector<TEvBlobStorage::TEvVGet::TPtr> nextPages;
+    THashSet<TVDiskID> queried;
+    ui32 bodyQueries = 0;
+    while (nextPages.size() < pageDisks.size()) {
+        auto request = state.GrabEventPtr<TEvBlobStorage::TEvVGet>();
+        const auto& record = request->Get()->Record;
+        if (!record.HasRangeQuery()) {
+            UNIT_ASSERT(mirror);
+            UNIT_ASSERT(++bodyQueries < 10000);
+            auto reply = state.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
+            group.OnVGet(*request->Get(), *reply->Get());
+            runtime.Send(reply.Release());
+            continue;
+        }
+        const auto disk = VDiskIDFromVDiskID(record.GetVDiskID());
+        UNIT_ASSERT(pageDiskIds.contains(disk));
+        UNIT_ASSERT(queried.insert(disk).second);
+        UNIT_ASSERT(LogoBlobIDFromLogoBlobID(record.GetRangeQuery().GetFrom()) < ids.front());
+        nextPages.push_back(std::move(request));
+    }
+    UNIT_ASSERT(!mirror || bodyQueries > 0);
+    for (ui32 i = 0; i < nextPages.size(); ++i) {
+        auto& request = nextPages[i];
+        const auto status = i == 0 ? firstPageStatus
+            : trailingFailures ? NKikimrProto::ERROR : NKikimrProto::OK;
+        if (status != NKikimrProto::OK) {
+            group.SetError(VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID()), status);
+        }
+        auto reply = state.CreateEventResultPtr(request, NKikimrProto::UNKNOWN);
+        group.OnVGet(*request->Get(), *reply->Get());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), status);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.ResultSize(), 0);
+        runtime.Send(reply.Release());
+    }
+    auto result = state.GrabEventPtr<TEvBlobStorage::TEvDiscoverResult>();
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status,
+        trailingFailures ? NKikimrProto::ERROR : NKikimrProto::NODATA);
+}
+
+#define PENDING_PAGE_TESTS(Name, Erasure) \
+Y_UNIT_TEST(Name##EmptyPageDoesNotHidePendingFailures) { \
+    CheckOtherErasurePendingPages(Erasure, NKikimrProto::OK, true); \
+} \
+Y_UNIT_TEST(Name##FailedPageDoesNotHidePendingFailures) { \
+    CheckOtherErasurePendingPages(Erasure, NKikimrProto::ERROR, true); \
+} \
+Y_UNIT_TEST(Name##EmptyRemainingPagesReturnNoData) { \
+    CheckOtherErasurePendingPages(Erasure, NKikimrProto::OK, false); \
+} \
+Y_UNIT_TEST(Name##ToleratedFailureAndEmptyRemainderReturnNoData) { \
+    CheckOtherErasurePendingPages(Erasure, NKikimrProto::ERROR, false); \
+}
+
+PENDING_PAGE_TESTS(Block42, TErasureType::Erasure4Plus2Block)
+PENDING_PAGE_TESTS(Mirror3dc, TErasureType::ErasureMirror3dc)
+#undef PENDING_PAGE_TESTS
+
 Y_UNIT_TEST(Block42Success) {
     TBlobStorageGroupType type(TErasureType::Erasure4Plus2Block);
     TTestBasicRuntime runtime;

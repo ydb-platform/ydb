@@ -26,6 +26,7 @@ struct TLiteral {
         Integer,
         String,
         Null,
+        Parameter,
     };
 
     EKind Kind = EKind::Integer;

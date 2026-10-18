@@ -1,7 +1,7 @@
 # INSERT SELECT
 
-status: pending
-commit:
+status: done
+commit: 3c280d6604707b23648b41271100d38ff178e9f2
 id: insert-select
 depends: insert-row
 

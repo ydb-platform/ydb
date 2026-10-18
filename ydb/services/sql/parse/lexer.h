@@ -15,6 +15,7 @@ enum class ETokenKind {
     RightParen,
     Operator,
     Number,
+    Parameter,
     String,
     Error,
 };

@@ -179,7 +179,7 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
     return MakeTextResult(columns, cells);
 }
 
-TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag) {
+TString MakeRowDescription(TArrayRef<const TResultColumn> columns) {
     TString description;
     AppendBe16(description, static_cast<ui16>(columns.size()));
     for (const TResultColumn& column : columns) {
@@ -191,8 +191,11 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
         AppendBe32(description, static_cast<ui32>(-1));
         AppendBe16(description, 0);
     }
+    return MakeMessage('T', description);
+}
 
-    TString out = MakeMessage('T', description);
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag, bool ready) {
+    TString out = MakeRowDescription(columns);
     for (const TVector<TTextCell>& row : rows) {
         TString data;
         AppendBe16(data, static_cast<ui16>(row.size()));
@@ -210,8 +213,35 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
     TString complete = tag ? TString(tag) : "SELECT " + ToString(rows.size());
     complete.push_back('\0');
     out.append(MakeMessage('C', complete));
-    out.append(MakeReadyForQuery());
+    if (ready) {
+        out.append(MakeReadyForQuery());
+    }
     return out;
+}
+
+TString MakeParseComplete() {
+    return MakeMessage('1', {});
+}
+
+TString MakeBindComplete() {
+    return MakeMessage('2', {});
+}
+
+TString MakeCloseComplete() {
+    return MakeMessage('3', {});
+}
+
+TString MakeNoData() {
+    return MakeMessage('n', {});
+}
+
+TString MakeParameterDescription(ui16 count) {
+    TString payload;
+    AppendBe16(payload, count);
+    for (ui16 i = 0; i < count; ++i) {
+        AppendBe32(payload, 0);
+    }
+    return MakeMessage('t', payload);
 }
 
 TString MakeHandshake(ui32 backendPid, ui32 secret) {

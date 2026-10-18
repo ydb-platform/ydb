@@ -88,6 +88,8 @@ public:
                 literal = {TLiteral::EKind::Null, {}};
             } else if (Current.Kind == ETokenKind::Number) {
                 literal = {TLiteral::EKind::Integer, Current.Text};
+            } else if (Current.Kind == ETokenKind::Parameter) {
+                literal = {TLiteral::EKind::Parameter, Current.Text};
             } else if (Current.Kind == ETokenKind::String) {
                 literal = {TLiteral::EKind::String, Current.Text};
             } else {
@@ -131,6 +133,8 @@ public:
             literal = {TLiteral::EKind::Null, {}};
         } else if (Current.Kind == ETokenKind::Number) {
             literal = {TLiteral::EKind::Integer, Current.Text};
+        } else if (Current.Kind == ETokenKind::Parameter) {
+            literal = {TLiteral::EKind::Parameter, Current.Text};
         } else if (Current.Kind == ETokenKind::String) {
             literal = {TLiteral::EKind::String, Current.Text};
         } else {
@@ -1026,6 +1030,8 @@ private:
             Advance();
             if (Current.Kind == ETokenKind::Number) {
                 comparison.Value = {TLiteral::EKind::Integer, Current.Text};
+            } else if (Current.Kind == ETokenKind::Parameter) {
+                comparison.Value = {TLiteral::EKind::Parameter, Current.Text};
             } else if (Current.Kind == ETokenKind::String) {
                 comparison.Value = {TLiteral::EKind::String, Current.Text};
             } else {

@@ -100,6 +100,17 @@ TToken TLexer::Next() {
         ++Position;
         return {ETokenKind::RightParen, ")", false};
     }
+    if (ch == '$') {
+        ++Position;
+        const size_t begin = Position;
+        while (Position < Input.size() && IsAsciiDigit(Input[Position])) {
+            ++Position;
+        }
+        if (begin == Position) {
+            return {ETokenKind::Error, "$", false};
+        }
+        return {ETokenKind::Parameter, TString(Input.substr(begin, Position - begin)), false};
+    }
     if (ch == '\'' ) {
         ++Position;
         TString text;

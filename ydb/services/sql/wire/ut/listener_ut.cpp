@@ -253,9 +253,11 @@ Y_UNIT_TEST_SUITE(SqlListener) {
         TString parse;
         parse.push_back('P');
         AppendBe32(parse, 4);
+        parse.push_back('S');
+        AppendBe32(parse, 4);
         UNIT_ASSERT(SendAll(*extended, parse));
         const TString extendedReply = ReadReply(*extended);
-        UNIT_ASSERT(extendedReply.Contains("0A000"));
+        UNIT_ASSERT(extendedReply.Contains("08P01"));
         UNIT_ASSERT(HasReadyForQuery(extendedReply));
 
         auto ssl = Open(sqlPort);

@@ -9,8 +9,15 @@ namespace NKikimr::NSql {
 inline constexpr ui32 EvExecute = EventSpaceBegin(TKikimrEvents::ES_SQL) + 4;
 inline constexpr ui32 EvExecuteResult = EventSpaceBegin(TKikimrEvents::ES_SQL) + 5;
 
+struct TBoundParam {
+    bool Null = false;
+    bool Number = false;
+    TString Text;
+};
+
 struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
     TString Sql;
+    TVector<TBoundParam> Params;
 };
 
 // Result of one statement. The wire session turns this into protocol frames.

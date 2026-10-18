@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/hash.h>
 #include <util/string/cast.h>
 
 namespace NKikimr::NSql {
@@ -20,7 +21,66 @@ namespace {
 struct TRequest {
     NActors::TActorId Client;
     TString Sql;
+    TVector<TBoundParam> Params;
 };
+
+bool FillParam(TLiteral& literal, const TVector<TBoundParam>& params, TString& sqlState, TString& message) {
+    if (literal.Kind != TLiteral::EKind::Parameter) {
+        return true;
+    }
+    ui32 index = 0;
+    if (!TryFromString(literal.Text, index) || index == 0 || index > params.size()) {
+        sqlState = "22023";
+        message = "parameter $" + literal.Text;
+        return false;
+    }
+    const TBoundParam& bound = params[index - 1];
+    if (bound.Null) {
+        literal.Kind = TLiteral::EKind::Null;
+        literal.Text.clear();
+    } else if (bound.Number) {
+        literal.Kind = TLiteral::EKind::Integer;
+        literal.Text = bound.Text;
+    } else {
+        literal.Kind = TLiteral::EKind::String;
+        literal.Text = bound.Text;
+    }
+    return true;
+}
+
+bool ApplyParams(TParseResult& parsed, const TVector<TBoundParam>& params, TString& sqlState, TString& message) {
+    auto where = [&](TVector<TComparison>& comparisons) {
+        for (TComparison& comparison : comparisons) {
+            if (!FillParam(comparison.Value, params, sqlState, message)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (parsed.Select && !where(parsed.Select->Where)) {
+        return false;
+    }
+    if (!parsed.Insert) {
+        return true;
+    }
+    for (TLiteral& literal : parsed.Insert->Values) {
+        if (!FillParam(literal, params, sqlState, message)) {
+            return false;
+        }
+    }
+    for (TUpdateAssign& assign : parsed.Insert->Update) {
+        if (!assign.Excluded && !FillParam(assign.Value, params, sqlState, message)) {
+            return false;
+        }
+    }
+    if (parsed.Insert->ConflictWhere && !FillParam(parsed.Insert->ConflictWhere->Value, params, sqlState, message)) {
+        return false;
+    }
+    if (parsed.Insert->Source && !where(parsed.Insert->Source->Where)) {
+        return false;
+    }
+    return true;
+}
 
 class TSqlSession : public NActors::TActorBootstrapped<TSqlSession> {
 public:
@@ -129,12 +189,28 @@ private:
         const TRequest request = std::move(Queue.front());
         Queue.erase(Queue.begin());
         Client = request.Client;
-        const TParseResult parsed = Parse(request.Sql);
+        TParseResult parsed;
+        if (const TParseResult* cached = Parsed.FindPtr(request.Sql)) {
+            parsed = *cached;
+        } else {
+            parsed = Parse(request.Sql);
+            if (!parsed.SqlState) {
+                Parsed[request.Sql] = parsed;
+            }
+        }
+        if (!parsed.SqlState) {
+            TString sqlState;
+            TString message;
+            if (!ApplyParams(parsed, request.Params, sqlState, message)) {
+                Fail(sqlState, message);
+                return;
+            }
+        }
         Start(parsed, request.Sql);
     }
 
     void HandleExecute(TEvExecute::TPtr& ev) {
-        Queue.push_back({ev->Sender, std::move(ev->Get()->Sql)});
+        Queue.push_back({ev->Sender, std::move(ev->Get()->Sql), std::move(ev->Get()->Params)});
         Pump();
     }
 
@@ -171,6 +247,7 @@ private:
     const TString Database;
     const ui32 InternalErrorRetries;
     TVector<TRequest> Queue;
+    THashMap<TString, TParseResult> Parsed;
     NActors::TActorId Client;
     bool Busy = false;
 };

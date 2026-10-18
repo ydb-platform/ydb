@@ -49,6 +49,12 @@ struct TTextCell {
 
 // Text-format result: RowDescription, DataRow per row, CommandComplete, ReadyForQuery.
 TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TString>> rows);
-TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag = {});
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag = {}, bool ready = true);
+TString MakeParseComplete();
+TString MakeBindComplete();
+TString MakeCloseComplete();
+TString MakeNoData();
+TString MakeParameterDescription(ui16 count);
+TString MakeRowDescription(TArrayRef<const TResultColumn> columns);
 
 } // namespace NKikimr::NSql

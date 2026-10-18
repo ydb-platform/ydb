@@ -390,7 +390,7 @@ TCodecValue DecodeInteger(NScheme::TTypeId type, TStringBuf wire, EWireFormat fo
 
 } // namespace
 
-TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format) {
+TCodecValue EncodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format) {
     if (!Supported(type)) {
         return Unsupported();
     }
@@ -406,7 +406,7 @@ TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireF
     return EncodeInteger(type, cell, format);
 }
 
-TCodecValue DecodeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format) {
+TCodecValue DecodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format) {
     if (!Supported(type)) {
         return Unsupported();
     }

@@ -24,4 +24,10 @@ struct TCodecValue {
 TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
 TCodecValue DecodeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
 
+// One family per file. A family that does not own the type returns 0A000.
+TCodecValue EncodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
+TCodecValue DecodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
+TCodecValue EncodeTextCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
+TCodecValue DecodeTextCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
+
 } // namespace NKikimr::NSql

@@ -1,7 +1,7 @@
 # Кодек целых и bool
 
-status: pending
-commit:
+status: done
+commit: 65b2b46ee73f18d1a12c8d310b5a849b15093cb7
 id: codec-ints
 depends: analyze-scheme
 

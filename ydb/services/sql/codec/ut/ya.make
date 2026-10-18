@@ -4,6 +4,7 @@ SIZE(SMALL)
 
 SRCS(
     ints_ut.cpp
+    text_ut.cpp
 )
 
 PEERDIR(

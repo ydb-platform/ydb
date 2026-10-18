@@ -1,7 +1,9 @@
 LIBRARY()
 
 SRCS(
+    dispatch.cpp
     ints.cpp
+    text.cpp
 )
 
 PEERDIR(

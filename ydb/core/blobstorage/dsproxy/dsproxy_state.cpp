@@ -105,6 +105,17 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::ApplyGroupInfo(TIntrusivePtr<TBlobStorageGroupInfo>&& info,
             TNodeLayoutInfoPtr nodeLayoutInfo, TIntrusivePtr<TStoragePoolCounters>&& counters) {
+        if (info && info->BlobDepotId.value_or(0) && info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+            // decommission is over, the group has no physical part and the BlobDepot agent in front of us serves it, so we
+            // are going to be stopped; requests queued before we got any configuration (that is before node warden put
+            // the agent in place) belong to the agent
+            const TActorId serviceId = MakeBlobStorageProxyID(info->GroupID);
+            UnconfiguredBufferSize = 0;
+            for (std::unique_ptr<IEventHandle>& ev : std::exchange(InitQueue, {})) {
+                TActivationContext::Send(IEventHandle::Forward(std::move(ev), serviceId).release());
+            }
+            return;
+        }
         if (info && info->IsInlinePile()) {
             // node warden puts bridge proxy in front of this one for inline pile and feeds us with the pile view only;
             // morphing into forwarder would make bridge proxy loop requests to itself
@@ -113,8 +124,13 @@ namespace NKikimr {
         }
         if (info && info->IsBridged()) {
             const TActorId serviceId = MakeBlobStorageProxyID(info->GroupID);
+            // when the group is being decommitted, node warden has put BlobDepot agent in front of us and the service id
+            // belongs to the agent; the bridge proxy has to serve agent's requests only then
+            const bool behindAgent = info->BlobDepotId.value_or(0);
             BridgeProxyId = RegisterWithSameMailbox(CreateBridgeProxyActor(std::move(info)));
-            TActivationContext::ActorSystem()->RegisterLocalService(serviceId, BridgeProxyId);
+            if (!behindAgent) {
+                TActivationContext::ActorSystem()->RegisterLocalService(serviceId, BridgeProxyId);
+            }
             Become(&TThis::StateForward);
             ProcessInitQueue();
             return;

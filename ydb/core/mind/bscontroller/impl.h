@@ -918,10 +918,11 @@ public:
             return std::make_tuple(GetReportedBlobDepotId(), DecommitStatus);
         }
 
-        // does this group have both physical and virtual parts (it is being decommitted or recommissioned); such
-        // group is not bridged, and conversion to bridged cluster is not finished until it loses one of the parts
+        // is this an unbridged group having both physical and virtual parts (it is being decommitted or recommissioned);
+        // such group can't be bridged, and conversion to bridged cluster is not finished until it loses one of the parts;
+        // already bridged group may be decommitted as a whole, it doesn't block anything
         bool BlocksBridgeConversion() const {
-            return !VDisksInGroup.empty() && (VirtualGroupState || BlobDepotId);
+            return !VDisksInGroup.empty() && (VirtualGroupState || BlobDepotId) && !BridgeGroupInfo;
         }
 
         using TGroupFinder = std::function<const TGroupInfo*(TGroupId)>;

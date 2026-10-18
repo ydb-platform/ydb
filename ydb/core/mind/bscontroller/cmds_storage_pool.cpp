@@ -246,15 +246,15 @@ namespace NKikimr::NBsController {
             throw TExError() << "can't invoke DeleteStoragePool against DDisk pool";
         }
 
-        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+        std::vector<TGroupId> groups;
+        const auto& storagePoolGroups = StoragePoolGroups.Get();
         for (auto it = storagePoolGroups.lower_bound({id, Min<TGroupId>()});
-                it != storagePoolGroups.end() && it->first == id; it = storagePoolGroups.erase(it)) {
-            const TGroupId groupId = it->second;
+                it != storagePoolGroups.end() && it->first == id; ++it) {
+            groups.push_back(it->second);
+        }
+        for (const TGroupId groupId : groups) {
             if (const TGroupInfo *groupInfo = Groups.Find(groupId)) {
-                for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                    DestroyVSlot(vslot->VSlotId);
-                }
-                DeleteExistingGroup(groupId);
+                DeleteExistingGroupWithVSlots(*groupInfo);
             } else {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
@@ -838,26 +838,7 @@ namespace NKikimr::NBsController {
             if (!groupInfo) {
                 throw TExGroupNotFound(groupId);
             }
-            for (const TVSlotInfo *vslot : groupInfo->VDisksInGroup) {
-                DestroyVSlot(vslot->VSlotId);
-            }
-
-            // adjust number of groups in storage pool
-            auto& storagePools = StoragePools.Unshare();
-            const auto spIt = storagePools.find(groupInfo->StoragePoolId);
-            Y_ABORT_UNLESS(spIt != storagePools.end());
-            if (auto& numGroups = spIt->second.NumGroups; !groupInfo->IsBridgePileOnly() && numGroups) {
-                --numGroups;
-            } else {
-                Y_DEBUG_ABORT_UNLESS(groupInfo->IsBridgePileOnly());
-            }
-
-            // remove group from storage pool group mapping
-            auto& storagePoolGroups = StoragePoolGroups.Unshare();
-            const size_t numErased = storagePoolGroups.erase({spIt->first, groupInfo->ID});
-            Y_ABORT_UNLESS(numErased == 1);
-
-            DeleteExistingGroup(groupInfo->ID);
+            DeleteExistingGroupWithVSlots(*groupInfo);
         }
     }
 

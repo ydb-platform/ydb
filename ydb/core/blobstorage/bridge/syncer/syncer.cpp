@@ -617,6 +617,13 @@ namespace NKikimr::NBridge {
         DoMergeLoop();
     }
 
+    void TSyncerActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
+        // the group has gone (e.g. it was deleted while being synced), so this syncer is useless now
+        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS16, "TEvUndelivered", (LogId, LogId), (SourceType, ev->Get()->SourceType),
+            (Reason, ev->Get()->Reason));
+        Terminate(TStringBuilder() << "request undelivered SourceType# " << ev->Get()->SourceType);
+    }
+
     STRICT_STFUNC(TSyncerActor::StateFunc,
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle)
         hFunc(TEvBlobStorage::TEvAssimilateResult, Handle)
@@ -625,6 +632,7 @@ namespace NKikimr::NBridge {
         hFunc(TEvBlobStorage::TEvPutResult, Handle)
         hFunc(TEvBlobStorage::TEvGetResult, Handle)
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle)
+        hFunc(TEvents::TEvUndelivered, Handle)
         cFunc(TEvents::TSystem::Poison, PassAway)
     )
 

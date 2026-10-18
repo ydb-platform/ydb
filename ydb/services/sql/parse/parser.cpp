@@ -116,6 +116,16 @@ public:
         if (IsKeyword("schema")) {
             return CreateSchema();
         }
+        if (IsKeyword("unique")) {
+            Advance();
+            if (!IsKeyword("index")) {
+                return Unsupported(Current.Text);
+            }
+            return CreateIndex(true);
+        }
+        if (IsKeyword("index")) {
+            return CreateIndex(false);
+        }
         return Unsupported(Current.Text);
     }
 
@@ -256,6 +266,48 @@ private:
         }
         Advance();
         return std::nullopt;
+    }
+
+    TParseResult CreateIndex(bool unique) {
+        Advance();
+        TCreateIndexStmt index;
+        index.Unique = unique;
+        if (IsKeyword("concurrently") || IsKeyword("using") || IsKeyword("tablespace")) {
+            return Unsupported(Current.Text);
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        index.Name = Identifier();
+        Advance();
+        if (!IsKeyword("on")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (auto error = QualifiedName(index.Schema, index.Table)) {
+            return *error;
+        }
+        if (IsKeyword("using") || IsKeyword("tablespace")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = ParenthesizedNames(index.Keys)) {
+            return *error;
+        }
+        if (IsKeyword("include")) {
+            Advance();
+            if (auto error = ParenthesizedNames(index.Include)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("where") || IsKeyword("tablespace") || IsKeyword("using")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.CreateIndex = std::move(index);
+        return result;
     }
 
     TParseResult CreateSchema() {
@@ -719,6 +771,31 @@ private:
         if (IsKeyword("offset") || IsKeyword("fetch")) {
             return Unsupported(Current.Text);
         }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ParenthesizedNames(TVector<TIdentifier>& names) {
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        names.push_back(Identifier());
+        Advance();
+        while (Current.Kind == ETokenKind::Comma) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            names.push_back(Identifier());
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
         return std::nullopt;
     }
 

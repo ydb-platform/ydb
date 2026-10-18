@@ -170,4 +170,19 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(owner.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(owner.Message, "owner");
     }
+
+    Y_UNIT_TEST(CreateIndex) {
+        const TParseResult parsed = Parse("CREATE UNIQUE INDEX note_idx ON app.t (note) INCLUDE (email)");
+        UNIT_ASSERT(parsed.CreateIndex);
+        UNIT_ASSERT(parsed.CreateIndex->Unique);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateIndex->Name.Name, "note_idx");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateIndex->Table.Name, "t");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateIndex->Keys[0].Name, "note");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateIndex->Include[0].Name, "email");
+
+        const TParseResult filtered = Parse("CREATE INDEX email_idx ON t (email) WHERE email = 'a'");
+        UNIT_ASSERT(!filtered.CreateIndex);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(filtered.Message, "where");
+    }
 }

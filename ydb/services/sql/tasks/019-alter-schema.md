@@ -1,7 +1,7 @@
 # ALTER SCHEMA отвечает 0A000
 
-status: pending
-commit:
+status: done
+commit: d67915b56cfa239212460e5cb544dc60fff9dd2b
 id: alter-schema
 depends: create-schema
 

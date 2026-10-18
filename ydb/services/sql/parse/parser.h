@@ -85,6 +85,15 @@ enum class EDropKind {
     Schema,
 };
 
+struct TCreateIndexStmt {
+    bool Unique = false;
+    std::optional<TIdentifier> Schema;
+    TIdentifier Table;
+    TIdentifier Name;
+    TVector<TIdentifier> Keys;
+    TVector<TIdentifier> Include;
+};
+
 struct TSchemaStmt {
     bool IfNotExists = false;
     TIdentifier Name;
@@ -134,6 +143,7 @@ struct TParseResult {
     std::optional<TAlterSequenceStmt> AlterSequence;
     std::optional<TDropStmt> Drop;
     std::optional<TSchemaStmt> CreateSchema;
+    std::optional<TCreateIndexStmt> CreateIndex;
     TString SqlState;
     TString Message;
 };

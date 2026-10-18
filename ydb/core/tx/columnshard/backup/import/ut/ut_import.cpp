@@ -112,8 +112,8 @@ std::shared_ptr<arrow::RecordBatch> MakeOversizedImportBatch() {
     using namespace NArrow::NConstruction;
     auto key1 = std::make_shared<TSimpleArrayConstructor<TIntSeqFiller<arrow::UInt64Type>>>("key1");
     auto key2 = std::make_shared<TSimpleArrayConstructor<TIntSeqFiller<arrow::UInt64Type>>>("key2");
-    auto field = std::make_shared<TSimpleArrayConstructor<TStringPoolFiller>>(
-        "field", TStringPoolFiller(1, kFieldBytes, TString(kFieldBytes, 'a'), 1.));
+    auto field =
+        std::make_shared<TSimpleArrayConstructor<TStringPoolFiller>>("field", TStringPoolFiller(1, kFieldBytes, TString(kFieldBytes, 'a'), 1.));
     return TRecordBatchConstructor({ key1, key2, field }).BuildBatch(kOversizedBatchRows);
 }
 
@@ -126,9 +126,9 @@ struct TRestoreColumn {
 
 const std::vector<TRestoreColumn>& RestoreColumns() {
     static const std::vector<TRestoreColumn> columns = {
-        {"key1", "Uint64", NTypeIds::Uint64, true},
-        {"key2", "Uint64", NTypeIds::Uint64, true},
-        {"field", "Utf8", NTypeIds::Utf8, false},
+        { "key1", "Uint64", NTypeIds::Uint64, true },
+        { "key2", "Uint64", NTypeIds::Uint64, true },
+        { "field", "Utf8", NTypeIds::Utf8, false },
     };
     return columns;
 }
@@ -192,8 +192,7 @@ NKikimrTxColumnShard::TBackupTxBody MakeBackupTxBody(const ui64 tableId, const N
     return txBody;
 }
 
-NKikimrTxColumnShard::TRestoreTxBody MakeRestoreTxBody(
-    const ui64 tableId, const TString& bucket, const std::optional<ui32> readBatchSize = {}) {
+NKikimrTxColumnShard::TRestoreTxBody MakeRestoreTxBody(const ui64 tableId, const TString& bucket, const std::optional<ui32> readBatchSize = {}) {
     NKikimrTxColumnShard::TRestoreTxBody txBody;
     auto& restoreTask = *txBody.MutableRestoreTask();
     restoreTask.SetTableId(tableId);
@@ -253,7 +252,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         AFL_VERIFY(checker());
     }
 
-    void PlanAndWait(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TPlanStep planStep,
+    void PlanAndWait(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TPlanStep planStep,
         const ui64 txId) {
         auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(txId);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
@@ -264,7 +263,7 @@ Y_UNIT_TEST_SUITE(Restore) {
     }
 
     template <class TCounter>
-    void RunCountedTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody,
+    void RunCountedTx(TTestBasicRuntime & runtime, TActorId & sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody,
         ui64& txId, const TCounter& counter) {
         AFL_VERIFY(counter() == 0);
         const auto planStep = ProposeTx(runtime, sender, txKind, txBody, ++txId);
@@ -272,7 +271,7 @@ Y_UNIT_TEST_SUITE(Restore) {
         PlanAndWait(runtime, sender, txKind, planStep, txId);
     }
 
-    void CommitBlob(TTestBasicRuntime& runtime, TActorId& sender, const ui64 writeId, ui64& txId, TPlanStep& planStep, const ui64 tableId,
+    void CommitBlob(TTestBasicRuntime & runtime, TActorId & sender, const ui64 writeId, ui64& txId, TPlanStep& planStep, const ui64 tableId,
         const TString& data, const std::vector<NArrow::NTest::TTestColumn>& schema) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, data, schema, true, &writeIds));
@@ -308,8 +307,9 @@ Y_UNIT_TEST_SUITE(Restore) {
             }, TDuration::Seconds(1000));
 
             RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP,
-                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucketName, {}, dataFormat).SerializeAsString(), txId,
-                [&]() { return csControllerGuard->GetFinishedExportsCount(); });
+                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucketName, {}, dataFormat).SerializeAsString(), txId, [&]() {
+                    return csControllerGuard->GetFinishedExportsCount();
+                });
             TestWaitCondition(runtime, "export", [&]() {
                 return NTestUtils::GetObjectKeys(bucketName, s3Client).size() == 3;
             });
@@ -326,8 +326,10 @@ Y_UNIT_TEST_SUITE(Restore) {
             ui64 txId = 111;
             TActorId sender = runtime.AllocateEdgeActor();
 
-            RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucketName).SerializeAsString(), txId,
-                [&]() { return csControllerGuard->GetFinishedImportsCount(); });
+            RunCountedTx(
+                runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE, MakeRestoreTxBody(tableId, bucketName).SerializeAsString(), txId, [&]() {
+                    return csControllerGuard->GetFinishedImportsCount();
+                });
             TestWaitCondition(runtime, "import", [&]() {
                 return true;
             });
@@ -378,8 +380,9 @@ Y_UNIT_TEST_SUITE(Restore) {
             ui64 writeId = 1;
             CommitBlob(runtime, sender, writeId, txId, planStep, tableId, NArrow::SerializeBatchNoCompression(batch), schema);
             RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP,
-                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucket, kWholeFileBytes).SerializeAsString(), txId,
-                [&]() { return csControllerGuard->GetFinishedExportsCount(); });
+                MakeBackupTxBody(tableId, NOlap::TSnapshot(planStep.Val(), txId), bucket, kWholeFileBytes).SerializeAsString(), txId, [&]() {
+                    return csControllerGuard->GetFinishedExportsCount();
+                });
             TestWaitCondition(runtime, "export", [&]() {
                 return NTestUtils::GetObjectKeys(bucket, s3Client).size() == 3;
             });
@@ -395,8 +398,9 @@ Y_UNIT_TEST_SUITE(Restore) {
             TActorId sender = runtime.AllocateEdgeActor();
 
             RunCountedTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_RESTORE,
-                MakeRestoreTxBody(tableId, bucket, kWholeFileBytes).SerializeAsString(), txId,
-                [&]() { return csControllerGuard->GetFinishedImportsCount(); });
+                MakeRestoreTxBody(tableId, bucket, kWholeFileBytes).SerializeAsString(), txId, [&]() {
+                    return csControllerGuard->GetFinishedImportsCount();
+                });
             VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(0, 0));

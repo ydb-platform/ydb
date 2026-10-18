@@ -84,8 +84,8 @@ struct TParseResult {
     TString Message;
 };
 
-// SELECT, or CREATE TABLE with columns, NULL and a primary key.
-// Anything else is SQLSTATE 0A000 and is not a statement.
+// PostgreSQL 18 gram.y in C++. Implemented: SELECT, CREATE TABLE, ALTER TABLE ADD COLUMN.
+// Any other rule is SQLSTATE 0A000 and is not a statement.
 TParseResult Parse(TStringBuf sql);
 
 } // namespace NKikimr::NSql

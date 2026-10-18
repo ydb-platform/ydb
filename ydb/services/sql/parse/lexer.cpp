@@ -21,14 +21,56 @@ TLexer::TLexer(TStringBuf sql)
 {
 }
 
-void TLexer::SkipSpace() {
-    while (Position < Input.size() && IsAsciiSpace(Input[Position])) {
+bool TLexer::SkipBlockComment() {
+    Position += 2;
+    int depth = 1;
+    while (Position + 1 < Input.size()) {
+        if (Input[Position] == '/' && Input[Position + 1] == '*') {
+            ++depth;
+            Position += 2;
+            continue;
+        }
+        if (Input[Position] == '*' && Input[Position + 1] == '/') {
+            --depth;
+            Position += 2;
+            if (depth == 0) {
+                return true;
+            }
+            continue;
+        }
         ++Position;
+    }
+    Position = Input.size();
+    return false;
+}
+
+void TLexer::SkipSpace() {
+    for (;;) {
+        while (Position < Input.size() && IsAsciiSpace(Input[Position])) {
+            ++Position;
+        }
+        if (Position + 1 < Input.size() && Input[Position] == '-' && Input[Position + 1] == '-') {
+            Position += 2;
+            while (Position < Input.size() && Input[Position] != '\n') {
+                ++Position;
+            }
+            continue;
+        }
+        if (Position + 1 < Input.size() && Input[Position] == '/' && Input[Position + 1] == '*') {
+            if (!SkipBlockComment()) {
+                CommentError = true;
+            }
+            continue;
+        }
+        break;
     }
 }
 
 TToken TLexer::Next() {
     SkipSpace();
+    if (CommentError) {
+        return {ETokenKind::Error, "comment", false};
+    }
     if (Position >= Input.size()) {
         return {};
     }

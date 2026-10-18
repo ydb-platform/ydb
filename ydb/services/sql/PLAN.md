@@ -2,12 +2,14 @@
 
 Код сервиса: [`ydb/services/sql`](ydb/services/sql) (в дереве сервисы лежат во множественном числе). Сборка и старт по образцу Kafka: сырой TCP через [`ydb/core/raw_socket`](ydb/core/raw_socket), инициализатор рядом с `TKafkaProxyServiceInitializer` в [`ydb/core/driver_lib/run/kikimr_services_initializers.cpp`](ydb/core/driver_lib/run/kikimr_services_initializers.cpp). gRPC `AddService` для протокола не используется.
 
-Ориентиры при реализации, без линковки их кода:
+Ориентиры при реализации. Чужой код не подключается как библиотека и не линкуется. Код PostgreSQL можно копировать в `ydb/services/sql` и переписывать на C++. KQP не копируется.
 
-- актуальный PostgreSQL (ветка 18): `src/backend/tcop`, `parser`, `optimizer/planmain.c`, `optimizer/path`, `optimizer/plan/createplan.c`, `executor/execMain.c`, `src/backend/libpq` (протокол)
+- актуальный PostgreSQL (ветка 18): `src/backend/tcop`, `parser` (`scan.l`, `gram.y`), `optimizer/planmain.c`, `optimizer/path`, `optimizer/plan/createplan.c`, `executor/execMain.c`, `src/backend/libpq` (протокол)
 - KQP только как карта поведения: scheme cache в [`kqp_table_resolver.cpp`](ydb/core/kqp/executer_actor/kqp_table_resolver.cpp), чтение в [`kqp_read_actor.cpp`](ydb/core/kqp/runtime/kqp_read_actor.cpp), запись через `TEvWrite`
 
-Запрет: `PEERDIR` и вызовы `yql/` и `ydb/core/kqp/`. Вендоренный парсер в `yql/essentials/parser/pg_wrapper` не используем.
+Запрет: `PEERDIR` и вызовы `yql/` и `ydb/core/kqp/`. Вендоренный парсер в `yql/essentials/parser/pg_wrapper` не линкуем и не копируем.
+
+Разбор SQL — перевод `scan.l` и `gram.y` на C++ в [`ydb/services/sql/parse`](ydb/services/sql/parse). Не bison, не ANTLR и не отдельная грамматика: правило `gram.y` становится методом, узел — структурой. Неподдержанное правило отвечает `0A000` там, где в `gram.y` оно начинается. Новый кусок грамматики копируется из `gram.y` тем коммитом, которому он нужен.
 
 Вся логика сервиса и любые последующие исправления лежат в `ydb/services/sql`. Каталоги [`ydb/core/tx/datashard`](ydb/core/tx/datashard) и [`ydb/core/tx/columnshard`](ydb/core/tx/columnshard), их события и протобуфы не редактируются. Сервис вызывает уже существующие `TEvRead`, `TEvWrite` и сообщения columnshard. Если готового вызова не хватает, обход делается в сервисе либо запрос отвечает `0A000`. Подключение слушателя — `ya.make`, поле конфига и инициализатор рядом с Kafka — единственные правки вне нового каталога.
 
@@ -221,7 +223,7 @@ flowchart LR
 
 3. Минимальный каталог для драйвера. Фиксированные ответы, которых хватает, чтобы `psql` дошёл до приглашения: `SELECT version()`, пустой или урезанный `pg_type` / `pg_catalog` запросы, которые шлёт libpq при старте. Список снимается с реального `psql` к PostgreSQL 18 и фиксируется тестом. Лишние каталоговые запросы — `0A000`.
 
-4. Разбор, три коммита, без кластера там, где нет scheme cache. Свой лексер и парсер по грамматике PostgreSQL, не генерация из `gram.y` и не грамматика YQL. Если парсер генерируется, инструмент — ANTLR 4.13.2, последний выпуск, рантайм уже в [`contrib/libs/antlr4_cpp_runtime`](contrib/libs/antlr4_cpp_runtime). Грамматики из `yql/essentials` не подключаются. Первый коммит: `SELECT` списка столбцов и `FROM`. Второй: `WHERE` и `LIMIT`. Третий: analyzer резолвит путь через scheme cache и проверяет имена столбцов; тест на неизвестный столбец. Грамматика `INSERT`, `ON CONFLICT` и `RETURNING` приходит коммитами вставки. Индексы из `TIndexDescription` analyzer запоминает в коммите синхронного IndexScan: тип (`EIndexTypeGlobal`, `EIndexTypeGlobalAsync`, `EIndexTypeGlobalUnique`), состояние, ключевые и покрывающие колонки, путь impl-таблицы. Цель конфликта не по первичному ключу до коммита уникального индекса — `0A000`, несовпадение с ключом — SQLSTATE `42P10`. Незнакомая конструкция — `0A000` с текстом узла.
+4. Разбор, три коммита, без кластера там, где нет scheme cache. Лексер и грамматика — перевод `scan.l` и `gram.y` PostgreSQL 18 на C++. Первый коммит: `SELECT` списка столбцов и `FROM`. Второй: `WHERE` и `LIMIT`. Третий: analyzer резолвит путь через scheme cache и проверяет имена столбцов; тест на неизвестный столбец. Грамматика `INSERT`, `ON CONFLICT` и `RETURNING` приходит коммитами вставки. Индексы из `TIndexDescription` analyzer запоминает в коммите синхронного IndexScan: тип (`EIndexTypeGlobal`, `EIndexTypeGlobalAsync`, `EIndexTypeGlobalUnique`), состояние, ключевые и покрывающие колонки, путь impl-таблицы. Цель конфликта не по первичному ключу до коммита уникального индекса — `0A000`, несовпадение с ключом — SQLSTATE `42P10`. Незнакомая конструкция — `0A000` с текстом узла.
 
 5. Планировщик среза. Построение путей point / prefix / full scan, выбор минимума `total_cost`, физический план: список партиций, ключ или диапазон на каждую, список column id, остаточный фильтр, проекция. В описании таблицы с самого начала есть вид хранения (row или column): column на этом шаге не получает путей и отвергается analyzer. Тесты планировщика без кластера: на фиктивной схеме с несколькими диапазонами ключа план выбирает point, а не full scan; диапазон через границу партиций перечисляет оба шарда.
 

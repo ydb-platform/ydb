@@ -78,4 +78,29 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "or");
     }
+
+    Y_UNIT_TEST(DistinctJoinAndOtherStatementsAreUnsupported) {
+        const TParseResult distinct = Parse("SELECT DISTINCT a FROM t");
+        UNIT_ASSERT_VALUES_EQUAL(distinct.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(distinct.Message, "distinct");
+
+        const TParseResult join = Parse("SELECT a FROM t JOIN u ON t.id = u.id");
+        UNIT_ASSERT_VALUES_EQUAL(join.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(join.Message, "join");
+
+        const TParseResult update = Parse("UPDATE t SET a = 1");
+        UNIT_ASSERT_VALUES_EQUAL(update.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(update.Message, "update");
+
+        const TParseResult all = Parse("SELECT ALL a FROM t");
+        UNIT_ASSERT(all.Select);
+        UNIT_ASSERT_VALUES_EQUAL(all.Select->Columns[0].Name, "a");
+    }
+
+    Y_UNIT_TEST(CommentIsSkipped) {
+        const TParseResult parsed = Parse("SELECT a /* cols */ FROM t -- tail\n");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Columns[0].Name, "a");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "t");
+    }
 }

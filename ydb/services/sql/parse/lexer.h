@@ -33,9 +33,11 @@ public:
 
 private:
     void SkipSpace();
+    bool SkipBlockComment();
 
     TStringBuf Input;
     size_t Position = 0;
+    bool CommentError = false;
 };
 
 } // namespace NKikimr::NSql

@@ -15,103 +15,82 @@ TParseResult Unsupported(TStringBuf node) {
     return result;
 }
 
-class TParser {
+// PostgreSQL 18 gram.y, rewritten as C++. A rule that is not implemented yet
+// returns 0A000 at the token where that rule starts.
+class TGrammar {
 public:
-    explicit TParser(TStringBuf sql)
+    explicit TGrammar(TStringBuf sql)
         : Lexer(sql)
     {
         Advance();
     }
 
-    TParseResult ParseStatement() {
+    // stmt
+    TParseResult Stmt() {
         if (Current.Kind == ETokenKind::Error) {
             return Unsupported(Current.Text);
         }
-        if (IsKeyword("select")) {
-            return ParseSelect();
+        if (IsKeyword("select") || IsKeyword("with") || IsKeyword("values") || IsKeyword("table")
+            || Current.Kind == ETokenKind::LeftParen) {
+            return SelectStmt();
         }
         if (IsKeyword("create")) {
-            return ParseCreate();
+            return CreateIntroducer();
         }
         if (IsKeyword("alter")) {
-            return ParseAlter();
+            return AlterIntroducer();
         }
         return Unsupported(Current.Text);
     }
 
-    TParseResult ParseSelect() {
-        if (Current.Kind == ETokenKind::Error) {
+    // SelectStmt / select_no_parens / simple_select
+    TParseResult SelectStmt() {
+        if (IsKeyword("with") || IsKeyword("values") || IsKeyword("table") || Current.Kind == ETokenKind::LeftParen) {
             return Unsupported(Current.Text);
         }
-        if (!IsKeyword("select")) {
+        if (Current.Kind == ETokenKind::Error || !IsKeyword("select")) {
             return Unsupported(Current.Text);
         }
         Advance();
 
         TSelectStmt select;
-        if (Current.Kind == ETokenKind::Star) {
-            select.Star = true;
+        if (IsKeyword("all")) {
             Advance();
-        } else if (Current.Kind == ETokenKind::Identifier) {
-            select.Columns.push_back(Identifier());
-            Advance();
-            while (Current.Kind == ETokenKind::Comma) {
-                Advance();
-                if (Current.Kind != ETokenKind::Identifier) {
-                    return Unsupported(Current.Text);
-                }
-                select.Columns.push_back(Identifier());
-                Advance();
-            }
-        } else {
+        } else if (IsKeyword("distinct")) {
             return Unsupported(Current.Text);
         }
 
-        if (!IsKeyword("from")) {
+        if (auto error = TargetList(select)) {
+            return *error;
+        }
+        if (IsKeyword("into")) {
             return Unsupported(Current.Text);
         }
-        Advance();
-        if (Current.Kind != ETokenKind::Identifier) {
-            return Unsupported(Current.Text);
+        if (auto error = FromClause(select)) {
+            return *error;
         }
-        const TIdentifier first = Identifier();
-        Advance();
-        if (Current.Kind == ETokenKind::Dot) {
-            Advance();
-            if (Current.Kind != ETokenKind::Identifier) {
-                return Unsupported(Current.Text);
-            }
-            select.Schema = first;
-            select.From = Identifier();
-            Advance();
-        } else {
-            select.From = first;
-        }
-
         if (IsKeyword("where")) {
             Advance();
-            if (auto error = ParseWhere(select)) {
+            if (auto error = WhereClause(select)) {
                 return *error;
             }
         }
+        if (IsKeyword("group") || IsKeyword("having") || IsKeyword("window")) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("union") || IsKeyword("intersect") || IsKeyword("except") || IsKeyword("order") || IsKeyword("for")) {
+            return Unsupported(Current.Text);
+        }
         if (IsKeyword("limit")) {
             Advance();
-            if (Current.Kind != ETokenKind::Number) {
-                return Unsupported(Current.Text);
+            if (auto error = LimitClause(select)) {
+                return *error;
             }
-            ui64 limit = 0;
-            if (!TryFromString(Current.Text, limit)) {
-                return Unsupported(Current.Text);
-            }
-            select.Limit = limit;
-            Advance();
-        }
-
-        if (Current.Kind == ETokenKind::Semicolon) {
-            Advance();
-        }
-        if (Current.Kind != ETokenKind::End) {
+        } else if (IsKeyword("offset") || IsKeyword("fetch")) {
             return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
         }
 
         TParseResult result;
@@ -119,17 +98,25 @@ public:
         return result;
     }
 
-    TParseResult ParseCreate() {
+    TParseResult CreateIntroducer() {
         Advance();
-        if (!IsKeyword("table")) {
+        if (IsKeyword("or") || IsKeyword("temp") || IsKeyword("temporary") || IsKeyword("unlogged")
+            || IsKeyword("global") || IsKeyword("local")) {
             return Unsupported(Current.Text);
         }
-        Advance();
+        if (IsKeyword("table")) {
+            return CreateStmt();
+        }
+        return Unsupported(Current.Text);
+    }
 
+    // CreateStmt: CREATE TABLE [IF NOT EXISTS] qualified_name '(' TableElementList ')'
+    TParseResult CreateStmt() {
+        Advance();
         TCreateTableStmt create;
         if (IsKeyword("if")) {
             Advance();
-            if (!IsKeyword("not") ) {
+            if (!IsKeyword("not")) {
                 return Unsupported(Current.Text);
             }
             Advance();
@@ -139,74 +126,22 @@ public:
             Advance();
             create.IfNotExists = true;
         }
-        if (Current.Kind != ETokenKind::Identifier) {
-            return Unsupported(Current.Text);
+        if (auto error = QualifiedName(create.Schema, create.Name)) {
+            return *error;
         }
-        const TIdentifier first = Identifier();
-        Advance();
-        if (Current.Kind == ETokenKind::Dot) {
-            Advance();
-            if (Current.Kind != ETokenKind::Identifier) {
-                return Unsupported(Current.Text);
-            }
-            create.Schema = first;
-            create.Name = Identifier();
-            Advance();
-        } else {
-            create.Name = first;
+        if (IsKeyword("of") || IsKeyword("partition")) {
+            return Unsupported(Current.Text);
         }
         if (Current.Kind != ETokenKind::LeftParen) {
             return Unsupported(Current.Text);
         }
         Advance();
-        if (Current.Kind == ETokenKind::RightParen) {
+        if (auto error = TableElementList(create)) {
+            return *error;
+        }
+        if (IsKeyword("inherits") || IsKeyword("partition") || IsKeyword("using") || IsKeyword("with")
+            || IsKeyword("on") || IsKeyword("tablespace")) {
             return Unsupported(Current.Text);
-        }
-
-        TVector<TIdentifier> inlineKey;
-        while (Current.Kind != ETokenKind::RightParen) {
-            if (IsKeyword("unique")) {
-                TVector<TIdentifier> columns;
-                if (auto error = ParseColumnList(columns)) {
-                    return *error;
-                }
-                create.Unique.push_back(std::move(columns));
-            } else if (IsKeyword("primary")) {
-                if (!create.PrimaryKey.empty() || !inlineKey.empty()) {
-                    return Unsupported("primary key");
-                }
-                if (auto error = ParsePrimaryKey(create.PrimaryKey)) {
-                    return *error;
-                }
-            } else if (IsTableConstraint()) {
-                return Unsupported(Current.Text);
-            } else if (Current.Kind == ETokenKind::Identifier) {
-                TColumnDef column;
-                bool inlinePrimary = false;
-                if (auto error = ParseColumn(column, inlinePrimary)) {
-                    return *error;
-                }
-                if (inlinePrimary) {
-                    if (!create.PrimaryKey.empty() || !inlineKey.empty()) {
-                        return Unsupported("primary key");
-                    }
-                    inlineKey.push_back(column.Name);
-                }
-                create.Columns.push_back(std::move(column));
-            } else {
-                return Unsupported(Current.Text);
-            }
-            if (Current.Kind == ETokenKind::Comma) {
-                Advance();
-                continue;
-            }
-            if (Current.Kind != ETokenKind::RightParen) {
-                return Unsupported(Current.Text);
-            }
-        }
-        Advance();
-        if (!inlineKey.empty()) {
-            create.PrimaryKey = std::move(inlineKey);
         }
         if (create.PrimaryKey.empty()) {
             return Unsupported("primary key");
@@ -227,39 +162,36 @@ public:
         return result;
     }
 
-    TParseResult ParseAlter() {
+    TParseResult AlterIntroducer() {
         Advance();
-        if (!IsKeyword("table")) {
+        if (IsKeyword("table")) {
+            return AlterTableStmt();
+        }
+        return Unsupported(Current.Text);
+    }
+
+    // AlterTableStmt + alter_table_cmd ADD [COLUMN] columnDef
+    TParseResult AlterTableStmt() {
+        Advance();
+        if (IsKeyword("if")) {
             return Unsupported(Current.Text);
         }
-        Advance();
         TAlterTableStmt alter;
-        if (Current.Kind != ETokenKind::Identifier) {
-            return Unsupported(Current.Text);
-        }
-        const TIdentifier first = Identifier();
-        Advance();
-        if (Current.Kind == ETokenKind::Dot) {
-            Advance();
-            if (Current.Kind != ETokenKind::Identifier) {
-                return Unsupported(Current.Text);
-            }
-            alter.Schema = first;
-            alter.Name = Identifier();
-            Advance();
-        } else {
-            alter.Name = first;
+        if (auto error = QualifiedName(alter.Schema, alter.Name)) {
+            return *error;
         }
         if (!IsKeyword("add")) {
             return Unsupported(Current.Text);
         }
         Advance();
-        if (!IsKeyword("column")) {
+        if (IsKeyword("column")) {
+            Advance();
+        }
+        if (IsKeyword("if")) {
             return Unsupported(Current.Text);
         }
-        Advance();
         bool inlinePrimary = false;
-        if (auto error = ParseColumn(alter.Column, inlinePrimary)) {
+        if (auto error = ColumnDef(alter.Column, inlinePrimary)) {
             return *error;
         }
         if (inlinePrimary) {
@@ -286,15 +218,15 @@ private:
         return {Current.Text, Current.Quoted};
     }
 
-    bool IsTableConstraint() const {
-        return IsKeyword("primary") || IsKeyword("unique") || IsKeyword("check")
-            || IsKeyword("constraint") || IsKeyword("foreign");
+    bool IsTableConstraintStart() const {
+        return IsKeyword("primary") || IsKeyword("unique") || IsKeyword("check") || IsKeyword("constraint")
+            || IsKeyword("foreign") || IsKeyword("like") || IsKeyword("not");
     }
 
-    bool IsColumnConstraint() const {
+    bool IsColumnConstraintStart() const {
         return IsKeyword("null") || IsKeyword("not") || IsKeyword("default") || IsKeyword("primary")
-            || IsKeyword("unique") || IsKeyword("check") || IsKeyword("references")
-            || IsKeyword("collate") || IsKeyword("constraint");
+            || IsKeyword("unique") || IsKeyword("check") || IsKeyword("references") || IsKeyword("collate")
+            || IsKeyword("constraint") || IsKeyword("storage") || IsKeyword("compression") || IsKeyword("generated");
     }
 
     std::optional<TParseResult> Finish() {
@@ -307,138 +239,67 @@ private:
         return std::nullopt;
     }
 
-    std::optional<TParseResult> ParseColumnList(TVector<TIdentifier>& columns) {
-        Advance();
-        if (Current.Kind != ETokenKind::LeftParen) {
-            return Unsupported(Current.Text);
-        }
-        Advance();
+    std::optional<TParseResult> QualifiedName(std::optional<TIdentifier>& schema, TIdentifier& name) {
         if (Current.Kind != ETokenKind::Identifier) {
             return Unsupported(Current.Text);
         }
-        columns.push_back(Identifier());
+        const TIdentifier first = Identifier();
+        Advance();
+        if (Current.Kind == ETokenKind::Dot) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            schema = first;
+            name = Identifier();
+            Advance();
+        } else {
+            name = first;
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> TargetList(TSelectStmt& select) {
+        if (Current.Kind == ETokenKind::Star) {
+            select.Star = true;
+            Advance();
+            return std::nullopt;
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        select.Columns.push_back(Identifier());
         Advance();
         while (Current.Kind == ETokenKind::Comma) {
             Advance();
             if (Current.Kind != ETokenKind::Identifier) {
                 return Unsupported(Current.Text);
             }
-            columns.push_back(Identifier());
+            select.Columns.push_back(Identifier());
             Advance();
         }
-        if (Current.Kind != ETokenKind::RightParen) {
-            return Unsupported(Current.Text);
-        }
-        Advance();
         return std::nullopt;
     }
 
-    std::optional<TParseResult> ParsePrimaryKey(TVector<TIdentifier>& key) {
-        Advance();
-        if (!IsKeyword("key")) {
+    std::optional<TParseResult> FromClause(TSelectStmt& select) {
+        if (!IsKeyword("from")) {
             return Unsupported(Current.Text);
         }
-        if (auto error = ParseColumnList(key)) {
+        Advance();
+        if (auto error = QualifiedName(select.Schema, select.From)) {
             return error;
         }
-        return std::nullopt;
-    }
-
-    std::optional<TParseResult> ParseColumn(TColumnDef& column, bool& inlinePrimary) {
-        column.Name = Identifier();
-        Advance();
-        if (auto error = ParseType(column.Type)) {
-            return error;
-        }
-        while (IsColumnConstraint()) {
-            if (IsKeyword("null")) {
-                column.NotNull = false;
-                Advance();
-                continue;
-            }
-            if (IsKeyword("not")) {
-                Advance();
-                if (!IsKeyword("null")) {
-                    return Unsupported(Current.Text);
-                }
-                column.NotNull = true;
-                Advance();
-                continue;
-            }
-            if (IsKeyword("default")) {
-                Advance();
-                TLiteral literal;
-                if (Current.Kind == ETokenKind::Number) {
-                    literal = {TLiteral::EKind::Integer, Current.Text};
-                } else if (Current.Kind == ETokenKind::String) {
-                    literal = {TLiteral::EKind::String, Current.Text};
-                } else {
-                    return Unsupported(Current.Text);
-                }
-                column.Default = std::move(literal);
-                Advance();
-                continue;
-            }
-            if (IsKeyword("primary")) {
-                Advance();
-                if (!IsKeyword("key")) {
-                    return Unsupported(Current.Text);
-                }
-                Advance();
-                inlinePrimary = true;
-                continue;
-            }
+        if (Current.Kind == ETokenKind::Comma || IsKeyword("join") || IsKeyword("inner") || IsKeyword("left")
+            || IsKeyword("right") || IsKeyword("full") || IsKeyword("cross") || IsKeyword("natural")
+            || IsKeyword("as")) {
             return Unsupported(Current.Text);
         }
         return std::nullopt;
     }
 
-    std::optional<TParseResult> ParseType(TPgType& type) {
-        if (Current.Kind != ETokenKind::Identifier) {
-            return Unsupported(Current.Text);
-        }
-        if (Current.Quoted) {
-            type.Name = Current.Text;
-            type.Quoted = true;
-            Advance();
-        } else {
-            type.Name = Current.Text;
-            Advance();
-            while (Current.Kind == ETokenKind::Identifier && !Current.Quoted && !IsColumnConstraint() && !IsTableConstraint()) {
-                type.Name += " ";
-                type.Name += Current.Text;
-                Advance();
-            }
-        }
-        if (Current.Kind != ETokenKind::LeftParen) {
-            return std::nullopt;
-        }
-        Advance();
-        ui32 precision = 0;
-        if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, precision)) {
-            return Unsupported(Current.Text);
-        }
-        type.Precision = precision;
-        Advance();
-        if (Current.Kind == ETokenKind::Comma) {
-            Advance();
-            ui32 scale = 0;
-            if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, scale)) {
-                return Unsupported(Current.Text);
-            }
-            type.Scale = scale;
-            Advance();
-        }
-        if (Current.Kind != ETokenKind::RightParen) {
-            return Unsupported(Current.Text);
-        }
-        Advance();
-        return std::nullopt;
-    }
-
-    std::optional<TParseResult> ParseWhere(TSelectStmt& select) {
+    std::optional<TParseResult> WhereClause(TSelectStmt& select) {
         for (;;) {
-            if (IsKeyword("or")) {
+            if (IsKeyword("or") || IsKeyword("not") || Current.Kind == ETokenKind::LeftParen) {
                 return Unsupported(Current.Text);
             }
             if (Current.Kind != ETokenKind::Identifier) {
@@ -482,6 +343,208 @@ private:
         }
     }
 
+    std::optional<TParseResult> LimitClause(TSelectStmt& select) {
+        if (Current.Kind != ETokenKind::Number) {
+            return Unsupported(Current.Text);
+        }
+        ui64 limit = 0;
+        if (!TryFromString(Current.Text, limit)) {
+            return Unsupported(Current.Text);
+        }
+        select.Limit = limit;
+        Advance();
+        if (IsKeyword("offset") || IsKeyword("fetch")) {
+            return Unsupported(Current.Text);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> NameList(TVector<TIdentifier>& names) {
+        Advance();
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        names.push_back(Identifier());
+        Advance();
+        while (Current.Kind == ETokenKind::Comma) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            names.push_back(Identifier());
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> TableElementList(TCreateTableStmt& create) {
+        if (Current.Kind == ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        TVector<TIdentifier> inlineKey;
+        while (Current.Kind != ETokenKind::RightParen) {
+            if (IsKeyword("unique")) {
+                TVector<TIdentifier> columns;
+                if (auto error = NameList(columns)) {
+                    return error;
+                }
+                create.Unique.push_back(std::move(columns));
+            } else if (IsKeyword("primary")) {
+                if (!create.PrimaryKey.empty() || !inlineKey.empty()) {
+                    return Unsupported("primary key");
+                }
+                if (auto error = PrimaryKey(create.PrimaryKey)) {
+                    return error;
+                }
+            } else if (IsTableConstraintStart()) {
+                return Unsupported(Current.Text);
+            } else if (Current.Kind == ETokenKind::Identifier) {
+                TColumnDef column;
+                bool inlinePrimary = false;
+                if (auto error = ColumnDef(column, inlinePrimary)) {
+                    return error;
+                }
+                if (inlinePrimary) {
+                    if (!create.PrimaryKey.empty() || !inlineKey.empty()) {
+                        return Unsupported("primary key");
+                    }
+                    inlineKey.push_back(column.Name);
+                }
+                create.Columns.push_back(std::move(column));
+            } else {
+                return Unsupported(Current.Text);
+            }
+            if (Current.Kind == ETokenKind::Comma) {
+                Advance();
+                continue;
+            }
+            if (Current.Kind != ETokenKind::RightParen) {
+                return Unsupported(Current.Text);
+            }
+        }
+        Advance();
+        if (!inlineKey.empty()) {
+            create.PrimaryKey = std::move(inlineKey);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> PrimaryKey(TVector<TIdentifier>& key) {
+        Advance();
+        if (!IsKeyword("key")) {
+            return Unsupported(Current.Text);
+        }
+        return NameList(key);
+    }
+
+    std::optional<TParseResult> ColumnDef(TColumnDef& column, bool& inlinePrimary) {
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        column.Name = Identifier();
+        Advance();
+        if (auto error = Typename(column.Type)) {
+            return error;
+        }
+        return ColQualList(column, inlinePrimary);
+    }
+
+    std::optional<TParseResult> Typename(TPgType& type) {
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        if (Current.Quoted) {
+            type.Name = Current.Text;
+            type.Quoted = true;
+            Advance();
+        } else {
+            type.Name = Current.Text;
+            Advance();
+            while (Current.Kind == ETokenKind::Identifier && !Current.Quoted && !IsColumnConstraintStart()
+                && !IsTableConstraintStart()) {
+                type.Name += " ";
+                type.Name += Current.Text;
+                Advance();
+            }
+        }
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return std::nullopt;
+        }
+        Advance();
+        ui32 precision = 0;
+        if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, precision)) {
+            return Unsupported(Current.Text);
+        }
+        type.Precision = precision;
+        Advance();
+        if (Current.Kind == ETokenKind::Comma) {
+            Advance();
+            ui32 scale = 0;
+            if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, scale)) {
+                return Unsupported(Current.Text);
+            }
+            type.Scale = scale;
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ColQualList(TColumnDef& column, bool& inlinePrimary) {
+        while (IsColumnConstraintStart()) {
+            if (IsKeyword("null")) {
+                column.NotNull = false;
+                Advance();
+                continue;
+            }
+            if (IsKeyword("not")) {
+                Advance();
+                if (!IsKeyword("null")) {
+                    return Unsupported(Current.Text);
+                }
+                column.NotNull = true;
+                Advance();
+                continue;
+            }
+            if (IsKeyword("default")) {
+                Advance();
+                TLiteral literal;
+                if (Current.Kind == ETokenKind::Number) {
+                    literal = {TLiteral::EKind::Integer, Current.Text};
+                } else if (Current.Kind == ETokenKind::String) {
+                    literal = {TLiteral::EKind::String, Current.Text};
+                } else {
+                    return Unsupported(Current.Text);
+                }
+                column.Default = std::move(literal);
+                Advance();
+                continue;
+            }
+            if (IsKeyword("primary")) {
+                Advance();
+                if (!IsKeyword("key")) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                inlinePrimary = true;
+                continue;
+            }
+            return Unsupported(Current.Text);
+        }
+        return std::nullopt;
+    }
+
     TLexer Lexer;
     TToken Current;
 };
@@ -489,7 +552,7 @@ private:
 } // namespace
 
 TParseResult Parse(TStringBuf sql) {
-    return TParser(sql).ParseStatement();
+    return TGrammar(sql).Stmt();
 }
 
 } // namespace NKikimr::NSql

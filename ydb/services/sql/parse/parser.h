@@ -202,6 +202,7 @@ struct TDeleteStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
     TVector<TComparison> Where;
+    TVector<TReturningItem> Returning;
 };
 
 struct TUpdateStmt {
@@ -209,6 +210,7 @@ struct TUpdateStmt {
     TIdentifier Name;
     TVector<TSetAssign> Set;
     TVector<TComparison> Where;
+    TVector<TReturningItem> Returning;
 };
 
 struct TParseResult {

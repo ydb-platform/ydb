@@ -1,7 +1,7 @@
 # DELETE одной таблицы
 
-status: pending
-commit:
+status: done
+commit: 4280412b51caa7d0b715f92846fdbfa7d0ec6de3
 id: delete
 depends: update
 

@@ -106,7 +106,9 @@ public:
             }
         }
         if (IsKeyword("returning")) {
-            return Unsupported(Current.Text);
+            if (auto error = ReturningClause(statement.Returning)) {
+                return *error;
+            }
         }
         if (auto error = Finish()) {
             return *error;
@@ -169,7 +171,9 @@ public:
             }
         }
         if (IsKeyword("returning")) {
-            return Unsupported(Current.Text);
+            if (auto error = ReturningClause(update.Returning)) {
+                return *error;
+            }
         }
         if (auto error = Finish()) {
             return *error;
@@ -246,7 +250,7 @@ public:
             }
         }
         if (IsKeyword("returning")) {
-            if (auto error = ReturningClause(insert)) {
+            if (auto error = ReturningClause(insert.Returning)) {
                 return *error;
             }
         }
@@ -393,7 +397,7 @@ public:
         return std::nullopt;
     }
 
-    std::optional<TParseResult> ReturningClause(TInsertStmt& insert) {
+    std::optional<TParseResult> ReturningClause(TVector<TReturningItem>& returning) {
         Advance();
         for (;;) {
             TReturningItem item;
@@ -417,7 +421,7 @@ public:
             } else {
                 return Unsupported(Current.Text);
             }
-            insert.Returning.push_back(std::move(item));
+            returning.push_back(std::move(item));
             if (Current.Kind != ETokenKind::Comma) {
                 break;
             }

@@ -31,6 +31,55 @@ struct TColumn {
     ui8 Scale = 0;
 };
 
+struct TPgWire {
+    ui32 Oid = 25;
+    i16 Size = -1;
+};
+
+std::optional<TPgWire> PgWire(NScheme::TTypeId type) {
+    switch (type) {
+        case NScheme::NTypeIds::Bool:
+            return TPgWire{16, 1};
+        case NScheme::NTypeIds::Int8:
+        case NScheme::NTypeIds::Int16:
+        case NScheme::NTypeIds::Uint8:
+            return TPgWire{21, 2};
+        case NScheme::NTypeIds::Int32:
+        case NScheme::NTypeIds::Uint16:
+            return TPgWire{23, 4};
+        case NScheme::NTypeIds::Int64:
+        case NScheme::NTypeIds::Uint32:
+            return TPgWire{20, 8};
+        case NScheme::NTypeIds::Uint64:
+        case NScheme::NTypeIds::Decimal:
+            return TPgWire{1700, -1};
+        case NScheme::NTypeIds::Utf8:
+            return TPgWire{25, -1};
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
+            return TPgWire{17, -1};
+        case NScheme::NTypeIds::Date:
+        case NScheme::NTypeIds::Date32:
+            return TPgWire{1082, 4};
+        case NScheme::NTypeIds::Datetime:
+        case NScheme::NTypeIds::Datetime64:
+        case NScheme::NTypeIds::Timestamp:
+        case NScheme::NTypeIds::Timestamp64:
+            return TPgWire{1114, 8};
+        case NScheme::NTypeIds::Interval:
+        case NScheme::NTypeIds::Interval64:
+            return TPgWire{1186, 16};
+        case NScheme::NTypeIds::Uuid:
+            return TPgWire{2950, 16};
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            return TPgWire{114, -1};
+        default:
+            return std::nullopt;
+    }
+}
+
 TString TablePath(const TString& database, const TDeleteStmt& statement) {
     TString path = database;
     if (path && path.back() == '/') {
@@ -109,6 +158,10 @@ private:
         auto result = MakeHolder<TEvQueryResult>();
         result->Ok = true;
         result->CommandTag = "DELETE " + ToString(count);
+        result->Columns = ResultColumns;
+        if (count > 0) {
+            result->Rows = ResultRows;
+        }
         result->Deferred = std::move(writes);
         Send(ReplyTo, result.Release());
         PassAway();
@@ -377,7 +430,60 @@ private:
         for (const TFilter& filter : Filters) {
             FilterCells.emplace_back(filter.Literal.data(), filter.Literal.size());
         }
+        if (!Statement.Returning.empty() && !PrepareReturning(entry, prepare)) {
+            return false;
+        }
         Table = entry.TableId;
+        return true;
+    }
+
+    template <typename TPrepare>
+    bool PrepareReturning(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TPrepare& prepare) {
+        TVector<const TSysTables::TTableColumnInfo*> ordered;
+        for (const auto& [id, column] : entry.Columns) {
+            Y_UNUSED(id);
+            ordered.push_back(&column);
+        }
+        std::sort(ordered.begin(), ordered.end(), [](const auto* left, const auto* right) {
+            return left->Id < right->Id;
+        });
+        auto add = [&](const TColumn& column, const TString& name) -> bool {
+            const auto wire = PgWire(column.Type.GetTypeId());
+            if (!wire) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            ResultColumns.push_back({name, wire->Oid, wire->Size});
+            Outputs.push_back(column);
+            return true;
+        };
+        for (const TReturningItem& item : Statement.Returning) {
+            if (item.Star) {
+                for (const auto* info : ordered) {
+                    const TColumn* column = prepare(info->Name);
+                    if (!column || !add(*column, column->Name)) {
+                        return false;
+                    }
+                }
+                continue;
+            }
+            const TColumn* column = prepare(item.Column.Name);
+            if (!column) {
+                return false;
+            }
+            if (!add(*column, item.Alias ? item.Alias->Name : column->Name)) {
+                return false;
+            }
+        }
+        for (const TColumn& column : Outputs) {
+            bool listed = false;
+            for (const TColumn& read : ReadColumns) {
+                listed = listed || read.Id == column.Id;
+            }
+            if (!listed) {
+                ReadColumns.push_back(column);
+            }
+        }
         return true;
     }
 
@@ -557,8 +663,39 @@ private:
                 }
                 held.Cells.push_back(cell);
             }
+            if (!AppendReturning(cells, held, false)) {
+                return false;
+            }
             Rows.push_back(std::move(held));
         }
+        return true;
+    }
+
+    bool AppendReturning(const TConstArrayRef<TCell>& read, const THeld& held, bool overlay) {
+        if (Outputs.empty()) {
+            return true;
+        }
+        Y_UNUSED(held);
+        Y_UNUSED(overlay);
+        TVector<TQueryCell> line;
+        line.reserve(Outputs.size());
+        for (const TColumn& column : Outputs) {
+            const size_t index = ReadIndex(column.Id);
+            if (index >= read.size()) {
+                Fail("XX000", "read failed");
+                return false;
+            }
+            const TCell& cell = read[index];
+            const bool null = cell.IsNull();
+            const TStringBuf bytes = null ? TStringBuf() : cell.AsBuf();
+            const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
+            if (!encoded.Ok) {
+                Fail(encoded.SqlState.empty() ? TString("0A000") : encoded.SqlState, encoded.Message.empty() ? TString("not supported") : encoded.Message);
+                return false;
+            }
+            line.push_back({encoded.Null, encoded.Bytes});
+        }
+        ResultRows.push_back(std::move(line));
         return true;
     }
 
@@ -740,6 +877,9 @@ private:
     TTableId Table;
     TVector<TColumn> ReadColumns;
     TVector<TColumn> WriteColumns;
+    TVector<TColumn> Outputs;
+    TVector<TQueryColumn> ResultColumns;
+    TVector<TVector<TQueryCell>> ResultRows;
     TVector<TString> KeyNames;
     TVector<NScheme::TTypeInfo> KeyTypes;
     TVector<TString> BoundBytes;

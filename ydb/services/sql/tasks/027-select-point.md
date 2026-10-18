@@ -1,7 +1,7 @@
 # Точечный SELECT одного шарда
 
-status: pending
-commit:
+status: done
+commit: 8b31403a3f22236e21910b949429b5c36851b3c2
 id: select-point
 depends: planner
 

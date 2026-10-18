@@ -11,7 +11,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
 
@@ -278,15 +280,15 @@ private:
             AllKeyTypes.push_back(prepared.Type);
         }
 
-        THashMap<TString, TColumn> columns;
-        THashMap<TString, TVector<const TComparison*>> grouped;
+        absl::flat_hash_map<TString, TColumn> columns;
+        absl::flat_hash_map<TString, TVector<const TComparison*>> grouped;
         for (const TComparison& comparison : Statement.Where) {
             const auto* info = FindColumn(entry, comparison.Column.Name);
             if (!info) {
                 Fail("42703", comparison.Column.Name);
                 return false;
             }
-            if (!columns.FindPtr(comparison.Column.Name)) {
+            if (!MapFindPtr(columns, comparison.Column.Name)) {
                 TColumn column;
                 if (!PrepareColumn(*info, column)) {
                     Fail("0A000", "not supported");
@@ -318,7 +320,7 @@ private:
                 return false;
             }
             KeyTypes.push_back(prepared.Type);
-            const auto* group = grouped.FindPtr(info->Name);
+            const auto* group = MapFindPtr(grouped, info->Name);
             if (!group || ranged) {
                 break;
             }
@@ -417,7 +419,7 @@ private:
             Y_UNUSED(name);
             for (const TComparison* comparison : list) {
                 TFilter filter;
-                filter.Column = *columns.FindPtr(comparison->Column.Name);
+                filter.Column = *MapFindPtr(columns, comparison->Column.Name);
                 filter.Op = comparison->Op;
                 TCell cell;
                 if (!DecodeLiteral(filter.Column, comparison->Value, cell)) {

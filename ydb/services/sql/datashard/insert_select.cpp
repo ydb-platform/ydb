@@ -12,7 +12,10 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
@@ -120,7 +123,7 @@ public:
                 return false;
             }
         }
-        THashMap<TString, TPrepared> byName;
+        absl::flat_hash_map<TString, TPrepared> byName;
         TVector<TPrepared> ordered;
         for (const auto& [id, column] : entry.Columns) {
             Y_UNUSED(id);
@@ -149,7 +152,7 @@ public:
             Targets = ordered;
         } else {
             for (const TIdentifier& name : Statement.Columns) {
-                const TPrepared* column = byName.FindPtr(name.Name);
+                const TPrepared* column = MapFindPtr(byName, name.Name);
                 if (!column) {
                     Fail("42703", name.Name);
                     return false;
@@ -199,7 +202,7 @@ public:
             Fail("42601", "column count");
             return false;
         }
-        THashMap<TString, TCell> byName;
+        absl::flat_hash_map<TString, TCell> byName;
         for (size_t i = 0; i < Targets.size(); ++i) {
             TCell cell;
             if (line[i].Null) {
@@ -281,7 +284,7 @@ public:
             Fail("42P01", Path);
             return;
         }
-        THashMap<ui64, TVector<size_t>> groups;
+        absl::flat_hash_map<ui64, TVector<size_t>> groups;
         for (size_t i = 0; i < request->ResultSet.size(); ++i) {
             if (request->ResultSet[i].Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
                 Fail("42P01", Path);

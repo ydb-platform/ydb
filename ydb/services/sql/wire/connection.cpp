@@ -5,6 +5,8 @@
 
 #include <ydb/services/sql/parse/parser.h>
 
+#include <util/generic/mapfindptr.h>
+
 #include <ydb/services/sql/session/events.h>
 
 #include <ydb/core/base/path.h>
@@ -141,7 +143,7 @@ private:
             return false;
         }
 
-        const auto database = message.Parameters.FindPtr("database");
+        const auto database = MapFindPtr(message.Parameters, "database");
         if (!database || database->empty()) {
             Fail("3D000", "database is required");
             return false;
@@ -255,7 +257,7 @@ private:
         if (!ReadCString(payload, portal) || !ReadCString(payload, statement)) {
             return MakeErrorResponse("08P01", "bind");
         }
-        const TPrepared* prepared = Statements.FindPtr(statement);
+        const TPrepared* prepared = MapFindPtr(Statements, statement);
         if (!prepared) {
             return MakeErrorResponse("26000", statement);
         }
@@ -333,14 +335,14 @@ private:
         const TString* sql = nullptr;
         ui16 params = 0;
         if (kind == 'S') {
-            const TPrepared* prepared = Statements.FindPtr(name);
+            const TPrepared* prepared = MapFindPtr(Statements, name);
             if (!prepared) {
                 return MakeErrorResponse("26000", name);
             }
             sql = &prepared->Sql;
             params = prepared->Params;
         } else if (kind == 'P') {
-            const TPortal* portal = Portals.FindPtr(name);
+            const TPortal* portal = MapFindPtr(Portals, name);
             if (!portal) {
                 return MakeErrorResponse("34000", name);
             }
@@ -389,7 +391,7 @@ private:
             Write(MakeErrorResponse("08P01", "execute"));
             return true;
         }
-        const TPortal* portal = Portals.FindPtr(name);
+        const TPortal* portal = MapFindPtr(Portals, name);
         if (!portal) {
             Write(MakeErrorResponse("34000", name));
             return true;
@@ -602,8 +604,8 @@ private:
     };
 
     NActors::TActorId Session;
-    THashMap<TString, TPrepared> Statements;
-    THashMap<TString, TPortal> Portals;
+    absl::flat_hash_map<TString, TPrepared> Statements;
+    absl::flat_hash_map<TString, TPortal> Portals;
     ui32 InternalErrorRetries = 3;
     bool Extended = false;
     char TxState = 'I';

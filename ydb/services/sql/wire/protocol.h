@@ -1,7 +1,8 @@
 #pragma once
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
 #include <util/generic/array_ref.h>
-#include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -15,7 +16,7 @@ struct TStartupMessage {
     bool SslRequest = false;
     bool CancelRequest = false;
     ui32 Protocol = 0;
-    THashMap<TString, TString> Parameters;
+    absl::flat_hash_map<TString, TString> Parameters;
 };
 
 struct TClientMessage {

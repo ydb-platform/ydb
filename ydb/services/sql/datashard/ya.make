@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     ydb/core/base
     ydb/core/scheme
     ydb/core/tx/data_events

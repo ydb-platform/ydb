@@ -1,3 +1,6 @@
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -49,7 +52,7 @@ struct TSeenColumn {
     TString DefaultText;
 };
 
-THashMap<TString, TSeenColumn> Describe(TServer& server, const TString& path, bool& exists) {
+absl::flat_hash_map<TString, TSeenColumn> Describe(TServer& server, const TString& path, bool& exists) {
     auto* runtime = server.GetRuntime();
     auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
@@ -62,7 +65,7 @@ THashMap<TString, TSeenColumn> Describe(TServer& server, const TString& path, bo
     const auto* navigate = ev->Get()->Request.Get();
     exists = navigate && navigate->ResultSet.size() == 1
         && navigate->ResultSet[0].Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
-    THashMap<TString, TSeenColumn> columns;
+    absl::flat_hash_map<TString, TSeenColumn> columns;
     if (!exists) {
         return columns;
     }
@@ -80,9 +83,9 @@ THashMap<TString, TSeenColumn> Describe(TServer& server, const TString& path, bo
     return columns;
 }
 
-THashMap<TString, TSeenColumn> WaitTable(TServer& server, const TString& path) {
+absl::flat_hash_map<TString, TSeenColumn> WaitTable(TServer& server, const TString& path) {
     const TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
-    THashMap<TString, TSeenColumn> columns;
+    absl::flat_hash_map<TString, TSeenColumn> columns;
     do {
         bool exists = false;
         columns = Describe(server, path, exists);
@@ -127,10 +130,10 @@ Y_UNIT_TEST_SUITE(CreateTable) {
             command.GetOutput() + "\n" + command.GetError());
 
         const auto types = WaitTable(server, database + "/types");
-        const TSeenColumn* id = types.FindPtr("id");
-        const TSeenColumn* ts = types.FindPtr("ts");
-        const TSeenColumn* tiny = types.FindPtr("tiny");
-        const TSeenColumn* note = types.FindPtr("note");
+        const TSeenColumn* id = MapFindPtr(types, "id");
+        const TSeenColumn* ts = MapFindPtr(types, "ts");
+        const TSeenColumn* tiny = MapFindPtr(types, "tiny");
+        const TSeenColumn* note = MapFindPtr(types, "note");
         UNIT_ASSERT(id && ts && tiny && note);
         UNIT_ASSERT_VALUES_EQUAL(id->TypeName, "Int64");
         UNIT_ASSERT(id->NotNull);
@@ -151,7 +154,7 @@ Y_UNIT_TEST_SUITE(CreateTable) {
         UNIT_ASSERT(!nodate);
 
         const auto dates = WaitTable(server, database + "/dates");
-        const TSeenColumn* date = dates.FindPtr("d");
+        const TSeenColumn* date = MapFindPtr(dates, "d");
         UNIT_ASSERT(date);
         UNIT_ASSERT_VALUES_EQUAL(date->TypeName, "Date");
     }
@@ -272,12 +275,12 @@ else:
             command.GetOutput() + "\n" + command.GetError());
 
         const auto columns = WaitTable(server, database + "/base");
-        const TSeenColumn* id = columns.FindPtr("id");
-        const TSeenColumn* note = columns.FindPtr("note");
+        const TSeenColumn* id = MapFindPtr(columns, "id");
+        const TSeenColumn* note = MapFindPtr(columns, "note");
         UNIT_ASSERT(id && note);
         UNIT_ASSERT_VALUES_EQUAL(id->TypeName, "Int32");
         UNIT_ASSERT_VALUES_EQUAL(note->TypeName, "Utf8");
-        UNIT_ASSERT(!columns.FindPtr("d"));
+        UNIT_ASSERT(!MapFindPtr(columns, "d"));
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2u);
     }
 
@@ -332,8 +335,8 @@ must_fail("ALTER TABLE base DROP COLUMN id")
             command.GetOutput() + "\n" + command.GetError());
 
         const auto columns = WaitTable(server, database + "/base");
-        UNIT_ASSERT(columns.FindPtr("id"));
-        UNIT_ASSERT(!columns.FindPtr("note"));
+        UNIT_ASSERT(MapFindPtr(columns, "id"));
+        UNIT_ASSERT(!MapFindPtr(columns, "note"));
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1u);
     }
 
@@ -389,7 +392,7 @@ else:
         bool ready = false;
         do {
             const auto columns = WaitTable(server, database + "/attrs");
-            const TSeenColumn* found = columns.FindPtr("note");
+            const TSeenColumn* found = MapFindPtr(columns, "note");
             if (found && found->NotNull && found->HasDefault && found->TypeName == "Utf8") {
                 note = *found;
                 ready = true;
@@ -801,7 +804,7 @@ else:
             command.GetOutput() + "\n" + command.GetError());
 
         const auto columns = WaitTable(server, database + "/full/t");
-        UNIT_ASSERT(columns.FindPtr("id"));
+        UNIT_ASSERT(MapFindPtr(columns, "id"));
         auto* runtime = server.GetRuntime();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;

@@ -12,7 +12,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
+
 #include <util/generic/hash_set.h>
 
 #include <algorithm>
@@ -135,7 +138,7 @@ private:
         ui64 TabletId = 0;
         TVector<TString> Storage;
         TVector<TCell> Cells;
-        THashMap<TString, TCell> Old;
+        absl::flat_hash_map<TString, TCell> Old;
     };
 
     struct TIndexPlan {
@@ -296,9 +299,11 @@ private:
             Fail("0A000", "not supported");
             return false;
         }
-        THashMap<TString, TColumn> byName;
+        absl::flat_hash_map<TString, TColumn> byName;
+        // A later column must not move this one: the caller keeps the pointer.
+        byName.reserve(entry.Columns.size());
         auto prepare = [&](const TString& name) -> const TColumn* {
-            if (const TColumn* found = byName.FindPtr(name)) {
+            if (const TColumn* found = MapFindPtr(byName, name)) {
                 return found;
             }
             const auto* info = FindColumn(entry, name);
@@ -312,7 +317,7 @@ private:
                 return nullptr;
             }
             byName[name] = column;
-            return byName.FindPtr(name);
+            return MapFindPtr(byName, name);
         };
         THashSet<TString> seenTarget;
         for (const TSetAssign& assign : Statement.Set) {
@@ -344,7 +349,7 @@ private:
         }
         WriteColumns.insert(WriteColumns.begin(), keyColumns.begin(), keyColumns.end());
 
-        THashMap<TString, TVector<const TComparison*>> grouped;
+        absl::flat_hash_map<TString, TVector<const TComparison*>> grouped;
         for (const TComparison& comparison : Statement.Where) {
             if (!prepare(comparison.Column.Name)) {
                 return false;
@@ -356,7 +361,7 @@ private:
         bool ranged = false;
         size_t equalPrefix = 0;
         for (const TColumn& key : keyColumns) {
-            const auto* group = grouped.FindPtr(key.Name);
+            const auto* group = MapFindPtr(grouped, key.Name);
             if (!group || ranged) {
                 break;
             }
@@ -460,7 +465,7 @@ private:
             if (!assign.FromColumn) {
                 continue;
             }
-            const TColumn* source = byName.FindPtr(assign.Source.Name);
+            const TColumn* source = MapFindPtr(byName, assign.Source.Name);
             if (!source) {
                 Fail("42703", assign.Source.Name);
                 return false;
@@ -477,7 +482,7 @@ private:
             Y_UNUSED(name);
             for (const TComparison* comparison : list) {
                 TFilter filter;
-                filter.Column = *byName.FindPtr(comparison->Column.Name);
+                filter.Column = *MapFindPtr(byName, comparison->Column.Name);
                 filter.Op = comparison->Op;
                 TCell cell;
                 if (!DecodeBound(filter.Column, comparison->Value, cell)) {
@@ -763,7 +768,7 @@ private:
     }
 
     bool TakeRows(TEvDataShard::TEvReadResult& result, ui64 tabletId) {
-        THashMap<TString, const TSetAssign*> last;
+        absl::flat_hash_map<TString, const TSetAssign*> last;
         for (const TSetAssign& assign : Statement.Set) {
             last[assign.Column.Name] = &assign;
         }
@@ -789,7 +794,7 @@ private:
                         return false;
                     }
                 } else {
-                    const TSetAssign* assign = last.FindPtr(column.Name) ? *last.FindPtr(column.Name) : nullptr;
+                    const TSetAssign* assign = MapFindPtr(last, column.Name) ? *MapFindPtr(last, column.Name) : nullptr;
                     if (!assign) {
                         Fail("XX000", "internal error");
                         return false;
@@ -869,7 +874,7 @@ private:
     }
 
     void Publish() {
-        THashMap<ui64, TVector<size_t>> groups;
+        absl::flat_hash_map<ui64, TVector<size_t>> groups;
         for (size_t i = 0; i < Rows.size(); ++i) {
             groups[Rows[i].TabletId].push_back(i);
         }
@@ -911,7 +916,7 @@ private:
                 return &held.Cells[i];
             }
         }
-        return held.Old.FindPtr(name);
+        return MapFindPtr(held.Old, name);
     }
 
     bool SameCell(const TCell& left, const TCell& right) const {
@@ -925,7 +930,7 @@ private:
         TIndexOp op;
         op.Bytes.reserve(names.size());
         for (const TString& name : names) {
-            const TCell* source = newest ? FindNew(held, name) : held.Old.FindPtr(name);
+            const TCell* source = newest ? FindNew(held, name) : MapFindPtr(held.Old, name);
             if (!source || source->IsNull()) {
                 op.Bytes.push_back(TString());
             } else {
@@ -940,7 +945,7 @@ private:
                 Fail("42703", names[i]);
                 return false;
             }
-            const TCell cell = op.Bytes[i].empty() && (newest ? !FindNew(held, names[i]) || FindNew(held, names[i])->IsNull() : !held.Old.FindPtr(names[i]) || held.Old.FindPtr(names[i])->IsNull())
+            const TCell cell = op.Bytes[i].empty() && (newest ? !FindNew(held, names[i]) || FindNew(held, names[i])->IsNull() : !MapFindPtr(held.Old, names[i]) || MapFindPtr(held.Old, names[i])->IsNull())
                 ? TCell()
                 : TCell(op.Bytes[i].data(), op.Bytes[i].size());
             cells.push_back(cell);
@@ -1015,7 +1020,7 @@ private:
         for (const THeld& held : Rows) {
             bool changed = false;
             for (const TString& name : plan.Keys) {
-                const TCell* previous = held.Old.FindPtr(name);
+                const TCell* previous = MapFindPtr(held.Old, name);
                 const TCell* next = FindNew(held, name);
                 if (!previous || !next || !SameCell(*previous, *next)) {
                     changed = true;

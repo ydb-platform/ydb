@@ -12,7 +12,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
 #include <util/string/cast.h>
 
 namespace NKikimr::NSql {
@@ -155,7 +157,7 @@ private:
 
     void RunSet(const TSetStmt& set) {
         const TString key = Lower(set.Name);
-        TGuc* guc = Gucs.FindPtr(key);
+        TGuc* guc = MapFindPtr(Gucs, key);
         if (key == "search_path" || !guc) {
             Fail("0A000", "not supported");
             return;
@@ -173,7 +175,7 @@ private:
     }
 
     void RunShow(const TShowStmt& show) {
-        const TGuc* guc = Gucs.FindPtr(Lower(show.Name));
+        const TGuc* guc = MapFindPtr(Gucs, Lower(show.Name));
         if (!guc) {
             Fail("0A000", "not supported");
             return;
@@ -342,7 +344,7 @@ private:
         Queue.erase(Queue.begin());
         Client = request.Client;
         TParseResult parsed;
-        if (const TParseResult* cached = Parsed.FindPtr(request.Sql)) {
+        if (const TParseResult* cached = MapFindPtr(Parsed, request.Sql)) {
             parsed = *cached;
         } else {
             parsed = Parse(request.Sql);
@@ -454,8 +456,8 @@ private:
         TString Value;
     };
 
-    THashMap<TString, TParseResult> Parsed;
-    THashMap<TString, TGuc> Gucs;
+    absl::flat_hash_map<TString, TParseResult> Parsed;
+    absl::flat_hash_map<TString, TGuc> Gucs;
     NActors::TActorId Client;
     ETx Tx = ETx::Idle;
     ui64 TxId = 0;

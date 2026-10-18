@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     ydb/core/base
     ydb/core/raw_socket
     ydb/core/tx/scheme_cache

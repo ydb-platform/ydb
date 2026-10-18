@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -112,7 +114,7 @@ private:
     };
 
     TPlannerConfig Config;
-    THashMap<TKey, TEntry, THash> Entries;
+    absl::flat_hash_map<TKey, TEntry, THash> Entries;
 };
 
 } // namespace NKikimr::NSql

@@ -14,7 +14,10 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <util/generic/hash.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <util/generic/mapfindptr.h>
+
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
@@ -214,7 +217,7 @@ public:
                 }
                 continue;
             }
-            const TPrepared* column = PreparedColumns.FindPtr(item.Column.Name);
+            const TPrepared* column = MapFindPtr(PreparedColumns, item.Column.Name);
             if (!column) {
                 Fail("42703", item.Column.Name);
                 return false;
@@ -226,13 +229,13 @@ public:
         return true;
     }
 
-    bool RememberImage(const THashMap<TString, TCell>& image) {
+    bool RememberImage(const absl::flat_hash_map<TString, TCell>& image) {
         if (Statement.Returning.empty()) {
             return true;
         }
         TVector<TQueryCell> row;
         for (const TPrepared& column : ResultSources) {
-            const TCell* cell = image.FindPtr(column.Name);
+            const TCell* cell = MapFindPtr(image, column.Name);
             const bool null = !cell || cell->IsNull();
             const TStringBuf bytes = null ? TStringBuf() : cell->AsBuf();
             const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
@@ -335,7 +338,7 @@ public:
             PreparedColumns[column.Name] = prepared;
         }
 
-        THashMap<TString, const TLiteral*> given;
+        absl::flat_hash_map<TString, const TLiteral*> given;
         if (Statement.Columns.empty()) {
             TVector<const TSysTables::TTableColumnInfo*> ordered;
             for (const auto& [id, column] : entry.Columns) {
@@ -465,7 +468,7 @@ public:
         }
 
         for (const auto* info : keys) {
-            const auto* literal = given.FindPtr(info->Name);
+            const auto* literal = MapFindPtr(given, info->Name);
             if (!take(*info, literal ? *literal : nullptr)) {
                 return false;
             }
@@ -492,7 +495,7 @@ public:
         });
         rest.erase(std::unique(rest.begin(), rest.end()), rest.end());
         for (const auto* info : rest) {
-            const auto* literal = given.FindPtr(info->Name);
+            const auto* literal = MapFindPtr(given, info->Name);
             if (!take(*info, literal ? *literal : nullptr)) {
                 return false;
             }
@@ -532,7 +535,7 @@ public:
         Table = entry.TableId;
         ReadColumns.clear();
         for (const auto* info : keys) {
-            const auto* prepared = PreparedColumns.FindPtr(info->Name);
+            const auto* prepared = MapFindPtr(PreparedColumns, info->Name);
             if (!prepared) {
                 Fail("0A000", "not supported");
                 return false;
@@ -569,22 +572,22 @@ public:
         Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
     }
 
-    bool WhereHolds(const THashMap<TString, TCell>& existing) {
+    bool WhereHolds(const absl::flat_hash_map<TString, TCell>& existing) {
         if (!Statement.ConflictWhere) {
             return true;
         }
         const TConflictWhere& where = *Statement.ConflictWhere;
-        const TPrepared* column = PreparedColumns.FindPtr(where.Column.Name);
+        const TPrepared* column = MapFindPtr(PreparedColumns, where.Column.Name);
         if (!column) {
             Fail("42703", where.Column.Name);
             return false;
         }
         TCell left;
         if (where.Excluded) {
-            if (const TCell* proposed = Proposed.FindPtr(where.Column.Name)) {
+            if (const TCell* proposed = MapFindPtr(Proposed, where.Column.Name)) {
                 left = *proposed;
             }
-        } else if (const TCell* found = existing.FindPtr(where.Column.Name)) {
+        } else if (const TCell* found = MapFindPtr(existing, where.Column.Name)) {
             left = *found;
         }
         if (left.IsNull() || where.Value.Kind == TLiteral::EKind::Null) {
@@ -620,7 +623,7 @@ public:
             if (column.KeyOrder < 0) {
                 continue;
             }
-            const TCell* key = Proposed.FindPtr(column.Name);
+            const TCell* key = MapFindPtr(Proposed, column.Name);
             if (!key || key->IsNull()) {
                 Fail("23502", "null value in column " + column.Name);
                 return false;
@@ -634,7 +637,7 @@ public:
             return false;
         }
         for (const TUpdateAssign& assign : Statement.Update) {
-            const TPrepared* column = PreparedColumns.FindPtr(assign.Column.Name);
+            const TPrepared* column = MapFindPtr(PreparedColumns, assign.Column.Name);
             if (!column) {
                 Fail("42703", assign.Column.Name);
                 return false;
@@ -649,7 +652,7 @@ public:
                     Fail("42703", assign.ExcludedColumn.Name);
                     return false;
                 }
-                if (const TCell* proposed = Proposed.FindPtr(assign.ExcludedColumn.Name)) {
+                if (const TCell* proposed = MapFindPtr(Proposed, assign.ExcludedColumn.Name)) {
                     cell = *proposed;
                 }
             } else if (!Decode(*column, assign.Value, cell)) {
@@ -808,7 +811,7 @@ public:
         if (!BuildUpdate()) {
             return;
         }
-        THashMap<TString, TCell> image = FoundCells;
+        absl::flat_hash_map<TString, TCell> image = FoundCells;
         for (const auto& [name, cell] : Assigned) {
             image[name] = cell;
         }
@@ -1090,7 +1093,7 @@ public:
                 Fail("42703", names[i]);
                 return false;
             }
-            const TCell* proposed = Proposed.FindPtr(names[i]);
+            const TCell* proposed = MapFindPtr(Proposed, names[i]);
             const TCell cell = proposed ? *proposed : TCell();
             if (i < keyNames.size() && cell.IsNull() && PreparedColumns.contains(names[i]) && PreparedColumns[names[i]].NotNull) {
                 Fail("23502", "null value in column " + names[i]);
@@ -1222,14 +1225,14 @@ public:
     TString InsertPayload;
     std::vector<ui32> InsertColumnIds;
     NKikimrDataEvents::TEvWrite::TOperation::EOperationType Operation = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT;
-    THashMap<TString, TPrepared> PreparedColumns;
-    THashMap<TString, TCell> Proposed;
-    THashMap<TString, TCell> Assigned;
+    absl::flat_hash_map<TString, TPrepared> PreparedColumns;
+    absl::flat_hash_map<TString, TCell> Proposed;
+    absl::flat_hash_map<TString, TCell> Assigned;
     TVector<TQueryColumn> ResultColumns;
     TVector<TPrepared> ResultSources;
     TVector<TVector<TQueryCell>> ResultRows;
     TVector<TPrepared> ReadColumns;
-    THashMap<TString, TCell> FoundCells;
+    absl::flat_hash_map<TString, TCell> FoundCells;
     TVector<TString> FoundStorage;
     bool Found = false;
     bool Reading = false;

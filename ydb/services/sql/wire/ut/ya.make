@@ -27,6 +27,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/containers/absl
     ydb/core/testlib/default
     ydb/services/sql/wire
 )

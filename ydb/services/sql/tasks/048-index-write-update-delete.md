@@ -1,7 +1,7 @@
 # UPDATE и DELETE пишут синхронный индекс
 
-status: pending
-commit:
+status: done
+commit: 512afd5aa091760ce97be8a122ffa5c734910fd7
 id: index-write-update-delete
 depends: index-write-sync
 

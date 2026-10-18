@@ -154,7 +154,7 @@ flowchart LR
 
 Делаем:
 
-- `SELECT`, включая согласованные члены: `WHERE`, `LIMIT`, `INNER` / `LEFT` / `RIGHT` / `CROSS` / `FULL JOIN`, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`, `UNION` / `INTERSECT` / `EXCEPT`, подзапрос, `WITH` / `WITH RECURSIVE`, окна, `OFFSET` / `FETCH`, `FOR UPDATE` на row-таблице
+- `SELECT`, включая согласованные члены: `WHERE` (`AND`, `OR`, `NOT`, скобки, `IN` / `NOT IN` / `EXISTS` / `ANY` / `ALL` и сравнение с подзапросом), `LIMIT`, `INNER` / `LEFT` / `RIGHT` / `CROSS` / `FULL JOIN`, `ORDER BY`, `GROUP BY`, `HAVING`, `DISTINCT`, `UNION` / `INTERSECT` / `EXCEPT`, подзапрос, `WITH` / `WITH RECURSIVE`, окна, `OFFSET` / `FETCH`, `FOR UPDATE` на row-таблице
 - `INSERT`, включая `ON CONFLICT`, `RETURNING` и, отдельным коммитом, `INSERT ... SELECT`
 - `UPDATE` одной таблицы и `DELETE` одной таблицы, включая `RETURNING`
 - `CREATE TABLE`
@@ -172,8 +172,10 @@ flowchart LR
 - `ROLLBACK` и `ABORT`
 - `SET` и `SHOW` параметров, которые сессия уже хранит
 - `EXPLAIN` уже разобранного оператора: текст выбранного пути, без чтения шарда и без `EXPLAIN ANALYZE`
+- `PREPARE`, `EXECUTE` и `DEALLOCATE`: оператор запоминается в сессии и выполняется отдельной командой
+- `SELECT INTO`: новая row-таблица из результата `SELECT`, без выдачи строк клиенту
 
-Не делаем, в том числе: `MERGE`, `TRUNCATE`, `COPY`, прочий `DROP` и `CREATE`, `CREATE VIEW`, `CREATE DATABASE`, `GRANT`, `REVOKE`, `VACUUM`, `ANALYZE`, SQL-команды `PREPARE` / `EXECUTE` / `DEALLOCATE`, `CALL`, `DO`, `LOCK`, `COMMENT`, `VALUES` и `TABLE` как отдельные команды. `WITH` относится только к `SELECT`. Функции, включая `nextval`, в список команд не входят и отвечают `0A000`. Отношение `information_schema`, которого нет в списке ниже, тоже `0A000`.
+Не делаем, в том числе: `MERGE`, `TRUNCATE`, `COPY`, прочий `DROP` и `CREATE`, `CREATE VIEW`, `CREATE DATABASE`, `GRANT`, `REVOKE`, `VACUUM`, `ANALYZE`, `CALL`, `DO`, `LOCK`, `COMMENT`, `VALUES` и `TABLE` как отдельные команды. `WITH` относится только к `SELECT`. Функции, включая `nextval`, в список команд не входят и отвечают `0A000`. Отношение `information_schema`, которого нет в списке ниже, тоже `0A000`.
 
 ## Ограничения SQL
 
@@ -277,6 +279,14 @@ flowchart LR
 
 6.1. `EXPLAIN`. Один коммит после того, как планировщик уже выбирает путь. Ответ — один столбец `QUERY PLAN` типа text. Оператор не выполняется: шард не читается и не пишется, схема не меняется. Для `SELECT` строка плана называет форму (`Keys` или `Ranges`), число шардов, остаток предиката в сервисе и `LIMIT`, если он есть. `EXPLAIN` команды, которая сама отвечает `0A000`, тоже `0A000`: план не строится. `EXPLAIN ANALYZE` — `0A000`.
 
+6.2. `PREPARE`. Один коммит. `PREPARE имя AS оператор` разбирает оператор и запоминает его в сессии, не выполняя: шард не читается и не пишется, схема не меняется. CommandComplete `PREPARE`. Оператор, который сам отвечает `0A000`, не запоминается. Список типов в скобках — `0A000`, оператор не запоминается. Повтор имени — SQLSTATE `42P05`, старый оператор остаётся. `EXECUTE имя` и `EXECUTE имя (литералы)` выполняют запомненное; литералы подставляются в `$1`, `$2`, … Неизвестное имя, лишний или пропущенный параметр — `26000` и `22023`, как у extended. `DEALLOCATE имя`, `DEALLOCATE PREPARE имя` и `DEALLOCATE ALL` снимают операторы. Подготовленный оператор переживает `COMMIT` и `ROLLBACK`. Это не кадр `Parse` протокола.
+
+6.3. `SELECT INTO`. Один коммит. `SELECT список INTO имя FROM ...` создаёт новую row-таблицу и заполняет её результатом того же `SELECT`, который сессия уже умеет выполнять. Строки клиенту не отправляются, CommandComplete `SELECT n`. Столбцы и типы берутся из списка выборки; имя столбца — метка `AS`, иначе имя столбца источника. Первичный ключ новой таблицы — первичный ключ источника, если он целиком входит в список выборки и идёт в том же порядке. Иначе `0A000`: у `TTableDescription` нет таблицы без `KeyColumnNames`, propose не отправляется. Повтор имени — `42P07`, исходная таблица не меняется. Чтение и запись идут одним снимком, как `INSERT ... SELECT`. `TEMPORARY`, `UNLOGGED`, `INTO TABLE` и `SELECT INTO` внутри `BEGIN` — `0A000`, таблица не создаётся. `CREATE TABLE AS` этим коммитом не делается.
+
+6.4. `OR`, `NOT` и скобки в `WHERE`. `AND` и сравнение столбца с литералом уже есть. Один коммит добавляет `OR`, `NOT` и скобки. Логика трёхзначная, как в PostgreSQL: сравнение с `NULL` неизвестно, неизвестное в `WHERE` строку не пропускает. `OR` в один ключ не сливается. Каждая ветка `OR` читается отдельно, если у неё есть своё ограничение ключа, затем строки объединяются по первичному ключу. Ветка без ограничения ключа — `0A000`, пока полный скан выключен, и шард не читается. `NOT` — остаточный фильтр поверх чтения, у которого ключ всё ещё ограничен. `NOT` без такого ключа — `0A000`.
+
+6.5. Подзапрос в `WHERE`. Один коммит, формы PostgreSQL: `IN`, `NOT IN`, `EXISTS`, `NOT EXISTS`, `оператор ANY` / `SOME`, `оператор ALL` и сравнение со скалярным подзапросом. Список литералов `IN (1, 2)` — тот же предикат, без второго чтения. Подзапрос без ссылки на внешний запрос выполняется один раз. Коррелированный видит столбцы внешнего запроса. На обе таблицы один снимок. `NULL` в `NOT IN` и `ALL` даёт неизвестно, строка не проходит. Скаляр из нескольких строк — `21000`. Больше одного столбца у скаляра и несовпадение числа столбцов в `IN` — `42601`.
+
 7. Вставка, три коммита. Первый — `INSERT` одной строки: шард выбирается по первичному ключу, `TEvWrite` `MODE_IMMEDIATE` `OPERATION_INSERT`. Повтор ключа — `STATUS_CONSTRAINT_VIOLATION`, клиенту SQLSTATE `23505`, строка не меняется. CommandComplete `INSERT 0 1`.
 
 Второй коммит — `ON CONFLICT` по столбцам первичного ключа, ориентир — `src/backend/parser/gram.y` и исполнитель `nodeModifyTable` в PostgreSQL 18:
@@ -348,7 +358,7 @@ flowchart LR
 
 18. Коммит `HAVING`. Фильтр по результатам агрегации, тем же языком сравнений, что и `WHERE`.
 
-19. Остальной синтаксис `SELECT`, каждый член своим коммитом и тестом, в этом порядке: `DISTINCT` и `DISTINCT ON`; `UNION` и `UNION ALL`; `INTERSECT`; `EXCEPT`; подзапрос в `FROM`, `WHERE` и списке выборки; `WITH`; `WITH RECURSIVE`; оконные функции `OVER`; `OFFSET` и `FETCH`. До своего коммита член отвечает `0A000`.
+19. Остальной синтаксис `SELECT`, каждый член своим коммитом и тестом, в этом порядке: `DISTINCT` и `DISTINCT ON`; `UNION` и `UNION ALL`; `INTERSECT`; `EXCEPT`; подзапрос в `FROM` и списке выборки; `WITH`; `WITH RECURSIVE`; оконные функции `OVER`; `OFFSET` и `FETCH`. Предикат-подзапрос в `WHERE` — отдельный коммит 6.5, не этот. До своего коммита член отвечает `0A000`.
 
 20. Коммит `FOR UPDATE` / `FOR NO KEY UPDATE` / `FOR SHARE` / `FOR KEY SHARE` только для row-таблицы. Блокировка берётся готовыми полями datashard: `TEvRead.LockMode` (`PESSIMISTIC_EXCLUSIVE`, `PESSIMISTIC_EXCLUSIVE_NO_KEY`, `PESSIMISTIC_SHARED`, `PESSIMISTIC_SHARED_KEY`) либо `TEvLockRows`, в том числе `SkipLocked`. События шарда не меняются. `NOWAIT` в этих событиях нет — `0A000`. У `TEvRead` columnshard нет режима блокировки — `FOR UPDATE` по колоночной таблице `0A000`.
 

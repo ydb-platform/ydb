@@ -21,8 +21,8 @@ struct TCodecValue {
     TString Message;
 };
 
-TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
-TCodecValue DecodeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
+TCodecValue EncodeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format, ui8 precision = 0, ui8 scale = 0);
+TCodecValue DecodeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format, ui8 precision = 0, ui8 scale = 0);
 
 // One family per file. A family that does not own the type returns 0A000.
 TCodecValue EncodeIntegerCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
@@ -31,5 +31,7 @@ TCodecValue EncodeTextCell(NScheme::TTypeId type, bool null, TStringBuf cell, EW
 TCodecValue DecodeTextCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
 TCodecValue EncodeTimeCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format);
 TCodecValue DecodeTimeCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format);
+TCodecValue EncodeDecimalCell(NScheme::TTypeId type, bool null, TStringBuf cell, EWireFormat format, ui8 precision, ui8 scale);
+TCodecValue DecodeDecimalCell(NScheme::TTypeId type, bool null, TStringBuf wire, EWireFormat format, ui8 precision, ui8 scale);
 
 } // namespace NKikimr::NSql

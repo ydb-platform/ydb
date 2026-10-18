@@ -1,7 +1,7 @@
 # Кодек даты, timestamp и interval
 
-status: pending
-commit:
+status: done
+commit: 54704027375b810703d89af4fb78baf34c5d40fb
 id: codec-time
 depends: codec-text
 

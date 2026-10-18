@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    decimal.cpp
     dispatch.cpp
     ints.cpp
     text.cpp

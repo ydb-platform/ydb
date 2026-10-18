@@ -34,13 +34,13 @@ Y_UNIT_TEST_SUITE(UpdateRow) {
         const auto index = sql.Exec("CREATE INDEX note_idx ON kept (note)");
         UNIT_ASSERT_C(index.Ok, index.SqlState + " " + index.Message);
 
-        const auto blocked = sql.Exec("UPDATE kept SET note = 'changed' WHERE id = 1");
-        UNIT_ASSERT(!blocked.Ok);
-        UNIT_ASSERT_VALUES_EQUAL(blocked.SqlState, "0A000");
+        const auto changed = sql.Exec("UPDATE kept SET note = 'changed' WHERE id = 1");
+        UNIT_ASSERT_C(changed.Ok, changed.SqlState + " " + changed.Message);
+        UNIT_ASSERT_VALUES_EQUAL(changed.CommandTag, "UPDATE 1");
 
         const auto still = sql.Exec("SELECT note FROM kept WHERE id = 1");
         UNIT_ASSERT_C(still.Ok, still.SqlState + " " + still.Message);
         UNIT_ASSERT_VALUES_EQUAL(still.Rows.size(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(still.Rows[0][0].Text, "stay");
+        UNIT_ASSERT_VALUES_EQUAL(still.Rows[0][0].Text, "changed");
     }
 }

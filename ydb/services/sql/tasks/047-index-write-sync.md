@@ -1,7 +1,7 @@
 # INSERT пишет синхронный индекс
 
-status: pending
-commit:
+status: done
+commit: 7574d3342487d5b4f6ae568d6e0be0268a5a970a
 id: index-write-sync
 depends: insert-row
 

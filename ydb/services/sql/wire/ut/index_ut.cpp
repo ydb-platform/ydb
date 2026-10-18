@@ -119,4 +119,39 @@ Y_UNIT_TEST_SUITE(IndexScan) {
         UNIT_ASSERT(!again.Ok);
         UNIT_ASSERT_VALUES_EQUAL(again.SqlState, "23505");
     }
+
+    Y_UNIT_TEST(UpdateMovesTheIndexKeyAndDeleteRemovesIt) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        const auto created = sql.Exec("CREATE TABLE moved (id int8 PRIMARY KEY, note text, extra text)");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO moved (id, note, extra) VALUES (1, 'old', 'body')").Ok, "insert");
+        const auto index = sql.Exec("CREATE INDEX note_idx ON moved (note)");
+        UNIT_ASSERT_C(index.Ok, index.SqlState + " " + index.Message);
+
+        const auto updated = sql.Exec("UPDATE moved SET note = 'new' WHERE id = 1");
+        UNIT_ASSERT_C(updated.Ok, updated.SqlState + " " + updated.Message);
+
+        const auto found = sql.Exec("SELECT extra FROM moved WHERE note = 'new'");
+        UNIT_ASSERT_C(found.Ok, found.SqlState + " " + found.Message);
+        UNIT_ASSERT_VALUES_EQUAL(found.AccessPath, "IndexScan");
+        UNIT_ASSERT_VALUES_EQUAL(found.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(found.Rows[0][0].Text, "body");
+
+        const auto gone = sql.Exec("SELECT extra FROM moved WHERE note = 'old'");
+        UNIT_ASSERT_C(gone.Ok, gone.SqlState + " " + gone.Message);
+        UNIT_ASSERT_VALUES_EQUAL(gone.AccessPath, "IndexScan");
+        UNIT_ASSERT_VALUES_EQUAL(gone.Rows.size(), 0u);
+
+        const auto removed = sql.Exec("DELETE FROM moved WHERE id = 1");
+        UNIT_ASSERT_C(removed.Ok, removed.SqlState + " " + removed.Message);
+        const auto after = sql.Exec("SELECT extra FROM moved WHERE note = 'new'");
+        UNIT_ASSERT_C(after.Ok, after.SqlState + " " + after.Message);
+        UNIT_ASSERT_VALUES_EQUAL(after.Rows.size(), 0u);
+    }
 }

@@ -10396,7 +10396,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    Y_UNIT_TEST(TestBridgeDemotion) {
+    void TestBridgeDemotion(bool rebootHive) {
         static constexpr ui32 NUM_NODES = 4;
         static constexpr ui32 NUM_TABLETS = 4;
         TTestBasicRuntime runtime(NUM_NODES, false);
@@ -10411,7 +10411,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui32 numNodes = runtime.GetNodeCount();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         MakeSureTabletIsUp(runtime, hiveTablet, 0);
-        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+        TActorId hiveActor = GetHiveActor(runtime, hiveTablet);
+        bridge.Subscribe(hiveActor);
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
 
         std::unordered_set<ui64> tablets;
@@ -10421,6 +10422,23 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             tablets.insert(tabletId);
             MakeSureTabletIsUp(runtime, tabletId, 0);
         }
+
+        // Every Local has reconnected (alive node) and every tablet has been resynced (none Unknown)
+        auto hiveSettled = [&]() -> bool {
+            runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveDomainStats());
+            TAutoPtr<IEventHandle> handle;
+            TEvHive::TEvResponseHiveDomainStats* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveDomainStats>(handle);
+            std::unordered_set<ui32> aliveNodes;
+            for (const auto& domain : response->Record.GetDomainStats()) {
+                aliveNodes.insert(domain.GetNodeIds().begin(), domain.GetNodeIds().end());
+                for (const auto& state : domain.GetStateStats()) {
+                    if (state.GetVolatileState() == NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN && state.GetCount() > 0) {
+                        return false;
+                    }
+                }
+            }
+            return aliveNodes.size() == numNodes;
+        };
 
         using TDistribution = std::vector<std::vector<ui64>>;
         auto getDistribution = [hiveTablet, nodeBase, senderA, numNodes, &runtime]() -> TDistribution {
@@ -10451,12 +10469,30 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), NUM_TABLETS);
 
+        if (rebootHive) {
+            RebootTablet(runtime, hiveTablet, senderA);
+            bool settled = hiveSettled();
+            for (ui32 i = 0; i < 100 && !settled; ++i) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+                settled = hiveSettled();
+            }
+            UNIT_ASSERT_C(settled, "Locals did not reconnect to the restarted Hive");
+            bridge.Unsubscribe(hiveActor);
+            hiveActor = GetHiveActor(runtime, hiveTablet);
+            bridge.Subscribe(hiveActor);
+        }
+
         TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
 
         bridge.Promote(1);
 
-        while (blockBoot.empty()) {
-            runtime.DispatchEvents({}, TDuration::MilliSeconds(20));
+        {
+            // Not runtime.WaitFor: it aborts the whole binary on timeout
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return !blockBoot.empty(); };
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; }); // enables full simulation
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(!blockBoot.empty(), "pile drain did not start after promotion");
         }
 
         // make sure tablets are moved with correct in-flight
@@ -10466,6 +10502,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
 
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), 0);
+    }
+
+    Y_UNIT_TEST(TestBridgeDemotion) {
+        TestBridgeDemotion(false);
+    }
+
+    Y_UNIT_TEST(TestBridgeDemotionAfterHiveRestart) {
+        TestBridgeDemotion(true);
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

@@ -3,5 +3,6 @@ RECURSE(
     codec
     ddl
     parse
+    plan
     wire
 )

@@ -1,7 +1,7 @@
 # Кодек decimal, uuid и json
 
-status: pending
-commit:
+status: done
+commit: 8b9bfc6571493216e190882ccdac8530145800de
 id: codec-decimal
 depends: codec-time
 

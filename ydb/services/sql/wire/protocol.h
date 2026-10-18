@@ -32,6 +32,7 @@ TString MakeAuthenticationOk();
 TString MakeParameterStatus(TStringBuf name, TStringBuf value);
 TString MakeBackendKeyData(ui32 backendPid, ui32 secret);
 TString MakeReadyForQuery();
+TString MakeCommandComplete(TStringBuf tag);
 TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message);
 TString MakeHandshake(ui32 backendPid, ui32 secret);
 

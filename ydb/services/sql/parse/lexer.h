@@ -11,6 +11,8 @@ enum class ETokenKind {
     Comma,
     Semicolon,
     Dot,
+    LeftParen,
+    RightParen,
     Operator,
     Number,
     String,

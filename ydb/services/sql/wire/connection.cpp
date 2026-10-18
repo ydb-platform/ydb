@@ -3,6 +3,9 @@
 #include "catalog.h"
 #include "protocol.h"
 
+#include <ydb/services/sql/ddl/events.h>
+#include <ydb/services/sql/parse/parser.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -107,6 +110,10 @@ private:
             }
             return;
         }
+        if (CurrentStateFunc() == &TSqlConnection::StateScheme) {
+            RequestRead();
+            return;
+        }
         if (CurrentStateFunc() == &TSqlConnection::StateQuery && HandleQueries()) {
             RequestRead();
         }
@@ -193,6 +200,13 @@ private:
                     }
                     continue;
                 }
+                const TParseResult parsed = Parse(sql);
+                if (parsed.CreateTable) {
+                    Register(CreateTableActor(SelfId(), DatabasePath, *parsed.CreateTable));
+                    Become(&TSqlConnection::StateScheme);
+                    RequestRead();
+                    return false;
+                }
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());
@@ -216,8 +230,29 @@ private:
             }
         }
         const auto state = CurrentStateFunc();
-        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery)) {
+        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery || state == &TSqlConnection::StateScheme)) {
             ReadSocket();
+        }
+    }
+
+    void HandleDdl(TEvDdlResult::TPtr& ev) {
+        const TEvDdlResult& result = *ev->Get();
+        TString reply;
+        if (result.Ok) {
+            reply = MakeCommandComplete(result.CommandTag);
+        } else {
+            const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
+            const TString message = result.Message.empty() ? TString("not supported") : result.Message;
+            reply = MakeErrorResponse(sqlState, message);
+        }
+        reply.append(MakeReadyForQuery());
+        const bool written = Write(reply);
+        Become(&TSqlConnection::StateQuery);
+        if (!written) {
+            return;
+        }
+        if (HandleQueries()) {
+            RequestRead();
         }
     }
 
@@ -239,6 +274,14 @@ private:
 
     STATEFN(StateQuery) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NActors::TEvPollerReady, HandleReady);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateScheme) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvDdlResult, HandleDdl);
             hFunc(NActors::TEvPollerReady, HandleReady);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }

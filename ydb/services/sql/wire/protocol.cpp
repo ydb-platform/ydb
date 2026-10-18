@@ -145,6 +145,12 @@ TString MakeReadyForQuery() {
     return MakeMessage('Z', TStringBuf("I", 1));
 }
 
+TString MakeCommandComplete(TStringBuf tag) {
+    TString payload(tag);
+    payload.push_back('\0');
+    return MakeMessage('C', payload);
+}
+
 TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message) {
     TString payload;
     payload.push_back('S');

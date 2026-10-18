@@ -8,6 +8,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
+    create_table_ut.cpp
     listener_ut.cpp
 )
 

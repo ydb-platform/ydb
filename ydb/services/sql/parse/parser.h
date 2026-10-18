@@ -46,13 +46,38 @@ struct TSelectStmt {
     std::optional<ui64> Limit;
 };
 
+// PostgreSQL type name. Quoted names are explicit YDB types.
+struct TPgType {
+    TString Name;
+    bool Quoted = false;
+    std::optional<ui32> Precision;
+    std::optional<ui32> Scale;
+};
+
+struct TColumnDef {
+    TIdentifier Name;
+    TPgType Type;
+    bool NotNull = false;
+    std::optional<TLiteral> Default;
+};
+
+struct TCreateTableStmt {
+    bool IfNotExists = false;
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TVector<TColumnDef> Columns;
+    TVector<TIdentifier> PrimaryKey;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
+    std::optional<TCreateTableStmt> CreateTable;
     TString SqlState;
     TString Message;
 };
 
-// SELECT of a column list or * FROM one table. Anything else is SQLSTATE 0A000.
+// SELECT, or CREATE TABLE with columns, NULL and a primary key.
+// Anything else is SQLSTATE 0A000 and is not a statement.
 TParseResult Parse(TStringBuf sql);
 
 } // namespace NKikimr::NSql

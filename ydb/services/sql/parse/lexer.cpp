@@ -50,6 +50,14 @@ TToken TLexer::Next() {
         ++Position;
         return {ETokenKind::Dot, ".", false};
     }
+    if (ch == '(') {
+        ++Position;
+        return {ETokenKind::LeftParen, "(", false};
+    }
+    if (ch == ')') {
+        ++Position;
+        return {ETokenKind::RightParen, ")", false};
+    }
     if (ch == '\'' ) {
         ++Position;
         TString text;

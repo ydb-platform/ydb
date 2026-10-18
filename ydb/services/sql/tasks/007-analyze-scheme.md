@@ -1,7 +1,7 @@
 # Привязка таблицы через scheme cache
 
-status: pending
-commit:
+status: done
+commit: 4d69b9ab68a1d2febbe97146d8d63545aec12d9a
 id: analyze-scheme
 depends: parse-where-limit
 

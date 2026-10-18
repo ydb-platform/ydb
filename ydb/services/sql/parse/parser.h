@@ -79,6 +79,14 @@ enum class EAlterTableKind {
     DropDefault,
 };
 
+struct TAlterSequenceStmt {
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TString DataType;
+    bool Restart = false;
+    std::optional<i64> RestartWith;
+};
+
 struct TCreateSequenceStmt {
     bool IfNotExists = false;
     std::optional<TIdentifier> Schema;
@@ -105,6 +113,7 @@ struct TParseResult {
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;
+    std::optional<TAlterSequenceStmt> AlterSequence;
     TString SqlState;
     TString Message;
 };

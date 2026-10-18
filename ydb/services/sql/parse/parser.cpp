@@ -170,6 +170,9 @@ public:
         if (IsKeyword("table")) {
             return AlterTableStmt();
         }
+        if (IsKeyword("sequence")) {
+            return AlterSequence();
+        }
         return Unsupported(Current.Text);
     }
 
@@ -244,6 +247,53 @@ private:
         }
         Advance();
         return std::nullopt;
+    }
+
+    TParseResult AlterSequence() {
+        Advance();
+        TAlterSequenceStmt sequence;
+        if (auto error = QualifiedName(sequence.Schema, sequence.Name)) {
+            return *error;
+        }
+        while (Current.Kind == ETokenKind::Identifier && !Current.Quoted) {
+            if (IsKeyword("as")) {
+                Advance();
+                if (IsKeyword("smallint")) {
+                    sequence.DataType = "Int16";
+                } else if (IsKeyword("integer") || IsKeyword("int") || IsKeyword("int4")) {
+                    sequence.DataType = "Int32";
+                } else if (IsKeyword("bigint") || IsKeyword("int8")) {
+                    sequence.DataType = "Int64";
+                } else {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                continue;
+            }
+            if (IsKeyword("restart")) {
+                Advance();
+                sequence.Restart = true;
+                if (IsKeyword("with")) {
+                    Advance();
+                    i64 value = 0;
+                    if (auto error = TakeInteger(value)) {
+                        return *error;
+                    }
+                    sequence.RestartWith = value;
+                }
+                continue;
+            }
+            if (IsKeyword("owned")) {
+                return Unsupported(Current.Text);
+            }
+            break;
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.AlterSequence = std::move(sequence);
+        return result;
     }
 
     TParseResult CreateSequence() {

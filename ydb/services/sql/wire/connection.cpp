@@ -219,6 +219,12 @@ private:
                     RequestRead();
                     return false;
                 }
+                if (parsed.AlterSequence) {
+                    Register(CreateAlterSequenceActor(SelfId(), DatabasePath, *parsed.AlterSequence));
+                    Become(&TSqlConnection::StateScheme);
+                    RequestRead();
+                    return false;
+                }
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());

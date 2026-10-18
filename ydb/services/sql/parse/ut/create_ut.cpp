@@ -100,4 +100,16 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT(!owned.CreateSequence);
         UNIT_ASSERT_VALUES_EQUAL(owned.Message, "owned");
     }
+
+    Y_UNIT_TEST(AlterSequenceRestart) {
+        const TParseResult parsed = Parse("ALTER SEQUENCE bounds RESTART WITH 9");
+        UNIT_ASSERT(parsed.AlterSequence);
+        UNIT_ASSERT(parsed.AlterSequence->Restart);
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.AlterSequence->RestartWith, 9);
+
+        const TParseResult owned = Parse("ALTER SEQUENCE bounds OWNED BY t.id");
+        UNIT_ASSERT(!owned.AlterSequence);
+        UNIT_ASSERT_VALUES_EQUAL(owned.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(owned.Message, "owned");
+    }
 }

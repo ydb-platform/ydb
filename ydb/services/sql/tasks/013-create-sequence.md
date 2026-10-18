@@ -1,7 +1,7 @@
 # CREATE SEQUENCE
 
-status: pending
-commit:
+status: done
+commit: ad1bacceaae5d2748c6077708be8adbde994d7f1
 id: create-sequence
 depends: create-table
 

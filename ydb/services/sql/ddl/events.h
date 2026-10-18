@@ -18,5 +18,6 @@ struct TEvDdlResult : public NActors::TEventLocal<TEvDdlResult, EvDdlResult> {
 NActors::IActor* CreateTableActor(const NActors::TActorId& replyTo, TString database, TCreateTableStmt statement);
 NActors::IActor* CreateAlterTableActor(const NActors::TActorId& replyTo, TString database, TAlterTableStmt statement);
 NActors::IActor* CreateSequenceActor(const NActors::TActorId& replyTo, TString database, TCreateSequenceStmt statement);
+NActors::IActor* CreateAlterSequenceActor(const NActors::TActorId& replyTo, TString database, TAlterSequenceStmt statement);
 
 } // namespace NKikimr::NSql

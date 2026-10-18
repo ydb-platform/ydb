@@ -166,6 +166,8 @@ struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvS
         TResponse Response;
 };
 
+// clang-format off
+
 class TQuerySessionPoolServiceActor: public NActors::TActorBootstrapped<TQuerySessionPoolServiceActor> {
     using TBase = NActors::TActorBootstrapped<TQuerySessionPoolServiceActor>;
 
@@ -602,6 +604,8 @@ private:
     std::unordered_map<TString, TDatabaseSessionState> DatabaseStates;
 };
 
+// clang-format on
+
 void TSessionInfoDeleter::operator()(TSessionInfo* sessionInfo) {
     ActorSystem->Send(QuerySessionPoolServiceActorId(), new TQuerySessionPoolServiceActor::TEvReleaseSession(std::move(*sessionInfo)));
     delete sessionInfo;
@@ -725,7 +729,12 @@ private:
 
 public:
     void Bootstrap() {
-#define COMMON_LOG { "actorId", SelfId() }, { "path", LookupSource.GetPath() }
+        // clang-format off
+#define COMMON_LOG \
+        { "actorId", SelfId() }, \
+        { "path", LookupSource.GetPath() }
+        // clang-format on
+
         YDB_LOG_INFO("New kikimr provider lookup actor",
                     COMMON_LOG,
                     {"database", LookupSource.GetDatabase()},

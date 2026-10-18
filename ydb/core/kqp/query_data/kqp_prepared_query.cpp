@@ -167,6 +167,38 @@ const NKikimr::NKqp::TStagePredictor& TKqpPhyTxHolder::GetCalculationPredictor(c
     return Predictors[stageIdx];
 }
 
+namespace {
+
+bool AreValuesKnownBeforeExecution(const NKqpProto::TKqpPhyKeyBound& bound, const THashSet<TString>& queryParams) {
+    for (const auto& value : bound.GetValues()) {
+        if (value.HasLiteralValue()) {
+            continue;
+        }
+        TString name;
+        if (value.HasParamValue()) {
+            name = value.GetParamValue().GetParamName();
+        } else if (value.HasParamElementValue()) {
+            name = value.GetParamElementValue().GetParamName();
+        } else {
+            return false;
+        }
+        if (!queryParams.contains(name)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// A key range whose bounds are known before the query is executed: literals,
+// or parameters supplied with the query rather than computed by it.
+bool IsKeyRangeKnownBeforeExecution(const NKqpProto::TKqpPhyKeyRange& range, const THashSet<TString>& queryParams) {
+    return range.HasFrom() && range.HasTo()
+        && AreValuesKnownBeforeExecution(range.GetFrom(), queryParams)
+        && AreValuesKnownBeforeExecution(range.GetTo(), queryParams);
+}
+
+} // namespace
+
 TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, bool noFillTables)
     : Proto(proto)
@@ -183,7 +215,6 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         return;
     }
 
-    THashSet<TString> tablesSet;
     const auto& phyQuery = Proto->GetPhysicalQuery();
     Transactions.reserve(phyQuery.TransactionsSize());
 
@@ -195,46 +226,75 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         FillTables(phyTx.GetStages());
     }
 
+    struct TTableReads {
+        TVector<const NKqpProto::TKqpPhyKeyRange*> KeyRanges;
+        bool Unbounded = false;
+    };
+    THashMap<TString, TTableReads> tableReads;
+    // A null range is a read (or write) that is not bounded by a key range.
+    auto addRead = [&](const TString& path, const NKqpProto::TKqpPhyKeyRange* range,
+        const THashSet<TString>& queryParams)
+    {
+        auto& reads = tableReads[path];
+        if (range && IsKeyRangeKnownBeforeExecution(*range, queryParams)) {
+            reads.KeyRanges.push_back(range);
+        } else {
+            reads.Unbounded = true;
+        }
+    };
+
     for (const auto& phyTx: phyQuery.GetTransactions()) {
         TKqpPhyTxHolder::TConstPtr txHolder = std::make_shared<const TKqpPhyTxHolder>(
             Proto, &phyTx, Alloc, TableConstInfoById);
         Transactions.emplace_back(std::move(txHolder));
+
+        // Parameters supplied with the query, as opposed to results of other
+        // transactions of the query and internally generated values.
+        THashSet<TString> queryParams;
+        for (const auto& binding : phyTx.GetParamBindings()) {
+            if (binding.HasExternalBinding()) {
+                queryParams.insert(binding.GetName());
+            }
+        }
+
         for (const auto& stage: phyTx.GetStages()) {
 
             for (const auto& tableOp: stage.GetTableOps()) {
-                tablesSet.insert(tableOp.GetTable().GetPath());
+                addRead(tableOp.GetTable().GetPath(),
+                    tableOp.HasReadRange() ? &tableOp.GetReadRange().GetKeyRange() : nullptr, queryParams);
             }
 
             for (const auto& input : stage.GetInputs()) {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                    tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
+                    addRead(input.GetStreamLookup().GetTable().GetPath(), nullptr, queryParams);
                 }
 
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
-                    tablesSet.insert(input.GetSequencer().GetTable().GetPath());
+                    addRead(input.GetSequencer().GetTable().GetPath(), nullptr, queryParams);
                 }
             }
 
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
-                    tablesSet.insert(source.GetReadRangesSource().GetTable().GetPath());
+                    const auto& read = source.GetReadRangesSource();
+                    addRead(read.GetTable().GetPath(), read.HasKeyRange() ? &read.GetKeyRange() : nullptr, queryParams);
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    tablesSet.insert(source.GetFullTextSource().GetTable().GetPath());
+                    addRead(source.GetFullTextSource().GetTable().GetPath(), nullptr, queryParams);
                 }
             }
 
             auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings) {
-                tablesSet.insert(settings.GetTable().GetPath());
+                addRead(settings.GetTable().GetPath(), nullptr, queryParams);
                 for (const auto& indexSettings : settings.GetIndexes()) {
-                    tablesSet.insert(indexSettings.GetTable().GetPath());
+                    addRead(indexSettings.GetTable().GetPath(), nullptr, queryParams);
                     if (indexSettings.HasFulltextSettings()) {
-                        tablesSet.insert(indexSettings.GetDocsTable().GetPath());
+                        addRead(indexSettings.GetDocsTable().GetPath(), nullptr, queryParams);
                         if (indexSettings.HasDictTable()) {
-                            tablesSet.insert(indexSettings.GetDictTable().GetPath());
+                            addRead(indexSettings.GetDictTable().GetPath(), nullptr, queryParams);
                         }
-                        tablesSet.insert(indexSettings.GetStatsTable().GetPath());
+                        addRead(indexSettings.GetStatsTable().GetPath(), nullptr, queryParams);
                     }
                 }
             };
@@ -255,7 +315,14 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         }
     }
 
-    QueryTables = TVector<TString>(tablesSet.begin(), tablesSet.end());
+    QueryTables.reserve(tableReads.size());
+    for (auto& [path, reads] : tableReads) {
+        auto& table = QueryTables.emplace_back();
+        table.Path = path;
+        if (!reads.Unbounded) {
+            table.KeyRanges = std::move(reads.KeyRanges);
+        }
+    }
 }
 
 TIntrusivePtr<TTableConstInfo>& TPreparedQueryHolder::GetInfo(const TTableId& tableId) {
@@ -383,7 +450,7 @@ bool TPreparedQueryHolder::HasTempTables(TKqpTempTablesState::TConstPtr tempTabl
         return false;
     }
     for (const auto& table: QueryTables) {
-        auto infoIt = tempTablesState->FindInfo(table, withSessionId);
+        auto infoIt = tempTablesState->FindInfo(table.Path, withSessionId);
         if (infoIt != tempTablesState->TempTables.end()) {
             return true;
         }

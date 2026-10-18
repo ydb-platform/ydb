@@ -46,6 +46,44 @@ TToken TLexer::Next() {
         ++Position;
         return {ETokenKind::Semicolon, ";", false};
     }
+    if (ch == '\'' ) {
+        ++Position;
+        TString text;
+        while (Position < Input.size()) {
+            if (Input[Position] == '\'') {
+                if (Position + 1 < Input.size() && Input[Position + 1] == '\'') {
+                    text.push_back('\'');
+                    Position += 2;
+                    continue;
+                }
+                ++Position;
+                return {ETokenKind::String, text, false};
+            }
+            text.push_back(Input[Position]);
+            ++Position;
+        }
+        return {ETokenKind::Error, text, false};
+    }
+    if (ch == '=' || ch == '<' || ch == '>' || ch == '!') {
+        TString text(1, ch);
+        ++Position;
+        if (Position < Input.size()) {
+            const char second = Input[Position];
+            if ((ch == '<' && (second == '>' || second == '=')) || (ch == '>' && second == '=') || (ch == '!' && second == '=')) {
+                text.push_back(second);
+                ++Position;
+            }
+        }
+        return {ETokenKind::Operator, text, false};
+    }
+    if (IsAsciiDigit(ch)) {
+        const size_t begin = Position;
+        ++Position;
+        while (Position < Input.size() && IsAsciiDigit(Input[Position])) {
+            ++Position;
+        }
+        return {ETokenKind::Number, TString(Input.substr(begin, Position - begin)), false};
+    }
     if (ch == '"') {
         ++Position;
         TString text;

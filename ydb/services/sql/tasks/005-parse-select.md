@@ -1,7 +1,7 @@
 # Разбор SELECT и FROM
 
-status: pending
-commit:
+status: done
+commit: f43795e2aeaec17d5892c997a649c41332b3b5ee
 id: parse-select
 depends: catalog
 

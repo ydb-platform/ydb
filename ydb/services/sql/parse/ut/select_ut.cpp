@@ -49,10 +49,25 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "insert");
     }
 
-    Y_UNIT_TEST(UnknownNodeKeepsText) {
-        const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1");
+    Y_UNIT_TEST(WhereAndLimit) {
+        const TParseResult parsed = Parse("SELECT a, b FROM t WHERE a = 1 AND b = 'x' LIMIT 10");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Where.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Where[0].Column.Name, "a");
+        UNIT_ASSERT(parsed.Select->Where[0].Op == ECompareOp::Eq);
+        UNIT_ASSERT(parsed.Select->Where[0].Value.Kind == TLiteral::EKind::Integer);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Where[0].Value.Text, "1");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Where[1].Column.Name, "b");
+        UNIT_ASSERT(parsed.Select->Where[1].Value.Kind == TLiteral::EKind::String);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Where[1].Value.Text, "x");
+        UNIT_ASSERT(parsed.Select->Limit);
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.Select->Limit, 10u);
+    }
+
+    Y_UNIT_TEST(OrIsUnsupported) {
+        const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);
         UNIT_ASSERT_VALUES_EQUAL(parsed.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "where");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "or");
     }
 }

@@ -12,10 +12,37 @@ struct TIdentifier {
     bool Quoted = false;
 };
 
+enum class ECompareOp {
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+};
+
+struct TLiteral {
+    enum class EKind {
+        Integer,
+        String,
+    };
+
+    EKind Kind = EKind::Integer;
+    TString Text;
+};
+
+struct TComparison {
+    TIdentifier Column;
+    ECompareOp Op = ECompareOp::Eq;
+    TLiteral Value;
+};
+
 struct TSelectStmt {
     bool Star = false;
     TVector<TIdentifier> Columns;
     TIdentifier From;
+    TVector<TComparison> Where;
+    std::optional<ui64> Limit;
 };
 
 struct TParseResult {

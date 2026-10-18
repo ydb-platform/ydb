@@ -2,6 +2,8 @@
 
 #include "lexer.h"
 
+#include <util/string/cast.h>
+
 namespace NKikimr::NSql {
 
 namespace {
@@ -13,75 +15,150 @@ TParseResult Unsupported(TStringBuf node) {
     return result;
 }
 
-bool IsKeyword(const TToken& token, TStringBuf keyword) {
-    return token.Kind == ETokenKind::Identifier && !token.Quoted && token.Text == keyword;
-}
-
-} // namespace
-
-TParseResult Parse(TStringBuf sql) {
-    TLexer lexer(sql);
-    const TToken first = lexer.Next();
-    if (first.Kind == ETokenKind::Error) {
-        return Unsupported(first.Text);
-    }
-    if (!IsKeyword(first, "select")) {
-        return Unsupported(first.Text);
+class TParser {
+public:
+    explicit TParser(TStringBuf sql)
+        : Lexer(sql)
+    {
+        Advance();
     }
 
-    TSelectStmt select;
-    const TToken item = lexer.Next();
-    if (item.Kind == ETokenKind::Star) {
-        select.Star = true;
-    } else if (item.Kind == ETokenKind::Identifier) {
-        select.Columns.push_back({item.Text, item.Quoted});
-        for (;;) {
-            const TToken separator = lexer.Next();
-            if (separator.Kind != ETokenKind::Comma) {
-                if (!IsKeyword(separator, "from")) {
-                    return Unsupported(separator.Text);
+    TParseResult ParseSelect() {
+        if (Current.Kind == ETokenKind::Error) {
+            return Unsupported(Current.Text);
+        }
+        if (!IsKeyword("select")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+
+        TSelectStmt select;
+        if (Current.Kind == ETokenKind::Star) {
+            select.Star = true;
+            Advance();
+        } else if (Current.Kind == ETokenKind::Identifier) {
+            select.Columns.push_back(Identifier());
+            Advance();
+            while (Current.Kind == ETokenKind::Comma) {
+                Advance();
+                if (Current.Kind != ETokenKind::Identifier) {
+                    return Unsupported(Current.Text);
                 }
-                break;
+                select.Columns.push_back(Identifier());
+                Advance();
             }
-            const TToken column = lexer.Next();
-            if (column.Kind != ETokenKind::Identifier) {
-                return Unsupported(column.Text);
+        } else {
+            return Unsupported(Current.Text);
+        }
+
+        if (!IsKeyword("from")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        select.From = Identifier();
+        Advance();
+
+        if (IsKeyword("where")) {
+            Advance();
+            if (auto error = ParseWhere(select)) {
+                return *error;
             }
-            select.Columns.push_back({column.Text, column.Quoted});
         }
-    } else {
-        return Unsupported(item.Text);
-    }
-
-    if (select.Star) {
-        const TToken from = lexer.Next();
-        if (!IsKeyword(from, "from")) {
-            return Unsupported(from.Text);
+        if (IsKeyword("limit")) {
+            Advance();
+            if (Current.Kind != ETokenKind::Number) {
+                return Unsupported(Current.Text);
+            }
+            ui64 limit = 0;
+            if (!TryFromString(Current.Text, limit)) {
+                return Unsupported(Current.Text);
+            }
+            select.Limit = limit;
+            Advance();
         }
-    }
 
-    const TToken table = lexer.Next();
-    if (table.Kind != ETokenKind::Identifier) {
-        return Unsupported(table.Text);
-    }
-    select.From = {table.Text, table.Quoted};
+        if (Current.Kind == ETokenKind::Semicolon) {
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::End) {
+            return Unsupported(Current.Text);
+        }
 
-    const TToken tail = lexer.Next();
-    if (tail.Kind == ETokenKind::End) {
         TParseResult result;
         result.Select = std::move(select);
         return result;
     }
-    if (tail.Kind == ETokenKind::Semicolon) {
-        const TToken after = lexer.Next();
-        if (after.Kind == ETokenKind::End) {
-            TParseResult result;
-            result.Select = std::move(select);
-            return result;
-        }
-        return Unsupported(after.Text);
+
+private:
+    void Advance() {
+        Current = Lexer.Next();
     }
-    return Unsupported(tail.Text);
+
+    bool IsKeyword(TStringBuf keyword) const {
+        return Current.Kind == ETokenKind::Identifier && !Current.Quoted && Current.Text == keyword;
+    }
+
+    TIdentifier Identifier() const {
+        return {Current.Text, Current.Quoted};
+    }
+
+    std::optional<TParseResult> ParseWhere(TSelectStmt& select) {
+        for (;;) {
+            if (IsKeyword("or")) {
+                return Unsupported(Current.Text);
+            }
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            TComparison comparison;
+            comparison.Column = Identifier();
+            Advance();
+            if (Current.Kind != ETokenKind::Operator) {
+                return Unsupported(Current.Text);
+            }
+            if (Current.Text == "=") {
+                comparison.Op = ECompareOp::Eq;
+            } else if (Current.Text == "<>" || Current.Text == "!=") {
+                comparison.Op = ECompareOp::NotEq;
+            } else if (Current.Text == "<") {
+                comparison.Op = ECompareOp::Lt;
+            } else if (Current.Text == ">") {
+                comparison.Op = ECompareOp::Gt;
+            } else if (Current.Text == "<=") {
+                comparison.Op = ECompareOp::Le;
+            } else if (Current.Text == ">=") {
+                comparison.Op = ECompareOp::Ge;
+            } else {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (Current.Kind == ETokenKind::Number) {
+                comparison.Value = {TLiteral::EKind::Integer, Current.Text};
+            } else if (Current.Kind == ETokenKind::String) {
+                comparison.Value = {TLiteral::EKind::String, Current.Text};
+            } else {
+                return Unsupported(Current.Text);
+            }
+            select.Where.push_back(std::move(comparison));
+            Advance();
+            if (!IsKeyword("and")) {
+                return std::nullopt;
+            }
+            Advance();
+        }
+    }
+
+    TLexer Lexer;
+    TToken Current;
+};
+
+} // namespace
+
+TParseResult Parse(TStringBuf sql) {
+    return TParser(sql).ParseSelect();
 }
 
 } // namespace NKikimr::NSql

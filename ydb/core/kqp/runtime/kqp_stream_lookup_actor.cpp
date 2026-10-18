@@ -1013,6 +1013,10 @@ private:
 
         // Remember the partitioning metadata of every shard that received a lock
         // request: it is shipped to the executer together with the collected locks.
+        // Note: only pessimistic (ReadCommitted) lock requests carry metas here.
+        // Optimistic locks ride inside EvRead requests and their shards are registered
+        // by the executer without metas, so repartitioning during an optimistic tx is
+        // not verified (not currently supported).
         ShardMetas[shardId] = MakeShardMeta(
             StreamLookupWorker->GetTableId(), Partitioning, shardId,
             StreamLookupWorker->GetKeyColumnTypes().size());
@@ -1454,8 +1458,11 @@ private:
     const TDuration SchemeCacheRequestTimeout;
     NActors::TActorId SchemeCacheRequestTimeoutTimer;
     TReadLockInfo LockInfo;
-    // Partitioning metadata of every shard that received a lock request, shipped
-    // to the executer together with the collected locks via ExtraData().
+    // Partitioning metadata of every shard that received a pessimistic (ReadCommitted)
+    // lock request, shipped to the executer together with the collected locks via
+    // ExtraData(). Optimistic locks ride inside EvRead requests and are registered
+    // without metas: repartitioning is not verified for optimistic transactions
+    // (not currently supported).
     THashMap<ui64, TShardMeta> ShardMetas;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;

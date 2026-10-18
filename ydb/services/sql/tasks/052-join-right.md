@@ -1,7 +1,7 @@
 # RIGHT JOIN
 
-status: pending
-commit:
+status: done
+commit: f2f7d39d568092568ef1a7f3ad90c0ac522afb4f
 id: join-right
 depends: join-left
 

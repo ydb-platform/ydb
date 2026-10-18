@@ -106,6 +106,21 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Right);
     }
 
+    Y_UNIT_TEST(CrossJoinAndCommaFromHaveNoPredicate) {
+        const TParseResult cross = Parse("SELECT lefts.note, rights.extra FROM lefts CROSS JOIN rights");
+        UNIT_ASSERT(cross.Select);
+        UNIT_ASSERT(cross.Select->Join);
+        UNIT_ASSERT(cross.Select->Join->Kind == EJoinKind::Cross);
+        UNIT_ASSERT_VALUES_EQUAL(cross.Select->Join->Name.Name, "rights");
+
+        const TParseResult comma = Parse("SELECT lefts.note FROM lefts, rights");
+        UNIT_ASSERT(comma.Select);
+        UNIT_ASSERT(comma.Select->Join);
+        UNIT_ASSERT(comma.Select->Join->Kind == EJoinKind::Cross);
+        UNIT_ASSERT_VALUES_EQUAL(comma.Select->From.Name, "lefts");
+        UNIT_ASSERT_VALUES_EQUAL(comma.Select->Join->Name.Name, "rights");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

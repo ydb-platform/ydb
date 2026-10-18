@@ -83,4 +83,38 @@ Y_UNIT_TEST_SUITE(Join) {
         UNIT_ASSERT(right.Rows[1][0].Null);
         UNIT_ASSERT_VALUES_EQUAL(right.Rows[1][1].Text, "other");
     }
+
+    Y_UNIT_TEST(CrossJoinReturnsTheProduct) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, extra text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'one')").Ok, "insert 1");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'two')").Ok, "insert 2");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (1, 'body')").Ok, "insert body");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, extra) VALUES (3, 'other')").Ok, "insert other");
+
+        const auto cross = sql.Exec("SELECT lefts.note, rights.extra FROM lefts CROSS JOIN rights");
+        UNIT_ASSERT_C(cross.Ok, cross.SqlState + " " + cross.Message);
+        UNIT_ASSERT_VALUES_EQUAL(cross.CommandTag, "SELECT 4");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows.size(), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[0][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[0][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[1][0].Text, "one");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[1][1].Text, "other");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[2][0].Text, "two");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[2][1].Text, "body");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[3][0].Text, "two");
+        UNIT_ASSERT_VALUES_EQUAL(cross.Rows[3][1].Text, "other");
+
+        const auto comma = sql.Exec("SELECT lefts.note, rights.extra FROM lefts, rights");
+        UNIT_ASSERT_C(comma.Ok, comma.SqlState + " " + comma.Message);
+        UNIT_ASSERT_VALUES_EQUAL(comma.CommandTag, "SELECT 4");
+        UNIT_ASSERT_VALUES_EQUAL(comma.Rows.size(), cross.Rows.size());
+    }
 }

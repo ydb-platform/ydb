@@ -120,10 +120,7 @@ public:
     }
 
     void Bootstrap() {
-        if (!Statement.Join || Statement.Star || !Statement.Where.empty()
-            || (Statement.Join->Kind != EJoinKind::Inner && Statement.Join->Kind != EJoinKind::Left
-                && Statement.Join->Kind != EJoinKind::Right))
-        {
+        if (!Statement.Join || Statement.Star || !Statement.Where.empty()) {
             Fail("0A000", "not supported");
             return;
         }
@@ -218,16 +215,18 @@ private:
             }
             return preferred;
         };
-        const int leftKey = own(join.LeftColumn, 0);
-        const int rightKey = own(join.RightColumn, 1);
-        if (leftKey < 0 || rightKey < 0 || leftKey == rightKey) {
-            Fail("42703", join.LeftColumn.Name);
-            return false;
+        if (join.Kind != EJoinKind::Cross) {
+            const int leftKey = own(join.LeftColumn, 0);
+            const int rightKey = own(join.RightColumn, 1);
+            if (leftKey < 0 || rightKey < 0 || leftKey == rightKey) {
+                Fail("42703", join.LeftColumn.Name);
+                return false;
+            }
+            KeySide[0] = leftKey == 0 ? join.LeftColumn.Name : join.RightColumn.Name;
+            KeySide[1] = leftKey == 1 ? join.LeftColumn.Name : join.RightColumn.Name;
+            LeftNames.insert(KeySide[0]);
+            RightNames.insert(KeySide[1]);
         }
-        KeySide[0] = leftKey == 0 ? join.LeftColumn.Name : join.RightColumn.Name;
-        KeySide[1] = leftKey == 1 ? join.LeftColumn.Name : join.RightColumn.Name;
-        LeftNames.insert(KeySide[0]);
-        RightNames.insert(KeySide[1]);
         if (join.Kind == EJoinKind::Right) {
             std::swap(LeftPath, RightPath);
             std::swap(LeftNames, RightNames);
@@ -375,7 +374,7 @@ private:
             }
             columns.push_back(std::move(column));
         }
-        if (!HasColumn(columns, KeySide[Side])) {
+        if (Statement.Join->Kind != EJoinKind::Cross && !HasColumn(columns, KeySide[Side])) {
             Fail("42703", KeySide[Side]);
             return false;
         }
@@ -563,6 +562,21 @@ private:
     }
 
     void Emit() {
+        if (Statement.Join->Kind == EJoinKind::Cross) {
+            for (const THeld& left : LeftRows) {
+                for (const THeld& right : RightRows) {
+                    if (Statement.Limit && Rows.size() >= *Statement.Limit) {
+                        Succeed();
+                        return;
+                    }
+                    if (!Append(left, &right)) {
+                        return;
+                    }
+                }
+            }
+            Succeed();
+            return;
+        }
         const size_t rightKey = KeyIndex(1);
         const size_t leftKey = KeyIndex(0);
         if (rightKey >= RightColumns.size() || leftKey >= LeftColumns.size()) {

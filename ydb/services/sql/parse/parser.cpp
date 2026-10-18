@@ -1209,6 +1209,18 @@ private:
             select.Alias = Identifier().Name;
             Advance();
         }
+        if (IsKeyword("cross")) {
+            Advance();
+            if (!IsKeyword("join")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            return JoinTail(select, EJoinKind::Cross, false);
+        }
+        if (Current.Kind == ETokenKind::Comma) {
+            Advance();
+            return JoinTail(select, EJoinKind::Cross, false);
+        }
         EJoinKind kind = EJoinKind::Inner;
         if (IsKeyword("left")) {
             Advance();
@@ -1236,19 +1248,29 @@ private:
         }
         if (IsKeyword("join")) {
             Advance();
-            TJoin join;
-            join.Kind = kind;
-            if (auto error = QualifiedName(join.Schema, join.Name)) {
-                return error;
+            return JoinTail(select, kind, true);
+        }
+        if (IsKeyword("full") || IsKeyword("natural")) {
+            return Unsupported(Current.Text);
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> JoinTail(TSelectStmt& select, EJoinKind kind, bool needOn) {
+        TJoin join;
+        join.Kind = kind;
+        if (auto error = QualifiedName(join.Schema, join.Name)) {
+            return error;
+        }
+        if (IsKeyword("as")) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
             }
-            if (IsKeyword("as")) {
-                Advance();
-                if (Current.Kind != ETokenKind::Identifier) {
-                    return Unsupported(Current.Text);
-                }
-                join.Alias = Identifier().Name;
-                Advance();
-            }
+            join.Alias = Identifier().Name;
+            Advance();
+        }
+        if (needOn) {
             if (!IsKeyword("on")) {
                 return Unsupported(Current.Text);
             }
@@ -1263,14 +1285,9 @@ private:
             if (auto error = ColumnRef(join.RightColumn)) {
                 return error;
             }
-            join.LeftAlias = select.Alias;
-            select.Join = std::move(join);
-            return std::nullopt;
         }
-        if (Current.Kind == ETokenKind::Comma || IsKeyword("left") || IsKeyword("right") || IsKeyword("full")
-            || IsKeyword("cross") || IsKeyword("natural")) {
-            return Unsupported(Current.Text);
-        }
+        join.LeftAlias = select.Alias;
+        select.Join = std::move(join);
         return std::nullopt;
     }
 

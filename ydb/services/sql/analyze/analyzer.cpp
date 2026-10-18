@@ -54,11 +54,12 @@ private:
         PassAway();
     }
 
-    void Succeed(TVector<ui32> columnIds) {
+    void Succeed(TVector<ui32> columnIds, TVector<TEvAnalyzeResult::TIndexNote> indexes = {}) {
         auto result = MakeHolder<TEvAnalyzeResult>();
         result->Ok = true;
         result->Path = Path;
         result->ColumnIds = std::move(columnIds);
+        result->Indexes = std::move(indexes);
         Send(ReplyTo, result.Release());
         PassAway();
     }
@@ -116,7 +117,22 @@ private:
                 ids.push_back(column->Id);
             }
         }
-        Succeed(std::move(ids));
+        TVector<TEvAnalyzeResult::TIndexNote> indexes;
+        for (const auto& index : entry.Indexes) {
+            TEvAnalyzeResult::TIndexNote note;
+            note.Name = index.GetName();
+            note.ImplPath = Path + "/" + note.Name + "/indexImplTable";
+            note.Type = index.GetType();
+            note.State = index.GetState();
+            for (const auto& column : index.GetKeyColumnNames()) {
+                note.KeyColumns.push_back(column);
+            }
+            for (const auto& column : index.GetDataColumnNames()) {
+                note.DataColumns.push_back(column);
+            }
+            indexes.push_back(std::move(note));
+        }
+        Succeed(std::move(ids), std::move(indexes));
     }
 
     STATEFN(StateWait) {

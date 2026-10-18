@@ -408,7 +408,14 @@ private:
             }
         }
         const TString tag = result.CommandTag.empty() ? "SELECT " + ToString(result.Rows.size()) : result.CommandTag;
-        Succeed(tag, result.Columns, result.Rows);
+        auto reply = MakeHolder<TEvExecuteResult>();
+        reply->Ok = true;
+        reply->CommandTag = tag;
+        reply->Columns = result.Columns;
+        reply->Rows = result.Rows;
+        reply->TxStatus = StatusChar();
+        reply->AccessPath = result.AccessPath;
+        Reply(reply.Release());
     }
 
     void HandleDdl(TEvDdlResult::TPtr& ev) {

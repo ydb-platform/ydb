@@ -14,6 +14,15 @@ struct TEvAnalyzeResult : public NActors::TEventLocal<TEvAnalyzeResult, EvAnalyz
     TString Message;
     TString Path;
     TVector<ui32> ColumnIds;
+    struct TIndexNote {
+        TString Name;
+        TString ImplPath;
+        ui32 Type = 0;
+        ui32 State = 0;
+        TVector<TString> KeyColumns;
+        TVector<TString> DataColumns;
+    };
+    TVector<TIndexNote> Indexes;
 };
 
 NActors::IActor* CreateSelectAnalyzer(const NActors::TActorId& replyTo, TString database, TSelectStmt statement);

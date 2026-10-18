@@ -32,6 +32,7 @@ struct TEvExecuteResult : public NActors::TEventLocal<TEvExecuteResult, EvExecut
     char TxStatus = 'I';
     TString GucName;
     TString GucValue;
+    TString AccessPath;
 };
 
 NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries);

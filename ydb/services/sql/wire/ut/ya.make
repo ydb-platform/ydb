@@ -16,6 +16,7 @@ SRCS(
     tx_ut.cpp
     update_ut.cpp
     extended_ut.cpp
+    index_ut.cpp
     insert_ut.cpp
     listener_ut.cpp
     schemata_ut.cpp

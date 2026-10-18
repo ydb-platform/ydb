@@ -1,7 +1,7 @@
 # SET и SHOW
 
-status: pending
-commit:
+status: done
+commit: dba9a1847f1b932ab2e1cb40a5d9e57684cada77
 id: set-show
 depends: wire-startup
 

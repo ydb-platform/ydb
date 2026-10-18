@@ -16,6 +16,7 @@
 #include <util/system/mutex.h>
 
 #include <algorithm>
+#include <limits>
 #include <optional>
 
 namespace NKikimr::NSql {
@@ -165,6 +166,7 @@ private:
         }
         result->Rows = std::move(Rows);
         result->Locks = std::move(Locks);
+        result->AccessPath = AccessPath;
         Send(ReplyTo, result.Release());
         PassAway();
     }
@@ -263,6 +265,17 @@ private:
         });
         if (keys.empty()) {
             return false;
+        }
+        AllKeyNames.clear();
+        AllKeyTypes.clear();
+        for (const auto* info : keys) {
+            AllKeyNames.push_back(info->Name);
+            TColumn prepared;
+            if (!PrepareColumn(*info, prepared)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            AllKeyTypes.push_back(prepared.Type);
         }
 
         THashMap<TString, TColumn> columns;
@@ -385,17 +398,18 @@ private:
             break;
         }
         Point = !ranged && equalPrefix == keys.size();
-        if (!Point && !ranged && equalPrefix == 0) {
-            return false;
-        }
-        if (!FromSet) {
-            // An empty start is +inf. -inf is a null cell for every key column.
-            FromCells.assign(KeyTypes.size(), TCell());
-            FromInclusive = true;
-        }
-        if (!ToSet) {
-            ToCells.clear();
-            ToInclusive = true;
+        KeyPrefix = static_cast<ui32>(equalPrefix + (ranged ? 1 : 0));
+        KeyPredicate = KeyPrefix > 0;
+        if (KeyPredicate) {
+            if (!FromSet) {
+                // An empty start is +inf. -inf is a null cell for every key column.
+                FromCells.assign(KeyTypes.size(), TCell());
+                FromInclusive = true;
+            }
+            if (!ToSet) {
+                ToCells.clear();
+                ToInclusive = true;
+            }
         }
 
         Filters.clear();
@@ -491,6 +505,24 @@ private:
             Fail("0A000", "not supported");
             return;
         }
+        MainTable = Table;
+        MainReadColumns = ReadColumns;
+        if (!CollectIndexes(entry)) {
+            return;
+        }
+        if (!KeyPredicate && Indexes.empty()) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (!Indexes.empty()) {
+            Exploring = true;
+            if (KeyPredicate) {
+                StartResolve();
+            } else {
+                StartIndex(0);
+            }
+            return;
+        }
 
         {
             TGuard<TAdaptiveLock> guard(Plans().Lock);
@@ -554,6 +586,15 @@ private:
 
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         const auto* request = ev->Get()->Request.Get();
+        if (IndexPhase) {
+            if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
+                Indexes[IndexPos].Ready = false;
+                StartIndex(IndexPos + 1);
+                return;
+            }
+            OnIndexResolved(*request->ResultSet[0].KeyDescription);
+            return;
+        }
         if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheRequest::EStatus::OkData) {
             Fail("42P01", Path);
             return;
@@ -561,6 +602,16 @@ private:
         const auto& partitions = request->ResultSet[0].KeyDescription->GetPartitions();
         if (partitions.empty()) {
             Fail("0A000", "not supported");
+            return;
+        }
+        if (MainLookup || ReadingIndex) {
+            Shards.clear();
+            for (const auto& partition : partitions) {
+                TShard shard;
+                shard.TabletId = partition.ShardId;
+                Shards.push_back(shard);
+            }
+            SendAll();
             return;
         }
         TTableShape shape;
@@ -572,6 +623,12 @@ private:
         const TPlanResult chosen = ChoosePlan(shape, Compares, {});
         if (!chosen.Ok || !chosen.Plan || !PlanMatches(*chosen.Plan)) {
             Fail(chosen.SqlState ? chosen.SqlState : TString("0A000"), chosen.Message ? chosen.Message : TString("not supported"));
+            return;
+        }
+        if (Exploring) {
+            PkCost = chosen.Plan->Cost.Total;
+            SavedPk = *chosen.Plan;
+            StartIndex(0);
             return;
         }
         {
@@ -710,7 +767,7 @@ private:
                 Fail("XX000", "read failed");
                 return false;
             }
-            if (!Matches(cells)) {
+            if (!ReadingIndex && !Matches(cells)) {
                 continue;
             }
             TVector<TQueryCell> line;
@@ -736,6 +793,15 @@ private:
             --Pending;
         }
         if (Pending == 0) {
+            if (ReadingIndex && !CoveringRead) {
+                BeginMainLookup();
+                return;
+            }
+            if (MainLookup && MainPos + 1 < MainKeyCells.size()) {
+                ++MainPos;
+                ReadNextMain();
+                return;
+            }
             Succeed();
         }
     }
@@ -789,7 +855,11 @@ private:
         for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
             Locks.push_back(lock);
         }
-        if (!TakeRows(*ev->Get())) {
+        if (ReadingIndex && !CoveringRead) {
+            if (!TakeIndexKeys(*ev->Get())) {
+                return;
+            }
+        } else if (!TakeRows(*ev->Get())) {
             return;
         }
         if (!ev->Get()->Record.GetFinished()) {
@@ -818,6 +888,428 @@ private:
         RetryResolve();
     }
 
+    struct TIndexCand {
+        TString Name;
+        TString ImplPath;
+        TVector<TString> Keys;
+        TVector<TString> Data;
+        TVector<TString> KeyNames;
+        TVector<NScheme::TTypeInfo> KeyTypes;
+        TVector<TColumn> ReadColumns;
+        TVector<TString> BoundBytes;
+        TVector<TCell> FromCells;
+        TVector<TCell> ToCells;
+        TVector<TKeyCompare> Compares;
+        TVector<ui64> Tablets;
+        TTableId Table;
+        ui32 Prefix = 0;
+        double Cost = 0;
+        bool Covering = false;
+        bool FullPoint = false;
+        bool FromInclusive = true;
+        bool ToInclusive = true;
+        bool Ready = false;
+    };
+
+    struct THeldKey {
+        TVector<TString> Bytes;
+        TVector<bool> Nulls;
+    };
+
+    bool DecodeInto(TVector<TString>& storage, const TColumn& column, const TLiteral& literal, TCell& cell) {
+        const TCodecValue decoded = DecodeCell(column.Type.GetTypeId(), false, literal.Text, EWireFormat::Text, column.Precision, column.Scale);
+        if (!decoded.Ok) {
+            Fail(decoded.SqlState, decoded.Message);
+            return false;
+        }
+        storage.push_back(decoded.Bytes);
+        cell = TCell(storage.back().data(), storage.back().size());
+        return true;
+    }
+
+    ui32 IndexPrefix(const TVector<TString>& keys) const {
+        ui32 count = 0;
+        for (const TString& name : keys) {
+            TVector<const TComparison*> group;
+            for (const TComparison& comparison : Statement.Where) {
+                if (comparison.Column.Name == name) {
+                    group.push_back(&comparison);
+                }
+            }
+            if (group.empty()) {
+                break;
+            }
+            if (group.size() == 1 && group[0]->Op == ECompareOp::Eq) {
+                ++count;
+                continue;
+            }
+            bool range = false;
+            for (const TComparison* comparison : group) {
+                if (comparison->Op != ECompareOp::Eq && comparison->Op != ECompareOp::NotEq) {
+                    range = true;
+                }
+            }
+            if (range) {
+                ++count;
+            }
+            break;
+        }
+        return count;
+    }
+
+    bool Covers(const TIndexCand& cand) const {
+        for (const TColumn& column : Output) {
+            bool found = false;
+            for (const TString& name : cand.Keys) {
+                found = found || name == column.Name;
+            }
+            for (const TString& name : cand.Data) {
+                found = found || name == column.Name;
+            }
+            for (const TString& name : AllKeyNames) {
+                found = found || name == column.Name;
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return !Output.empty();
+    }
+
+    bool BuildIndexBounds(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, TIndexCand& cand) {
+        cand.BoundBytes.reserve(cand.Prefix);
+        TVector<TCell> prefix;
+        for (ui32 i = 0; i < cand.Prefix; ++i) {
+            const TComparison* equal = nullptr;
+            for (const TComparison& comparison : Statement.Where) {
+                if (comparison.Column.Name == cand.Keys[i] && comparison.Op == ECompareOp::Eq) {
+                    equal = &comparison;
+                }
+            }
+            if (!equal) {
+                cand.Prefix = 0;
+                return true;
+            }
+            const auto* info = FindColumn(entry, cand.Keys[i]);
+            if (!info) {
+                Fail("42703", cand.Keys[i]);
+                return false;
+            }
+            TColumn column;
+            if (!PrepareColumn(*info, column)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            TCell cell;
+            if (!DecodeInto(cand.BoundBytes, column, equal->Value, cell)) {
+                return false;
+            }
+            prefix.push_back(cell);
+            cand.Compares.push_back({column.Name, true, false, false, cand.BoundBytes.back(), {}});
+        }
+
+        TVector<TString> implNames = cand.Keys;
+        for (const TString& name : AllKeyNames) {
+            bool present = false;
+            for (const TString& key : cand.Keys) {
+                present = present || key == name;
+            }
+            if (!present) {
+                implNames.push_back(name);
+            }
+        }
+        cand.KeyNames = implNames;
+        for (const TString& name : implNames) {
+            const auto* info = FindColumn(entry, name);
+            if (!info) {
+                Fail("42703", name);
+                return false;
+            }
+            TColumn column;
+            if (!PrepareColumn(*info, column)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            cand.KeyTypes.push_back(column.Type);
+        }
+        if (prefix.size() == cand.KeyTypes.size()) {
+            cand.FullPoint = true;
+            cand.FromCells = prefix;
+            cand.FromInclusive = true;
+            cand.ToInclusive = true;
+        } else {
+            cand.FromCells = prefix;
+            for (size_t i = prefix.size(); i < cand.KeyTypes.size(); ++i) {
+                cand.FromCells.emplace_back();
+            }
+            cand.ToCells = prefix;
+            cand.FromInclusive = true;
+            cand.ToInclusive = true;
+        }
+        return true;
+    }
+
+    bool CollectIndexes(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        for (const auto& index : entry.Indexes) {
+            if (index.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                continue;
+            }
+            const auto type = index.GetType();
+            if (type != NKikimrSchemeOp::EIndexTypeGlobal && type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                continue;
+            }
+            if (index.GetSpecializedIndexDescriptionCase() != NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET) {
+                continue;
+            }
+            TIndexCand cand;
+            cand.Name = index.GetName();
+            for (const auto& name : index.GetKeyColumnNames()) {
+                cand.Keys.push_back(name);
+            }
+            for (const auto& name : index.GetDataColumnNames()) {
+                cand.Data.push_back(name);
+            }
+            if (cand.Keys.empty()) {
+                continue;
+            }
+            cand.Prefix = IndexPrefix(cand.Keys);
+            if (cand.Prefix == 0 || cand.Prefix <= KeyPrefix) {
+                continue;
+            }
+            cand.ImplPath = Path + "/" + cand.Name + "/indexImplTable";
+            cand.Covering = Covers(cand);
+            if (!BuildIndexBounds(entry, cand)) {
+                return false;
+            }
+            if (cand.Prefix == 0) {
+                continue;
+            }
+            Indexes.push_back(std::move(cand));
+        }
+        return true;
+    }
+
+    void StartIndex(size_t pos) {
+        IndexPos = pos;
+        IndexPhase = false;
+        if (pos >= Indexes.size()) {
+            PickPath();
+            return;
+        }
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = Database;
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.Path = SplitPath(Indexes[pos].ImplPath);
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        entry.ShowPrivatePath = true;
+        request->ResultSet.emplace_back(std::move(entry));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
+        Become(&TSelectActor::StateIndexNavigate);
+    }
+
+    void HandleIndexNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto* request = ev->Get()->Request.Get();
+        if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            Indexes[IndexPos].Ready = false;
+            StartIndex(IndexPos + 1);
+            return;
+        }
+        const auto& entry = request->ResultSet[0];
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            Indexes[IndexPos].Ready = false;
+            StartIndex(IndexPos + 1);
+            return;
+        }
+        TIndexCand& cand = Indexes[IndexPos];
+        cand.Table = entry.TableId;
+        if (cand.Covering) {
+            for (const TColumn& out : Output) {
+                const auto* info = FindColumn(entry, out.Name);
+                if (!info) {
+                    cand.Ready = false;
+                    StartIndex(IndexPos + 1);
+                    return;
+                }
+                TColumn column;
+                if (!PrepareColumn(*info, column)) {
+                    Fail("0A000", "not supported");
+                    return;
+                }
+                cand.ReadColumns.push_back(std::move(column));
+            }
+        } else {
+            for (const TString& name : AllKeyNames) {
+                const auto* info = FindColumn(entry, name);
+                if (!info) {
+                    cand.Ready = false;
+                    StartIndex(IndexPos + 1);
+                    return;
+                }
+                TColumn column;
+                if (!PrepareColumn(*info, column)) {
+                    Fail("0A000", "not supported");
+                    return;
+                }
+                cand.ReadColumns.push_back(std::move(column));
+            }
+        }
+        if (cand.ReadColumns.empty()) {
+            cand.Ready = false;
+            StartIndex(IndexPos + 1);
+            return;
+        }
+        TVector<TKeyDesc::TColumnOp> columns;
+        columns.reserve(cand.ReadColumns.size());
+        for (const TColumn& column : cand.ReadColumns) {
+            TKeyDesc::TColumnOp operation;
+            operation.Column = column.Id;
+            operation.Operation = TKeyDesc::EColumnOperation::Read;
+            operation.ExpectedType = column.Type;
+            operation.InplaceUpdateMode = 0;
+            operation.ImmediateUpdateSize = 0;
+            columns.push_back(operation);
+        }
+        const TTableRange range = cand.FullPoint
+            ? TTableRange(cand.FromCells)
+            : TTableRange(cand.FromCells, cand.FromInclusive, cand.ToCells, cand.ToInclusive);
+        auto description = MakeHolder<TKeyDesc>(cand.Table, range, TKeyDesc::ERowOperation::Read, cand.KeyTypes, columns);
+        auto resolve = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        resolve->DatabaseName = Database;
+        resolve->ResultSet.emplace_back(std::move(description));
+        IndexPhase = true;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(resolve.Release()));
+        Become(&TSelectActor::StateResolve);
+    }
+
+    void OnIndexResolved(const TKeyDesc& description) {
+        TIndexCand& cand = Indexes[IndexPos];
+        const auto& partitions = description.GetPartitions();
+        if (partitions.empty()) {
+            cand.Ready = false;
+            StartIndex(IndexPos + 1);
+            return;
+        }
+        TTableShape shape;
+        shape.KeyColumns = cand.Keys;
+        shape.SchemaVersion = cand.Table.SchemaVersion;
+        for (const auto& partition : partitions) {
+            shape.Partitions.push_back({partition.ShardId, {}, {}, true});
+            cand.Tablets.push_back(partition.ShardId);
+        }
+        const TPlanResult chosen = ChoosePlan(shape, cand.Compares, {});
+        const TPlannerConfig config;
+        const double rows = chosen.Ok && chosen.Plan ? chosen.Plan->Cost.Rows : static_cast<double>(cand.Tablets.size());
+        cand.Cost = cand.Tablets.size() * config.CallCost + rows * config.RowCost + rows * config.ByteCost;
+        cand.Ready = !cand.Tablets.empty();
+        StartIndex(IndexPos + 1);
+    }
+
+    void PickPath() {
+        Exploring = false;
+        IndexPhase = false;
+        double best = KeyPredicate ? PkCost : std::numeric_limits<double>::infinity();
+        int bestAt = -1;
+        const double followUp = TPlannerConfig{}.CallCost;
+        for (size_t i = 0; i < Indexes.size(); ++i) {
+            if (!Indexes[i].Ready) {
+                continue;
+            }
+            const double cost = Indexes[i].Cost + (Indexes[i].Covering ? 0 : followUp);
+            if (cost < best) {
+                best = cost;
+                bestAt = static_cast<int>(i);
+            }
+        }
+        if (bestAt < 0) {
+            if (!KeyPredicate || !SavedPk) {
+                Fail("0A000", "not supported");
+                return;
+            }
+            Adopt(*SavedPk);
+            SendAll();
+            return;
+        }
+        const TIndexCand& cand = Indexes[bestAt];
+        ReadingIndex = true;
+        CoveringRead = cand.Covering;
+        AccessPath = cand.Covering ? "IndexOnlyScan" : "IndexScan";
+        Table = cand.Table;
+        ReadColumns = cand.ReadColumns;
+        FromCells = cand.FromCells;
+        ToCells = cand.ToCells;
+        FromInclusive = cand.FromInclusive;
+        ToInclusive = cand.ToInclusive;
+        Point = cand.FullPoint;
+        KeyTypes = cand.KeyTypes;
+        Shards.clear();
+        for (const ui64 tabletId : cand.Tablets) {
+            TShard shard;
+            shard.TabletId = tabletId;
+            Shards.push_back(shard);
+        }
+        SendAll();
+    }
+
+    bool TakeIndexKeys(TEvDataShard::TEvReadResult& result) {
+        const size_t count = result.GetRowsCount();
+        for (size_t row = 0; row < count; ++row) {
+            const TConstArrayRef<TCell> cells = result.GetCells(row);
+            if (cells.size() != ReadColumns.size()) {
+                Fail("XX000", "read failed");
+                return false;
+            }
+            THeldKey held;
+            held.Bytes.reserve(cells.size());
+            held.Nulls.reserve(cells.size());
+            for (const TCell& cell : cells) {
+                held.Nulls.push_back(cell.IsNull());
+                held.Bytes.push_back(cell.IsNull() ? TString() : TString(cell.AsBuf()));
+            }
+            MainKeys.push_back(std::move(held));
+        }
+        return true;
+    }
+
+    void BeginMainLookup() {
+        ReadingIndex = false;
+        MainLookup = true;
+        Table = MainTable;
+        ReadColumns = MainReadColumns;
+        KeyTypes = AllKeyTypes;
+        Point = true;
+        FromInclusive = true;
+        ToInclusive = true;
+        MainKeyCells.clear();
+        MainKeyCells.reserve(MainKeys.size());
+        for (const THeldKey& held : MainKeys) {
+            TVector<TCell> cells;
+            cells.reserve(held.Bytes.size());
+            for (size_t i = 0; i < held.Bytes.size(); ++i) {
+                if (held.Nulls[i]) {
+                    cells.emplace_back();
+                } else {
+                    cells.emplace_back(held.Bytes[i].data(), held.Bytes[i].size());
+                }
+            }
+            MainKeyCells.push_back(std::move(cells));
+        }
+        MainPos = 0;
+        ReadNextMain();
+    }
+
+    void ReadNextMain() {
+        if (MainPos >= MainKeyCells.size()) {
+            Succeed();
+            return;
+        }
+        FromCells = MainKeyCells[MainPos];
+        ToCells.clear();
+        Point = true;
+        Exploring = false;
+        IndexPhase = false;
+        StartResolve();
+    }
+
     STATEFN(StateNavigate) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
@@ -837,6 +1329,13 @@ private:
             hFunc(TEvDataShard::TEvReadResult, HandleRead);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandleDelivery);
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+
+    STATEFN(StateIndexNavigate) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleIndexNavigate);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -875,6 +1374,25 @@ private:
     bool ToInclusive = true;
     bool Sent = false;
     bool Replied = false;
+    bool KeyPredicate = false;
+    bool Exploring = false;
+    bool IndexPhase = false;
+    bool ReadingIndex = false;
+    bool CoveringRead = false;
+    bool MainLookup = false;
+    ui32 KeyPrefix = 0;
+    size_t IndexPos = 0;
+    size_t MainPos = 0;
+    double PkCost = 0;
+    TString AccessPath;
+    TTableId MainTable;
+    TVector<TColumn> MainReadColumns;
+    TVector<TString> AllKeyNames;
+    TVector<NScheme::TTypeInfo> AllKeyTypes;
+    TVector<TIndexCand> Indexes;
+    std::optional<TPlan> SavedPk;
+    TVector<THeldKey> MainKeys;
+    TVector<TVector<TCell>> MainKeyCells;
 };
 
 } // namespace

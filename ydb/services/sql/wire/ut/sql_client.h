@@ -25,6 +25,7 @@ public:
         TVector<TVector<TQueryCell>> Rows;
         TString GucName;
         TString GucValue;
+        TString AccessPath;
     };
 
     TResult Exec(const TString& sql) {
@@ -33,7 +34,7 @@ public:
         Runtime.Send(new NActors::IEventHandle(Session, Edge, request.Release()), 0, true);
         const auto ev = Runtime.GrabEdgeEventRethrow<TEvExecuteResult>(Edge);
         const TEvExecuteResult& result = *ev->Get();
-        return {result.Ok, result.SqlState, result.Message, result.CommandTag, result.TxStatus, result.Columns, result.Rows, result.GucName, result.GucValue};
+        return {result.Ok, result.SqlState, result.Message, result.CommandTag, result.TxStatus, result.Columns, result.Rows, result.GucName, result.GucValue, result.AccessPath};
     }
 
 private:

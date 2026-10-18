@@ -47,6 +47,7 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
     TVector<TVector<TQueryCell>> Rows;
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<TDeferredWrite> Deferred;
+    TString AccessPath;
 };
 
 NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot = std::nullopt, ui64 lockTxId = 0);

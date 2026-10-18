@@ -1,3 +1,6 @@
+
+## 2.34.0 ##
+
 * Fixed `ydb scheme rmdir --recursive` failing when a directory contains schema secrets.
 * Added support for repeating `--pile` in `ydb admin bridge failover` to disconnect multiple failed piles in one operation.
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.

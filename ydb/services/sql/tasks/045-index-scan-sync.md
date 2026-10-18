@@ -1,7 +1,7 @@
 # IndexScan синхронного индекса
 
-status: pending
-commit:
+status: done
+commit: ab216da0280061a52487f6052288d4bd699bb99e
 id: index-scan-sync
 depends: select-where-limit
 

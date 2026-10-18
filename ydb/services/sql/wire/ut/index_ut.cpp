@@ -51,4 +51,45 @@ Y_UNIT_TEST_SUITE(IndexScan) {
         UNIT_ASSERT_VALUES_EQUAL(fromIndex.Rows.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(fromIndex.Rows[0][0].Text, "body");
     }
+
+    Y_UNIT_TEST(AsyncIndexSeesTheRowAfterTheChangeIsApplied) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+
+        NKikimrSchemeOp::TTableDescription table;
+        table.SetName("items");
+        auto* key = table.AddColumns();
+        key->SetName("id");
+        key->SetType("Uint64");
+        key->SetNotNull(true);
+        auto* note = table.AddColumns();
+        note->SetName("note");
+        note->SetType("Uint64");
+        auto* extra = table.AddColumns();
+        extra->SetName("extra");
+        extra->SetType("Utf8");
+        table.AddKeyColumnNames("id");
+        UNIT_ASSERT_VALUES_EQUAL(client.CreateTableWithUniformShardedIndex(
+            database, table, "note_idx", {"note"}, NKikimrSchemeOp::EIndexTypeGlobalAsync, {}), NMsgBusProxy::MSTATUS_OK);
+
+        TSqlClient sql(server, database);
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO items (id, note, extra) VALUES (1, 7, 'body')").Ok, "insert");
+
+        TSqlClient::TResult seen;
+        for (int attempt = 0; attempt < 30; ++attempt) {
+            seen = sql.Exec("SELECT extra FROM items WHERE note = 7");
+            if (seen.Ok && seen.AccessPath == "IndexScan" && seen.Rows.size() == 1) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(seen.Ok, seen.SqlState + " " + seen.Message);
+        UNIT_ASSERT_VALUES_EQUAL(seen.AccessPath, "IndexScan");
+        UNIT_ASSERT_VALUES_EQUAL(seen.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(seen.Rows[0][0].Text, "body");
+    }
 }

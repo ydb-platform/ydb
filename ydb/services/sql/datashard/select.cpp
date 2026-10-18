@@ -1055,7 +1055,10 @@ private:
                 continue;
             }
             const auto type = index.GetType();
-            if (type != NKikimrSchemeOp::EIndexTypeGlobal && type != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            if (type != NKikimrSchemeOp::EIndexTypeGlobal
+                && type != NKikimrSchemeOp::EIndexTypeGlobalUnique
+                && type != NKikimrSchemeOp::EIndexTypeGlobalAsync)
+            {
                 continue;
             }
             if (index.GetSpecializedIndexDescriptionCase() != NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET) {

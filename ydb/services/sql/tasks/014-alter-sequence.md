@@ -1,7 +1,7 @@
 # ALTER SEQUENCE
 
-status: pending
-commit:
+status: done
+commit: 37f87686c33d976a514421a54ec0dd0ea889d739
 id: alter-sequence
 depends: create-sequence
 

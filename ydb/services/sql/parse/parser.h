@@ -79,6 +79,17 @@ enum class EAlterTableKind {
     DropDefault,
 };
 
+enum class EDropKind {
+    Table,
+};
+
+struct TDropStmt {
+    EDropKind Kind = EDropKind::Table;
+    bool IfExists = false;
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+};
+
 struct TAlterSequenceStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
@@ -114,6 +125,7 @@ struct TParseResult {
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;
     std::optional<TAlterSequenceStmt> AlterSequence;
+    std::optional<TDropStmt> Drop;
     TString SqlState;
     TString Message;
 };

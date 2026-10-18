@@ -19,5 +19,6 @@ NActors::IActor* CreateTableActor(const NActors::TActorId& replyTo, TString data
 NActors::IActor* CreateAlterTableActor(const NActors::TActorId& replyTo, TString database, TAlterTableStmt statement);
 NActors::IActor* CreateSequenceActor(const NActors::TActorId& replyTo, TString database, TCreateSequenceStmt statement);
 NActors::IActor* CreateAlterSequenceActor(const NActors::TActorId& replyTo, TString database, TAlterSequenceStmt statement);
+NActors::IActor* CreateDropActor(const NActors::TActorId& replyTo, TString database, TDropStmt statement);
 
 } // namespace NKikimr::NSql

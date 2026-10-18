@@ -37,6 +37,9 @@ public:
         if (IsKeyword("create")) {
             return CreateIntroducer();
         }
+        if (IsKeyword("drop")) {
+            return DropObject();
+        }
         if (IsKeyword("alter")) {
             return AlterIntroducer();
         }
@@ -247,6 +250,36 @@ private:
         }
         Advance();
         return std::nullopt;
+    }
+
+    TParseResult DropObject() {
+        Advance();
+        TDropStmt drop;
+        if (!IsKeyword("table")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        drop.Kind = EDropKind::Table;
+        if (IsKeyword("if")) {
+            Advance();
+            if (!IsKeyword("exists")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            drop.IfExists = true;
+        }
+        if (auto error = QualifiedName(drop.Schema, drop.Name)) {
+            return *error;
+        }
+        if (IsKeyword("cascade")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Drop = std::move(drop);
+        return result;
     }
 
     TParseResult AlterSequence() {

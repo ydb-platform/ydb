@@ -219,6 +219,12 @@ private:
                     RequestRead();
                     return false;
                 }
+                if (parsed.Drop) {
+                    Register(CreateDropActor(SelfId(), DatabasePath, *parsed.Drop));
+                    Become(&TSqlConnection::StateScheme);
+                    RequestRead();
+                    return false;
+                }
                 if (parsed.AlterSequence) {
                     Register(CreateAlterSequenceActor(SelfId(), DatabasePath, *parsed.AlterSequence));
                     Become(&TSqlConnection::StateScheme);

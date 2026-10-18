@@ -112,4 +112,15 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(owned.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(owned.Message, "owned");
     }
+
+    Y_UNIT_TEST(DropTable) {
+        const TParseResult parsed = Parse("DROP TABLE IF EXISTS app.doomed");
+        UNIT_ASSERT(parsed.Drop);
+        UNIT_ASSERT(parsed.Drop->IfExists);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Drop->Name.Name, "doomed");
+
+        const TParseResult cascade = Parse("DROP TABLE doomed CASCADE");
+        UNIT_ASSERT(!cascade.Drop);
+        UNIT_ASSERT_VALUES_EQUAL(cascade.SqlState, "0A000");
+    }
 }

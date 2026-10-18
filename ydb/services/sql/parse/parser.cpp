@@ -347,6 +347,9 @@ private:
     TParseResult DropObject() {
         Advance();
         TDropStmt drop;
+        if (IsKeyword("index")) {
+            return DropIndex();
+        }
         if (IsKeyword("table")) {
             drop.Kind = EDropKind::Table;
         } else if (IsKeyword("sequence")) {
@@ -370,6 +373,39 @@ private:
         }
         if (IsKeyword("cascade")) {
             return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Drop = std::move(drop);
+        return result;
+    }
+
+    // DROP INDEX [CONCURRENTLY] [IF EXISTS] qualified_name [CASCADE | RESTRICT]
+    TParseResult DropIndex() {
+        Advance();
+        TDropStmt drop;
+        drop.Kind = EDropKind::Index;
+        if (IsKeyword("concurrently")) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("if")) {
+            Advance();
+            if (!IsKeyword("exists")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            drop.IfExists = true;
+        }
+        if (auto error = QualifiedName(drop.Schema, drop.Name)) {
+            return *error;
+        }
+        if (IsKeyword("cascade")) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("restrict")) {
+            Advance();
         }
         if (auto error = Finish()) {
             return *error;

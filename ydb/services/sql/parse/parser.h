@@ -83,6 +83,7 @@ enum class EDropKind {
     Table,
     Sequence,
     Schema,
+    Index,
 };
 
 struct TCreateIndexStmt {

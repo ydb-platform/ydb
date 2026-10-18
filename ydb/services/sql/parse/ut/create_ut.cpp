@@ -185,4 +185,19 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(filtered.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(filtered.Message, "where");
     }
+
+    Y_UNIT_TEST(DropIndex) {
+        const TParseResult parsed = Parse("DROP INDEX IF EXISTS app.email_idx RESTRICT");
+        UNIT_ASSERT(parsed.Drop);
+        UNIT_ASSERT(parsed.Drop->Kind == EDropKind::Index);
+        UNIT_ASSERT(parsed.Drop->IfExists);
+        UNIT_ASSERT(parsed.Drop->Schema);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Drop->Schema->Name, "app");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Drop->Name.Name, "email_idx");
+
+        const TParseResult cascade = Parse("DROP INDEX email_idx CASCADE");
+        UNIT_ASSERT(!cascade.Drop);
+        UNIT_ASSERT_VALUES_EQUAL(cascade.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(cascade.Message, "cascade");
+    }
 }

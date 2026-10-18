@@ -232,7 +232,11 @@ private:
                     return false;
                 }
                 if (parsed.Drop) {
-                    Register(CreateDropActor(SelfId(), DatabasePath, *parsed.Drop));
+                    if (parsed.Drop->Kind == EDropKind::Index) {
+                        Register(CreateDropIndexActor(SelfId(), DatabasePath, *parsed.Drop));
+                    } else {
+                        Register(CreateDropActor(SelfId(), DatabasePath, *parsed.Drop));
+                    }
                     Become(&TSqlConnection::StateScheme);
                     RequestRead();
                     return false;

@@ -8,6 +8,7 @@ SRCS(
     create_sequence.cpp
     create_table.cpp
     drop.cpp
+    drop_index.cpp
     types.cpp
 )
 

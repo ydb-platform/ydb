@@ -20,6 +20,7 @@ NActors::IActor* CreateAlterTableActor(const NActors::TActorId& replyTo, TString
 NActors::IActor* CreateSequenceActor(const NActors::TActorId& replyTo, TString database, TCreateSequenceStmt statement);
 NActors::IActor* CreateAlterSequenceActor(const NActors::TActorId& replyTo, TString database, TAlterSequenceStmt statement);
 NActors::IActor* CreateDropActor(const NActors::TActorId& replyTo, TString database, TDropStmt statement);
+NActors::IActor* CreateDropIndexActor(const NActors::TActorId& replyTo, TString database, TDropStmt statement);
 NActors::IActor* CreateSchemaActor(const NActors::TActorId& replyTo, TString database, TSchemaStmt statement);
 NActors::IActor* CreateIndexActor(const NActors::TActorId& replyTo, TString database, TCreateIndexStmt statement);
 

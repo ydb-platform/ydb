@@ -294,6 +294,11 @@ public:
 
         shardState.HasPipe = true;
 
+        if (!ShardMetas.contains(shardId)) {
+            AFL_ENSURE(Partitioning);
+            ShardMetas[shardId] = MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size());
+        }
+
         AFL_ENSURE(LockIdToState.emplace(
             requestId,
             TRequestState {
@@ -321,8 +326,7 @@ public:
         const auto cookie = requestState.LockCookie;
 
         // TODO: Add Action Lock?
-        Settings.TxManager->AddShard(shardId, false, Settings.TablePath,
-            MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size()));
+        Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& lockState = CookieToLockState.at(cookie);
@@ -679,6 +683,7 @@ public:
 private:
     TKqpBufferLockSettings Settings;
     TShardPartitionIndex Partitioning;
+    THashMap<ui64, TShardMeta> ShardMetas;
     const TString LogPrefix;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
 

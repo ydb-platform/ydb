@@ -146,4 +146,16 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT(!catalog.CreateSchema);
         UNIT_ASSERT_VALUES_EQUAL(catalog.Message, "pg_catalog");
     }
+
+    Y_UNIT_TEST(DropSchema) {
+        const TParseResult parsed = Parse("DROP SCHEMA IF EXISTS app");
+        UNIT_ASSERT(parsed.Drop);
+        UNIT_ASSERT(parsed.Drop->Kind == EDropKind::Schema);
+        UNIT_ASSERT(parsed.Drop->IfExists);
+
+        const TParseResult cascade = Parse("DROP SCHEMA app CASCADE");
+        UNIT_ASSERT(!cascade.Drop);
+        UNIT_ASSERT_VALUES_EQUAL(cascade.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(cascade.Message, "cascade");
+    }
 }

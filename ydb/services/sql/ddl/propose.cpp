@@ -733,9 +733,13 @@ public:
         auto event = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
         event->Record.SetDatabaseName(Database);
         auto* modify = event->Record.MutableTransaction()->MutableModifyScheme();
-        modify->SetOperationType(Statement.Kind == EDropKind::Sequence
-            ? NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence
-            : NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+        NKikimrSchemeOp::EOperationType operation = NKikimrSchemeOp::EOperationType::ESchemeOpDropTable;
+        if (Statement.Kind == EDropKind::Sequence) {
+            operation = NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence;
+        } else if (Statement.Kind == EDropKind::Schema) {
+            operation = NKikimrSchemeOp::EOperationType::ESchemeOpRmDir;
+        }
+        modify->SetOperationType(operation);
         TString dir = Database;
         if (dir && dir.back() == '/') {
             dir.pop_back();
@@ -755,7 +759,12 @@ private:
         result->Ok = ok;
         result->SqlState = std::move(sqlState);
         result->Message = std::move(message);
-        result->CommandTag = Statement.Kind == EDropKind::Sequence ? "DROP SEQUENCE" : "DROP TABLE";
+        result->CommandTag = "DROP TABLE";
+        if (Statement.Kind == EDropKind::Sequence) {
+            result->CommandTag = "DROP SEQUENCE";
+        } else if (Statement.Kind == EDropKind::Schema) {
+            result->CommandTag = "DROP SCHEMA";
+        }
         Send(ReplyTo, result.Release());
         if (Pipe) {
             NTabletPipe::CloseClient(SelfId(), Pipe);

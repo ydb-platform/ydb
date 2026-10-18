@@ -82,6 +82,7 @@ enum class EAlterTableKind {
 enum class EDropKind {
     Table,
     Sequence,
+    Schema,
 };
 
 struct TSchemaStmt {

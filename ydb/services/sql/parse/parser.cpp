@@ -296,6 +296,8 @@ private:
             drop.Kind = EDropKind::Table;
         } else if (IsKeyword("sequence")) {
             drop.Kind = EDropKind::Sequence;
+        } else if (IsKeyword("schema")) {
+            drop.Kind = EDropKind::Schema;
         } else {
             return Unsupported(Current.Text);
         }

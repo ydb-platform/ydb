@@ -1,7 +1,7 @@
 # CREATE SCHEMA
 
-status: pending
-commit:
+status: done
+commit: 59ca6396180674c9461f671ceddaaa459a1278cb
 id: create-schema
 depends: create-table
 

@@ -1,7 +1,7 @@
 # information_schema.columns
 
-status: pending
-commit:
+status: done
+commit: 7b78fae25c9c62bc6985c08465192ec240ce94d2
 id: ischema-columns
 depends: ischema-tables
 

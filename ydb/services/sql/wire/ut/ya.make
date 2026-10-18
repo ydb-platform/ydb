@@ -9,6 +9,7 @@ ENDIF()
 
 SRCS(
     columns_ut.cpp
+    constraints_ut.cpp
     create_table_ut.cpp
     listener_ut.cpp
     schemata_ut.cpp

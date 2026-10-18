@@ -51,8 +51,8 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         return TConclusionStatus::Success();
     }
 
-    if (read.GetTableMetadataAccessor()->GetPathId()) {
-        const auto pathId = read.GetTableMetadataAccessor()->GetPathIdVerified().GetInternalPathId();
+    if (const auto* table = dynamic_cast<const TUserTableAccessor*>(read.GetTableMetadataAccessor().get())) {
+        const auto pathId = table->GetPathIdVerified().GetInternalPathId();
         const auto granule = owner->GetIndexAs<TColumnEngineForLogs>().GetGranuleOptional(pathId);
         if (granule && granule->HasIncompatibleDecimalKeyPortions(read.GetSnapshot())) {
             return TConclusionStatus::Fail(

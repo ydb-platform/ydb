@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         RunFilterEqualForPrecision<12, 2>(Arg<0>(), Arg<1>(), Arg<2>());
     }
 
-    void CheckPrimaryKeyOrder(const TString& reader, const bool separatePortions) {
+    void CheckPrimaryKeyOrder(const TString& reader, const bool separatePortions, const ui32 scale = 0) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.SetColumnShardReaderClassName(reader);
         settings.AppConfig.MutableColumnShardConfig()->SetEnableDecimalKeyComparison(true);
@@ -556,9 +556,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
-        auto ddl = session.ExecuteQuery(R"(
+        const TString decimalType = TStringBuilder() << "Decimal(22, " << scale << ")";
+        auto ddl = session.ExecuteQuery(TStringBuilder() << R"(
             CREATE TABLE `/Root/Decimals` (
-                key Decimal(22, 0) NOT NULL,
+                key )" << decimalType << R"( NOT NULL,
                 value Int64 NOT NULL,
                 PRIMARY KEY (key)
             ) PARTITION BY HASH(key)
@@ -572,10 +573,10 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             return result;
         };
         // Both the sign and carries between bytes disagree with lexicographic byte order.
-        const std::vector<i64> values = {-257, -256, -1, 0, 1, 255, 256, 257, 65536};
+        const std::vector<i64> values = {-257, -256, -100, -1, 0, 1, 2, 10, 100, 255, 256, 257, 65536};
         TStringBuilder rows;
         for (const auto value : values) {
-            TString row = TStringBuilder() << "(Unwrap(CAST(\"" << value << "\" AS Decimal(22, 0))), " << value << ")";
+            TString row = TStringBuilder() << "(Unwrap(CAST(\"" << value << "\" AS " << decimalType << ")), " << value << ")";
             if (separatePortions) {
                 execute("INSERT INTO `/Root/Decimals` (key, value) VALUES " + row);
             } else {
@@ -589,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
             execute("INSERT INTO `/Root/Decimals` (key, value) VALUES " + rows);
         }
         for (const bool reverse : {false, true}) {
-            for (const ui32 limit : {1u, 4u, 9u}) {
+            for (const ui32 limit : {1u, 4u, ui32(values.size())}) {
                 const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` ORDER BY key "
                     << (reverse ? "DESC" : "ASC") << " LIMIT " << limit;
                 auto result = execute(query);
@@ -604,23 +605,30 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
         }
         for (const auto value : values) {
             const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` WHERE key = CAST(\""
-                << value << "\" AS Decimal(22, 0))";
+                << value << "\" AS " << decimalType << ")";
             auto result = execute(query);
             auto parser = result.GetResultSetParser(0);
             UNIT_ASSERT_C(parser.TryNextRow(), query);
             UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(), value, query);
             UNIT_ASSERT_C(!parser.TryNextRow(), query);
         }
-        const TString rangeQuery = R"(SELECT value FROM `/Root/Decimals`
-            WHERE key >= CAST("-256" AS Decimal(22, 0)) AND key < CAST("257" AS Decimal(22, 0))
-            ORDER BY key)";
-        auto result = execute(rangeQuery);
-        auto parser = result.GetResultSetParser(0);
-        for (const i64 value : {-256, -1, 0, 1, 255, 256}) {
-            UNIT_ASSERT_C(parser.TryNextRow(), rangeQuery);
-            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(), value, rangeQuery);
+        for (const TString& op : {"<", "<=", ">", ">="}) {
+            for (const i64 bound : {-256, -1, 0, 1, 256}) {
+                const TString query = TStringBuilder() << "SELECT value FROM `/Root/Decimals` WHERE key " << op
+                    << " CAST(\"" << bound << "\" AS " << decimalType << ") ORDER BY key";
+                auto result = execute(query);
+                auto parser = result.GetResultSetParser(0);
+                for (const i64 value : values) {
+                    const bool matches = op == "<" ? value < bound : op == "<=" ? value <= bound :
+                        op == ">" ? value > bound : value >= bound;
+                    if (matches) {
+                        UNIT_ASSERT_C(parser.TryNextRow(), query);
+                        UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("value").GetInt64(), value, query);
+                    }
+                }
+                UNIT_ASSERT_C(!parser.TryNextRow(), query);
+            }
         }
-        UNIT_ASSERT_C(!parser.TryNextRow(), rangeQuery);
     }
 
     Y_UNIT_TEST(PrimaryKeySinglePortionSimple) {
@@ -638,6 +646,23 @@ Y_UNIT_TEST_SUITE(KqpDecimalColumnShard) {
     Y_UNIT_TEST(PrimaryKeyMultiplePortionsSimple) {
         CheckPrimaryKeyOrder("SIMPLE", true);
     }
+
+    Y_UNIT_TEST(PrimaryKeyScaledSinglePortionSimple) {
+        CheckPrimaryKeyOrder("SIMPLE", false, 9);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyScaledSinglePortionTrivial) {
+        CheckPrimaryKeyOrder("TRIVIAL", false, 9);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyScaledMultiplePortionsSimple) {
+        CheckPrimaryKeyOrder("SIMPLE", true, 9);
+    }
+
+    Y_UNIT_TEST(PrimaryKeyScaledMultiplePortionsTrivial) {
+        CheckPrimaryKeyOrder("TRIVIAL", true, 9);
+    }
+
 }
 
 }   // namespace NKqp

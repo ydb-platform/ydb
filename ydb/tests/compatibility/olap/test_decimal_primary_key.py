@@ -81,26 +81,37 @@ class TestDecimalPrimaryKeyRepair(RestartToAnotherVersionFixture):
         })
 
     def test_forward_repair_without_critical_schema(self):
-        values = [-257, -256, -1, 0, 1, 255, 256, 257, 65536]
+        values = [-257, -256, -100, -1, 0, 1, 2, 10, 100, 255, 256, 257, 65536]
         with ydb.QuerySessionPool(self.driver) as pool:
             pool.execute_with_retries("""
                 CREATE TABLE decimals (
-                    key Decimal(22, 0) NOT NULL,
+                    key Decimal(22, 9) NOT NULL,
                     value Int64 NOT NULL,
                     PRIMARY KEY (key)
                 ) PARTITION BY HASH(key)
                 WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1)
             """)
-            rows = ",".join(f'(Unwrap(CAST("{value}" AS Decimal(22, 0))), {i})' for i, value in enumerate(values))
+            rows = ",".join(f'(Unwrap(CAST("{value}" AS Decimal(22, 9))), {i})' for i, value in enumerate(values))
             pool.execute_with_retries("UPSERT INTO decimals (key, value) VALUES " + rows)
             result = pool.execute_with_retries("SELECT value FROM decimals ORDER BY value")[0].rows
             assert [row["value"] for row in result] == list(range(len(values)))
 
-        self.config.yaml_config["column_shard_config"].update({
-            "enable_decimal_key_comparison": True,
-            "repairs": [{"class_name": "RebuildDecimalPrimaryKey", "description": "decimal-pk-forward-compatibility"}],
-        })
+        self.config.yaml_config["column_shard_config"]["enable_decimal_key_comparison"] = True
         self.change_cluster_version()
+        with ydb.QuerySessionPool(self.driver) as pool:
+            with pytest.raises(ydb.Error, match="Decimal primary key order changed"):
+                pool.execute_with_retries("SELECT value FROM decimals ORDER BY key")
+            rows = pool.execute_with_retries(
+                "SELECT SUM(Rows) AS rows FROM `decimals/.sys/primary_index_portion_stats` WHERE Activity = 1"
+            )[0].rows
+            assert rows[0]["rows"] == len(values)
+
+        self.config.yaml_config["column_shard_config"]["repairs"] = [
+            {"class_name": "RebuildDecimalPrimaryKey", "description": "decimal-pk-forward-compatibility"},
+        ]
+        self.stop_driver()
+        self.cluster.update_configurator_and_restart(self.config)
+        self.driver = self.create_driver()
 
         def check():
             deadline = time.monotonic() + 120
@@ -118,9 +129,15 @@ class TestDecimalPrimaryKeyRepair(RestartToAnotherVersionFixture):
                 assert [row["value"] for row in result] == [0]
                 for i, value in enumerate(values):
                     result = pool.execute_with_retries(f"""
-                        SELECT value FROM decimals WHERE key = CAST("{value}" AS Decimal(22, 0))
+                        SELECT value FROM decimals WHERE key = CAST("{value}" AS Decimal(22, 9))
                     """)[0].rows
                     assert [row["value"] for row in result] == [i]
+                for op, predicate in (("<", lambda value: value < 0), ("<=", lambda value: value <= 0),
+                                      (">", lambda value: value > 0), (">=", lambda value: value >= 0)):
+                    result = pool.execute_with_retries(f"""
+                        SELECT value FROM decimals WHERE key {op} CAST("0" AS Decimal(22, 9)) ORDER BY key
+                    """)[0].rows
+                    assert [row["value"] for row in result] == [i for i, value in enumerate(values) if predicate(value)]
 
         check()
         self.stop_driver()

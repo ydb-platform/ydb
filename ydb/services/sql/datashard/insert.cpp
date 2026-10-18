@@ -173,7 +173,7 @@ public:
             write.Operation = static_cast<ui32>(Operation);
             write.ColumnIds = ColumnIds;
             write.Payload = Payload;
-            result->Deferred = std::move(write);
+            result->Deferred.push_back(std::move(write));
         }
         Send(ReplyTo, result.Release());
         PassAway();

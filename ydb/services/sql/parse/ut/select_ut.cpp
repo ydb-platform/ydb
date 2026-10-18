@@ -52,10 +52,10 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
     }
 
     Y_UNIT_TEST(UnknownCommand) {
-        const TParseResult parsed = Parse("UPDATE t SET a = 1");
+        const TParseResult parsed = Parse("GRANT SELECT ON t TO u");
         UNIT_ASSERT(!parsed.Select);
         UNIT_ASSERT_VALUES_EQUAL(parsed.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "update");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Message, "grant");
     }
 
     Y_UNIT_TEST(WhereAndLimit) {
@@ -97,9 +97,9 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(join.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(join.Message, "join");
 
-        const TParseResult update = Parse("UPDATE t SET a = 1");
-        UNIT_ASSERT_VALUES_EQUAL(update.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(update.Message, "update");
+        const TParseResult grant = Parse("GRANT SELECT ON t TO u");
+        UNIT_ASSERT_VALUES_EQUAL(grant.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(grant.Message, "grant");
 
         const TParseResult all = Parse("SELECT ALL a FROM t");
         UNIT_ASSERT(all.Select);

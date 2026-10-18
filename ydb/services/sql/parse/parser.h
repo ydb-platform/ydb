@@ -190,6 +190,21 @@ struct TTxStmt {
     ETxKind Kind = ETxKind::Begin;
 };
 
+// SET is a literal or a column of the same row. FROM another table stays 0A000.
+struct TSetAssign {
+    TIdentifier Column;
+    bool FromColumn = false;
+    TIdentifier Source;
+    TLiteral Value;
+};
+
+struct TUpdateStmt {
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TVector<TSetAssign> Set;
+    TVector<TComparison> Where;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
@@ -201,6 +216,7 @@ struct TParseResult {
     std::optional<TCreateIndexStmt> CreateIndex;
     std::optional<TInsertStmt> Insert;
     std::optional<TTxStmt> Tx;
+    std::optional<TUpdateStmt> Update;
     TString SqlState;
     TString Message;
 };

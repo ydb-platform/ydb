@@ -12,6 +12,7 @@ SRCS(
     constraints_ut.cpp
     create_table_ut.cpp
     tx_ut.cpp
+    update_ut.cpp
     extended_ut.cpp
     insert_ut.cpp
     listener_ut.cpp

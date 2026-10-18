@@ -46,6 +46,9 @@ public:
         if (IsKeyword("insert")) {
             return InsertStmt();
         }
+        if (IsKeyword("update")) {
+            return UpdateStmt();
+        }
         if (IsKeyword("begin") || IsKeyword("start") || IsKeyword("commit") || IsKeyword("end")
             || IsKeyword("rollback") || IsKeyword("abort")) {
             return TransactionStmt();
@@ -77,6 +80,69 @@ public:
         }
         TParseResult result;
         result.Tx = tx;
+        return result;
+    }
+
+    TParseResult UpdateStmt() {
+        Advance();
+        TUpdateStmt update;
+        if (auto error = QualifiedName(update.Schema, update.Name)) {
+            return *error;
+        }
+        if (IsKeyword("from") || IsKeyword("using") || Current.Kind == ETokenKind::Star) {
+            return Unsupported(Current.Text);
+        }
+        if (!IsKeyword("set")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        for (;;) {
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            TSetAssign assign;
+            assign.Column = Identifier();
+            Advance();
+            if (Current.Kind != ETokenKind::Operator || Current.Text != "=") {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (Current.Kind == ETokenKind::Identifier) {
+                assign.FromColumn = true;
+                assign.Source = Identifier();
+                Advance();
+                if (Current.Kind == ETokenKind::Operator || Current.Kind == ETokenKind::LeftParen || Current.Kind == ETokenKind::Dot) {
+                    return Unsupported(Current.Text);
+                }
+            } else if (auto error = ValueLiteral(assign.Value)) {
+                return *error;
+            }
+            update.Set.push_back(std::move(assign));
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
+        }
+        if (update.Set.empty()) {
+            return Unsupported("set");
+        }
+        if (IsKeyword("from") || IsKeyword("using")) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("where")) {
+            Advance();
+            if (auto error = WhereClause(update.Where)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("returning")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Update = std::move(update);
         return result;
     }
 
@@ -355,7 +421,7 @@ public:
         }
         if (IsKeyword("where")) {
             Advance();
-            if (auto error = WhereClause(select)) {
+            if (auto error = WhereClause(select.Where)) {
                 return *error;
             }
         }
@@ -1029,7 +1095,7 @@ private:
         return std::nullopt;
     }
 
-    std::optional<TParseResult> WhereClause(TSelectStmt& select) {
+    std::optional<TParseResult> WhereClause(TVector<TComparison>& where) {
         for (;;) {
             if (IsKeyword("or") || IsKeyword("not") || Current.Kind == ETokenKind::LeftParen) {
                 return Unsupported(Current.Text);
@@ -1068,7 +1134,7 @@ private:
             } else {
                 return Unsupported(Current.Text);
             }
-            select.Where.push_back(std::move(comparison));
+            where.push_back(std::move(comparison));
             Advance();
             if (!IsKeyword("and")) {
                 return std::nullopt;

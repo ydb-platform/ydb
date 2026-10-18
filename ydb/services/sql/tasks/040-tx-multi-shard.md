@@ -1,7 +1,7 @@
 # Запись на несколько шардов
 
-status: pending
-commit:
+status: done
+commit: e64d29217e913a02d7905a7e61b6b739e69208d6
 id: tx-multi-shard
 depends: tx-one-shard
 

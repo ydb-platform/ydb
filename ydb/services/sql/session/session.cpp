@@ -259,6 +259,10 @@ private:
             }
             return;
         }
+        if (parsed.Update) {
+            Register(CreateUpdateActor(SelfId(), Database, *parsed.Update, InternalErrorRetries, Tx == ETx::Open));
+            return;
+        }
         if (parsed.Insert) {
             if (parsed.Insert->Source) {
                 Register(CreateInsertSelectActor(SelfId(), Database, sql, *parsed.Insert, InternalErrorRetries));
@@ -334,8 +338,10 @@ private:
                 result.Message.empty() ? TString("not supported") : result.Message);
             return;
         }
-        if (Tx == ETx::Open && result.Deferred) {
-            Pending.push_back(*result.Deferred);
+        if (Tx == ETx::Open) {
+            for (const TDeferredWrite& write : result.Deferred) {
+                Pending.push_back(write);
+            }
         }
         if (Tx == ETx::Open) {
             for (const auto& lock : result.Locks) {

@@ -5,6 +5,7 @@ SRCS(
     insert.cpp
     insert_select.cpp
     select.cpp
+    update.cpp
 )
 
 PEERDIR(

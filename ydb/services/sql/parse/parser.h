@@ -84,6 +84,11 @@ enum class EDropKind {
     Sequence,
 };
 
+struct TSchemaStmt {
+    bool IfNotExists = false;
+    TIdentifier Name;
+};
+
 struct TDropStmt {
     EDropKind Kind = EDropKind::Table;
     bool IfExists = false;
@@ -127,6 +132,7 @@ struct TParseResult {
     std::optional<TCreateSequenceStmt> CreateSequence;
     std::optional<TAlterSequenceStmt> AlterSequence;
     std::optional<TDropStmt> Drop;
+    std::optional<TSchemaStmt> CreateSchema;
     TString SqlState;
     TString Message;
 };

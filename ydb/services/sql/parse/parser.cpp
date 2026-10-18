@@ -113,6 +113,9 @@ public:
         if (IsKeyword("sequence")) {
             return CreateSequence();
         }
+        if (IsKeyword("schema")) {
+            return CreateSchema();
+        }
         return Unsupported(Current.Text);
     }
 
@@ -250,6 +253,40 @@ private:
         }
         Advance();
         return std::nullopt;
+    }
+
+    TParseResult CreateSchema() {
+        Advance();
+        TSchemaStmt schema;
+        if (IsKeyword("if")) {
+            Advance();
+            if (!IsKeyword("not")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (!IsKeyword("exists")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            schema.IfNotExists = true;
+        }
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        schema.Name = Identifier();
+        Advance();
+        if (schema.Name.Name == "information_schema" || schema.Name.Name == "pg_catalog") {
+            return Unsupported(schema.Name.Name);
+        }
+        if (IsKeyword("authorization") || IsKeyword("create")) {
+            return Unsupported(Current.Text);
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.CreateSchema = std::move(schema);
+        return result;
     }
 
     TParseResult DropObject() {

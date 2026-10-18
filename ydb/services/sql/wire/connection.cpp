@@ -219,6 +219,12 @@ private:
                     RequestRead();
                     return false;
                 }
+                if (parsed.CreateSchema) {
+                    Register(CreateSchemaActor(SelfId(), DatabasePath, *parsed.CreateSchema));
+                    Become(&TSqlConnection::StateScheme);
+                    RequestRead();
+                    return false;
+                }
                 if (parsed.Drop) {
                     Register(CreateDropActor(SelfId(), DatabasePath, *parsed.Drop));
                     Become(&TSqlConnection::StateScheme);

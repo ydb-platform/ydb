@@ -1,7 +1,7 @@
 # DROP SEQUENCE
 
-status: pending
-commit:
+status: done
+commit: 7bb0b2e8b9285c7d629eb886e880cb5f136cbd5c
 id: drop-sequence
 depends: create-sequence
 

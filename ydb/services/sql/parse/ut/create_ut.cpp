@@ -131,4 +131,19 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT(parsed.Drop->IfExists);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Drop->Schema->Name, "app");
     }
+
+    Y_UNIT_TEST(CreateSchema) {
+        const TParseResult parsed = Parse("CREATE SCHEMA app");
+        UNIT_ASSERT(parsed.CreateSchema);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateSchema->Name.Name, "app");
+
+        const TParseResult body = Parse("CREATE SCHEMA s CREATE TABLE t (id int4 PRIMARY KEY)");
+        UNIT_ASSERT(!body.CreateSchema);
+        UNIT_ASSERT_VALUES_EQUAL(body.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(body.Message, "create");
+
+        const TParseResult catalog = Parse("CREATE SCHEMA pg_catalog");
+        UNIT_ASSERT(!catalog.CreateSchema);
+        UNIT_ASSERT_VALUES_EQUAL(catalog.Message, "pg_catalog");
+    }
 }

@@ -1,7 +1,7 @@
 # IndexScan асинхронного индекса
 
-status: pending
-commit:
+status: done
+commit: bfeab2b9b3caa18b02f81192a1585a39e9ba5bb5
 id: index-scan-async
 depends: index-scan-sync
 

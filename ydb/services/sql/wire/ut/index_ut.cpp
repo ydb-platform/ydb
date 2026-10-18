@@ -92,4 +92,31 @@ Y_UNIT_TEST_SUITE(IndexScan) {
         UNIT_ASSERT_VALUES_EQUAL(seen.Rows.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(seen.Rows[0][0].Text, "body");
     }
+
+    Y_UNIT_TEST(InsertIsVisibleThroughTheIndexAndARepeatedUniqueKeyIsRejected) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        const auto created = sql.Exec("CREATE TABLE items (id int8 PRIMARY KEY, note text, extra text)");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+        const auto index = sql.Exec("CREATE UNIQUE INDEX note_idx ON items (note)");
+        UNIT_ASSERT_C(index.Ok, index.SqlState + " " + index.Message);
+        const auto inserted = sql.Exec("INSERT INTO items (id, note, extra) VALUES (1, 'hello', 'body')");
+        UNIT_ASSERT_C(inserted.Ok, inserted.SqlState + " " + inserted.Message);
+        UNIT_ASSERT_VALUES_EQUAL(inserted.CommandTag, "INSERT 0 1");
+
+        const auto seen = sql.Exec("SELECT extra FROM items WHERE note = 'hello'");
+        UNIT_ASSERT_C(seen.Ok, seen.SqlState + " " + seen.Message);
+        UNIT_ASSERT_VALUES_EQUAL(seen.AccessPath, "IndexScan");
+        UNIT_ASSERT_VALUES_EQUAL(seen.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(seen.Rows[0][0].Text, "body");
+
+        const auto again = sql.Exec("INSERT INTO items (id, note, extra) VALUES (2, 'hello', 'other')");
+        UNIT_ASSERT(!again.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(again.SqlState, "23505");
+    }
 }

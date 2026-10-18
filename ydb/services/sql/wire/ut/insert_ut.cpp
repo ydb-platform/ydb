@@ -42,9 +42,11 @@ Y_UNIT_TEST_SUITE(InsertRow) {
 
         const auto indexed = sql.Exec("CREATE TABLE keyed (id int8 PRIMARY KEY, email text, UNIQUE (email))");
         UNIT_ASSERT_C(indexed.Ok, indexed.SqlState + " " + indexed.Message);
-        const auto blocked = sql.Exec("INSERT INTO keyed (id, email) VALUES (1, 'a')");
-        UNIT_ASSERT(!blocked.Ok);
-        UNIT_ASSERT_VALUES_EQUAL(blocked.SqlState, "0A000");
+        const auto written = sql.Exec("INSERT INTO keyed (id, email) VALUES (1, 'a')");
+        UNIT_ASSERT_C(written.Ok, written.SqlState + " " + written.Message);
+        const auto clash = sql.Exec("INSERT INTO keyed (id, email) VALUES (2, 'a')");
+        UNIT_ASSERT(!clash.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(clash.SqlState, "23505");
     }
 
     Y_UNIT_TEST(OnConflictUpdatesOnlyTheSetColumns) {

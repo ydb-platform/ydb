@@ -15,10 +15,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/services
-    ydb/services/sql/datashard
-    ydb/services/sql/ddl
-    ydb/services/sql/ischema
-    ydb/services/sql/parse
+    ydb/services/sql/session
 )
 
 END()

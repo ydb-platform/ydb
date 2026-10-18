@@ -6,5 +6,6 @@ RECURSE(
     ischema
     parse
     plan
+    session
     wire
 )

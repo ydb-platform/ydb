@@ -1,7 +1,7 @@
 # information_schema.tables
 
-status: pending
-commit:
+status: done
+commit: bc52da20f632e54011ae60646fd7574368fae50e
 id: ischema-tables
 depends: ischema-schemata
 

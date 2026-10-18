@@ -3,15 +3,12 @@
 #include "catalog.h"
 #include "protocol.h"
 
-#include <ydb/services/sql/datashard/events.h>
-#include <ydb/services/sql/ddl/events.h>
-#include <ydb/services/sql/ischema/schemata.h>
-#include <ydb/services/sql/ischema/tables.h>
-#include <ydb/services/sql/parse/parser.h>
+#include <ydb/services/sql/session/events.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/services/services.pb.h>
@@ -115,7 +112,7 @@ private:
             }
             return;
         }
-        if (CurrentStateFunc() == &TSqlConnection::StateScheme || CurrentStateFunc() == &TSqlConnection::StateRead) {
+        if (CurrentStateFunc() == &TSqlConnection::StateExecute) {
             RequestRead();
             return;
         }
@@ -173,6 +170,7 @@ private:
         }
         const ui32 backendPid = static_cast<ui32>(SelfId().LocalId());
         const ui32 secret = SelfId().Hint() ^ 0x53514c;
+        Session = Register(CreateSqlSession(DatabasePath, InternalErrorRetries));
         Write(MakeHandshake(backendPid, secret));
         Become(&TSqlConnection::StateQuery);
         RequestRead();
@@ -205,65 +203,12 @@ private:
                     }
                     continue;
                 }
-                const TParseResult parsed = Parse(sql);
-                if (parsed.CreateTable) {
-                    Register(CreateTableActor(SelfId(), DatabasePath, *parsed.CreateTable));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.AlterTable) {
-                    Register(CreateAlterTableActor(SelfId(), DatabasePath, *parsed.AlterTable));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.CreateSequence) {
-                    Register(CreateSequenceActor(SelfId(), DatabasePath, *parsed.CreateSequence));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.CreateIndex) {
-                    Register(CreateIndexActor(SelfId(), DatabasePath, *parsed.CreateIndex));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.CreateSchema) {
-                    Register(CreateSchemaActor(SelfId(), DatabasePath, *parsed.CreateSchema));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.Drop) {
-                    if (parsed.Drop->Kind == EDropKind::Index) {
-                        Register(CreateDropIndexActor(SelfId(), DatabasePath, *parsed.Drop));
-                    } else {
-                        Register(CreateDropActor(SelfId(), DatabasePath, *parsed.Drop));
-                    }
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.AlterSequence) {
-                    Register(CreateAlterSequenceActor(SelfId(), DatabasePath, *parsed.AlterSequence));
-                    Become(&TSqlConnection::StateScheme);
-                    RequestRead();
-                    return false;
-                }
-                if (parsed.Select) {
-                    if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "schemata") {
-                        Register(CreateSchemataActor(SelfId(), DatabasePath, *parsed.Select));
-                    } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "tables") {
-                        Register(CreateTablesActor(SelfId(), DatabasePath, *parsed.Select));
-                    } else {
-                        Register(CreateSelectActor(SelfId(), DatabasePath, TString(sql), *parsed.Select, InternalErrorRetries));
-                    }
-                    Become(&TSqlConnection::StateRead);
-                    RequestRead();
-                    return false;
-                }
+                auto request = MakeHolder<TEvExecute>();
+                request->Sql = TString(sql);
+                Send(Session, request.Release());
+                Become(&TSqlConnection::StateExecute);
+                RequestRead();
+                return false;
             }
             TString reply = MakeErrorResponse("0A000", "not supported");
             reply.append(MakeReadyForQuery());
@@ -287,15 +232,23 @@ private:
             }
         }
         const auto state = CurrentStateFunc();
-        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery || state == &TSqlConnection::StateScheme || state == &TSqlConnection::StateRead)) {
+        if (ev->Get()->Read && (state == &TSqlConnection::StateStartup || state == &TSqlConnection::StateQuery || state == &TSqlConnection::StateExecute)) {
             ReadSocket();
         }
     }
 
-    void HandleQuery(TEvQueryResult::TPtr& ev) {
-        const TEvQueryResult& result = *ev->Get();
+    void HandleExecute(TEvExecuteResult::TPtr& ev) {
+        const TEvExecuteResult& result = *ev->Get();
         TString reply;
-        if (result.Ok) {
+        if (!result.Ok) {
+            const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
+            const TString message = result.Message.empty() ? TString("not supported") : result.Message;
+            reply = MakeErrorResponse(sqlState, message);
+            reply.append(MakeReadyForQuery());
+        } else if (result.Columns.empty() && !result.CommandTag.StartsWith("SELECT")) {
+            reply = MakeCommandComplete(result.CommandTag);
+            reply.append(MakeReadyForQuery());
+        } else {
             TVector<TResultColumn> columns;
             columns.reserve(result.Columns.size());
             for (const TQueryColumn& column : result.Columns) {
@@ -312,11 +265,6 @@ private:
                 rows.push_back(std::move(line));
             }
             reply = MakeTextResult(columns, rows);
-        } else {
-            const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
-            const TString message = result.Message.empty() ? TString("not supported") : result.Message;
-            reply = MakeErrorResponse(sqlState, message);
-            reply.append(MakeReadyForQuery());
         }
         const bool written = Write(reply);
         Become(&TSqlConnection::StateQuery);
@@ -328,25 +276,12 @@ private:
         }
     }
 
-    void HandleDdl(TEvDdlResult::TPtr& ev) {
-        const TEvDdlResult& result = *ev->Get();
-        TString reply;
-        if (result.Ok) {
-            reply = MakeCommandComplete(result.CommandTag);
-        } else {
-            const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
-            const TString message = result.Message.empty() ? TString("not supported") : result.Message;
-            reply = MakeErrorResponse(sqlState, message);
+    void PassAway() override {
+        if (Session) {
+            Send(Session, new NActors::TEvents::TEvPoison);
+            Session = {};
         }
-        reply.append(MakeReadyForQuery());
-        const bool written = Write(reply);
-        Become(&TSqlConnection::StateQuery);
-        if (!written) {
-            return;
-        }
-        if (HandleQueries()) {
-            RequestRead();
-        }
+        TActorBootstrapped<TSqlConnection>::PassAway();
     }
 
     STATEFN(StateStartup) {
@@ -372,17 +307,9 @@ private:
         }
     }
 
-    STATEFN(StateScheme) {
+    STATEFN(StateExecute) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvDdlResult, HandleDdl);
-            hFunc(NActors::TEvPollerReady, HandleReady);
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
-        }
-    }
-
-    STATEFN(StateRead) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvQueryResult, HandleQuery);
+            hFunc(TEvExecuteResult, HandleExecute);
             hFunc(NActors::TEvPollerReady, HandleReady);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
@@ -395,6 +322,7 @@ private:
     TString Inbox;
     TString Outbox;
     TString DatabasePath;
+    NActors::TActorId Session;
     ui32 InternalErrorRetries = 3;
     bool CloseAfterWrite = false;
 };

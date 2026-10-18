@@ -12,6 +12,7 @@ SRCS(
     listener_ut.cpp
     schemata_ut.cpp
     select_ut.cpp
+    session_ut.cpp
 )
 
 PEERDIR(

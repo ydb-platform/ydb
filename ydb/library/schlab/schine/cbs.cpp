@@ -14,6 +14,39 @@ TCbs::~TCbs() {
     DeleteJobs();
 }
 
+TCbs::TCbs(TCbs&& other) noexcept
+    : TCbs()
+{
+    Swap(other);
+}
+
+TCbs& TCbs::operator=(TCbs&& other) noexcept {
+    if (this != &other) {
+        TCbs moved(std::move(other));
+        Swap(moved);
+    }
+    return *this;
+}
+
+void TCbs::Swap(TCbs& other) noexcept {
+    Jobs.Swap(other.Jobs);
+    std::swap(CbsIdx, other.CbsIdx);
+    std::swap(CbsNameIdx, other.CbsNameIdx);
+    std::swap(CbsName, other.CbsName);
+    std::swap(MaxBudget, other.MaxBudget);
+    std::swap(CbsDeadline, other.CbsDeadline);
+    std::swap(State, other.State);
+    std::swap(CurBudget, other.CurBudget);
+    std::swap(Period, other.Period);
+    std::swap(LastSeqNo, other.LastSeqNo);
+    std::swap(Weight, other.Weight);
+    std::swap(JobsSize, other.JobsSize);
+    std::swap(JobsCost, other.JobsCost);
+    std::swap(OwnerIdx, other.OwnerIdx);
+    std::swap(GateIdx, other.GateIdx);
+    std::swap(IsNew, other.IsNew);
+}
+
 void TCbs::Reset(ui64 cbsIdx, ui8 ownerIdx, ui8 gateIdx) {
     IsNew = true;
     CbsIdx = cbsIdx;
@@ -38,45 +71,35 @@ void TCbs::PushJob(TIntrusivePtr<TJob> &job) {
     LastSeqNo++;
     job->SeqNo = LastSeqNo;
     job->CbsIdx = CbsIdx;
-    Jobs.push_back(job);
+    Y_ABORT_UNLESS(job->Empty());
+    job->Ref(); // The queue owns one reference until PopJob or DeleteJobs.
+    Jobs.PushBack(job.Get());
     JobsSize++;
     JobsCost += job->Cost;
 }
 
 TIntrusivePtr<TJob> TCbs::PeekTailJob() {
-    if (Jobs.empty()) {
+    if (Jobs.Empty()) {
         return nullptr;
     }
-    return Jobs.back();
+    return Jobs.Back();
 }
 
-TIntrusivePtr<TJob> TCbs::PeekJob() {
-    Y_ABORT_UNLESS(!Jobs.empty());
-    if (Jobs.empty()) {
-        return nullptr;
-    }
-    return Jobs.front();
-}
 
 TIntrusivePtr<TJob> TCbs::PopJob() {
-    Y_ABORT_UNLESS(!Jobs.empty());
-    TIntrusivePtr<TJob> job = Jobs.front();
+    Y_ABORT_UNLESS(!Jobs.Empty());
+    TIntrusivePtr<TJob> job(Jobs.PopFront(), TIntrusivePtr<TJob>::TNoIncrement{});
     JobsSize--;
     JobsCost -= job->Cost;
-    Jobs.pop_front();
     return job;
 }
 
-bool TCbs::IsEmpty() {
-    return Jobs.empty();
-}
 
-bool TCbs::IsPresent() {
-    return CbsIdx != InvalidIdx;
-}
 
 void TCbs::DeleteJobs() {
-    Jobs.clear();
+    while (!Jobs.Empty()) {
+        Jobs.PopFront()->UnRef();
+    }
     JobsCost = 0;
     JobsSize = 0;
 }

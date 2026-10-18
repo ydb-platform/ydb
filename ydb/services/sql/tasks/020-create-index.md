@@ -1,7 +1,7 @@
 # CREATE INDEX и CREATE UNIQUE INDEX
 
-status: pending
-commit:
+status: done
+commit: e6cdb8265084ee70265750c4aeddc7281c5f5967
 id: create-index
 depends: create-table
 

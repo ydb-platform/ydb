@@ -1,7 +1,13 @@
 LIBRARY()
 
 SRCS(
-    propose.cpp
+    alter_sequence.cpp
+    alter_table.cpp
+    create_index.cpp
+    create_schema.cpp
+    create_sequence.cpp
+    create_table.cpp
+    drop.cpp
     types.cpp
 )
 

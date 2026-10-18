@@ -121,7 +121,8 @@ public:
 
     void Bootstrap() {
         if (!Statement.Join || Statement.Star || !Statement.Where.empty()
-            || (Statement.Join->Kind != EJoinKind::Inner && Statement.Join->Kind != EJoinKind::Left))
+            || (Statement.Join->Kind != EJoinKind::Inner && Statement.Join->Kind != EJoinKind::Left
+                && Statement.Join->Kind != EJoinKind::Right))
         {
             Fail("0A000", "not supported");
             return;
@@ -227,6 +228,18 @@ private:
         KeySide[1] = leftKey == 1 ? join.LeftColumn.Name : join.RightColumn.Name;
         LeftNames.insert(KeySide[0]);
         RightNames.insert(KeySide[1]);
+        if (join.Kind == EJoinKind::Right) {
+            std::swap(LeftPath, RightPath);
+            std::swap(LeftNames, RightNames);
+            std::swap(KeySide[0], KeySide[1]);
+            for (TOutput& out : Output) {
+                if (out.Side == 0) {
+                    out.Side = 1;
+                } else if (out.Side == 1) {
+                    out.Side = 0;
+                }
+            }
+        }
         return true;
     }
 
@@ -563,7 +576,7 @@ private:
             }
             bucket[RightRows[i].Bytes[rightKey]].push_back(i);
         }
-        const bool keepLeft = Statement.Join->Kind == EJoinKind::Left;
+        const bool keepLeft = Statement.Join->Kind == EJoinKind::Left || Statement.Join->Kind == EJoinKind::Right;
         for (const THeld& left : LeftRows) {
             const TVector<size_t>* hits = left.Nulls[leftKey] ? nullptr : MapFindPtr(bucket, left.Bytes[leftKey]);
             if (!hits || hits->empty()) {

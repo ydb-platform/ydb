@@ -1,7 +1,7 @@
 # LEFT JOIN
 
-status: pending
-commit:
+status: done
+commit: 2e80ff5bb648b98575c985ca77fd01bc8ad698f9
 id: join-left
 depends: join-inner
 

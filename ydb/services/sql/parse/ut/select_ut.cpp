@@ -99,6 +99,13 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Left);
     }
 
+    Y_UNIT_TEST(RightJoinKeepsTheRightTable) {
+        const TParseResult parsed = Parse("SELECT rights.extra FROM lefts RIGHT JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Select->Join);
+        UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Right);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

@@ -1219,6 +1219,15 @@ private:
                 return Unsupported(Current.Text);
             }
             kind = EJoinKind::Left;
+        } else if (IsKeyword("right")) {
+            Advance();
+            if (IsKeyword("outer")) {
+                Advance();
+            }
+            if (!IsKeyword("join")) {
+                return Unsupported(Current.Text);
+            }
+            kind = EJoinKind::Right;
         } else if (IsKeyword("inner")) {
             Advance();
             if (!IsKeyword("join")) {

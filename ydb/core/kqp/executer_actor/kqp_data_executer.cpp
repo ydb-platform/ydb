@@ -1158,17 +1158,14 @@ private:
     }
 
     void HandleShutdown(TEvDqCompute::TEvState::TPtr& ev) {
-        const TActorId computeActorId = ev->Sender;
-        const ui64 taskId = ev->Get()->Record.GetTaskId();
-        const auto state = ev->Get()->Record.GetState();
+        const auto& state = ev->Get()->Record;
 
         // The first report of a compute actor unknown to TerminateComputeActors()
-        const bool firstReport = HandleComputeStats(ev);
-        if (firstReport
-            && state != NYql::NDqProto::COMPUTE_STATE_FINISHED
-            && state != NYql::NDqProto::COMPUTE_STATE_FAILURE)
+        if (HandleComputeStats(ev)
+            && state.GetState() != NYql::NDqProto::COMPUTE_STATE_FINISHED
+            && state.GetState() != NYql::NDqProto::COMPUTE_STATE_FAILURE)
         {
-            AbortLateComputeActor(taskId, computeActorId);
+            AbortLateComputeActor(state.GetTaskId(), ev->Sender);
         }
 
         if (Planner->GetPendingComputeTasks().empty() && Planner->GetPendingComputeActors().empty()) {

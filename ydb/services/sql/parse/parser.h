@@ -180,6 +180,16 @@ struct TInsertStmt {
     std::optional<TSelectStmt> Source;
 };
 
+enum class ETxKind {
+    Begin,
+    Commit,
+    Rollback,
+};
+
+struct TTxStmt {
+    ETxKind Kind = ETxKind::Begin;
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
@@ -190,6 +200,7 @@ struct TParseResult {
     std::optional<TSchemaStmt> CreateSchema;
     std::optional<TCreateIndexStmt> CreateIndex;
     std::optional<TInsertStmt> Insert;
+    std::optional<TTxStmt> Tx;
     TString SqlState;
     TString Message;
 };

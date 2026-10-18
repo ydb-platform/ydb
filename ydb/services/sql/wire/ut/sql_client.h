@@ -20,6 +20,7 @@ public:
         TString SqlState;
         TString Message;
         TString CommandTag;
+        char TxStatus = 'I';
         TVector<TQueryColumn> Columns;
         TVector<TVector<TQueryCell>> Rows;
     };
@@ -30,7 +31,7 @@ public:
         Runtime.Send(new NActors::IEventHandle(Session, Edge, request.Release()), 0, true);
         const auto ev = Runtime.GrabEdgeEventRethrow<TEvExecuteResult>(Edge);
         const TEvExecuteResult& result = *ev->Get();
-        return {result.Ok, result.SqlState, result.Message, result.CommandTag, result.Columns, result.Rows};
+        return {result.Ok, result.SqlState, result.Message, result.CommandTag, result.TxStatus, result.Columns, result.Rows};
     }
 
 private:

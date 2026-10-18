@@ -440,7 +440,7 @@ private:
                 continue;
             }
             if (message.Type == 'S') {
-                if (!Write(MakeReadyForQuery())) {
+                if (!Write(MakeReadyForQuery(TxState))) {
                     return false;
                 }
                 continue;
@@ -500,17 +500,18 @@ private:
     void HandleExecute(TEvExecuteResult::TPtr& ev) {
         const TEvExecuteResult& result = *ev->Get();
         TString reply;
+        TxState = result.TxStatus == 'T' || result.TxStatus == 'E' ? result.TxStatus : 'I';
         if (!result.Ok) {
             const TString sqlState = result.SqlState.empty() ? TString("0A000") : result.SqlState;
             const TString message = result.Message.empty() ? TString("not supported") : result.Message;
             reply = MakeErrorResponse(sqlState, message);
             if (!Extended) {
-                reply.append(MakeReadyForQuery());
+                reply.append(MakeReadyForQuery(TxState));
             }
         } else if (result.Columns.empty() && !result.CommandTag.StartsWith("SELECT")) {
             reply = MakeCommandComplete(result.CommandTag);
             if (!Extended) {
-                reply.append(MakeReadyForQuery());
+                reply.append(MakeReadyForQuery(TxState));
             }
         } else {
             TVector<TResultColumn> columns;
@@ -528,7 +529,7 @@ private:
                 }
                 rows.push_back(std::move(line));
             }
-            reply = MakeTextResult(columns, rows, result.CommandTag, !Extended);
+            reply = MakeTextResult(columns, rows, result.CommandTag, !Extended, TxState);
         }
         Extended = false;
         const bool written = Write(reply);
@@ -602,6 +603,7 @@ private:
     THashMap<TString, TPortal> Portals;
     ui32 InternalErrorRetries = 3;
     bool Extended = false;
+    char TxState = 'I';
     bool CloseAfterWrite = false;
 };
 

@@ -31,7 +31,7 @@ bool TryParseMessage(TString& buffer, TClientMessage& message, TString& error);
 TString MakeAuthenticationOk();
 TString MakeParameterStatus(TStringBuf name, TStringBuf value);
 TString MakeBackendKeyData(ui32 backendPid, ui32 secret);
-TString MakeReadyForQuery();
+TString MakeReadyForQuery(char status = 'I');
 TString MakeCommandComplete(TStringBuf tag);
 TString MakeErrorResponse(TStringBuf sqlState, TStringBuf message);
 TString MakeHandshake(ui32 backendPid, ui32 secret);
@@ -49,7 +49,7 @@ struct TTextCell {
 
 // Text-format result: RowDescription, DataRow per row, CommandComplete, ReadyForQuery.
 TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TString>> rows);
-TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag = {}, bool ready = true);
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag = {}, bool ready = true, char txStatus = 'I');
 TString MakeParseComplete();
 TString MakeBindComplete();
 TString MakeCloseComplete();

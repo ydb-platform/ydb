@@ -111,11 +111,12 @@ struct TPrepared {
 
 class TInsertActor : public NActors::TActorBootstrapped<TInsertActor> {
 public:
-    TInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries)
+    TInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries, bool defer)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , Statement(std::move(statement))
         , InternalErrorRetries(internalErrorRetries)
+        , Defer(defer)
     {
     }
 
@@ -162,6 +163,17 @@ public:
             if (count > 0) {
                 result->Rows = ResultRows;
             }
+        }
+        if (HoldWrite && count > 0) {
+            TDeferredWrite write;
+            write.OwnerId = Table.PathId.OwnerId;
+            write.LocalPathId = Table.PathId.LocalPathId;
+            write.SchemaVersion = Table.SchemaVersion;
+            write.TabletId = TabletId;
+            write.Operation = static_cast<ui32>(Operation);
+            write.ColumnIds = ColumnIds;
+            write.Payload = Payload;
+            result->Deferred = std::move(write);
         }
         Send(ReplyTo, result.Release());
         PassAway();
@@ -647,6 +659,11 @@ public:
     }
 
     void Allocate() {
+        if (Defer) {
+            HoldWrite = true;
+            Succeed(1);
+            return;
+        }
         Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId());
         Become(&TInsertActor::StateAllocate);
     }
@@ -924,6 +941,7 @@ public:
     const TString Database;
     const TInsertStmt Statement;
     const ui32 InternalErrorRetries;
+    const bool Defer;
     TString Path;
     TTableId Table;
     ui64 TabletId = 0;
@@ -950,6 +968,7 @@ public:
     TVector<TString> Storage;
     TVector<TCell> KeyCells;
     TVector<NScheme::TTypeInfo> KeyTypes;
+    bool HoldWrite = false;
     bool Linked = false;
     bool Replied = false;
     ui32 OverloadRetries = 0;
@@ -958,8 +977,8 @@ public:
 
 } // namespace
 
-NActors::IActor* CreateInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries) {
-    return new TInsertActor(replyTo, std::move(database), std::move(statement), internalErrorRetries);
+NActors::IActor* CreateInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries, bool defer) {
+    return new TInsertActor(replyTo, std::move(database), std::move(statement), internalErrorRetries, defer);
 }
 
 } // namespace NKikimr::NSql

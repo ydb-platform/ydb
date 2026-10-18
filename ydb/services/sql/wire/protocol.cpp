@@ -141,8 +141,8 @@ TString MakeBackendKeyData(ui32 backendPid, ui32 secret) {
     return MakeMessage('K', payload);
 }
 
-TString MakeReadyForQuery() {
-    return MakeMessage('Z', TStringBuf("I", 1));
+TString MakeReadyForQuery(char status) {
+    return MakeMessage('Z', TStringBuf(&status, 1));
 }
 
 TString MakeCommandComplete(TStringBuf tag) {
@@ -194,7 +194,7 @@ TString MakeRowDescription(TArrayRef<const TResultColumn> columns) {
     return MakeMessage('T', description);
 }
 
-TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag, bool ready) {
+TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const TVector<TTextCell>> rows, TStringBuf tag, bool ready, char txStatus) {
     TString out = MakeRowDescription(columns);
     for (const TVector<TTextCell>& row : rows) {
         TString data;
@@ -214,7 +214,7 @@ TString MakeTextResult(TArrayRef<const TResultColumn> columns, TArrayRef<const T
     complete.push_back('\0');
     out.append(MakeMessage('C', complete));
     if (ready) {
-        out.append(MakeReadyForQuery());
+        out.append(MakeReadyForQuery(txStatus));
     }
     return out;
 }

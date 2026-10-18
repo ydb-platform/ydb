@@ -46,7 +46,38 @@ public:
         if (IsKeyword("insert")) {
             return InsertStmt();
         }
+        if (IsKeyword("begin") || IsKeyword("start") || IsKeyword("commit") || IsKeyword("end")
+            || IsKeyword("rollback") || IsKeyword("abort")) {
+            return TransactionStmt();
+        }
         return Unsupported(Current.Text);
+    }
+
+    TParseResult TransactionStmt() {
+        TTxStmt tx;
+        if (IsKeyword("begin")) {
+            tx.Kind = ETxKind::Begin;
+            Advance();
+        } else if (IsKeyword("start")) {
+            Advance();
+            if (!IsKeyword("transaction")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            tx.Kind = ETxKind::Begin;
+        } else if (IsKeyword("commit") || IsKeyword("end")) {
+            tx.Kind = ETxKind::Commit;
+            Advance();
+        } else {
+            tx.Kind = ETxKind::Rollback;
+            Advance();
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.Tx = tx;
+        return result;
     }
 
     TParseResult InsertStmt() {

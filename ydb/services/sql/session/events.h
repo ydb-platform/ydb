@@ -29,6 +29,7 @@ struct TEvExecuteResult : public NActors::TEventLocal<TEvExecuteResult, EvExecut
     TString CommandTag;
     TVector<TQueryColumn> Columns;
     TVector<TVector<TQueryCell>> Rows;
+    char TxStatus = 'I';
 };
 
 NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries);

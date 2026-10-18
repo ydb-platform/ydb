@@ -1,7 +1,7 @@
 # Extended query
 
-status: pending
-commit:
+status: done
+commit: c81fdb040cbaa722396a3145bbd2d7c9e33d1f78
 id: extended
 depends: insert-returning
 

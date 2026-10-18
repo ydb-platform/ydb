@@ -102,10 +102,24 @@ private:
         Pump();
     }
 
-    void Fail(TString sqlState, TString message) {
+    char StatusChar() const {
+        if (Tx == ETx::Failed) {
+            return 'E';
+        }
+        if (Tx == ETx::Open) {
+            return 'T';
+        }
+        return 'I';
+    }
+
+    void Fail(TString sqlState, TString message, bool abortTx = true) {
+        if (abortTx && Tx == ETx::Open) {
+            Tx = ETx::Failed;
+        }
         auto result = MakeHolder<TEvExecuteResult>();
         result->SqlState = std::move(sqlState);
         result->Message = std::move(message);
+        result->TxStatus = StatusChar();
         Reply(result.Release());
     }
 
@@ -115,11 +129,69 @@ private:
         result->CommandTag = std::move(tag);
         result->Columns = std::move(columns);
         result->Rows = std::move(rows);
+        result->TxStatus = StatusChar();
         Reply(result.Release());
+    }
+
+    bool IsDdl(const TParseResult& parsed) const {
+        return parsed.CreateTable || parsed.AlterTable || parsed.CreateSequence || parsed.CreateIndex
+            || parsed.CreateSchema || parsed.Drop || parsed.AlterSequence;
+    }
+
+    void RunTx(const TTxStmt& tx) {
+        if (tx.Kind == ETxKind::Begin) {
+            if (Tx != ETx::Idle) {
+                Fail("25001", "transaction already open", false);
+                return;
+            }
+            Tx = ETx::Open;
+            Succeed("BEGIN", {}, {});
+            return;
+        }
+        if (tx.Kind == ETxKind::Rollback) {
+            Pending.clear();
+            Tx = ETx::Idle;
+            Succeed("ROLLBACK", {}, {});
+            return;
+        }
+        if (Tx == ETx::Idle) {
+            Succeed("COMMIT", {}, {});
+            return;
+        }
+        if (Pending.empty()) {
+            Tx = ETx::Idle;
+            Succeed("COMMIT", {}, {});
+            return;
+        }
+        const ui64 tablet = Pending[0].TabletId;
+        for (const TDeferredWrite& write : Pending) {
+            if (write.TabletId != tablet) {
+                Fail("0A000", "not supported");
+                return;
+            }
+        }
+        Committing = true;
+        Register(CreateCommitActor(SelfId(), Pending, InternalErrorRetries));
     }
 
     void Start(const TParseResult& parsed, const TString& sql) {
         Busy = true;
+        if (Tx == ETx::Failed) {
+            if (parsed.Tx && parsed.Tx->Kind == ETxKind::Rollback) {
+                RunTx(*parsed.Tx);
+                return;
+            }
+            Fail("25P02", "current transaction is aborted");
+            return;
+        }
+        if (parsed.Tx) {
+            RunTx(*parsed.Tx);
+            return;
+        }
+        if (Tx == ETx::Open && (IsDdl(parsed) || (parsed.Insert && parsed.Insert->Source))) {
+            Fail("0A000", "not supported");
+            return;
+        }
         if (parsed.CreateTable) {
             Register(CreateTableActor(SelfId(), Database, *parsed.CreateTable));
             return;
@@ -174,7 +246,7 @@ private:
             if (parsed.Insert->Source) {
                 Register(CreateInsertSelectActor(SelfId(), Database, sql, *parsed.Insert, InternalErrorRetries));
             } else {
-                Register(CreateInsertActor(SelfId(), Database, *parsed.Insert, InternalErrorRetries));
+                Register(CreateInsertActor(SelfId(), Database, *parsed.Insert, InternalErrorRetries, Tx == ETx::Open));
             }
             return;
         }
@@ -216,10 +288,27 @@ private:
 
     void HandleQuery(TEvQueryResult::TPtr& ev) {
         const TEvQueryResult& result = *ev->Get();
+        if (Committing) {
+            Committing = false;
+            if (!result.Ok) {
+                Pending.clear();
+                Tx = ETx::Failed;
+                Fail(result.SqlState.empty() ? TString("XX000") : result.SqlState,
+                    result.Message.empty() ? TString("internal error") : result.Message, false);
+                return;
+            }
+            Pending.clear();
+            Tx = ETx::Idle;
+            Succeed("COMMIT", {}, {});
+            return;
+        }
         if (!result.Ok) {
             Fail(result.SqlState.empty() ? TString("0A000") : result.SqlState,
                 result.Message.empty() ? TString("not supported") : result.Message);
             return;
+        }
+        if (Tx == ETx::Open && result.Deferred) {
+            Pending.push_back(*result.Deferred);
         }
         const TString tag = result.CommandTag.empty() ? "SELECT " + ToString(result.Rows.size()) : result.CommandTag;
         Succeed(tag, result.Columns, result.Rows);
@@ -246,10 +335,19 @@ private:
 
     const TString Database;
     const ui32 InternalErrorRetries;
+    enum class ETx {
+        Idle,
+        Open,
+        Failed,
+    };
+
     TVector<TRequest> Queue;
+    TVector<TDeferredWrite> Pending;
     THashMap<TString, TParseResult> Parsed;
     NActors::TActorId Client;
+    ETx Tx = ETx::Idle;
     bool Busy = false;
+    bool Committing = false;
 };
 
 } // namespace

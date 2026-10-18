@@ -79,6 +79,19 @@ enum class EAlterTableKind {
     DropDefault,
 };
 
+struct TCreateSequenceStmt {
+    bool IfNotExists = false;
+    std::optional<TIdentifier> Schema;
+    TIdentifier Name;
+    TString DataType;
+    std::optional<i64> Increment;
+    std::optional<i64> MinValue;
+    std::optional<i64> MaxValue;
+    std::optional<i64> StartValue;
+    std::optional<ui64> Cache;
+    bool Cycle = false;
+};
+
 struct TAlterTableStmt {
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
@@ -91,6 +104,7 @@ struct TParseResult {
     std::optional<TSelectStmt> Select;
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
+    std::optional<TCreateSequenceStmt> CreateSequence;
     TString SqlState;
     TString Message;
 };

@@ -107,6 +107,9 @@ public:
         if (IsKeyword("table")) {
             return CreateStmt();
         }
+        if (IsKeyword("sequence")) {
+            return CreateSequence();
+        }
         return Unsupported(Current.Text);
     }
 
@@ -233,6 +236,126 @@ private:
         return IsKeyword("null") || IsKeyword("not") || IsKeyword("default") || IsKeyword("primary")
             || IsKeyword("unique") || IsKeyword("check") || IsKeyword("references") || IsKeyword("collate")
             || IsKeyword("constraint") || IsKeyword("storage") || IsKeyword("compression") || IsKeyword("generated");
+    }
+
+    std::optional<TParseResult> TakeInteger(i64& value) {
+        if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, value)) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        return std::nullopt;
+    }
+
+    TParseResult CreateSequence() {
+        Advance();
+        TCreateSequenceStmt sequence;
+        if (IsKeyword("if")) {
+            Advance();
+            if (!IsKeyword("not")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (!IsKeyword("exists")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            sequence.IfNotExists = true;
+        }
+        if (auto error = QualifiedName(sequence.Schema, sequence.Name)) {
+            return *error;
+        }
+        while (Current.Kind == ETokenKind::Identifier && !Current.Quoted) {
+            if (IsKeyword("as")) {
+                Advance();
+                if (IsKeyword("smallint")) {
+                    sequence.DataType = "Int16";
+                } else if (IsKeyword("integer") || IsKeyword("int") || IsKeyword("int4")) {
+                    sequence.DataType = "Int32";
+                } else if (IsKeyword("bigint") || IsKeyword("int8")) {
+                    sequence.DataType = "Int64";
+                } else {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                continue;
+            }
+            if (IsKeyword("increment")) {
+                Advance();
+                if (IsKeyword("by")) {
+                    Advance();
+                }
+                i64 value = 0;
+                if (auto error = TakeInteger(value)) {
+                    return *error;
+                }
+                sequence.Increment = value;
+                continue;
+            }
+            if (IsKeyword("minvalue")) {
+                Advance();
+                i64 value = 0;
+                if (auto error = TakeInteger(value)) {
+                    return *error;
+                }
+                sequence.MinValue = value;
+                continue;
+            }
+            if (IsKeyword("maxvalue")) {
+                Advance();
+                i64 value = 0;
+                if (auto error = TakeInteger(value)) {
+                    return *error;
+                }
+                sequence.MaxValue = value;
+                continue;
+            }
+            if (IsKeyword("start")) {
+                Advance();
+                if (IsKeyword("with")) {
+                    Advance();
+                }
+                i64 value = 0;
+                if (auto error = TakeInteger(value)) {
+                    return *error;
+                }
+                sequence.StartValue = value;
+                continue;
+            }
+            if (IsKeyword("cache")) {
+                Advance();
+                ui64 value = 0;
+                if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, value)) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                sequence.Cache = value;
+                continue;
+            }
+            if (IsKeyword("cycle")) {
+                Advance();
+                sequence.Cycle = true;
+                continue;
+            }
+            if (IsKeyword("no")) {
+                Advance();
+                if (IsKeyword("cycle")) {
+                    Advance();
+                    sequence.Cycle = false;
+                    continue;
+                }
+                return Unsupported(Current.Text);
+            }
+            if (IsKeyword("owned") || IsKeyword("temporary") || IsKeyword("temp") || IsKeyword("unlogged")) {
+                return Unsupported(Current.Text);
+            }
+            break;
+        }
+        if (auto error = Finish()) {
+            return *error;
+        }
+        TParseResult result;
+        result.CreateSequence = std::move(sequence);
+        return result;
     }
 
     TParseResult AlterColumn(TAlterTableStmt alter) {

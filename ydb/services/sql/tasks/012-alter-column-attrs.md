@@ -1,7 +1,7 @@
 # ALTER COLUMN NOT NULL и DEFAULT
 
-status: pending
-commit:
+status: done
+commit: 2e9fb9bd9b0c59ded590fef430f637008bc8cb9e
 id: alter-column-attrs
 depends: alter-drop-column
 

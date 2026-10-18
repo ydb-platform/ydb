@@ -81,4 +81,23 @@ Y_UNIT_TEST_SUITE(ParseCreateTable) {
         UNIT_ASSERT_VALUES_EQUAL(typed.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(typed.Message, "type");
     }
+
+    Y_UNIT_TEST(CreateSequenceOptions) {
+        const TParseResult parsed = Parse(
+            "CREATE SEQUENCE app.bounds AS integer INCREMENT BY 2 MINVALUE 1 MAXVALUE 20 START WITH 5 CACHE 3 CYCLE");
+        UNIT_ASSERT(parsed.CreateSequence);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CreateSequence->DataType, "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.CreateSequence->Increment, 2);
+        UNIT_ASSERT_VALUES_EQUAL(*parsed.CreateSequence->MaxValue, 20);
+        UNIT_ASSERT(parsed.CreateSequence->Cycle);
+
+        const TParseResult temporary = Parse("CREATE SEQUENCE seq TEMPORARY");
+        UNIT_ASSERT(!temporary.CreateSequence);
+        UNIT_ASSERT_VALUES_EQUAL(temporary.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(temporary.Message, "temporary");
+
+        const TParseResult owned = Parse("CREATE SEQUENCE seq OWNED BY t.id");
+        UNIT_ASSERT(!owned.CreateSequence);
+        UNIT_ASSERT_VALUES_EQUAL(owned.Message, "owned");
+    }
 }

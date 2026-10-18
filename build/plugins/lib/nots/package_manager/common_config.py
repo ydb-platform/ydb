@@ -218,6 +218,12 @@ def validate_pnpm_settings(data):
         for name, value in entries.items():
             if not isinstance(name, str) or not name:
                 raise ValueError("invalid {} selector".format(key))
+            if PNPM_SETTING_TYPES[key] == "supported-architectures":
+                if name not in ("os", "cpu", "libc"):
+                    raise ValueError("invalid {} architecture {}".format(key, name))
+                if not isinstance(value, list) or any(not isinstance(v, str) for v in value):
+                    raise ValueError("{}.{} must be a list of strings".format(key, name))
+                continue
             if PNPM_SETTING_TYPES[key] == "peer-rules":
                 if name in ("ignoreMissing", "allowAny"):
                     if not isinstance(value, list) or any(not isinstance(v, str) for v in value):

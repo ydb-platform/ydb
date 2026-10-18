@@ -625,3 +625,50 @@ def test_file_override_selector_is_not_a_peer_name(tmp_path, selector):
     )
     assert PackageManager.get_local_peers_from_package_json(pm) == ["project/replacement"]
     assert pj.data["pnpm"]["overrides"] == {selector: "file:../replacement"}
+
+
+def test_supported_architectures_and_deprecation_exceptions(tmp_path):
+    from build.plugins.lib.nots.package_manager.common_config import join_pnpm_settings, select_pnpm_settings
+
+    pj, _ = fixture(
+        tmp_path,
+        "catalogs: {project/common: {colors: 1.4.0}}\n"
+        "supportedArchitectures: {os: [current, linux], cpu: [x64]}\n"
+        "allowedDeprecatedVersions: {old: '1', common: '*'}",
+    )
+    common = load_common_config(pj, str(tmp_path), include_settings=True)[2]
+    target = {
+        "supportedArchitectures": {"os": ["linux", "darwin"], "cpu": ["arm64"], "libc": ["musl"]},
+        "allowedDeprecatedVersions": {"old": "2"},
+    }
+    merged = join_pnpm_settings(common, select_pnpm_settings(target))
+    assert merged == {
+        "supportedArchitectures": {
+            "os": ["current", "linux", "darwin"],
+            "cpu": ["x64", "arm64"],
+            "libc": ["musl"],
+        },
+        "allowedDeprecatedVersions": {"old": "2", "common": "*"},
+    }
+    merged["supportedArchitectures"]["os"].append("win32")
+    assert common["supportedArchitectures"]["os"] == ["current", "linux"]
+    assert target["supportedArchitectures"]["os"] == ["linux", "darwin"]
+    assert select_pnpm_settings({"supportedArchitectures": {}}) == {"supportedArchitectures": {}}
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [("supportedArchitectures", v) for v in (
+        None, [], "linux", {"os": "linux"}, {"cpu": [42]}, {"libc": None}, {"arch": ["x64"]}
+    )] + [("allowedDeprecatedVersions", []), ("allowedDeprecatedVersions", {"old": 42})],
+)
+def test_invalid_platform_and_deprecation_settings(tmp_path, key, value):
+    from build.plugins.lib.nots.package_manager.common_config import select_pnpm_settings
+
+    with pytest.raises(ValueError):
+        select_pnpm_settings({key: value})
+    pj, _ = fixture(
+        tmp_path, "catalogs: {project/common: {colors: 1.4.0}}\n" + key + ": " + json.dumps(value)
+    )
+    with pytest.raises(ValueError):
+        load_common_config(pj, str(tmp_path), include_settings=True)

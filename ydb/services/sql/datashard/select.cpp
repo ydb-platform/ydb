@@ -108,13 +108,14 @@ TPlanStore& Plans() {
 
 class TSelectActor : public NActors::TActorBootstrapped<TSelectActor> {
 public:
-    TSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot)
+    TSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot, ui64 lockTxId)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , Text(std::move(text))
         , Statement(std::move(statement))
         , InternalErrorRetries(internalErrorRetries)
         , Snapshot(std::move(snapshot))
+        , LockTxId(lockTxId)
     {
     }
 
@@ -163,6 +164,7 @@ private:
             result->Columns.push_back({column.Name, column.TypeOid, column.TypeSize});
         }
         result->Rows = std::move(Rows);
+        result->Locks = std::move(Locks);
         Send(ReplyTo, result.Release());
         PassAway();
     }
@@ -593,6 +595,10 @@ private:
             record.MutableSnapshot()->SetStep(Snapshot->first);
             record.MutableSnapshot()->SetTxId(Snapshot->second);
         }
+        if (LockTxId) {
+            record.SetLockTxId(LockTxId);
+            record.SetLockNodeId(SelfId().NodeId());
+        }
         for (const TColumn& column : ReadColumns) {
             record.AddColumns(column.Id);
         }
@@ -776,6 +782,13 @@ private:
             Fail("XX000", StatusText(ev->Get()->Record));
             return;
         }
+        if (ev->Get()->Record.BrokenTxLocksSize() > 0) {
+            Fail("40001", "could not serialize access");
+            return;
+        }
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            Locks.push_back(lock);
+        }
         if (!TakeRows(*ev->Get())) {
             return;
         }
@@ -834,6 +847,7 @@ private:
     const TSelectStmt Statement;
     const ui32 InternalErrorRetries;
     const std::optional<std::pair<ui64, ui64>> Snapshot;
+    const ui64 LockTxId;
     TString Path;
     TTableId Table;
     TVector<TColumn> Output;
@@ -848,6 +862,7 @@ private:
     TVector<TCell> FilterCells;
     TVector<TShard> Shards;
     TVector<TVector<TQueryCell>> Rows;
+    TVector<NKikimrDataEvents::TLock> Locks;
     TVector<ui64> WakeTablets;
     ui64 ReadId = 0;
     ui32 Pending = 0;
@@ -864,8 +879,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot) {
-    return new TSelectActor(replyTo, std::move(database), std::move(text), std::move(statement), internalErrorRetries, std::move(snapshot));
+NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot, ui64 lockTxId) {
+    return new TSelectActor(replyTo, std::move(database), std::move(text), std::move(statement), internalErrorRetries, std::move(snapshot), lockTxId);
 }
 
 } // namespace NKikimr::NSql

@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/tx/tx_proxy
     ydb/library/actors/core
     ydb/services/sql/datashard
     ydb/services/sql/ddl

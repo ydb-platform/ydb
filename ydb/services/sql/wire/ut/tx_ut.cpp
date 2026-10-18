@@ -83,4 +83,54 @@ Y_UNIT_TEST_SUITE(SqlTransaction) {
         UNIT_ASSERT_VALUES_EQUAL(still.Rows.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(still.Rows[0][0].Text, "kept");
     }
+
+    Y_UNIT_TEST(TwoShardsCommitTogetherAndRollbackLeavesNeither) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+
+        NKikimrSchemeOp::TTableDescription table;
+        table.SetName("items");
+        table.AddColumns()->SetName("id");
+        table.MutableColumns(0)->SetType("Int64");
+        table.AddColumns()->SetName("note");
+        table.MutableColumns(1)->SetType("Utf8");
+        table.AddKeyColumnNames("id");
+        table.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetInt64(10);
+        UNIT_ASSERT_VALUES_EQUAL(client.CreateTable(database, table), NMsgBusProxy::MSTATUS_OK);
+        const auto described = client.Describe(server.GetRuntime(), database + "/items");
+        UNIT_ASSERT_VALUES_EQUAL(described.GetPathDescription().TablePartitionsSize(), 2u);
+
+        TSqlClient sql(server, database);
+        const auto begun = sql.Exec("BEGIN");
+        UNIT_ASSERT_C(begun.Ok, begun.SqlState + " " + begun.Message);
+        const auto left = sql.Exec("INSERT INTO items (id, note) VALUES (1, 'left')");
+        UNIT_ASSERT_C(left.Ok, left.SqlState + " " + left.Message);
+        const auto right = sql.Exec("INSERT INTO items (id, note) VALUES (20, 'right')");
+        UNIT_ASSERT_C(right.Ok, right.SqlState + " " + right.Message);
+        const auto committed = sql.Exec("COMMIT");
+        UNIT_ASSERT_C(committed.Ok, committed.SqlState + " " + committed.Message);
+        UNIT_ASSERT_VALUES_EQUAL(committed.TxStatus, 'I');
+
+        const auto both = sql.Exec("SELECT note FROM items WHERE id < 100");
+        UNIT_ASSERT_C(both.Ok, both.SqlState + " " + both.Message);
+        UNIT_ASSERT_VALUES_EQUAL(both.Rows.size(), 2u);
+
+        const auto again = sql.Exec("BEGIN");
+        UNIT_ASSERT_C(again.Ok, again.SqlState + " " + again.Message);
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO items (id, note) VALUES (2, 'gone')").Ok, "insert left");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO items (id, note) VALUES (30, 'gone')").Ok, "insert right");
+        const auto rolled = sql.Exec("ROLLBACK");
+        UNIT_ASSERT_C(rolled.Ok, rolled.SqlState + " " + rolled.Message);
+
+        const auto leftGone = sql.Exec("SELECT note FROM items WHERE id = 2");
+        UNIT_ASSERT_C(leftGone.Ok, leftGone.SqlState + " " + leftGone.Message);
+        UNIT_ASSERT_VALUES_EQUAL(leftGone.Rows.size(), 0u);
+        const auto rightGone = sql.Exec("SELECT note FROM items WHERE id = 30");
+        UNIT_ASSERT_C(rightGone.Ok, rightGone.SqlState + " " + rightGone.Message);
+        UNIT_ASSERT_VALUES_EQUAL(rightGone.Rows.size(), 0u);
+    }
 }

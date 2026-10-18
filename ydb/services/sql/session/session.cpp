@@ -1,5 +1,6 @@
 #include "events.h"
 
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/sql/ddl/events.h>
 #include <ydb/services/sql/ischema/columns.h>
 #include <ydb/services/sql/ischema/constraints.h>
@@ -144,12 +145,19 @@ private:
                 Fail("25001", "transaction already open", false);
                 return;
             }
-            Tx = ETx::Open;
-            Succeed("BEGIN", {}, {});
+            Allocating = true;
+            Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId());
             return;
         }
         if (tx.Kind == ETxKind::Rollback) {
+            if (!Locks.empty()) {
+                Rolling = true;
+                Register(CreateRollbackActor(SelfId(), TxId, Locks));
+                return;
+            }
             Pending.clear();
+            Locks.clear();
+            TxId = 0;
             Tx = ETx::Idle;
             Succeed("ROLLBACK", {}, {});
             return;
@@ -158,20 +166,29 @@ private:
             Succeed("COMMIT", {}, {});
             return;
         }
-        if (Pending.empty()) {
+        if (Pending.empty() && Locks.empty()) {
             Tx = ETx::Idle;
+            TxId = 0;
             Succeed("COMMIT", {}, {});
             return;
         }
-        const ui64 tablet = Pending[0].TabletId;
-        for (const TDeferredWrite& write : Pending) {
-            if (write.TabletId != tablet) {
-                Fail("0A000", "not supported");
-                return;
-            }
-        }
         Committing = true;
-        Register(CreateCommitActor(SelfId(), Pending, InternalErrorRetries));
+        Register(CreateCommitActor(SelfId(), TxId, Pending, Locks, InternalErrorRetries));
+    }
+
+    void HandleAllocate(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        if (!Allocating) {
+            return;
+        }
+        Allocating = false;
+        const ui64 txId = ev->Get()->TxId;
+        if (!txId) {
+            Fail("XX000", "internal error");
+            return;
+        }
+        TxId = txId;
+        Tx = ETx::Open;
+        Succeed("BEGIN", {}, {});
     }
 
     void Start(const TParseResult& parsed, const TString& sql) {
@@ -238,7 +255,7 @@ private:
             } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "sequences") {
                 Register(CreateSequencesActor(SelfId(), Database, *parsed.Select));
             } else {
-                Register(CreateSelectActor(SelfId(), Database, sql, *parsed.Select, InternalErrorRetries));
+                Register(CreateSelectActor(SelfId(), Database, sql, *parsed.Select, InternalErrorRetries, std::nullopt, Tx == ETx::Open ? TxId : 0));
             }
             return;
         }
@@ -288,16 +305,26 @@ private:
 
     void HandleQuery(TEvQueryResult::TPtr& ev) {
         const TEvQueryResult& result = *ev->Get();
+        if (Rolling) {
+            Rolling = false;
+            Pending.clear();
+            Locks.clear();
+            TxId = 0;
+            Tx = ETx::Idle;
+            Succeed("ROLLBACK", {}, {});
+            return;
+        }
         if (Committing) {
             Committing = false;
+            Pending.clear();
+            Locks.clear();
+            TxId = 0;
             if (!result.Ok) {
-                Pending.clear();
                 Tx = ETx::Failed;
                 Fail(result.SqlState.empty() ? TString("XX000") : result.SqlState,
                     result.Message.empty() ? TString("internal error") : result.Message, false);
                 return;
             }
-            Pending.clear();
             Tx = ETx::Idle;
             Succeed("COMMIT", {}, {});
             return;
@@ -309,6 +336,11 @@ private:
         }
         if (Tx == ETx::Open && result.Deferred) {
             Pending.push_back(*result.Deferred);
+        }
+        if (Tx == ETx::Open) {
+            for (const auto& lock : result.Locks) {
+                Locks.push_back(lock);
+            }
         }
         const TString tag = result.CommandTag.empty() ? "SELECT " + ToString(result.Rows.size()) : result.CommandTag;
         Succeed(tag, result.Columns, result.Rows);
@@ -329,6 +361,7 @@ private:
             hFunc(TEvExecute, HandleExecute);
             hFunc(TEvQueryResult, HandleQuery);
             hFunc(TEvDdlResult, HandleDdl);
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleAllocate);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
@@ -343,11 +376,15 @@ private:
 
     TVector<TRequest> Queue;
     TVector<TDeferredWrite> Pending;
+    TVector<NKikimrDataEvents::TLock> Locks;
     THashMap<TString, TParseResult> Parsed;
     NActors::TActorId Client;
     ETx Tx = ETx::Idle;
+    ui64 TxId = 0;
     bool Busy = false;
     bool Committing = false;
+    bool Rolling = false;
+    bool Allocating = false;
 };
 
 } // namespace

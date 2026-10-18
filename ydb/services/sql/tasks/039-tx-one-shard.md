@@ -1,7 +1,7 @@
 # BEGIN, COMMIT, ROLLBACK на одном шарде
 
-status: pending
-commit:
+status: done
+commit: a5808cd93e9c749038046a02eea489152d3fb2d1
 id: tx-one-shard
 depends: insert-row
 

@@ -14,9 +14,7 @@ bool CanPushLimitToRead(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePt
         return false;
     }
     const auto read = CastOperator<TOpRead>(input);
-    return input->IsSingleConsumer() && !read->Limit &&
-        read->GetTableStorageType() == NYql::EStorageType::ColumnStorage &&
-        IsValidLimit(limit->GetLimitCond());
+    return !read->Limit && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage && IsValidLimit(limit->GetLimitCond());
 }
 
 bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {

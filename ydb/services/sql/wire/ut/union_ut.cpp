@@ -53,4 +53,25 @@ Y_UNIT_TEST_SUITE(Union) {
         UNIT_ASSERT_VALUES_EQUAL(shared.Rows.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(shared.Rows[0][0].Text, "b");
     }
+
+    Y_UNIT_TEST(ExceptDropsTheSharedRow) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        TSqlClient sql(server, "/" + settings.DomainName);
+
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE lefts (id int8 PRIMARY KEY, note text)").Ok, "left");
+        UNIT_ASSERT_C(sql.Exec("CREATE TABLE rights (id int8 PRIMARY KEY, note text)").Ok, "right");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (1, 'a')").Ok, "a");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO lefts (id, note) VALUES (2, 'b')").Ok, "b");
+        UNIT_ASSERT_C(sql.Exec("INSERT INTO rights (id, note) VALUES (1, 'b')").Ok, "b2");
+
+        const auto diff = sql.Exec("SELECT note FROM lefts WHERE id >= 1 EXCEPT SELECT note FROM rights WHERE id >= 1");
+        UNIT_ASSERT_C(diff.Ok, diff.SqlState + " " + diff.Message);
+        UNIT_ASSERT_VALUES_EQUAL(diff.CommandTag, "SELECT 1");
+        UNIT_ASSERT_VALUES_EQUAL(diff.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(diff.Rows[0][0].Text, "a");
+    }
 }

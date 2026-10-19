@@ -1,7 +1,7 @@
 # INTERSECT
 
-status: pending
-commit:
+status: done
+commit: a973f5938bca2234a7746a21fa1fc8956db43fa3
 id: select-intersect
 depends: select-union
 

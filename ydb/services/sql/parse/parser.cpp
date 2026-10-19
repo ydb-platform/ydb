@@ -585,6 +585,9 @@ public:
         } else if (IsKeyword("intersect")) {
             Advance();
             combine = ECombine::Intersect;
+        } else if (IsKeyword("except")) {
+            Advance();
+            combine = ECombine::Except;
         }
         if (combine != ECombine::None) {
             TParseResult right = SelectStmt();
@@ -600,7 +603,7 @@ public:
             result.SelectRight = std::move(right.Select);
             return result;
         }
-        if (IsKeyword("except") || IsKeyword("for")) {
+        if (IsKeyword("for")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("limit")) {

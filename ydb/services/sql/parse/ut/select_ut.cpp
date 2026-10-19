@@ -189,6 +189,12 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.SelectRight->From.Name, "u");
     }
 
+    Y_UNIT_TEST(ExceptKeepsTheOperator) {
+        const TParseResult parsed = Parse("SELECT a FROM t EXCEPT SELECT a FROM u");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Combine == ECombine::Except);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

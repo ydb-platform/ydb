@@ -1,0 +1,18 @@
+# relwithdebinfo + msan + tsan. Same VM shape as the other static files.
+names:
+  - static-relwithdebinfo-d-15
+  - static-relwithdebinfo-d-16
+  - static-relwithdebinfo-d-17
+  - static-relwithdebinfo-d-18
+  - static-relwithdebinfo-d-19
+  - static-relwithdebinfo-d-20
+platform: standard-v4a
+cores: 64
+memory_gb: 256
+disk_gb: 2418
+preset: relwithdebinfo
+labels:
+  - auto-provisioned
+  - build-preset-relwithdebinfo
+  - build-preset-release-msan
+  - build-preset-release-tsan

@@ -822,7 +822,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             CREATE TABLE `/Root/RboNativeWindow` (
                 Id Uint64 NOT NULL,
                 Bucket String,
-                Price Decimal(35, 2),
+                Price Decimal(15, 2),
                 PRIMARY KEY (Id)
             ) WITH (STORE = COLUMN);
         )").GetValueSync();

@@ -48,7 +48,7 @@ struct TFixture {
         table.Metadata->Columns.emplace("x", TKikimrColumnMetadata("x", 2, "Int32", true));
         table.Metadata->Columns.emplace("g", TKikimrColumnMetadata("g", 3, "String", false));
         TKikimrColumnMetadata price("price", 4, "Decimal", false);
-        price.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(35, 2));
+        price.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(15, 2));
         table.Metadata->Columns.emplace("price", std::move(price));
         table.Metadata->ColumnOrder = {"k", "x", "g", "price"};
         UNIT_ASSERT(table.Load(Expr));
@@ -86,6 +86,10 @@ struct TFixture {
     TIntrusivePtr<TOpWindow> Window(const TString& function, bool wholePartition) {
         const auto* decimal = Expr.MakeType<TOptionalExprType>(
             Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "35", "2"));
+        // Leave accumulator headroom at the two-row proof bound. Full-width
+        // Decimal sources intentionally fail the model's overflow admission.
+        const auto* priceType = Expr.MakeType<TOptionalExprType>(
+            Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "15", "2"));
         const auto* groupType = Expr.MakeType<TOptionalExprType>(
             Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
         auto read = MakeIntrusive<TOpRead>(
@@ -94,7 +98,7 @@ struct TFixture {
             nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None,
             TPhysicalOpProps{}, TPositionHandle());
         SetType(*read, {{Key, Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)},
-            {Group, groupType}, {Price, decimal}});
+            {Group, groupType}, {Price, priceType}});
         Sum = Registry.Add(TInfoUnit("", "total"));
         WindowResult = Registry.Add(TInfoUnit("", "total"));
         auto aggregate = MakeIntrusive<TOpAggregate>(read,

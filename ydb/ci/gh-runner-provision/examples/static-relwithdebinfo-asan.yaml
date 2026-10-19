@@ -1,9 +1,5 @@
 # relwithdebinfo + asan, without postcommit.
 names:
-  - static-relwithdebinfo-d-22
-  - static-relwithdebinfo-d-23
-  - static-relwithdebinfo-d-25
-  - static-relwithdebinfo-d-26
   - static-relwithdebinfo-d-29
   - static-relwithdebinfo-d-30
   - static-relwithdebinfo-d-31

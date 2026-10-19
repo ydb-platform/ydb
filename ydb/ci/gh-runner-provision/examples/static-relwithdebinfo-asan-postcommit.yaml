@@ -1,7 +1,11 @@
 # relwithdebinfo + asan + postcommit.
 names:
   - static-relwithdebinfo-d-21
+  - static-relwithdebinfo-d-22
+  - static-relwithdebinfo-d-23
   - static-relwithdebinfo-d-24
+  - static-relwithdebinfo-d-25
+  - static-relwithdebinfo-d-26
   - static-relwithdebinfo-d-27
   - static-relwithdebinfo-d-28
 platform: standard-v4a

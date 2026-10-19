@@ -26,10 +26,16 @@ operator inspection and counterexample traces, outside the proof-producing code.
 
 From the repository root. On this memory-constrained development host, use
 [the Linux build guard](tools/run_limited.py): it restricts CPU affinity to two
-CPUs, sets a hard 8 GiB address-space cap per process, and stops the process tree
+CPUs, sets a hard 8 GiB data/allocation cap per process, and stops the process tree
 when sampled aggregate RSS exceeds 16 GiB or host available memory falls below
 16 GiB. The aggregate cutoff is monitored, not a kernel cgroup limit. Keep the
 explicit worker limits too; `ya --memory-limit` alone is not a hard memory cap.
+Virtual address space is capped separately at 64 GiB so the linker can map
+read-only archives and debug sections; those mappings still count toward the
+aggregate RSS guard when resident. Use `RBO_BUILD_CPUS=1` and `--threads=1`
+for a conservative link retry that reuses the existing compilation cache.
+After measuring memory headroom, `RBO_BUILD_CPUS=4` and `--threads=4` permit
+four workers with the same memory limits. The guard rejects CPU counts above four.
 
 ```bash
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \

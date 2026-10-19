@@ -1,8 +1,9 @@
-"""Linux local-build guard: two CPUs, hard per-process AS cap, monitored tree RSS.
+"""Linux local-build guard: bounded CPUs, hard allocation cap, monitored tree RSS.
 
 The aggregate RSS cutoff is sampled every 100 ms; it is not a kernel cgroup
 limit. Descendants of every thread are tracked, including reparented children.
-Pass ya's worker limits explicitly as well so it schedules only two compilers.
+Pass ya's worker limits explicitly as well. The default is two CPUs;
+RBO_BUILD_CPUS may select one through four after checking memory headroom.
 """
 
 import glob
@@ -15,12 +16,17 @@ import time
 
 GIB = 1024 ** 3
 PROCESS_LIMIT = 8 * GIB
+ADDRESS_LIMIT = 64 * GIB  # Linkers map large read-only archives and debug sections.
 TREE_LIMIT = 16 * GIB
-cpus = set(sorted(os.sched_getaffinity(0))[:2])
+cpu_count = int(os.environ.get("RBO_BUILD_CPUS", "2"))
+if not 1 <= cpu_count <= 4:
+    raise SystemExit("RBO_BUILD_CPUS must be between one and four")
+cpus = set(sorted(os.sched_getaffinity(0))[:cpu_count])
 
 def child_limits():
     os.sched_setaffinity(0, cpus)
-    resource.setrlimit(resource.RLIMIT_AS, (PROCESS_LIMIT, PROCESS_LIMIT))
+    resource.setrlimit(resource.RLIMIT_DATA, (PROCESS_LIMIT, PROCESS_LIMIT))
+    resource.setrlimit(resource.RLIMIT_AS, (ADDRESS_LIMIT, ADDRESS_LIMIT))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
 
 command = sys.argv[1:]
@@ -68,7 +74,7 @@ def interrupt(signum, frame):
 
 signal.signal(signal.SIGTERM, interrupt)
 signal.signal(signal.SIGINT, interrupt)
-print(f'BUILD LIMITS: CPUs={sorted(cpus)}, address-space/process=8 GiB, process-tree RSS guard=16 GiB', flush=True)
+print(f'BUILD LIMITS: CPUs={sorted(cpus)}, data/process=8 GiB, address-space/process=64 GiB, process-tree RSS guard=16 GiB', flush=True)
 while process.poll() is None:
     pending = [process.pid, *known]
     seen = set()

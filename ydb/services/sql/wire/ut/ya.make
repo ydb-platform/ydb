@@ -40,8 +40,11 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     library/cpp/containers/absl
+    ydb/core/formats/arrow
     ydb/core/testlib/default
+    ydb/core/tx/data_events
     ydb/services/sql/wire
 )
 

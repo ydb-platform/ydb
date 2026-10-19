@@ -1,7 +1,7 @@
 # CREATE TABLE колоночной таблицы
 
-status: pending
-commit:
+status: done
+commit: e2a9dccc8705ab3d200e2e216c6d70a7cda38eeb
 id: column-create
 depends: create-table
 

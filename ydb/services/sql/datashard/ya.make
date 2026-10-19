@@ -25,6 +25,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/public/api/protos
     ydb/services/sql/codec
+    ydb/services/sql/columnshard
     ydb/services/sql/parse
     ydb/services/sql/plan
 )

@@ -1,6 +1,7 @@
 #include "events.h"
 
 #include <ydb/services/sql/codec/codec.h>
+#include <ydb/services/sql/columnshard/events.h>
 #include <ydb/services/sql/plan/plan.h>
 
 #include <ydb/core/base/path.h>
@@ -1303,7 +1304,8 @@ private:
         }
         const auto& entry = request->ResultSet[0];
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            Fail("0A000", "not supported");
+            Register(CreateColumnSelectActor(ReplyTo, Database, Statement, InternalErrorRetries, LockTxId));
+            PassAway();
             return;
         }
         if (Statement.Lock != ERowLock::None && !LockTxId) {

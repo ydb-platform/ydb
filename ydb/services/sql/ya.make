@@ -1,6 +1,7 @@
 RECURSE(
     analyze
     codec
+    columnshard
     datashard
     ddl
     ischema

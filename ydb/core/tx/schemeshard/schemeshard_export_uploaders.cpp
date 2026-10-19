@@ -121,6 +121,11 @@ protected:
         Files.emplace_back(TFileUpload{.Path = std::move(path), .Delete = true});
     }
 
+    void ClearFiles() {
+        Files.clear();
+        Delay = TDuration::Minutes(1);
+    }
+
     // Starting function for upload already added files
     void UploadFiles() {
         if (!StorageOperator) {
@@ -498,6 +503,7 @@ public:
         , ExportId(exportId)
         , ItemIdx(itemIdx)
         , EnableChecksums(enableChecksums)
+        , Encrypted(settings.has_encryption_settings())
         , IV(iv)
         , Scheme(std::move(scheme))
     {
@@ -506,10 +512,19 @@ public:
     void Bootstrap() {
         const TString createTableFileName = NYdb::NDump::NFiles::CreateTable().FileName;
 
+        // Missing SQL also covers preparation failures and recovery from an older
+        // binary. Never regenerate bytes under an IV that may have been used.
+        if (Scheme.empty()) {
+            return OnFilesUploaded(false, "Missing persisted CREATE TABLE SQL");
+        }
+        if (Encrypted && !IV) {
+            return OnFilesUploaded(false, "Missing IV for SQL scheme upload");
+        }
+
         TMaybe<NBackup::TEncryptionIV> schemeIV;
         if (IV) {
             if (IV->Size() != NBackup::TEncryptionIV::SIZE) {
-                return Finish(false, "Invalid IV size for SQL scheme upload");
+                return OnFilesUploaded(false, "Invalid IV size for SQL scheme upload");
             }
             schemeIV = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::TableCreate, 0 /* backupItemNumber */, 0 /* shardNumber */);
         }
@@ -542,7 +557,27 @@ private:
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
-        Finish(success, error);
+        if (!success && !Cleaning) {
+            YDB_LOG_WARN("Failed to upload CREATE TABLE SQL, removing SQL artifacts before backup",
+                {"self", this->SelfId()},
+                {"id", ExportId},
+                {"itemIdx", ItemIdx},
+                {"error", error},
+            );
+            // Keep SchemeShard in UploadTableSchemeSql until upload or fallback
+            // cleanup completes. A reboot can safely replay these persisted bytes.
+            Cleaning = true;
+            this->ClearFiles();
+            const TString fileName = NYdb::NDump::NFiles::CreateTable().FileName;
+            this->AddDeleteFile(NBackup::ChecksumKey(fileName));
+            this->AddDeleteFile(fileName);
+            this->AddDeleteFile(fileName + ".enc");
+            return this->UploadFiles();
+        }
+        if (!success) {
+            return Finish(false, TStringBuilder() << "Cannot invalidate CREATE TABLE SQL: " << error);
+        }
+        Finish(true, {});
     }
 
 private:
@@ -550,37 +585,10 @@ private:
     ui64 ExportId;
     ui32 ItemIdx;
     const bool EnableChecksums;
+    const bool Encrypted;
     TMaybe<NBackup::TEncryptionIV> IV;
     TString Scheme;
-};
-
-template <typename TSettings>
-class TTableSchemeCleaner : public TExportFilesUploader<TTableSchemeCleaner<TSettings>, TSettings> {
-public:
-    TTableSchemeCleaner(TActorId schemeShard, ui64 exportId, ui32 itemIdx, const TSettings& settings)
-        : TExportFilesUploader<TTableSchemeCleaner<TSettings>, TSettings>(settings, GetDestinationPrefix(settings, itemIdx))
-        , SchemeShard(schemeShard)
-        , ExportId(exportId)
-        , ItemIdx(itemIdx)
-    {}
-
-    void Bootstrap() {
-        const TString fileName = NYdb::NDump::NFiles::CreateTable().FileName;
-        this->AddDeleteFile(NBackup::ChecksumKey(fileName));
-        this->AddDeleteFile(fileName);
-        this->AddDeleteFile(fileName + ".enc");
-        this->UploadFiles();
-    }
-
-private:
-    void OnFilesUploaded(bool success, const TString& error) override {
-        this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
-        this->PassAway();
-    }
-
-    const TActorId SchemeShard;
-    const ui64 ExportId;
-    const ui32 ItemIdx;
+    bool Cleaning = false;
 };
 
 template <typename TSettings>
@@ -717,16 +725,6 @@ IActor* CreateTableSchemeUploader(
 ) {
     return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(scheme), enableChecksums, iv);
 }
-
-template <typename TSettings>
-IActor* CreateTableSchemeCleaner(TActorId schemeShard, ui64 exportId, ui32 itemIdx, const TSettings& settings) {
-    return new TTableSchemeCleaner<TSettings>(schemeShard, exportId, itemIdx, settings);
-}
-
-template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToS3Settings>(
-    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToS3Settings& settings);
-template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToFsSettings>(
-    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToFsSettings& settings);
 
 template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

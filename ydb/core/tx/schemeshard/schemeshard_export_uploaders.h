@@ -31,6 +31,8 @@ NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 export
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
+// Reports success after uploading SQL or removing all SQL artifacts for fallback.
+// Empty SQL skips upload and performs cleanup; cleanup failure reports failure.
 template <typename TSettings>
 NActors::IActor* CreateTableSchemeUploader(
     NActors::TActorId schemeShard,
@@ -41,10 +43,6 @@ NActors::IActor* CreateTableSchemeUploader(
     bool enableChecksums,
     const TMaybe<NBackup::TEncryptionIV>& iv
 );
-
-template <typename TSettings>
-NActors::IActor* CreateTableSchemeCleaner(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx,
-    const TSettings& settings);
 
 template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

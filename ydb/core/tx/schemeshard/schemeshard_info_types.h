@@ -3789,7 +3789,6 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Transferring = 4,
         UploadExportMetadata = 5,
         UploadTableSchemeSql = 6,
-        InvalidateTableSchemeSql = 7,
         Done = 240,
         Dropping = 241,
         Dropped = 242,

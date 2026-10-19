@@ -77,8 +77,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
         for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
             auto& item = exportInfo->Items[itemIdx];
-            if (item.State != TExportInfo::EState::UploadTableSchemeSql
-                && item.State != TExportInfo::EState::InvalidateTableSchemeSql) {
+            if (item.State != TExportInfo::EState::UploadTableSchemeSql) {
                 continue;
             }
 

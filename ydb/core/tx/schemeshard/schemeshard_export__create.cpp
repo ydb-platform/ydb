@@ -628,17 +628,8 @@ private:
             return fail("Cannot parse settings for SQL scheme upload");
         }
 
-        if (item.State == EState::InvalidateTableSchemeSql) {
-            item.SchemeUploader = ctx.Register(CreateTableSchemeCleaner(Self->SelfId(), exportInfo.Id, itemIdx, exportSettings));
-            Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
-            return;
-        }
-
         TMaybe<NBackup::TEncryptionIV> iv;
-        if (exportSettings.has_encryption_settings()) {
-            if (itemIdx >= ui32(exportInfo.ExportMetadata.SchemaMappingSize())) {
-                return fail("Schema mapping entry is missing for SQL scheme upload");
-            }
+        if (exportSettings.has_encryption_settings() && itemIdx < ui32(exportInfo.ExportMetadata.SchemaMappingSize())) {
             iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
         }
 
@@ -652,16 +643,8 @@ private:
         const auto& item = exportInfo.Items[itemIdx];
 
         if (!NeedsTableSchemeUpload(exportInfo, item)
-            || (item.State != EState::UploadTableSchemeSql && item.State != EState::InvalidateTableSchemeSql)
+            || item.State != EState::UploadTableSchemeSql
             || item.SchemeUploader) {
-            return;
-        }
-
-        // An older binary may have uploaded SQL without persisting its bytes.
-        // Never regenerate it with an IV that might already have been used.
-        if (item.State == EState::UploadTableSchemeSql && item.TableSchemeSql.empty()) {
-            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(
-                exportInfo.Id, itemIdx, false, "Missing persisted CREATE TABLE SQL"));
             return;
         }
 
@@ -1242,7 +1225,7 @@ private:
             for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
                 const auto& item = exportInfo->Items.at(itemIdx);
 
-                if (item.State == EState::UploadTableSchemeSql || item.State == EState::InvalidateTableSchemeSql) {
+                if (item.State == EState::UploadTableSchemeSql) {
                     TableSchemeUploads.emplace_back(exportInfo, itemIdx);
                     continue;
                 }
@@ -1645,39 +1628,30 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         auto& item = exportInfo->Items[itemIdx];
-        // SQL preparation can fail before an uploader is registered.
-        const bool preparationFailed = NeedsTableSchemeUpload(*exportInfo, item)
-            && (item.State == EState::UploadTableSchemeSql || item.State == EState::InvalidateTableSchemeSql)
+        // Unreadable settings prevent both upload and cleanup from starting.
+        const bool startFailed = NeedsTableSchemeUpload(*exportInfo, item)
+            && item.State == EState::UploadTableSchemeSql
             && !item.SchemeUploader
             && SchemeUploadResult->Sender == Self->SelfId()
             && !result.Success;
-        if (!preparationFailed && (!item.SchemeUploader || item.SchemeUploader != SchemeUploadResult->Sender)) {
+        if (!startFailed && (!item.SchemeUploader || item.SchemeUploader != SchemeUploadResult->Sender)) {
             return;
         }
         Self->RunningExportSchemeUploaders.erase(std::exchange(item.SchemeUploader, {}));
 
         if (NeedsTableSchemeUpload(*exportInfo, item)) {
-            if (item.State != EState::UploadTableSchemeSql && item.State != EState::InvalidateTableSchemeSql) {
+            if (item.State != EState::UploadTableSchemeSql) {
                 return;
             }
 
             if (exportInfo->State == EState::Transferring) {
                 if (!result.Success) {
-                    if (item.State == EState::InvalidateTableSchemeSql) {
-                        item.State = EState::Cancelled;
-                        item.Issue = TStringBuilder() << "Cannot invalidate CREATE TABLE SQL: " << result.Error;
-                        Self->PersistExportItemState(db, *exportInfo, itemIdx);
-                        CancelAndPersistExport(exportInfo, itemIdx, "SQL cleanup failed", db);
-                        return;
-                    }
-                    YDB_LOG_WARN("Failed to upload CREATE TABLE SQL, removing SQL artifacts before backup",
-                        {"id", exportId},
-                        {"itemIdx", itemIdx},
-                        {"error", result.Error},
-                    );
-                    item.State = EState::InvalidateTableSchemeSql;
+                    // Upload failures are handled inside the uploader. A failure
+                    // here means it could not make fallback safe either.
+                    item.State = EState::Cancelled;
+                    item.Issue = result.Error;
                     Self->PersistExportItemState(db, *exportInfo, itemIdx);
-                    TableSchemeUploads.emplace_back(exportInfo, itemIdx);
+                    CancelAndPersistExport(exportInfo, itemIdx, "SQL upload and cleanup failed", db);
                     return;
                 }
 
@@ -1894,15 +1868,17 @@ private:
 
                 if (NeedsTableSchemeUpload(*exportInfo, item)) {
                     TString error;
-                    const bool prepared = PrepareTableSchemeSql(*exportInfo, itemIdx, error);
+                    if (!PrepareTableSchemeSql(*exportInfo, itemIdx, error)) {
+                        item.TableSchemeSql.clear();
+                        YDB_LOG_WARN("Cannot prepare CREATE TABLE SQL, removing SQL artifacts before backup",
+                            {"id", exportInfo->Id},
+                            {"itemIdx", itemIdx},
+                            {"error", error},
+                        );
+                    }
                     item.State = EState::UploadTableSchemeSql;
                     Self->PersistExportItemState(db, *exportInfo, itemIdx);
-                    if (prepared) {
-                        TableSchemeUploads.emplace_back(exportInfo, itemIdx);
-                    } else {
-                        Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(
-                            exportInfo->Id, itemIdx, false, error));
-                    }
+                    TableSchemeUploads.emplace_back(exportInfo, itemIdx);
                     continue;
                 }
 

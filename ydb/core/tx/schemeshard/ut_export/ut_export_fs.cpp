@@ -36,12 +36,12 @@ namespace {
     }
 
     enum class ESqlCleanupOutcome {
-        ResumeAfterReboot,
+        Fallback,
         DeleteFailure,
         Cancel,
     };
 
-    void CheckFsSqlCleanup(bool encrypted, ESqlCleanupOutcome outcome) {
+    void CheckFsSqlCleanup(bool encrypted, ESqlCleanupOutcome outcome, bool reboot) {
         TTempDir tempDir;
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -118,10 +118,12 @@ namespace {
             UNIT_ASSERT(!FileExists(directory + "/data_00.csv.enc"));
         }
 
-        if (outcome == ESqlCleanupOutcome::ResumeAfterReboot) {
-            deletes.clear();
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-            runtime.WaitFor("FS cleanup resumes after reboot", [&] { return !deletes.empty(); });
+        if (outcome == ESqlCleanupOutcome::Fallback) {
+            if (reboot) {
+                deletes.clear();
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+                runtime.WaitFor("FS cleanup resumes after reboot", [&] { return !deletes.empty(); });
+            }
             UNIT_ASSERT(backups.empty());
             deletes.Stop().Unblock();
             runtime.WaitFor("FS backup after cleanup", [&] { return !backups.empty(); });
@@ -143,7 +145,7 @@ namespace {
             deletes.Stop().Unblock();
         }
 
-        const auto expectedStatus = outcome == ESqlCleanupOutcome::ResumeAfterReboot
+        const auto expectedStatus = outcome == ESqlCleanupOutcome::Fallback
             ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED;
         env.TestWaitNotification(runtime, exportId);
         const auto result = TestGetExport(runtime, exportId, "/MyRoot", expectedStatus);
@@ -162,7 +164,9 @@ namespace {
             UNIT_ASSERT_C(result.GetResponse().GetEntry().IssuesSize(), result.DebugString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(),
                 outcome == ESqlCleanupOutcome::DeleteFailure ? "Cannot invalidate" : "Cancelled manually");
-            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            if (reboot) {
+                RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            }
             TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT(backups.empty());
             UNIT_ASSERT_VALUES_EQUAL(sqlAttempts, 1u);
@@ -536,16 +540,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         backupProposals.Stop();
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupResumesFsExportAfterReboot, Encrypted) {
-        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::ResumeAfterReboot);
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupResumesFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::Fallback, Reboot);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupFailureCancelsFsExport, Encrypted) {
-        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::DeleteFailure);
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupFailureCancelsFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::DeleteFailure, Reboot);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCancelDuringFsCleanup, Encrypted) {
-        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::Cancel);
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCancelDuringFsCleanup, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::Cancel, Reboot);
     }
 
     Y_UNIT_TEST(ShouldExportMultipleTablesWithData) {

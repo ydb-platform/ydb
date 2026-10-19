@@ -3347,11 +3347,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Runtime().SetObserverFunc(prevObserver);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlPreparationFailureContinuesBackup, IsColumn) {
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlPreparationFailureContinuesBackup, IsColumn, RebootCleanup) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, IsColumn);
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
         const TString prefix = "context";
+        SeedSqlCleanupDestination("/" + prefix);
         TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> sqlUploads(Runtime(), [&](const auto& ev) {
             return ev->Get()->Request.GetKey() == prefix + "/create_table.sql";
         });
@@ -3384,12 +3385,22 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
         Runtime().WaitFor("consistent copy completion after reboot", [&] { return !copyCompletion.empty(); });
         copyCompletion.Stop().Unblock();
-        Runtime().WaitFor("SQL preparation result after reboot", [&] { return !results.empty(); });
+        Runtime().WaitFor("SQL cleanup result after preparation failure", [&] { return !results.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
-        UNIT_ASSERT(!results.front()->Get()->Success);
-        UNIT_ASSERT_STRING_CONTAINS(results.front()->Get()->Error, "not in database");
+        UNIT_ASSERT(results.front()->Get()->Success);
+        UNIT_ASSERT(results.front()->Get()->Error.empty());
+        CheckSqlArtifactsAbsent("/" + prefix);
         UNIT_ASSERT(sqlUploads.empty());
         UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 1u);
+        if (RebootCleanup) {
+            results.clear();
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            Runtime().WaitFor("cleanup repeats with missing persisted SQL", [&] { return !results.empty(); });
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+            UNIT_ASSERT(results.front()->Get()->Success);
+            UNIT_ASSERT(sqlUploads.empty());
+            CheckSqlArtifactsAbsent("/" + prefix);
+        }
         results.Stop().Unblock();
         WaitTableSqlExport(exportId);
         UNIT_ASSERT(sqlUploads.empty());
@@ -3434,11 +3445,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         const auto originalUploader = sqlUploads.front()->Sender;
         Runtime().Send(new IEventHandle(originalUploader, Runtime().AllocateEdgeActor(), new TEvents::TEvPoisonPill()), 0, true);
         sqlUploads.clear();
+        SeedSqlCleanupDestination("/encrypted/sql");
         const auto schemeShard = ResolveTablet(Runtime(), TTestTxConfig::SchemeShard);
         Ydb::Export::ExportToS3Settings settings;
         settings.set_endpoint(Sprintf("localhost:%d", S3Port()));
         settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
-        settings.add_items()->set_destination_prefix("sql");
+        settings.add_items()->set_destination_prefix("encrypted/sql");
         auto& encryption = *settings.mutable_encryption_settings();
         encryption.set_encryption_algorithm("AES-128-GCM");
         encryption.mutable_symmetric_key()->set_key(InvalidIV ? "0123456789012345" : "short");
@@ -3450,11 +3462,12 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Runtime().Register(new TLaunchTableSchemeUploader([&] {
             return NSchemeShard::CreateTableSchemeUploader(schemeShard, exportId, 0, settings, scheme, true, iv);
         }));
-        Runtime().WaitFor("SQL encryption failure result", [&] { return !results.empty(); });
+        Runtime().WaitFor("SQL cleanup after encryption failure", [&] { return !results.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
         const auto& result = *results.front()->Get();
-        UNIT_ASSERT(!result.Success);
-        UNIT_ASSERT_STRING_CONTAINS(result.Error, InvalidIV ? "IV size" : "failed to encrypt");
+        UNIT_ASSERT(result.Success);
+        UNIT_ASSERT(result.Error.empty());
+        CheckSqlArtifactsAbsent("/encrypted/sql");
         // Inject the replacement uploader's result as the uploader SchemeShard registered.
         results.front()->Sender = originalUploader;
         results.Stop().Unblock();
@@ -3826,6 +3839,107 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         WaitTableSqlExport(exportId);
         CheckSqlArtifactsAbsent(prefix);
         UNIT_ASSERT(HasS3File(Encrypted ? "/encrypted/export_complete.json" : "/sql/export_complete.json"));
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlUploadAndCleanupReportOneResult, Encrypted, Reboot) {
+        ui64 txId = 100;
+        CreateTableForSqlBackup(txId, false, true, 1);
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        const TString prefix = Encrypted ? "/encrypted/sql" : "/sql";
+        SeedSqlCleanupDestination(prefix);
+        const TString sqlKey = prefix.substr(1) + "/create_table.sql" + (Encrypted ? ".enc" : "");
+        const TString checksumKey = prefix.substr(1) + "/create_table.sql.sha256";
+        TVector<TString> sqlContents;
+        auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            if (ev->Get()->Request.GetKey() == sqlKey) {
+                sqlContents.push_back(ev->Get()->Body);
+            } else if (ev->Get()->Request.GetKey() == checksumKey) {
+                FailS3Upload(ev);
+                ev.Reset();
+            }
+        });
+        const ui64 exportId = txId + 1;
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
+            return ev->Get()->ExportId == exportId;
+        });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(StartTableSqlExport(txId, "sql", SqlCleanupExportSettings(Encrypted)), exportId);
+        Runtime().WaitFor("one final result after SQL cleanup", [&] { return !results.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        UNIT_ASSERT(results.front()->Get()->Success);
+        CheckSqlArtifactsAbsent(prefix);
+        UNIT_ASSERT(backups.empty());
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistedExportItemState(exportId),
+            static_cast<ui8>(NSchemeShard::TExportInfo::EState::UploadTableSchemeSql));
+        if (Reboot) {
+            results.clear();
+            RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+            Runtime().WaitFor("one final result after replaying upload and cleanup", [&] { return !results.empty(); });
+            UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+            UNIT_ASSERT(results.front()->Get()->Success);
+            CheckSqlArtifactsAbsent(prefix);
+            UNIT_ASSERT(backups.empty());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(sqlContents.size(), Reboot ? 2u : 1u);
+        if (Reboot) {
+            UNIT_ASSERT_VALUES_EQUAL(sqlContents[0], sqlContents[1]);
+        }
+        results.Stop().Unblock();
+        Runtime().WaitFor("backup starts after final SQL result", [&] { return !backups.empty(); });
+        CheckSqlArtifactsAbsent(prefix);
+        backups.Stop().Unblock();
+        WaitTableSqlExport(exportId);
+        CheckSqlArtifactsAbsent(prefix);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlRetriesUploadAfterLostCleanupCompletion, Encrypted) {
+        ui64 txId = 100;
+        CreateTableForSqlBackup(txId, false, true, 1);
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        const auto expected = DescribeTableAsSql();
+        const TString prefix = Encrypted ? "/encrypted/sql" : "/sql";
+        SeedSqlCleanupDestination(prefix);
+        bool failChecksum = true;
+        auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            if (failChecksum && ev->Get()->Request.GetKey() == prefix.substr(1) + "/create_table.sql.sha256") {
+                FailS3Upload(ev);
+                ev.Reset();
+            }
+        });
+        const ui64 exportId = txId + 1;
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
+            return ev->Get()->ExportId == exportId;
+        });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(StartTableSqlExport(txId, "sql", SqlCleanupExportSettings(Encrypted)), exportId);
+        Runtime().WaitFor("cleanup completion before reboot", [&] { return !results.empty(); });
+        UNIT_ASSERT(results.front()->Get()->Success);
+        CheckSqlArtifactsAbsent(prefix);
+        UNIT_ASSERT(backups.empty());
+
+        failChecksum = false;
+        results.clear();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        Runtime().WaitFor("SQL upload succeeds after lost cleanup completion", [&] { return !results.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
+        UNIT_ASSERT(results.front()->Get()->Success);
+        UNIT_ASSERT(HasS3File(prefix + (Encrypted ? "/create_table.sql.enc" : "/create_table.sql")));
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(prefix + "/create_table.sql.sha256"),
+            NBackup::ComputeChecksum(expected) + " create_table.sql");
+        UNIT_ASSERT(backups.empty());
+        results.Stop().Unblock();
+        Runtime().WaitFor("backup after recovered SQL upload", [&] { return !backups.empty(); });
+        backups.Stop().Unblock();
+        WaitTableSqlExport(exportId);
+        CheckSqlBackup(prefix, expected, Encrypted);
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtChecksum, Cancel) {

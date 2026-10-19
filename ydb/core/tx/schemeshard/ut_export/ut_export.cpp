@@ -2706,7 +2706,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
 
         backupProposals.Stop().Unblock();
         WaitTableSqlExport(exportId);
-        UNIT_ASSERT(HasS3File("/sql/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
         UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
         UNIT_ASSERT(HasS3File("/sql/metadata.json"));
         VerifyS3ExportHasData("sql", EBackupTestDataFormat::Csv);
@@ -3274,13 +3274,11 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckNoS3Prefix({"/sql/"});
     }
 
-    Y_UNIT_TEST(TableBackupAsSqlFallbackOverwritesDataWithStaleSql) {
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlFallbackRemovesStaleSqlAfterReboot, Checksum) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, false, true, 1);
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
         WaitTableSqlExport(StartTableSqlExport(txId, "sql"));
-        const auto oldSql = GetS3FileContent("/sql/create_table.sql");
-        const auto oldSqlChecksum = GetS3FileContent("/sql/create_table.sql.sha256");
         UpdateRow(Runtime(), "Table", 2, "newValue");
         TestAlterTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -3290,15 +3288,37 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         const auto sourceShard = DescribePath(Runtime(), "/MyRoot/Table", true)
             .GetPathDescription().GetTablePartitions(0).GetDatashardId();
         const auto expected = ReadTable(Runtime(), sourceShard, "Table", {"key"}, {"key", "value", "added"}).DebugString();
+        const TString failedKey = Checksum ? "sql/create_table.sql.sha256" : "sql/create_table.sql";
         auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
-            if (ev->Get()->Request.GetKey() == "sql/create_table.sql") {
+            if (ev->Get()->Request.GetKey() == failedKey) {
                 FailS3Upload(ev);
                 ev.Reset();
             }
         });
-        WaitTableSqlExport(StartTableSqlExport(txId, "sql", "number_of_retries: 0"));
-        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/create_table.sql"), oldSql);
-        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/create_table.sql.sha256"), oldSqlChecksum);
+        const ui64 exportId = txId + 1;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
+            return ev->Get()->ExportId == exportId && ev->Get()->Success;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(StartTableSqlExport(txId, "sql", "number_of_retries: 0"), exportId);
+        Runtime().WaitFor("SQL cleanup completion", [&] { return !results.empty(); });
+        UNIT_ASSERT_VALUES_EQUAL(GetPersistedExportItemState(exportId), 7u);
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql.enc"));
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
+        UNIT_ASSERT(backups.empty());
+
+        results.Stop();
+        results.clear();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        Runtime().WaitFor("backup after repeated SQL cleanup", [&] { return !backups.empty(); });
+        backups.Stop().Unblock();
+        WaitTableSqlExport(exportId);
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/sql/create_table.sql.sha256"));
         const auto importId = ++txId;
         TestImport(Runtime(), importId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -3313,6 +3333,51 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         TestDescribeResult(imported, {NLs::CheckColumns("Imported", {"key", "value", "added"}, {}, {"key"}, true)});
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(Runtime(), imported.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
             "Imported", {"key"}, {"key", "value", "added"}).DebugString(), expected);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupFailureCancelsBeforeDataWrite, Checksums) {
+        ui64 txId = 100;
+        CreateTableForSqlBackup(txId, false, true, 1);
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(Checksums);
+        WaitTableSqlExport(StartTableSqlExport(txId, "sql"));
+        const auto oldSql = GetS3FileContent("/sql/create_table.sql");
+        const auto oldScheme = GetS3FileContent("/sql/scheme.pb");
+        const auto oldData = GetS3FileContent("/sql/data_00.csv");
+        UpdateRow(Runtime(), "Table", 2, "newValue");
+        TestAlterTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "added" Type: "Utf8" }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+            if (ev->Get()->Request.GetKey() == "sql/create_table.sql") {
+                FailS3Upload(ev);
+                ev.Reset();
+            }
+        });
+        auto deletes = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvDeleteObjectRequest>([&](auto& ev) {
+            auto response = MakeHolder<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(
+                TString(ev->Get()->Request.GetKey().c_str()),
+                Aws::Utils::Outcome<Aws::S3::Model::DeleteObjectResult, Aws::S3::S3Error>(
+                    Aws::Client::AWSError<Aws::S3::S3Errors>(Aws::S3::S3Errors::ACCESS_DENIED, false)));
+            Runtime().Send(new IEventHandle(ev->Sender, ev->Recipient,
+                response.Release(), ev->Flags, ev->Cookie), 0, true);
+            ev.Reset();
+        });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        const auto exportId = StartTableSqlExport(txId, "sql", "number_of_retries: 0");
+        const auto result = WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_C(result.GetResponse().GetEntry().IssuesSize(), result.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "Cannot invalidate");
+        UNIT_ASSERT(backups.empty());
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/create_table.sql"), oldSql);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/scheme.pb"), oldScheme);
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/data_00.csv"), oldData);
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlDataUploadFailureAfterSuccessfulSchemeUpload, IsColumn) {

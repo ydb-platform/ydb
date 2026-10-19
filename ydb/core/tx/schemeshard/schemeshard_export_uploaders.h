@@ -43,6 +43,10 @@ NActors::IActor* CreateTableSchemeUploader(
 );
 
 template <typename TSettings>
+NActors::IActor* CreateTableSchemeCleaner(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const TSettings& settings);
+
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums

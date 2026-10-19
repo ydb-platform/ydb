@@ -62,6 +62,7 @@ protected:
         TString Path;
         TString Content;
         size_t Attempt = 0;
+        bool Delete = false;
     };
 
 protected:
@@ -116,6 +117,10 @@ protected:
         return true;
     }
 
+    void AddDeleteFile(TString path) {
+        Files.emplace_back(TFileUpload{.Path = std::move(path), .Delete = true});
+    }
+
     // Starting function for upload already added files
     void UploadFiles() {
         if (!StorageOperator) {
@@ -136,16 +141,30 @@ protected:
 
         const TFileUpload& upload = Files.front();
 
+        if (upload.Delete) {
+            auto request = Aws::S3::Model::DeleteObjectRequest().WithKey(GetObjectKey(upload.Path));
+            this->Send(StorageOperator, new TEvExternalStorage::TEvDeleteObjectRequest(request));
+            return;
+        }
+
         auto request = Aws::S3::Model::PutObjectRequest().WithKey(GetObjectKey(upload.Path));
 
         this->Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
     }
 
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
-        const auto& result = ev->Get()->Result;
+        HandleResult(ev->Get()->Result);
+    }
+
+    void Handle(TEvExternalStorage::TEvDeleteObjectResponse::TPtr& ev) {
+        HandleResult(ev->Get()->Result);
+    }
+
+    template <typename TResult>
+    void HandleResult(const TResult& result) {
         TFileUpload& upload = Files.front();
 
-        YDB_LOG_DEBUG("Put file response " << upload.Path,
+        YDB_LOG_DEBUG("File operation response " << upload.Path,
             {"self", this->SelfId()},
             {"key", GetObjectKey(upload.Path)},
             {"result", result},
@@ -178,6 +197,7 @@ protected:
             sFunc(TEvents::TEvWakeup, ProcessQueue);
             sFunc(TEvents::TEvPoisonPill, PassAway);
             hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+            hFunc(TEvExternalStorage::TEvDeleteObjectResponse, Handle);
         }
     }
 
@@ -535,6 +555,35 @@ private:
 };
 
 template <typename TSettings>
+class TTableSchemeCleaner : public TExportFilesUploader<TTableSchemeCleaner<TSettings>, TSettings> {
+public:
+    TTableSchemeCleaner(TActorId schemeShard, ui64 exportId, ui32 itemIdx, const TSettings& settings)
+        : TExportFilesUploader<TTableSchemeCleaner<TSettings>, TSettings>(settings, GetDestinationPrefix(settings, itemIdx))
+        , SchemeShard(schemeShard)
+        , ExportId(exportId)
+        , ItemIdx(itemIdx)
+    {}
+
+    void Bootstrap() {
+        const TString fileName = NYdb::NDump::NFiles::CreateTable().FileName;
+        this->AddDeleteFile(NBackup::ChecksumKey(fileName));
+        this->AddDeleteFile(fileName);
+        this->AddDeleteFile(fileName + ".enc");
+        this->UploadFiles();
+    }
+
+private:
+    void OnFilesUploaded(bool success, const TString& error) override {
+        this->Send(SchemeShard, new TEvPrivate::TEvExportSchemeUploadResult(ExportId, ItemIdx, success, error));
+        this->PassAway();
+    }
+
+    const TActorId SchemeShard;
+    const ui64 ExportId;
+    const ui32 ItemIdx;
+};
+
+template <typename TSettings>
 class TExportMetadataUploader: public TExportFilesUploader<TExportMetadataUploader<TSettings>, TSettings> {
 public:
     TExportMetadataUploader(
@@ -668,6 +717,16 @@ IActor* CreateTableSchemeUploader(
 ) {
     return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(scheme), enableChecksums, iv);
 }
+
+template <typename TSettings>
+IActor* CreateTableSchemeCleaner(TActorId schemeShard, ui64 exportId, ui32 itemIdx, const TSettings& settings) {
+    return new TTableSchemeCleaner<TSettings>(schemeShard, exportId, itemIdx, settings);
+}
+
+template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToS3Settings& settings);
+template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToFsSettings& settings);
 
 template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,

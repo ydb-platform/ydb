@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
         env.TestWaitNotification(runtime, exportId);
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(FileExists(sqlPath));
+        UNIT_ASSERT(!FileExists(sqlPath));
         UNIT_ASSERT(!FileExists(checksumPath));
         UNIT_ASSERT(FileExists(metadataPath));
         UNIT_ASSERT(FileExists(MakeExportPath(basePath, destination, "scheme.pb")));

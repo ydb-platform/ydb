@@ -131,6 +131,17 @@ IActor* CreateTableSchemeUploader(
 }
 
 template <typename TSettings>
+IActor* CreateTableSchemeCleaner(TActorId schemeShard, ui64 exportId, ui32 itemIdx, const TSettings& settings) {
+    Y_UNUSED(settings);
+    return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
+}
+
+template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToS3Settings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToS3Settings& settings);
+template IActor* CreateTableSchemeCleaner<Ydb::Export::ExportToFsSettings>(
+    TActorId schemeShard, ui64 exportId, ui32 itemIdx, const Ydb::Export::ExportToFsSettings& settings);
+
+template <typename TSettings>
 NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
     const TSettings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata,
     bool enableChecksums

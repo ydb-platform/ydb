@@ -15,8 +15,18 @@
     "release-msan": ".github/config/muted_ya_msan.txt"
   },
   "default_build_types": [
-    "relwithdebinfo",
-    "release-asan"
+    "relwithdebinfo"
   ],
-  "branch_overrides": {}
+  "branch_overrides": {
+    "main": [
+      "relwithdebinfo",
+      "release-asan",
+      "release-tsan",
+      "release-msan"
+    ],
+    "stable-26-4-1": [
+      "relwithdebinfo",
+      "release-asan"
+    ]
+  }
 }

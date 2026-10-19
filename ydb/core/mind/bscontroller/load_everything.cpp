@@ -244,6 +244,10 @@ public:
                                                    std::get<2>(geom),
                                                    false /* ddisk, will fill in later */);
 
+                group.ExcludedVDisks = groups.GetValueOrDefault<T::ExcludedVDisks>();
+                if (groups.HaveValue<T::WritePolicy>()) {
+                    group.WritePolicy = groups.GetValue<T::WritePolicy>();
+                }
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
                 if (group.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
                     group.VDisksInGroup.clear();

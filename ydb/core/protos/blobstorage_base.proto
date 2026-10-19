@@ -96,6 +96,24 @@ message TVDiskLocation {
     optional uint64 PDiskGuid = 4;
 }
 
+// Logical VDisk positions, independent of group generation and physical placement.
+message TExcludedVDisks {
+    repeated uint32 VDiskOrderNumber = 1;
+}
+
+// Each entry is a minimum number of written parts in a distinct failrealm.
+// Realm identities are interchangeable: [1, 2] means one realm with >=1 part
+// and another realm with >=2 parts.
+message TGroupWriteLayout {
+    repeated uint32 PartsPerFailRealm = 1;
+}
+
+message TGroupWritePolicy {
+    // Alternatives are OR-ed; requirements inside a layout are AND-ed.
+    repeated TGroupWriteLayout WriteOk = 1;
+    repeated TGroupWriteLayout WriteDurability = 2;
+}
+
 message TGroupInfo {
     message TFailRealm {
         message TFailDomain {
@@ -125,6 +143,8 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
+    optional TExcludedVDisks ExcludedVDisks = 24;
+    optional TGroupWritePolicy WritePolicy = 25;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

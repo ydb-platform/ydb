@@ -643,6 +643,20 @@ message TUpdateBridgeGroupInfo {
     NKikimrBlobStorage.TGroupInfo BridgeGroupInfo = 3; // new value for bridge group info
 }
 
+// Replaces the complete exclusion list. An empty list clears all exclusions.
+message TSetGroupExcludedVDisks {
+    uint32 GroupId = 1;
+    uint32 GroupGeneration = 2; // expected generation
+    NKikimrBlobStorage.TExcludedVDisks ExcludedVDisks = 3;
+}
+
+// Replaces both write layout lists. Omit WritePolicy to restore the default policy.
+message TSetGroupWritePolicy {
+    uint32 GroupId = 1;
+    uint32 GroupGeneration = 2;
+    NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 3;
+}
+
 message TReconfigureVirtualGroup {
     string Name = 1;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 2;
@@ -736,6 +750,8 @@ message TConfigRequest {
             TPopulatePDisk PopulatePDisk = 61;
             TDeleteSpecificGroups DeleteSpecificGroups = 62;
             TUpdateStoragePoolSettings UpdateStoragePoolSettings = 63;
+            TSetGroupExcludedVDisks SetGroupExcludedVDisks = 65;
+            TSetGroupWritePolicy SetGroupWritePolicy = 66;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -871,6 +887,8 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
+        NKikimrBlobStorage.TExcludedVDisks ExcludedVDisks = 16;
+        NKikimrBlobStorage.TGroupWritePolicy WritePolicy = 17;
     }
     message TNode {
         uint32 NodeId = 1;

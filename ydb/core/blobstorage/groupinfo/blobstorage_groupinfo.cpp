@@ -15,6 +15,7 @@
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 
+#include <util/generic/algorithm.h>
 #include <util/string/printf.h>
 #include <util/string/escape.h>
 #include <util/stream/input.h>
@@ -653,6 +654,8 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     , GroupGeneration(vdiskId.GroupGeneration)
     , Type(info->Type)
     , GroupSizeInUnits(info->GroupSizeInUnits)
+    , WritePolicy(info->WritePolicy)
+    , ExcludedVDisks(info->ExcludedVDisks)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -671,6 +674,8 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other,
     , GroupGeneration(other.GroupGeneration)
     , Type(other.Type)
     , GroupSizeInUnits(other.GroupSizeInUnits)
+    , WritePolicy(other.WritePolicy)
+    , ExcludedVDisks(other.ExcludedVDisks)
     , BlobDepotId(other.BlobDepotId)
     , DecommitStatus(other.DecommitStatus)
     , Group(other.Group)
@@ -714,6 +719,117 @@ bool TBlobStorageGroupInfo::DecommitBlocksWrites() const {
             Y_ABORT();
             return true;
     }
+}
+
+std::optional<TBlobStorageGroupInfo::TWritePolicy> TBlobStorageGroupInfo::TWritePolicy::Parse(
+        const NKikimrBlobStorage::TGroupWritePolicy& policy, const TTopology& topology, IOutputStream* err) {
+    TWritePolicy result;
+    const auto parse = [&](const auto& source, TLayouts* target) {
+        if (source.empty()) {
+            if (err) {
+                *err << "WriteOk and WriteDurability must each contain at least one layout";
+            }
+            return false;
+        }
+        for (const auto& item : source) {
+            TVector<ui32> layout(item.GetPartsPerFailRealm().begin(), item.GetPartsPerFailRealm().end());
+            ui64 total = 0;
+            bool valid = !layout.empty() && layout.size() <= topology.GetTotalFailRealmsNum();
+            for (ui32 count : layout) {
+                valid &= count > 0 && count <= topology.GetNumFailDomainsPerFailRealm();
+                total += count;
+            }
+            if (!valid || total < topology.GType.MinimalRestorablePartCount()) {
+                if (err) {
+                    *err << "Write layout exceeds group geometry or contains fewer parts than required for recovery";
+                }
+                return false;
+            }
+            Sort(layout, std::greater<ui32>());
+            target->push_back(std::move(layout));
+        }
+        SortUnique(*target);
+        return true;
+    };
+    if (!parse(policy.GetWriteOk(), &result.WriteOk) || !parse(policy.GetWriteDurability(), &result.WriteDurability)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
+NKikimrBlobStorage::TGroupWritePolicy TBlobStorageGroupInfo::TWritePolicy::ToProto() const {
+    NKikimrBlobStorage::TGroupWritePolicy result;
+    const auto serialize = [](const TLayouts& source, auto* target) {
+        for (const auto& layout : source) {
+            auto* item = target->Add();
+            for (ui32 count : layout) {
+                item->AddPartsPerFailRealm(count);
+            }
+        }
+    };
+    serialize(WriteOk, result.MutableWriteOk());
+    serialize(WriteDurability, result.MutableWriteDurability());
+    return result;
+}
+
+bool TBlobStorageGroupInfo::TWritePolicy::CheckLayouts(const TLayouts& layouts, TVector<ui32> partsPerFailRealm) {
+    Sort(partsPerFailRealm, std::greater<ui32>());
+    for (const auto& layout : layouts) {
+        if (partsPerFailRealm.size() < layout.size()) {
+            continue;
+        }
+        bool matches = true;
+        for (size_t i = 0; i < layout.size(); ++i) {
+            if (partsPerFailRealm[i] < layout[i]) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TBlobStorageGroupInfo::TWritePolicy::CheckWriteOk(TVector<ui32> partsPerFailRealm) const {
+    return CheckLayouts(WriteOk, std::move(partsPerFailRealm));
+}
+
+bool TBlobStorageGroupInfo::TWritePolicy::CheckWriteDurability(TVector<ui32> partsPerFailRealm) const {
+    return CheckLayouts(WriteDurability, std::move(partsPerFailRealm));
+}
+
+std::optional<TVector<ui32>> TBlobStorageGroupInfo::ParseExcludedVDisks(
+        const NKikimrBlobStorage::TExcludedVDisks& excluded, const TTopology& topology, IOutputStream* err) {
+    TVector<ui32> result;
+    for (ui32 orderNumber : excluded.GetVDiskOrderNumber()) {
+        if (orderNumber >= topology.GetTotalVDisksNum()) {
+            if (err) {
+                *err << "Excluded VDisk order number is outside group topology: " << orderNumber;
+            }
+            return std::nullopt;
+        }
+        result.push_back(orderNumber);
+    }
+    SortUnique(result);
+    TVector<ui32> counts(topology.GetTotalFailRealmsNum(), 0);
+    for (ui32 orderNumber : result) {
+        ++counts[topology.GetVDiskId(orderNumber).FailRealm];
+    }
+    for (ui32 realm = 0; realm < counts.size(); ++realm) {
+        ui32 total = 0;
+        for (const auto& domain : topology.FailRealms[realm].FailDomains) {
+            total += domain.VDisks.size();
+        }
+        if (counts[realm] && counts[realm] != total) {
+            if (err) {
+                *err << "VDisk exclusions must cover the whole failrealm: " << realm;
+            }
+            return std::nullopt;
+        }
+    }
+    return result;
 }
 
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
@@ -762,6 +878,18 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         res->DecommitStatus = group.GetDecommitStatus();
     }
     res->GroupSizeInUnits = group.GetGroupSizeInUnits();
+
+    auto excluded = ParseExcludedVDisks(group.GetExcludedVDisks(), res->GetTopology(), err);
+    if (!excluded) {
+        return nullptr;
+    }
+    res->ExcludedVDisks = std::move(*excluded);
+    if (group.HasWritePolicy()) {
+        res->WritePolicy = TWritePolicy::Parse(group.GetWritePolicy(), res->GetTopology(), err);
+        if (!res->WritePolicy) {
+            return nullptr;
+        }
+    }
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());

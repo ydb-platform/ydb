@@ -15,6 +15,9 @@
 #include <util/str_stl.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/vector.h>
+
+#include <algorithm>
 
 namespace NKikimrBlobStorage {
     class TGroupInfo;
@@ -510,6 +513,39 @@ public:
     const TBlobStorageGroupType Type;
     // the size to match PDisk.SlotSizeInUnits
     ui32 GroupSizeInUnits;
+    struct TWritePolicy {
+        using TLayouts = TVector<TVector<ui32>>;
+        TLayouts WriteOk;
+        TLayouts WriteDurability;
+
+        bool operator==(const TWritePolicy&) const = default;
+
+        static std::optional<TWritePolicy> Parse(const NKikimrBlobStorage::TGroupWritePolicy& policy,
+            const TTopology& topology, IOutputStream* err = nullptr);
+        NKikimrBlobStorage::TGroupWritePolicy ToProto() const;
+        // Successful part counts per failrealm; callers retain erasure-specific part layout checks.
+        bool CheckWriteOk(TVector<ui32> partsPerFailRealm) const;
+        bool CheckWriteDurability(TVector<ui32> partsPerFailRealm) const;
+
+    private:
+        static bool CheckLayouts(const TLayouts& layouts, TVector<ui32> partsPerFailRealm);
+    };
+
+    std::optional<TWritePolicy> WritePolicy;
+    // Logical order numbers; exclusions must cover whole failrealms.
+    TVector<ui32> ExcludedVDisks;
+
+    static std::optional<TVector<ui32>> ParseExcludedVDisks(const NKikimrBlobStorage::TExcludedVDisks& excluded,
+        const TTopology& topology, IOutputStream* err = nullptr);
+
+    bool IsVDiskExcluded(const TVDiskIdShort& vdisk) const {
+        return std::find(ExcludedVDisks.begin(), ExcludedVDisks.end(), GetOrderNumber(vdisk)) != ExcludedVDisks.end();
+    }
+
+    bool HasVDiskPolicyChanged(const TBlobStorageGroupInfo& previous) const {
+        return ExcludedVDisks != previous.ExcludedVDisks || WritePolicy != previous.WritePolicy;
+    }
+
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id

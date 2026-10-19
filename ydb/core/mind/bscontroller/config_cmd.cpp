@@ -419,6 +419,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MergeBoxes)
                     HANDLE_COMMAND(MoveGroups)
                     HANDLE_COMMAND(ChangeGroupSizeInUnits)
+                    HANDLE_COMMAND(SetGroupExcludedVDisks)
+                    HANDLE_COMMAND(SetGroupWritePolicy)
                     HANDLE_COMMAND(DropDonorDisk)
                     HANDLE_COMMAND(AddDriveSerial)
                     HANDLE_COMMAND(RemoveDriveSerial)

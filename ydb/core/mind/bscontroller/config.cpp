@@ -1388,6 +1388,60 @@ namespace NKikimr::NBsController {
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetGroupExcludedVDisks& cmd, TStatus&) {
+            auto* group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetGroupExcludedVDisks::GetGroupId));
+            if (!group) {
+                throw TExGroupNotFound(cmd.GetGroupId());
+            }
+            if (group->Generation != cmd.GetGroupGeneration()) {
+                throw TExGroupGenerationMismatch(cmd.GetGroupId(), cmd.GetGroupGeneration(), group->Generation);
+            }
+            if (group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
+                throw TExError() << "VDisk exclusions require a physical erasure group";
+            }
+            TStringStream error;
+            const auto excluded = TBlobStorageGroupInfo::ParseExcludedVDisks(cmd.GetExcludedVDisks(), *group->Topology, &error);
+            if (!excluded) {
+                throw TExError() << error.Str();
+            }
+            NKikimrBlobStorage::TExcludedVDisks normalized;
+            for (ui32 orderNumber : *excluded) {
+                normalized.AddVDiskOrderNumber(orderNumber);
+            }
+            if (group->ExcludedVDisks.SerializeAsString() != normalized.SerializeAsString()) {
+                group->ExcludedVDisks = std::move(normalized);
+                GroupContentChanged.insert(group->ID);
+            }
+        }
+
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TSetGroupWritePolicy& cmd, TStatus&) {
+            auto* group = Groups.FindForUpdate(TGroupId::FromProto(&cmd, &NKikimrBlobStorage::TSetGroupWritePolicy::GetGroupId));
+            if (!group) {
+                throw TExGroupNotFound(cmd.GetGroupId());
+            }
+            if (group->Generation != cmd.GetGroupGeneration()) {
+                throw TExGroupGenerationMismatch(cmd.GetGroupId(), cmd.GetGroupGeneration(), group->Generation);
+            }
+            if (group->DDisk || group->VirtualGroupState || group->BridgeGroupInfo) {
+                throw TExError() << "Write policy requires a physical erasure group";
+            }
+            std::optional<NKikimrBlobStorage::TGroupWritePolicy> policy;
+            if (cmd.HasWritePolicy()) {
+                TStringStream error;
+                const auto parsed = TBlobStorageGroupInfo::TWritePolicy::Parse(cmd.GetWritePolicy(), *group->Topology, &error);
+                if (!parsed) {
+                    throw TExError() << error.Str();
+                }
+                policy = parsed->ToProto();
+            }
+            if (group->WritePolicy.has_value() != policy.has_value()
+                    || (group->WritePolicy && policy
+                        && group->WritePolicy->SerializeAsString() != policy->SerializeAsString())) {
+                group->WritePolicy = std::move(policy);
+                GroupContentChanged.insert(group->ID);
+            }
+        }
+
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
                 const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
@@ -1399,6 +1453,10 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            pb->MutableExcludedVDisks()->CopyFrom(group.ExcludedVDisks);
+            if (group.WritePolicy) {
+                pb->MutableWritePolicy()->CopyFrom(*group.WritePolicy);
+            }
             if (group.GroupSizeInUnits != 0) {
                 pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
             }
@@ -1542,6 +1600,10 @@ namespace NKikimr::NBsController {
                 groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
             }
             groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+            group->MutableExcludedVDisks()->CopyFrom(groupInfo.ExcludedVDisks);
+            if (groupInfo.WritePolicy) {
+                group->MutableWritePolicy()->CopyFrom(*groupInfo.WritePolicy);
+            }
 
             if (poolInfo.DDisk) {
                 group->SetDDisk(true);

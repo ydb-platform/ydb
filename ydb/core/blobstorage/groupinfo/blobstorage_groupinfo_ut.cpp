@@ -3,6 +3,7 @@
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <bit>
@@ -10,6 +11,183 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
+
+    Y_UNIT_TEST(ExcludedVDisks) {
+        NKikimrBlobStorage::TGroupInfo group;
+        group.SetGroupID(0);
+        group.SetGroupGeneration(1);
+        group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            auto *ring = group.AddRings();
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                auto *location = ring->AddFailDomains()->AddVDiskLocations();
+                location->SetNodeID(1 + realm * 3 + domain);
+                location->SetPDiskID(1);
+                location->SetVDiskSlotID(1);
+            }
+        }
+        const auto original = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(original);
+        UNIT_ASSERT(original->ExcludedVDisks.empty());
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(2);
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(0);
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(2);
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks[1], 1);
+        UNIT_ASSERT(info->HasVDiskPolicyChanged(*original));
+        for (ui32 orderNumber = 0; orderNumber < 9; ++orderNumber) {
+            UNIT_ASSERT_VALUES_EQUAL(info->IsVDiskExcluded(info->GetVDiskId(orderNumber)),
+                orderNumber < 3);
+        }
+        TBlobStorageGroupInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
+        UNIT_ASSERT(copy.ExcludedVDisks == info->ExcludedVDisks);
+        UNIT_ASSERT(!copy.HasVDiskPolicyChanged(*info));
+        group.ClearExcludedVDisks();
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
+        group.ClearExcludedVDisks();
+        const auto cleared = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(cleared);
+        UNIT_ASSERT(cleared->ExcludedVDisks.empty());
+        UNIT_ASSERT(cleared->HasVDiskPolicyChanged(*info));
+        auto* writePolicy = group.MutableWritePolicy();
+        writePolicy->AddWriteOk()->AddPartsPerFailRealm(2);
+        auto* durability = writePolicy->AddWriteDurability();
+        durability->AddPartsPerFailRealm(2);
+        durability->AddPartsPerFailRealm(2);
+        const auto withPolicy = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(withPolicy);
+        UNIT_ASSERT(withPolicy->WritePolicy);
+        UNIT_ASSERT(withPolicy->HasVDiskPolicyChanged(*cleared));
+        TBlobStorageGroupInfo policyCopy(withPolicy, TVDiskID(0, 3, 0, 0, 0), TActorId());
+        UNIT_ASSERT(policyCopy.WritePolicy == withPolicy->WritePolicy);
+        UNIT_ASSERT(!policyCopy.HasVDiskPolicyChanged(*withPolicy));
+        for (ui32 i = 0; i < 3; ++i) {
+            group.MutableExcludedVDisks()->AddVDiskOrderNumber(i);
+        }
+        group.SetBridgeProxyGroupId(0);
+        group.MutableBridgeGroupState()->AddPile()->SetGroupId(0);
+        const auto inlineInfo = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(inlineInfo);
+        UNIT_ASSERT(inlineInfo->IsInlinePile());
+        const auto view = inlineInfo->MakeInlinePileView();
+        UNIT_ASSERT(view->WritePolicy == inlineInfo->WritePolicy);
+        UNIT_ASSERT(view->ExcludedVDisks == inlineInfo->ExcludedVDisks);
+        group.ClearExcludedVDisks();
+        group.ClearBridgeProxyGroupId();
+        group.ClearBridgeGroupState();
+        group.ClearWritePolicy();
+        UNIT_ASSERT(TBlobStorageGroupInfo::Parse(group, nullptr, nullptr)->HasVDiskPolicyChanged(*withPolicy));
+        group.MutableWritePolicy();
+        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
+        group.ClearWritePolicy();
+        group.MutableExcludedVDisks()->AddVDiskOrderNumber(9);
+        TStringStream error;
+        UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, &error));
+        UNIT_ASSERT(!error.Str().empty());
+    }
+
+    Y_UNIT_TEST(WritePolicyLayouts) {
+        const TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+        struct TCase {
+            TVector<ui32> Layout;
+            TVector<ui32> Success;
+            TVector<ui32> Failure;
+        };
+        for (const auto& item : TVector<TCase>{
+                {{2}, {0, 2, 0}, {1, 0, 0}},
+                {{2, 2}, {2, 0, 2}, {2, 1, 1}},
+                {{1, 2}, {1, 0, 2}, {3, 0, 0}},
+                {{1, 1}, {1, 0, 1}, {2, 0, 0}},
+                {{1, 1, 1}, {1, 1, 1}, {3, 3, 0}},
+                {{2, 2, 2}, {2, 3, 2}, {3, 1, 3}}}) {
+            NKikimrBlobStorage::TGroupWritePolicy proto;
+            auto* layout = proto.AddWriteOk();
+            for (ui32 count : item.Layout) {
+                layout->AddPartsPerFailRealm(count);
+            }
+            proto.AddWriteDurability()->CopyFrom(*layout);
+            const auto policy = TBlobStorageGroupInfo::TWritePolicy::Parse(proto, topology);
+            UNIT_ASSERT(policy);
+            UNIT_ASSERT(policy->CheckWriteOk(item.Success));
+            UNIT_ASSERT(policy->CheckWriteDurability(item.Success));
+            UNIT_ASSERT(!policy->CheckWriteOk(item.Failure));
+            UNIT_ASSERT(!policy->CheckWriteDurability(item.Failure));
+            UNIT_ASSERT(TBlobStorageGroupInfo::TWritePolicy::Parse(policy->ToProto(), topology) == policy);
+        }
+    }
+
+    Y_UNIT_TEST(WritePolicyAlternativesAndValidation) {
+        const TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, true);
+        NKikimrBlobStorage::TGroupWritePolicy proto;
+        auto* layout = proto.AddWriteOk();
+        layout->AddPartsPerFailRealm(2);
+        layout->AddPartsPerFailRealm(2);
+        layout = proto.AddWriteOk();
+        for (ui32 i = 0; i < 3; ++i) {
+            layout->AddPartsPerFailRealm(1);
+        }
+        layout = proto.AddWriteDurability();
+        for (ui32 i = 0; i < 3; ++i) {
+            layout->AddPartsPerFailRealm(2);
+        }
+        const auto policy = TBlobStorageGroupInfo::TWritePolicy::Parse(proto, topology);
+        UNIT_ASSERT(policy);
+        UNIT_ASSERT(policy->CheckWriteOk({2, 2, 0}));
+        UNIT_ASSERT(policy->CheckWriteOk({1, 1, 1}));
+        UNIT_ASSERT(!policy->CheckWriteOk({2, 1, 0}));
+        UNIT_ASSERT(!policy->CheckWriteDurability({2, 2, 0}));
+        UNIT_ASSERT(policy->CheckWriteDurability({2, 2, 2}));
+        UNIT_ASSERT(!policy->CheckWriteOk({}));
+        proto.AddWriteOk()->CopyFrom(proto.GetWriteOk(0));
+        UNIT_ASSERT(TBlobStorageGroupInfo::TWritePolicy::Parse(proto, topology) == policy);
+        proto.ClearWriteOk();
+        UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(proto, topology));
+        for (const auto& invalid : TVector<TVector<ui32>>{{}, {0}, {4}, {1, 1, 1, 1}}) {
+            auto malformed = policy->ToProto();
+            auto* bad = malformed.MutableWriteOk(0);
+            bad->ClearPartsPerFailRealm();
+            for (ui32 count : invalid) {
+                bad->AddPartsPerFailRealm(count);
+            }
+            UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(malformed, topology));
+        }
+        auto malformed = policy->ToProto();
+        malformed.ClearWriteDurability();
+        UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(malformed, topology));
+    }
+
+    Y_UNIT_TEST(WritePolicyBlock42) {
+        const TBlobStorageGroupInfo::TTopology topology(TBlobStorageGroupType::Erasure4Plus2Block, 1, 8, 1, true);
+        NKikimrBlobStorage::TGroupWritePolicy proto;
+        proto.AddWriteOk()->AddPartsPerFailRealm(4);
+        proto.AddWriteDurability()->AddPartsPerFailRealm(6);
+        const auto policy = TBlobStorageGroupInfo::TWritePolicy::Parse(proto, topology);
+        UNIT_ASSERT(policy);
+        UNIT_ASSERT(policy->CheckWriteOk({4}));
+        UNIT_ASSERT(!policy->CheckWriteOk({3}));
+        UNIT_ASSERT(policy->CheckWriteDurability({6}));
+        UNIT_ASSERT(!policy->CheckWriteDurability({5}));
+        for (ui32 count : {3u, 9u}) {
+            auto invalid = proto;
+            invalid.MutableWriteOk(0)->SetPartsPerFailRealm(0, count);
+            UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(invalid, topology));
+        }
+        auto invalid = proto;
+        invalid.MutableWriteOk(0)->AddPartsPerFailRealm(4);
+        UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(invalid, topology));
+        NKikimrBlobStorage::TExcludedVDisks excluded;
+        excluded.AddVDiskOrderNumber(0);
+        UNIT_ASSERT(!TBlobStorageGroupInfo::ParseExcludedVDisks(excluded, topology));
+        for (ui32 i = 1; i < 8; ++i) {
+            excluded.AddVDiskOrderNumber(i);
+        }
+        UNIT_ASSERT(TBlobStorageGroupInfo::ParseExcludedVDisks(excluded, topology));
+    }
 
     Y_UNIT_TEST(TestBelongsToSubgroup) {
         for (ui32 disks = 1; disks < 4; ++disks) {

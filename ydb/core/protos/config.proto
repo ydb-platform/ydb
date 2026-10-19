@@ -1641,19 +1641,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
-<<<<<<< HEAD
-=======
-        optional uint64 EnableSplitMergeFairScheduling = 20 [(ControlOptions) = {
-            Description: "Enables cross-table fair (round-robin) scheduling of deferred split/merge operations on slot-free. Requires the EnableSplitMergeDemandTracking feature flag. Off falls back to stats-arrival order.",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
+        reserved "EnableSplitMergeFairScheduling"; reserved 20;  // for future EnableSplitMergeFairScheduling
         optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
             Description: "Enables merge by size",
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
->>>>>>> 976bd102257 (schemeshard: add MergeBySizeEnabled ICB control (#56055))
     }
 
     message TTCMallocControls {

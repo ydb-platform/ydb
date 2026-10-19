@@ -333,10 +333,12 @@ public:
 class TTtlVersions {
 private:
     THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
+    ui64 VersionsCount = 0;
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
         AFL_VERIFY(inserted || it->second == ttl)("snapshot", snapshot);
+        VersionsCount += inserted;
     }
 
 public:
@@ -364,11 +366,7 @@ public:
     }
 
     ui64 GetMemoryUsage() const {
-        ui64 memory = 0;
-        for (const auto& [_, ttlVersions] : Ttl) {
-            memory += ttlVersions.size() * sizeof(NOlap::TTiering);
-        }
-        return memory;
+        return VersionsCount * sizeof(NOlap::TTiering);
     }
 };
 

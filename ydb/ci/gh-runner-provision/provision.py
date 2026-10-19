@@ -432,11 +432,11 @@ labels:
     plain = load_config_text(sample.replace("count: 2\nstart: 8\nindex_width: 2\n", ""))
     assert runner_names(plain) == ["tiny-worker-2026-10"]
     listed = load_config_text(
-        "names:\n  - static-relwithdebinfo-d-40\n"
-        "platform: standard-v4a\ncores: 64\nmemory_gb: 256\ndisk_gb: 2418\n"
+        "names:\n  - analytic-node-1\n"
+        "platform: standard-v4a\ncores: 8\nmemory_gb: 64\ndisk_gb: 186\n"
         "labels:\n  - auto-provisioned\n"
     )
-    assert runner_names(listed) == ["static-relwithdebinfo-d-40"]
+    assert runner_names(listed) == ["analytic-node-1"]
     try:
         load_config_text(sample.replace("disk_gb: 186", "disk_gb: 200"))
     except ConfigError as exc:

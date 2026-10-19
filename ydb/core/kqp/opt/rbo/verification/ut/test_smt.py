@@ -708,6 +708,7 @@ class SmtTest(unittest.TestCase):
 
     def test_boolean_compaction_preserves_truth_tables(self):
         a, b, c = (smt.symbol(name, smt.BOOL) for name in "abc")
+
         def evaluate(term, values):
             if term.operation == "bool":
                 return term.atom

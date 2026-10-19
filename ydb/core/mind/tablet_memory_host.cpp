@@ -72,15 +72,20 @@ TTabletMemoryHost::TSetReportResult TTabletMemoryHost::SetReport(TTabletKey tabl
     return {.SumsChanged = before != ExactSums, .NewSlot = newSlot, .ExecutorChanged = executorChanged, .SharesChanged = sharesChanged};
 }
 
-bool TTabletMemoryHost::Forget(TTabletKey tablet) {
+TTabletMemoryHost::TForgetResult TTabletMemoryHost::Forget(TTabletKey tablet) {
     const auto it = Slots.find(tablet);
     if (it == Slots.end()) {
-        return false;
+        return {};
+    }
+    TForgetResult result;
+    if (it->second.ShareDelivered && it->second.Share) {
+        result.Withdrawal = TTabletShare{.Executor = it->second.Executor, .Bytes = std::nullopt};
     }
     const TWideSums before = ExactSums;
     AddDelta(it->second.TabletType, it->second.Report, {});
     Slots.erase(it);
-    return before != ExactSums;
+    result.SumsChanged = before != ExactSums;
+    return result;
 }
 
 void TTabletMemoryHost::Clear(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {

@@ -1024,6 +1024,35 @@ Y_UNIT_TEST(TabletsElasticBoundsFromRegistrants) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/LimitMax"), 10_MB);
 }
 
+Y_UNIT_TEST(ConsumerZoneIncludesExternalPressure) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    TControllerFixture fixture(config);
+    auto& info = fixture.Provider->ProcessMemoryInfo;
+    info.MemTotal = 200_MB;
+    info.AnonRss = 30_MB;
+    info.AllocatedMemory = 30_MB;
+    const auto local = fixture.Runtime.AllocateEdgeActor();
+    fixture.Register(local, EMemoryConsumerKind::Tablets);
+    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+
+    const auto expect = [&](ui64 available, EMemoryZone zone) {
+        info.MemAvailable = available;
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ExternalConsumption"), 170_MB - available);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/TabletMemoryZone"), static_cast<i64>(zone));
+        bool delivered = false;
+        for (ui32 attempt = 0; attempt != 10 && !delivered; ++attempt) {
+            delivered = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(local)->Get()->Zone == zone;
+        }
+        UNIT_ASSERT(delivered);
+    };
+    expect(100_MB, EMemoryZone::Green);
+    expect(80_MB, EMemoryZone::Yellow);
+    expect(20_MB, EMemoryZone::Red);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+    expect(100_MB, EMemoryZone::Green);
+}
+
 Y_UNIT_TEST(ConsumerLimitCarriesTheNodeZone) {
     // Hard limit 200 MB means a 100 MB target utilization and a 150 MB soft limit
     NKikimrConfig::TMemoryControllerConfig config;

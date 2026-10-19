@@ -480,8 +480,9 @@ private:
         }
 
         // The zone every registrant is told: Green up to the target utilization, Yellow up to the soft limit, Red above it
-        NodeZone = processMemoryInfo.AllocatedMemory > softLimitBytes ? EMemoryZone::Red
-            : processMemoryInfo.AllocatedMemory > targetUtilizationBytes ? EMemoryZone::Yellow
+        const ui64 pressureConsumption = consumersConsumption + otherConsumption + externalConsumption;
+        NodeZone = pressureConsumption > softLimitBytes ? EMemoryZone::Red
+            : pressureConsumption > targetUtilizationBytes ? EMemoryZone::Yellow
             : EMemoryZone::Green;
 
         YDB_LOG_INFO_CTX(ctx, "Periodic memory stats",

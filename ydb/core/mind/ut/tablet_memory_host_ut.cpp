@@ -41,6 +41,30 @@ Y_UNIT_TEST(SplitsTheReportIntoStateAndElasticPart) {
     UNIT_ASSERT_VALUES_EQUAL(host.GetElasticReport().Reclaimable, 40u);
 }
 
+Y_UNIT_TEST(ForgettingAPromotedFollowerWithdrawsItsAllocation) {
+    for (ui64 budget : {0u, 40u}) {
+        TTabletMemoryHost host;
+        const auto executor = MakeExecutor(1);
+        host.SetReport({1, 1}, executor, TTabletTypes::DataShard, Report(100, 100, 40));
+        const auto shares = host.ApplyElasticLimit(budget);
+        UNIT_ASSERT_VALUES_EQUAL(shares.size(), 1u);
+        UNIT_ASSERT(shares.front().Bytes);
+        UNIT_ASSERT_VALUES_EQUAL(*shares.front().Bytes, budget);
+
+        const auto forgotten = host.Forget({1, 1});
+        UNIT_ASSERT(forgotten.SumsChanged);
+        UNIT_ASSERT(forgotten.Withdrawal);
+        UNIT_ASSERT_VALUES_EQUAL(forgotten.Withdrawal->Executor, executor);
+        UNIT_ASSERT(!forgotten.Withdrawal->Bytes);
+
+        // A promoted executor survives, even when its new slot has no elastic demand.
+        host.SetReport({1, 0}, executor, TTabletTypes::DataShard, Report(100, 100, 0));
+        UNIT_ASSERT(host.ApplyElasticLimit(0).empty());
+        UNIT_ASSERT(!host.Forget({1, 0}).Withdrawal);
+        UNIT_ASSERT(!host.Forget({1, 1}).Withdrawal);
+    }
+}
+
 Y_UNIT_TEST(ClampsAReportThatBreaksItsInvariants) {
     TTabletMemoryHost host;
     host.SetReport({1, 0}, MakeExecutor(1), TTabletTypes::DataShard, Report(100, 10, 500));
@@ -66,13 +90,13 @@ Y_UNIT_TEST(ALeavingTabletTakesItsReportOutOfTheSums) {
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Elastic, 40u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSlotsCount(), 2u);
 
-    UNIT_ASSERT(host.Forget({1, 0}));
+    UNIT_ASSERT(host.Forget({1, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Total, 30u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Elastic, 0u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSlotsCount(), 1u);
 
-    UNIT_ASSERT(!host.Forget({1, 0}));
-    UNIT_ASSERT(host.Forget({2, 0}));
+    UNIT_ASSERT(!host.Forget({1, 0}).SumsChanged);
+    UNIT_ASSERT(host.Forget({2, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Total, 0u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSlotsCount(), 0u);
 }
@@ -249,14 +273,14 @@ Y_UNIT_TEST(SaturatedDemandStillSignalsChangesAndRecoversExactly) {
     UNIT_ASSERT(!unchanged.SharesChanged);
     UNIT_ASSERT_VALUES_EQUAL(apply(), 0u);
 
-    UNIT_ASSERT(host.Forget({2, 0}));
+    UNIT_ASSERT(host.Forget({2, 0}).SumsChanged);
     delivered.erase(MakeExecutor(2));
     UNIT_ASSERT(sums == before);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSlotsCount(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(apply(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(delivered[MakeExecutor(1)], 399u);
     UNIT_ASSERT_VALUES_EQUAL(delivered[MakeExecutor(3)], 200u);
-    UNIT_ASSERT(host.Forget({3, 0}));
+    UNIT_ASSERT(host.Forget({3, 0}).SumsChanged);
     delivered.erase(MakeExecutor(3));
     UNIT_ASSERT_VALUES_EQUAL(sums.ElasticDemand, Max<ui64>());
     UNIT_ASSERT_VALUES_EQUAL(apply(), 1u);
@@ -267,9 +291,9 @@ Y_UNIT_TEST(SaturatedDemandStillSignalsChangesAndRecoversExactly) {
     UNIT_ASSERT_VALUES_EQUAL(host.GetElasticReport().Demand, halfRange + 10);
     UNIT_ASSERT_VALUES_EQUAL(apply(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(delivered[MakeExecutor(1)], 600u);
-    UNIT_ASSERT(host.Forget({1, 0}));
+    UNIT_ASSERT(host.Forget({1, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(sums.ElasticDemand, 0u);
-    UNIT_ASSERT(!host.Forget({1, 0}));
+    UNIT_ASSERT(!host.Forget({1, 0}).SumsChanged);
 }
 
 Y_UNIT_TEST(RetypingAReportSignalsRemovalAndWithdrawsItsShare) {
@@ -322,9 +346,9 @@ Y_UNIT_TEST(SaturatedStateRecoversAfterReplacementAndRemoval) {
     UNIT_ASSERT(replacement.SumsChanged);
     UNIT_ASSERT(!replacement.SharesChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetReport().Used, Max<ui64>());
-    UNIT_ASSERT(host.Forget({2, 0}));
+    UNIT_ASSERT(host.Forget({2, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetReport().Used, Max<ui64>());
-    UNIT_ASSERT(host.Forget({3, 0}));
+    UNIT_ASSERT(host.Forget({3, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Total, halfRange + 10);
     UNIT_ASSERT_VALUES_EQUAL(host.GetReport().Used, halfRange + 10);
     UNIT_ASSERT_VALUES_EQUAL(host.GetReport().Reclaimable, 0u);
@@ -461,7 +485,7 @@ Y_UNIT_TEST(PerTypeSensorsFallToZeroWhenTheLastTabletOfATypeLeaves) {
     UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter(keyValue + "Used")->Val(), 50);
 
     // The row of a type that lost its last tablet stays, so the sensors are published as 0 instead of freezing
-    UNIT_ASSERT(host.Forget({2, 0}));
+    UNIT_ASSERT(host.Forget({2, 0}).SumsChanged);
     host.UpdateCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter(keyValue + "Used")->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(counters->GetCounter(keyValue + "Demand")->Val(), 0);
@@ -487,7 +511,7 @@ Y_UNIT_TEST(SaturatedTypeGaugesRecoverAfterReplacementAndRemoval) {
     UNIT_ASSERT_VALUES_EQUAL(host.GetElasticReport().Used, Max<ui64>());
     UNIT_ASSERT_VALUES_EQUAL(host.GetElasticReport().Reclaimable, Max<ui64>());
     expect(dataShard, gaugeMax, gaugeMax, gaugeMax);
-    UNIT_ASSERT(host.Forget({2, 0}));
+    UNIT_ASSERT(host.Forget({2, 0}).SumsChanged);
     expect(dataShard, gaugeMax, gaugeMax, gaugeMax);
     const auto replacement = host.SetReport({1, 0}, MakeExecutor(1), TTabletTypes::DataShard, Report(100, 120, 20));
     UNIT_ASSERT(replacement.SumsChanged);
@@ -495,7 +519,7 @@ Y_UNIT_TEST(SaturatedTypeGaugesRecoverAfterReplacementAndRemoval) {
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Elastic, Max<ui64>());
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().ElasticDemand, Max<ui64>());
     expect(dataShard, gaugeMax, gaugeMax, gaugeMax);
-    UNIT_ASSERT(host.Forget({3, 0}));
+    UNIT_ASSERT(host.Forget({3, 0}).SumsChanged);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Total, 80u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().Elastic, 20u);
     UNIT_ASSERT_VALUES_EQUAL(host.GetSums().ElasticDemand, 40u);

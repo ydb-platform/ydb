@@ -56,8 +56,14 @@ public:
     // Merges the update into the tablet's last report
     TSetReportResult SetReport(TTabletKey tablet, TActorId executor, TTabletTypes::EType tabletType, const TReportUpdate& update);
 
-    // Drops the tablet's slot, so its last report leaves the sums; true when it had one
-    bool Forget(TTabletKey tablet);
+    struct TForgetResult {
+        bool SumsChanged = false;
+        std::optional<TTabletShare> Withdrawal;
+    };
+
+    // Removes the report and returns any allocation the caller must withdraw.
+    // The executor can survive removal of its slot during follower promotion.
+    TForgetResult Forget(TTabletKey tablet);
 
     void Clear(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = {});
 

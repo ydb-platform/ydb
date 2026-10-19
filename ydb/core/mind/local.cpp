@@ -71,7 +71,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         {}
     };
 
+    struct TPendingMemoryReport {
+        TActorId Executor;
+        NMemory::TConsumerReport Report;
+    };
+
     struct TTabletEntry : TTablet {
+        std::optional<TPendingMemoryReport> PendingMemoryReport;
         TInstant From;
         bool IsPromoting = false;
         ui32 PromotingFromFollower = 0;
@@ -214,7 +220,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void ForgetTabletMemory(TTabletId tabletId, const TActorContext& ctx) {
-        if (TabletMemoryHostEnabled && MemoryHost.Host.Forget(tabletId)) {
+        if (!TabletMemoryHostEnabled) {
+            return;
+        }
+        const auto result = MemoryHost.Host.Forget(tabletId);
+        if (result.Withdrawal) {
+            ctx.Send(result.Withdrawal->Executor,
+                new NMemory::TEvMemoryZone(MemoryHost.NodeMemoryZone, std::nullopt, true));
+        }
+        if (result.SumsChanged) {
             PublishTabletMemory();
             ScheduleTabletMemoryShares(ctx);
         }
@@ -643,6 +657,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             ctx.Send(entry.Tablet, new TEvents::TEvPoisonPill());
         }
 
+        entry.PendingMemoryReport.reset();
         TTabletSetupInfo *setupInfo = it->second.SetupInfo.Get();
         switch (record.GetBootMode()) {
         case NKikimrLocal::BOOT_MODE_LEADER:
@@ -763,6 +778,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
             if (Connected) {
                 ScheduleSendTabletMetrics(ctx);
+            }
+        } else if (TabletMemoryHostEnabled && msg->Executor && msg->TabletMemoryReport && msg->SystemTablet) {
+            const auto inboot = InbootTablets.find(tabletId);
+            if (inboot != InbootTablets.end() && inboot->second.Tablet == msg->SystemTablet) {
+                // Owner reports can arrive before readiness via the system tablet.
+                // Keep only this incarnation's latest report until it is online.
+                inboot->second.PendingMemoryReport = TPendingMemoryReport{msg->Executor, *msg->TabletMemoryReport};
             }
         }
     }
@@ -921,7 +943,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (inbootIt->second.IsPromoting) {
             FinishPromotion(tabletId, inbootIt->second, ctx);
         }
-        OnlineTablets.emplace(tabletId, inbootIt->second);
+        auto& entry = inbootIt->second;
+        if (entry.PendingMemoryReport) {
+            UpdateTabletMemory(tabletId, entry.PendingMemoryReport->Executor, entry.TabletType,
+                entry.PendingMemoryReport->Report, ctx);
+            entry.PendingMemoryReport.reset();
+        }
+        OnlineTablets.emplace(tabletId, entry);
         InbootTablets.erase(inbootIt);
     }
 

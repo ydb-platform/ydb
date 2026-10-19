@@ -611,6 +611,7 @@ struct TConsumerRecorder : public NMemory::IMemoryConsumer {
 
 // Stands in for the node's memory controller: hands out consumers and remembers who registered
 struct TStubMemoryControllerState : public TThrRefBase {
+    std::optional<NMemory::EMemoryZone> InitialZone;
     TIntrusivePtr<TConsumerRecorder> Tablets;
     TIntrusivePtr<TConsumerRecorder> TabletsElastic;
     TActorId Registrant;
@@ -646,6 +647,9 @@ private:
         }
         State->Registrant = ev->Sender;
         Send(ev->Sender, new NMemory::TEvConsumerRegistered(ev->Get()->Kind, std::move(recorder)));
+        if (State->InitialZone) {
+            Send(ev->Sender, new NMemory::TEvConsumerLimit(ev->Get()->Kind, 4_MB, *State->InitialZone));
+        }
     }
 
     void Handle(NMemory::TEvConsumerUnregister::TPtr&) {
@@ -12303,7 +12307,9 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         ui64 TabletId = 0;
         bool DropInitialOwnerReport = false;
 
-        explicit TTabletMemoryEnv(bool hostEnabled, NMemory::TConsumerReport report, bool dropInitialOwnerReport = false) {
+        explicit TTabletMemoryEnv(bool hostEnabled, NMemory::TConsumerReport report, bool dropInitialOwnerReport = false,
+                TDuration initialWait = TDuration::Seconds(60), std::optional<NMemory::EMemoryZone> initialZone = std::nullopt) {
+            Controller->InitialZone = initialZone;
             Probe->Report = report;
             DropInitialOwnerReport = dropInitialOwnerReport;
             Setup(Runtime, false, 1, [hostEnabled](TAppPrepare& app) {
@@ -12354,7 +12360,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 }
                 Runtime.SimulateSleep(TDuration::Seconds(2));
             } else {
-                Runtime.SimulateSleep(TDuration::Seconds(60));
+                Runtime.SimulateSleep(initialWait);
             }
         }
 
@@ -12368,6 +12374,111 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return result;
         }
     };
+
+    Y_UNIT_TEST(TestTabletMemoryBootReportReceivesPressureWithoutRetry) {
+        TTabletMemoryEnv env(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB}, false,
+            TDuration::Seconds(1), NMemory::EMemoryZone::Red);
+        UNIT_ASSERT_VALUES_EQUAL(env.Controller->Tablets->Last.Used, 30_MB);
+        UNIT_ASSERT_VALUES_EQUAL(env.Controller->TabletsElastic->Last.Used, 10_MB);
+        UNIT_ASSERT(env.Probe->LastZone);
+        UNIT_ASSERT_EQUAL(*env.Probe->LastZone, NMemory::EMemoryZone::Red);
+        UNIT_ASSERT(env.Probe->LastShare);
+        UNIT_ASSERT_VALUES_EQUAL(*env.Probe->LastShare, 4_MB);
+    }
+
+    Y_UNIT_TEST(TestTabletMemoryPendingBootReportRejectsOldIncarnation) {
+        TTabletMemoryEnv env(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB}, false,
+            TDuration::Seconds(1), NMemory::EMemoryZone::Red);
+        auto* oldTablet = dynamic_cast<TMemoryProbeTablet*>(env.Runtime.FindActor(env.Probe->TabletActor));
+        UNIT_ASSERT(oldTablet);
+        const auto oldSystem = oldTablet->Tablet();
+        const auto oldExecutor = oldTablet->ExecutorID();
+        TBlockEvents<TEvTablet::TEvReady> ready(env.Runtime);
+        env.Runtime.Send(new IEventHandle(oldSystem, TActorId(), new TEvents::TEvPoisonPill()));
+        for (ui32 attempt = 0; attempt != 100 && ready.empty(); ++attempt) {
+            env.Runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(!ready.empty());
+        env.Runtime.Send(new IEventHandle(env.Controller->Registrant, oldExecutor,
+            new TEvLocal::TEvTabletMetrics(env.TabletId, 0, {}, oldExecutor,
+                NMemory::TConsumerReport{.Used = 500_MB, .Demand = 520_MB, .Reclaimable = 10_MB}, oldSystem)));
+        env.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(env.Controller->Tablets->Last.Used, 0);
+        env.Probe->LastZone.reset();
+        ready.Stop().Unblock();
+        MakeSureTabletIsUp(env.Runtime, env.TabletId, 0);
+        env.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(env.Controller->Tablets->Last.Used, 30_MB);
+        UNIT_ASSERT(env.Probe->LastZone);
+        UNIT_ASSERT_EQUAL(*env.Probe->LastZone, NMemory::EMemoryZone::Red);
+    }
+
+    Y_UNIT_TEST(TestTabletMemoryFollowerPromotionWithdrawsShare) {
+        constexpr ui32 Nodes = 2;
+        TTestBasicRuntime runtime(Nodes, false);
+        Setup(runtime, false, 1, [](TAppPrepare& app) {
+            app.FeatureFlags.SetEnableTabletMemoryHost(true);
+        });
+        std::array<TIntrusivePtr<TMemoryProbeState>, Nodes> probes;
+        std::array<TIntrusivePtr<TStubMemoryControllerState>, Nodes> controllers;
+        for (ui32 node = 0; node != Nodes; ++node) {
+            probes[node] = MakeIntrusive<TMemoryProbeState>();
+            probes[node]->Report = {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB};
+            controllers[node] = MakeIntrusive<TStubMemoryControllerState>();
+            controllers[node]->InitialZone = NMemory::EMemoryZone::Green;
+            const auto controller = runtime.Register(new TStubMemoryController(controllers[node]), node);
+            runtime.RegisterService(NMemory::MakeMemoryControllerId(runtime.GetNodeId(node)), controller, node);
+            CreateLocal(runtime, node, MakeMemoryProbeLocalConfig(probes[node]));
+        }
+        const ui64 hive = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        const ui64 owner = MakeTabletID(false, 1);
+        auto create = MakeHolder<TEvHive::TEvCreateTablet>(owner, 0, TTabletTypes::Dummy, BINDED_CHANNELS);
+        auto* followers = create->Record.AddFollowerGroups();
+        followers->SetFollowerCount(1);
+        followers->SetAllowLeaderPromotion(true);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hive, owner, std::move(create), 0, true);
+        NTabletPipe::TClientConfig pipe;
+        pipe.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        pipe.ForceLocal = true;
+        pipe.AllowFollower = true;
+        std::array<bool, Nodes> leaders = {};
+        for (ui32 node = 0; node != Nodes; ++node) {
+            MakeSureTabletIsUp(runtime, tabletId, node, &pipe, &leaders[node]);
+        }
+        UNIT_ASSERT(leaders[0] != leaders[1]);
+        const ui32 leaderNode = leaders[0] ? 0 : 1;
+        const ui32 followerNode = 1 - leaderNode;
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        auto& probe = probes[followerNode];
+        UNIT_ASSERT(probe->LastShare);
+        UNIT_ASSERT_VALUES_EQUAL(*probe->LastShare, 4_MB);
+        const auto followerActor = probe->TabletActor;
+        auto* follower = dynamic_cast<TMemoryProbeTablet*>(runtime.FindActor(followerActor));
+        UNIT_ASSERT(follower);
+        const auto executor = follower->ExecutorID();
+
+        // The old grant must be withdrawn even if the promoted leader has no elastic demand.
+        probe->Report = {.Used = 40_MB, .Demand = 40_MB, .Reclaimable = 0};
+        TBlockEvents<TEvTablet::TEvPromoteToLeader> promote(runtime);
+        SendKillLocal(runtime, leaderNode);
+        for (ui32 attempt = 0; attempt != 100 && promote.empty(); ++attempt) {
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(!promote.empty());
+        promote.Stop().Unblock();
+        bool isLeader = false;
+        MakeSureTabletIsUp(runtime, tabletId, followerNode, &pipe, &isLeader);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(isLeader);
+        UNIT_ASSERT_VALUES_EQUAL(probe->TabletActor, followerActor);
+        auto* promoted = dynamic_cast<TMemoryProbeTablet*>(runtime.FindActor(probe->TabletActor));
+        UNIT_ASSERT(promoted);
+        UNIT_ASSERT_VALUES_EQUAL(promoted->ExecutorID(), executor);
+        UNIT_ASSERT(!probe->LastShare);
+        UNIT_ASSERT_VALUES_EQUAL(controllers[followerNode]->Tablets->Last.Used, 40_MB);
+        UNIT_ASSERT_VALUES_EQUAL(controllers[followerNode]->TabletsElastic->Last.Demand, 0);
+    }
 
     Y_UNIT_TEST(TestTabletMemoryReportReachesHiveAndMemoryController) {
         TTabletMemoryEnv env(true, {.Used = 40_MB, .Demand = 60_MB, .Reclaimable = 10_MB});
@@ -12545,7 +12656,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const TActorId tablet = ResolveTablet(env.Runtime, env.TabletId);
         env.Runtime.Send(new IEventHandle(tablet, TActorId(), new TEvents::TEvPoisonPill()));
         MakeSureTabletIsUp(env.Runtime, env.TabletId, 0);
-        env.Runtime.SimulateSleep(TDuration::Seconds(60));
+        env.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(env.Probe->LastZone);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(*env.Probe->LastZone), static_cast<ui32>(NMemory::EMemoryZone::Red));
     }

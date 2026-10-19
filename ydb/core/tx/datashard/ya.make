@@ -445,6 +445,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    contrib/libs/zlib
     contrib/libs/zstd
     library/cpp/containers/absl
     library/cpp/containers/stack_vector
@@ -459,6 +460,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/backup/common
+    ydb/core/backup/yt
     ydb/core/base
     ydb/library/json_index
     ydb/core/change_exchange

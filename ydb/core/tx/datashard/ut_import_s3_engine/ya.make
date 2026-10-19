@@ -3,6 +3,8 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/zstd
+    contrib/libs/zlib
+    library/cpp/yson/node
     library/cpp/testing/common
     ydb/core/testlib
     ydb/core/tx

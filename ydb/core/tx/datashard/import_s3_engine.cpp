@@ -5,6 +5,8 @@
 #include "import_parquet_s3_file.h"
 
 #include <contrib/libs/zstd/include/zstd.h>
+#include <contrib/libs/zlib/zlib.h>
+#include <ydb/core/backup/yt/format.h>
 
 #include <algorithm>
 #include <exception>
@@ -1597,6 +1599,295 @@ private:
     TString FatalError;
 };
 
+// Gzip cursors are row counts, not compressed offsets. Replaying from byte zero also
+// reconstructs the parser, ordering checks and the gzip CRC before emitting new rows.
+class TYtImportS3Engine final : public IImportS3Engine {
+public:
+    TYtImportS3Engine(const TImportS3EngineSettings& settings,
+                     const TTableInfo& tableInfo, NBackup::NYt::TSchema schema)
+        : Settings(settings)
+        , Schema(std::move(schema))
+    {
+        for (ui32 i = 0; i < Schema.Columns.size(); ++i) {
+            const auto& name = Schema.Columns[i].Name;
+            const auto order = tableInfo.KeyOrder(name);
+            if (order == Max<ui32>()) {
+                Values.push_back(i);
+            } else {
+                Keys.resize(Max<size_t>(Keys.size(), order + 1));
+                Keys[order] = i;
+            }
+        }
+        for (const auto index : Keys) {
+            KeyTypes.push_back(tableInfo.GetColumnType(Schema.Columns[index].Name).first);
+        }
+        Reset();
+    }
+
+    ~TYtImportS3Engine() override {
+        inflateEnd(&Stream);
+    }
+
+    std::expected<TNextRangeResult, TString> NextRange() override {
+        if (Error) {
+            return std::unexpected(Error);
+        }
+        if (Outstanding || Waiting || !Input.empty() || DrainPending) {
+            return TNextRangeResult{};
+        }
+        if (Offset == Settings.ContentLength || Finished) {
+            return TNextRangeResult{.Status = ENextRangeStatus::Exhausted};
+        }
+        Outstanding = TImportRange{Offset, Min<ui64>(Settings.ReadBatchSize, Settings.ContentLength - Offset)};
+        return TNextRangeResult{.Status = ENextRangeStatus::Ready, .Range = *Outstanding};
+    }
+
+    std::expected<void, TString> PutRange(const TImportRange& range, TString data) override {
+        if (!Outstanding || *Outstanding != range || data.size() != range.Length) {
+            return std::unexpected("unexpected YT source range or range length");
+        }
+        Outstanding.Clear();
+        Offset += range.Length;
+        Input = std::move(data);
+        InputPos = 0;
+        return {};
+    }
+
+    std::expected<void, TString> FailRange(const TImportRange& range) override {
+        if (!Outstanding || *Outstanding != range) {
+            return std::unexpected("unexpected failed YT range");
+        }
+        Outstanding.Clear();
+        return {};
+    }
+
+    std::expected<TDataResult, TString> GetData(TMemoryPool&, const TAddRowFn& addRow,
+                                              const TAddChecksumChunkFn&) override {
+        if (Error) {
+            return std::unexpected(Error);
+        }
+        if (Waiting) {
+            return TDataResult{.Status = EDataStatus::WaitingForCommit, .Batch = *Waiting};
+        }
+        if (Finished) {
+            return TDataResult{.Status = EDataStatus::Finished};
+        }
+        AddRow = &addRow;
+        BatchRows = BatchBytes = BatchUploadBytes = 0;
+        ui64 decompressedBytes = 0;
+        // Leave room for a row crossing the budget (at most 16 MiB), including when
+        // ReadBatchSize is raised. The same batches feed ColumnShard uploads.
+        const ui64 batchLimit = Min<ui64>(Min<ui64>(Settings.ReadBatchSize, Settings.BufferSizeLimit), 8 * 1024 * 1024);
+        const ui64 maxFixedRowBytes = 2 * sizeof(ui16) + Schema.Columns.size() * (sizeof(ui32) + sizeof(ui64));
+        // Flush before the remaining budget forces tiny inflate steps for a wide row.
+        const ui64 batchMargin = Max(maxFixedRowBytes, batchLimit / 8);
+        constexpr ui64 REPLAY_TURN_LIMIT = 256 * 1024;
+        while (!Finished) {
+            if (!BatchRows && decompressedBytes >= REPLAY_TURN_LIMIT) {
+                AddRow = nullptr;
+                return TDataResult{.Status = EDataStatus::Yield};
+            }
+            if (Input.empty() && !DrainPending) {
+                if (Offset < Settings.ContentLength) {
+                    break;
+                }
+                if (!GzipEnded) {
+                    return Fail("truncated YT gzip stream");
+                }
+                TString error;
+                if (!Decoder->Finish(error)) {
+                    return Fail(error);
+                }
+                if (SeenRows != Settings.YtExpectedRows) {
+                    return Fail("YT source row count does not match planned range");
+                }
+                if (SeenRows < CommittedRows) {
+                    return Fail("YT durable row cursor exceeds source rows");
+                }
+                Finished = true;
+                break;
+            }
+            if (GzipEnded) {
+                return Fail("trailing bytes after YT gzip stream");
+            }
+            char output[16 * 1024];
+            Stream.next_in = Input.empty() ? nullptr : reinterpret_cast<Bytef*>(Input.Detach() + InputPos);
+            Stream.avail_in = Input.size() - InputPos;
+            Stream.next_out = reinterpret_cast<Bytef*>(output);
+            // Omitted nullable columns still need serialized cell headers; numeric
+            // cells can expand to eight bytes. A chunk ends at most one row per byte.
+            const size_t outputSize = Min<ui64>(sizeof(output), Max<ui64>(1, (batchLimit - BatchUploadBytes) / maxFixedRowBytes));
+            Stream.avail_out = outputSize;
+            const auto before = Stream.avail_in;
+            const int result = inflate(&Stream, Z_NO_FLUSH);
+            InputPos += before - Stream.avail_in;
+            const size_t produced = outputSize - Stream.avail_out;
+            decompressedBytes += produced;
+            DrainPending = Stream.avail_out == 0 && result != Z_STREAM_END;
+            if (result != Z_OK && result != Z_STREAM_END && result != Z_BUF_ERROR) {
+                return Fail(TStringBuilder() << "invalid YT gzip stream: " << (Stream.msg ? Stream.msg : "inflate failed"));
+            }
+            TString error;
+            if (produced && !Decoder->Feed(TStringBuf(output, produced), error)) {
+                return Fail(error);
+            }
+            if (result == Z_STREAM_END) {
+                GzipEnded = true;
+            }
+            if (InputPos == Input.size()) {
+                Input.clear();
+                InputPos = 0;
+            }
+            if (!produced && before == Stream.avail_in && result != Z_STREAM_END) {
+                if (Input.empty()) {
+                    DrainPending = false;
+                    continue;
+                }
+                return Fail("YT gzip decoder made no progress");
+            }
+            // Feed can finish a row that started in an earlier chunk, so the limit
+            // is a target. Never yield with rows in the caller's uncommitted upload.
+            if (BatchRows && (BatchUploadBytes + batchMargin >= batchLimit || decompressedBytes >= batchLimit || GzipEnded)) {
+                break;
+            }
+        }
+        AddRow = nullptr;
+        if (!BatchRows && !Finished) {
+            return TDataResult{.Status = EDataStatus::NeedInput};
+        }
+        TDataBatch batch;
+        batch.Id = NextId++;
+        batch.Rows = BatchRows;
+        batch.DataBytes = BatchBytes;
+        batch.Checkpoint = true;
+        // Never publish the compressed EOF until parser EOF, CRC and count passed.
+        batch.ProcessedBytesAfter = Finished ? Settings.ContentLength : 0;
+        auto* cursor = batch.DownloadStateAfter.MutableYsonGzip();
+        cursor->SetVersion(1);
+        cursor->SetCommittedRows(SeenRows);
+        // All rows may be committed before gzip CRC, YSON EOF and row count are
+        // validated. Finished persists that validation in a possibly zero-row checkpoint.
+        cursor->SetFinished(Finished);
+        Waiting = batch;
+        return TDataResult{.Status = EDataStatus::Ready, .Batch = batch};
+    }
+
+    std::expected<void, TString> Commit(ui64 id) override {
+        if (!Waiting || Waiting->Id != id) {
+            return std::unexpected("unexpected YT batch commit");
+        }
+        CommittedRows = Waiting->DownloadStateAfter.GetYsonGzip().GetCommittedRows();
+        Waiting.Clear();
+        return {};
+    }
+
+    std::expected<void, TString> RestoreFromState(ui64 bytes, const NKikimrBackup::TS3DownloadState& state) override {
+        ui64 rows = 0;
+        bool finished = false;
+        if (state.HasYsonGzip()) {
+            const auto& cursor = state.GetYsonGzip();
+            if (cursor.GetVersion() != 1) {
+                return std::unexpected("unsupported YT cursor version");
+            }
+            rows = cursor.GetCommittedRows();
+            finished = cursor.GetFinished();
+        }
+        if (rows > Settings.YtExpectedRows || (finished && rows != Settings.YtExpectedRows)
+            || bytes != (finished ? Settings.ContentLength : 0)) {
+            return std::unexpected("inconsistent durable YT cursor");
+        }
+        // A transport retry preserves the live parser; rejected uploads restore the
+        // last durable row count by replaying, discarding any pending batch.
+        if (!Waiting && rows == CommittedRows && !Error && SeenRows >= rows) {
+            return {};
+        }
+        inflateEnd(&Stream);
+        Reset();
+        CommittedRows = rows;
+        Finished = finished;
+        return {};
+    }
+
+    ui64 PendingBytes() const override { return Input.size() - InputPos; }
+    bool HasLiveState() const override { return Offset || SeenRows || Waiting || Outstanding; }
+
+private:
+    void Reset() {
+        Error.clear();
+        Stream = {};
+        const int status = inflateInit2(&Stream, 16 + MAX_WBITS);
+        if (status != Z_OK) {
+            Error = "cannot initialize YT gzip decoder";
+        }
+        Offset = SeenRows = InputPos = 0;
+        Input.clear();
+        Outstanding.Clear();
+        Waiting.Clear();
+        PreviousKey = {};
+        GzipEnded = Finished = DrainPending = false;
+        Decoder = MakeHolder<NBackup::NYt::TRowDecoder>(Schema,
+            [this](const NBackup::NYt::TDecodedRow& row, TString& error) {
+                TVector<TCell> keys, values;
+                for (auto index : Keys) {
+                    keys.push_back(row.Cells[index]);
+                }
+                for (auto index : Values) {
+                    values.push_back(row.Cells[index]);
+                }
+                if (SeenRows && CompareTypedCellVectors(PreviousKey.GetCells().data(), keys.data(), KeyTypes.data(), keys.size()) >= 0) {
+                    error = "YT source keys must be strictly increasing and unique";
+                    return false;
+                }
+                PreviousKey = TSerializedCellVec(keys);
+                ++SeenRows;
+                if (SeenRows > Settings.YtExpectedRows) {
+                    error = "YT source contains more rows than planned";
+                    return false;
+                }
+                if (SeenRows <= CommittedRows) {
+                    return true;
+                }
+                if (!AddRow) {
+                    error = "YT row decoded outside an upload batch";
+                    return false;
+                }
+                if (auto result = (*AddRow)(keys, values); !result) {
+                    error = result.error();
+                    return false;
+                }
+                ++BatchRows;
+                BatchUploadBytes += TSerializedCellVec::SerializedSize(keys) + TSerializedCellVec::SerializedSize(values);
+                for (const auto& cell : row.Cells) {
+                    BatchBytes += cell.Size();
+                }
+                return true;
+            }, Min<ui64>(Settings.BufferSizeLimit, 16 * 1024 * 1024));
+    }
+
+    std::expected<TDataResult, TString> Fail(TString error) {
+        AddRow = nullptr;
+        Error = std::move(error);
+        return std::unexpected(Error);
+    }
+
+    const TImportS3EngineSettings Settings;
+    const NBackup::NYt::TSchema Schema;
+    TVector<ui32> Keys, Values;
+    TVector<NScheme::TTypeInfo> KeyTypes;
+    TSerializedCellVec PreviousKey;
+    THolder<NBackup::NYt::TRowDecoder> Decoder;
+    z_stream Stream{};
+    TString Input, Error;
+    size_t InputPos = 0;
+    ui64 Offset = 0, SeenRows = 0, CommittedRows = 0, NextId = 1;
+    ui64 BatchRows = 0, BatchBytes = 0, BatchUploadBytes = 0;
+    bool GzipEnded = false, Finished = false, DrainPending = false;
+    TMaybe<TImportRange> Outstanding;
+    TMaybe<TDataBatch> Waiting;
+    const TAddRowFn* AddRow = nullptr;
+};
+
+
 std::expected<void, TString> ValidateCommonSettings(const TImportS3EngineSettings& settings) {
     if (!settings.ReadBatchSize) {
         return std::unexpected("S3 import read batch size must be greater than zero");
@@ -1626,6 +1917,21 @@ std::expected<IImportS3Engine::TPtr, TString> CreateImportS3Engine(
 {
     if (auto result = ValidateCommonSettings(settings); !result) {
         return std::unexpected(std::move(result.error()));
+    }
+
+    if (settings.YtSource) {
+        if (settings.EncryptionKey) {
+            return std::unexpected("YT source encryption is unsupported");
+        }
+        if (!settings.ContentLength) {
+            return std::unexpected("YT gzip source cannot be empty");
+        }
+        NBackup::NYt::TSchema schema;
+        TString error;
+        if (!NBackup::NYt::BuildSchema(scheme, schema, error)) {
+            return std::unexpected(error);
+        }
+        return MakeHolder<TYtImportS3Engine>(settings, tableInfo, std::move(schema));
     }
 
     switch (settings.DataFormat) {

@@ -195,6 +195,7 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             }
             return;
 
+        case EOperator::Window:
         case EOperator::Map:
             if (children != 1) {
                 Unsupported("Map must have one input");
@@ -10789,7 +10790,8 @@ private:
             case EOperator::Filter:
             case EOperator::Limit:
             case EOperator::Sort:
-            case EOperator::AddDependencies: {
+            case EOperator::AddDependencies:
+            case EOperator::Window: {
                 const auto& input = base.GetChildren().front();
                 const auto outputNames = OutputNames(base);
                 for (const auto& [name, provenance] : StoredStringOutputs(*input)) {
@@ -10963,7 +10965,8 @@ private:
             case EOperator::Filter:
             case EOperator::Limit:
             case EOperator::Sort:
-            case EOperator::AddDependencies: {
+            case EOperator::AddDependencies:
+            case EOperator::Window: {
                 auto& input = *base.GetChildren().front();
                 const auto outputs = OutputNames(base);
                 for (const auto& name :
@@ -11088,6 +11091,104 @@ private:
                 }
                 node["op"] = "empty_source";
                 return node;
+
+            case EOperator::Window: {
+                auto& window = static_cast<TOpWindow&>(base);
+                if (children.size() != 1 || !window.GetFrame().IsWholePartition() ||
+                    !window.GetSortElements().Items().empty() ||
+                    window.GetWindowFuncs().Items().size() != 1)
+                {
+                    Unsupported("Native Window requires one unordered whole-partition aggregate");
+                }
+                auto& input = *window.GetInput();
+                if (input.GetKind() != EOperator::Aggregate) {
+                    Unsupported("Native Window must directly consume a grouped Aggregate");
+                }
+                auto& aggregate = static_cast<TOpAggregate&>(input);
+                if (aggregate.IsDistinctAll() || aggregate.GetKeyColumns().Items().empty() ||
+                    (aggregate.GetAggregationPhase() != EOpPhase::Undefined &&
+                     aggregate.GetAggregationPhase() != EOpPhase::Final))
+                {
+                    Unsupported("Native Window requires a logical or final grouped Aggregate");
+                }
+                const auto& [output, function] = *window.GetWindowFuncs().Items().begin();
+                const bool isSum = function.Function == "sum";
+                if (function.Kind != EWindowFuncKind::Aggregate ||
+                    (!isSum && function.Function != "avg") || function.Arguments.Items().size() != 1)
+                {
+                    Unsupported("Native Window supports only direct Decimal SUM or AVG");
+                }
+                const TString argument = ToString(function.Arguments.Items().front());
+                const TString outputName = ToString(output);
+                bool argumentNullable = false;
+                bool outputNullable = false;
+                if (TypeName(OutputType(input, argument), &argumentNullable) != "Decimal(35,2)" ||
+                    !argumentNullable ||
+                    TypeName(OutputType(window, outputName), &outputNullable) != "Decimal(35,2)" ||
+                    !outputNullable)
+                {
+                    Unsupported("Native Window requires Optional<Decimal(35,2)> input and result");
+                }
+                size_t matchingSums = 0;
+                for (const auto& [id, trait] : aggregate.GetAggregationTraits().Items()) {
+                    if (id == function.Arguments.Items().front() && trait.AggFunction == "sum" &&
+                        !trait.Distinct && !trait.Unwrap)
+                    {
+                        ++matchingSums;
+                    }
+                }
+                if (matchingSums != 1) {
+                    Unsupported("Native Window argument must be one direct grouped SUM result");
+                }
+                const auto& keys = window.GetPartitionKeys().Items();
+                if ((isSum && keys.size() != 1) || (!isSum && (keys.empty() || keys.size() > 5))) {
+                    Unsupported("Native Window has an unsupported partition key count");
+                }
+                auto partitions = JsonArray();
+                for (const auto key : keys) {
+                    bool nullable = false;
+                    const TString name = ToString(key);
+                    const TString type = TypeName(OutputType(input, name), &nullable);
+                    if (!aggregate.GetKeyColumns().Unordered().Contains(key) || !nullable ||
+                        (type != "String" && (isSum || type != "Int64")))
+                    {
+                        Unsupported("Native Window partition keys must be supported nullable grouping keys");
+                    }
+                    partitions.AppendValue(name);
+                }
+                auto expression = JsonMap();
+                expression["kind"] = isSum ? "window_sum" : "window_avg";
+                expression["input"] = argument;
+                if (isSum) {
+                    expression["partition_by"] = ToString(keys.front());
+                } else {
+                    expression["partition_by"] = std::move(partitions);
+                }
+                expression["type"] = "Decimal(35,2)";
+                expression["nullable"] = true;
+                auto columns = JsonArray();
+                THashSet<TString> outputs;
+                for (const auto& iu : SnapshotOutputIUs(input)) {
+                    const TString name = iu.GetFullName();
+                    outputs.insert(name);
+                    auto column = JsonMap();
+                    column["output"] = name;
+                    column["expression"] = ColumnExpr(name);
+                    columns.AppendValue(std::move(column));
+                }
+                if (!outputs.insert(outputName).second || outputs != OutputNames(window)) {
+                    Unsupported("Native Window has an inconsistent output schema");
+                }
+                auto result = JsonMap();
+                result["output"] = outputName;
+                result["expression"] = std::move(expression);
+                columns.AppendValue(std::move(result));
+                node["op"] = "project";
+                node["input"] = children.front();
+                node["ordered"] = false;
+                node["columns"] = std::move(columns);
+                return node;
+            }
 
             case EOperator::Source: {
                 if (!children.empty()) {

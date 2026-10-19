@@ -168,3 +168,9 @@ a symbolic candidate and may need real-YDB replay because admitted opaque
 values can over-approximate runtime behavior. Raw model-domain disjunctions and
 explicit binary64 mode are stricter: standalone `SAT` is not classified as a
 counterexample.
+
+Native whole-partition Window operators may export the existing Decimal SUM/AVG
+leaf in a projection when they have one direct aggregate argument, no order
+keys, a complete-partition frame, and the existing nullable grouping-key and
+grouped-SUM types. The ordinary window dataflow admission remains mandatory;
+this representation does not widen the modeled window corridor.

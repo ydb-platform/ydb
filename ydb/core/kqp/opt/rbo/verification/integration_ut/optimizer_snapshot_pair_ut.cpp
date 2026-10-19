@@ -809,6 +809,61 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         }
     }
 
+    Y_UNIT_TEST(RealHostVerifiesNativeWholePartitionDecimalWindows) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/RboNativeWindow` (
+                Id Uint64 NOT NULL,
+                Bucket String,
+                Price Decimal(35, 2),
+                PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        for (const TString& function : {TString("SUM"), TString("AVG")}) {
+            const TString query = TStringBuilder() << R"(--!syntax_v1
+                SELECT Bucket, Total, )" << function << R"((Total) OVER (
+                    PARTITION BY Bucket
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS WindowTotal
+                FROM (
+                    SELECT Bucket, Id, SUM(Price) AS Total
+                    FROM `/Root/RboNativeWindow` GROUP BY Bucket, Id
+                );
+            )";
+            const auto pair = VerifyRealHostSnapshotPair(kikimr, query);
+            for (const auto* snapshot : {&pair.Initial, &pair.Final}) {
+                TVector<const NJson::TJsonValue*> windows;
+                CollectExpressions(*snapshot, function == "SUM" ? "window_sum" : "window_avg", windows);
+                UNIT_ASSERT_VALUES_EQUAL(windows.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL((*windows.front())["type"].GetStringSafe(), "Decimal(35,2)");
+                UNIT_ASSERT((*windows.front())["nullable"].GetBooleanSafe());
+            }
+        }
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const auto prepared = host->SyncPrepareDataQuery(R"(--!syntax_v1
+            SELECT SUM(Total) OVER (
+                PARTITION BY Bucket ORDER BY Id ROWS UNBOUNDED PRECEDING
+            ) AS RunningTotal
+            FROM (
+                SELECT Bucket, Id, SUM(Price) AS Total
+                FROM `/Root/RboNativeWindow` GROUP BY Bucket, Id
+            );
+        )", settings);
+        UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(!results[0].IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(results[0].UnsupportedReason, "Native Window");
+    }
+
     Y_UNIT_TEST(RealHostVerifiesMapCopyingOneSourceToTwoOutputs) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);

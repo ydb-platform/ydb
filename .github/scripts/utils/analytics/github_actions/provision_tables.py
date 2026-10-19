@@ -15,6 +15,10 @@ if str(_ANALYTICS_ROOT) not in sys.path:
 from collector.flush import has_send_credentials
 from collector.schema import _open_ydb_wrapper
 from github_actions.ci_metrics import build_create_table_sql, resolve_table_path
+from github_actions.export_runner_capacity import (
+    build_create_capacity_table_sql,
+    resolve_capacity_table_path,
+)
 from github_actions.state import build_create_state_table_sql, resolve_state_table_path
 
 
@@ -24,6 +28,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--state-table", default=None, help="Override the state table path")
     parser.add_argument("--skip-metrics", action="store_true", help="Do not touch the metrics table")
     parser.add_argument("--skip-state", action="store_true", help="Do not touch the state table")
+    parser.add_argument("--skip-capacity", action="store_true", help="Do not touch the capacity table")
     return parser.parse_args(argv)
 
 
@@ -31,8 +36,10 @@ def provision(
     *,
     metrics_table: Optional[str] = None,
     state_table: Optional[str] = None,
+    capacity_table: Optional[str] = None,
     skip_metrics: bool = False,
     skip_state: bool = False,
+    skip_capacity: bool = False,
 ) -> int:
     if not has_send_credentials():
         print("Analytics YDB credentials are missing, cannot provision tables", file=sys.stderr)
@@ -49,6 +56,10 @@ def provision(
             path = state_table or resolve_state_table_path(wrapper)
             wrapper.create_table(path, build_create_state_table_sql(path))
             print(f"State table ready: {path}")
+        if not skip_capacity:
+            path = capacity_table or resolve_capacity_table_path(wrapper)
+            wrapper.create_table(path, build_create_capacity_table_sql(path))
+            print(f"Capacity table ready: {path}")
     return 0
 
 
@@ -59,6 +70,7 @@ def main(argv=None) -> int:
         state_table=args.state_table,
         skip_metrics=args.skip_metrics,
         skip_state=args.skip_state,
+        skip_capacity=args.skip_capacity,
     )
 
 

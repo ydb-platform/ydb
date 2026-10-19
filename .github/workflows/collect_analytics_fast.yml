@@ -158,3 +158,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         CI_METRICS_WORKFLOW: ${{ github.event_name == 'workflow_dispatch' && inputs.workflow || 'all' }}
       run: python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2
+    - name: Export runner capacity
+      continue-on-error: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: python3 .github/scripts/utils/analytics/github_actions/export_runner_capacity.py

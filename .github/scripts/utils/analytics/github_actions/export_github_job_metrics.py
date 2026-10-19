@@ -430,30 +430,115 @@ def pull_requests_have_target(pulls: Any) -> bool:
         if not isinstance(pull, dict):
             continue
         base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
-        if base.get("ref"):
+        if pull.get("number") is not None and base.get("ref"):
             return True
     return False
 
 
-def attach_pull_requests(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
-    """Recover PR target branch from the head SHA when the run payload omits it."""
+def _head_owner(run: Dict[str, Any]) -> str:
+    repo = run.get("head_repository") if isinstance(run.get("head_repository"), dict) else {}
+    owner = repo.get("owner") if isinstance(repo.get("owner"), dict) else {}
+    login = owner.get("login")
+    return str(login) if login else ""
+
+
+def _choose_pull(pulls: Any, run: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    numbered = [pull for pull in (pulls or []) if isinstance(pull, dict) and pull.get("number") is not None]
+    if not numbered:
+        return None
+    title = str((run or {}).get("display_title") or "").strip()
+    open_ones = [pull for pull in numbered if pull.get("state") == "open"]
+    pool = open_ones or numbered
+    if title:
+        for pull in pool:
+            if str(pull.get("title") or "").strip() == title:
+                return pull
+    pool = sorted(pool, key=lambda pull: int(pull.get("number") or 0), reverse=True)
+    return pool[0]
+
+
+def _as_pull_ref(pull: Dict[str, Any], run: Dict[str, Any]) -> Dict[str, Any]:
+    base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
+    return {
+        "number": pull.get("number"),
+        "title": pull.get("title") or (run or {}).get("display_title") or "",
+        "base": {"ref": base.get("ref")},
+    }
+
+
+def _cached_github_list(cache: Dict[str, list], key: str, loader) -> list:
+    if key not in cache:
+        try:
+            payload = loader()
+        except Exception as exc:  # noqa: BLE001 — keep exporting the run
+            print("Warning: %s: %s" % (key, exc))
+            payload = []
+        cache[key] = payload if isinstance(payload, list) else []
+    return cache[key]
+
+
+def attach_pull_requests(
+    org: str,
+    repo: str,
+    run: Dict[str, Any],
+    cache: Optional[Dict[str, list]] = None,
+    fetcher=None,
+) -> Dict[str, Any]:
+    """Recover PR number and target branch when the run payload omits them.
+
+    List-runs often has empty pull_requests for pull_request_target, especially
+    from a fork: the head SHA is not in the base repo yet, so /commits/{sha}/pulls
+    404s. Then look up pulls?head={fork_owner}:{head_branch}.
+    """
+    get = fetcher or github_get
+    cache = cache if cache is not None else {}
     if run.get("event") not in ("pull_request", "pull_request_target"):
         return run
-    if pull_requests_have_target(run.get("pull_requests")):
-        return run
+    pulls = run.get("pull_requests") or []
+    if pull_requests_have_target(pulls):
+        pull = pulls[0] if pulls and isinstance(pulls[0], dict) else {}
+        if pull.get("title") or not run.get("display_title"):
+            return run
+        enriched = dict(run)
+        filled = dict(pull)
+        filled["title"] = run.get("display_title") or ""
+        enriched["pull_requests"] = [filled]
+        return enriched
+
+    found: list = []
     sha = run.get("head_sha")
-    if not sha:
-        return run
-    try:
-        pulls = github_get(f"https://api.github.com/repos/{org}/{repo}/commits/{quote(str(sha))}/pulls")
-    except Exception as exc:  # noqa: BLE001 — keep exporting the run
-        print(f"Warning: commit pulls for {sha}: {exc}")
-        return run
-    refs = pull_refs_from_commit_pulls(pulls)
-    if not refs:
+    if sha:
+        found = _cached_github_list(
+            cache,
+            "sha:%s" % sha,
+            lambda: get("https://api.github.com/repos/%s/%s/commits/%s/pulls" % (org, repo, quote(str(sha)))),
+        )
+    if _choose_pull(found, run) is None:
+        owner = _head_owner(run)
+        branch = run.get("head_branch") or ""
+        if owner and branch:
+            def load_head():
+                for state in ("open", "all"):
+                    try:
+                        payload = get(
+                            "https://api.github.com/repos/%s/%s/pulls" % (org, repo),
+                            params={"head": "%s:%s" % (owner, branch), "state": state, "per_page": 10},
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        print("Warning: pulls %s:%s state=%s: %s" % (owner, branch, state, exc))
+                        payload = []
+                    rows = payload if isinstance(payload, list) else []
+                    if rows:
+                        return rows
+                return []
+
+            found = _cached_github_list(cache, "head:%s:%s" % (owner, branch), load_head)
+
+    chosen = _choose_pull(found, run)
+    if chosen is None:
         return run
     enriched = dict(run)
-    enriched["pull_requests"] = refs
+    enriched["pull_requests"] = [_as_pull_ref(chosen, run)]
     return enriched
 
 

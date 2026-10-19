@@ -61,10 +61,11 @@ footprints:
     vcpu: 64
     ram_gb: 320
     nrd_ssd_gb: 2417
+  # Measured on live analytic-node ghrun (8c / 64 GiB / 186 GiB NRD).
   build-preset-analytic-node:
-    vcpu: 64
-    ram_gb: 320
-    nrd_ssd_gb: 2417
+    vcpu: 8
+    ram_gb: 64
+    nrd_ssd_gb: 186
 
 default_footprint:
   vcpu: 96

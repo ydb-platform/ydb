@@ -463,7 +463,7 @@ private:
     IKqpController::TPtr KqpController = std::make_shared<IKqpController>();
 
     void ReplaceCSController(const ICSController::TPtr& newController) {
-        CSController.atomic_store(MakeTrueAtomicShared<ICSController::TPtr>(newController));
+        CSController = MakeTrueAtomicShared<ICSController::TPtr>(newController);
     }
 
 public:
@@ -511,7 +511,7 @@ public:
 
     static ICSController::TPtr GetColumnShardController() {
         auto* controllers = Singleton<TControllers>();
-        auto controller = controllers->CSController.atomic_load();
+        auto controller = controllers->CSController;
         return *controller;
     }
 

@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
@@ -17,6 +18,21 @@
 namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
+
+bool ReadRequestsPortionId(const TReadDescription& read) {
+    const ui32 portionId = static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID);
+    for (const ui32 columnId : read.ColumnIds) {
+        if (columnId == portionId) {
+            return true;
+        }
+    }
+    if (read.SystemColumnsFilter && read.SystemColumnsFilter->HasConstraint(portionId)) {
+        return true;
+    }
+    const auto& program = read.GetProgram();
+    return program.GetSourceColumns().contains(portionId) || program.GetEarlyFilterColumns().contains(portionId) ||
+        program.GetProcessingColumns().contains(portionId);
+}
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
     const auto& request = Ev->Get()->Record;
@@ -286,8 +302,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return SendError("cannot build scanner", constructorConclusion.GetErrorMessage(), ctx);
     }
     const std::unique_ptr<IScannerConstructor> scannerConstructor = constructorConclusion.DetachResult();
+    const EReaderClass readerClass = scannerConstructor->GetReaderClass();
 
-    TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, scannerConstructor->GetReaderClass(), tableMetadataAccessor);
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, orbit, readerClass, tableMetadataAccessor);
     read.PKRangesFilter = Target.PKRangesFilter;
     const ui64 rawPathId = OnScanStartedForPath(read, *orbit);
 
@@ -296,6 +313,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     if (auto status = InitProgram(read, *scannerConstructor); status.IsFail()) {
         return SendError("cannot parse program", status.GetErrorMessage(), ctx);
+    }
+    if (readerClass == EReaderClass::Plain && ReadRequestsPortionId(read)) {
+        return SendError("PLAIN reader does not support _yql_portion_id", "", ctx);
     }
 
     auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);

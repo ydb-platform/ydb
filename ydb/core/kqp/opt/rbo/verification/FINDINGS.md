@@ -34,6 +34,16 @@ scope, including a changed caller binding and preserved typed conjuncts.
 The raw log is `/tmp/rbo-native-focused-main.log`. This does not replace a
 fresh real-host corpus census or migration of the older `cpp_ut` fixtures.
 
+The subsequent native scalar-capture port passed all 15 tests, with peak
+aggregate RSS 10.36 GiB (`/tmp/rbo-native-scalar-after.log`). Before the port,
+the new valid COUNT fixtures were rejected because local capture IDs were
+compared to caller IDs. Export now audits the native capture types and renames
+only the serialized correlation Filter and passive Maps below the keyless
+Aggregate. The diagnostic logical-prefix checks prove an inserted passive Map
+equivalent and detect a changed caller binding; negative tests reject bad types
+and capture uses outside the correlation Filter. These are exporter/model
+regressions, not fresh optimizer or distributed-runtime results.
+
 ## Current runtime check
 
 On **2026-09-05**, the manual paired diagnostics at source `b000dfaba5f` observed:
@@ -68,13 +78,17 @@ The eleven historically runtime-confirmed defects remain grouped by root cause
 below. “Fixed” records the repair and retained regression, not a universal proof
 or a claim that every listed runtime test ran in the latest verifier gate.
 The production tests below live in [KqpRboYql](../../../ut/rbo/kqp_rbo_yql_ut.cpp).
+The correlated-rule and stage-assignment C++ fixture files named below are
+absent after the native API migration. They are historical evidence, not current
+coverage; their replacements still need to be restored. The surviving older
+`cpp_ut` target also requires migration.
 
 | Historical cases | Retained focused regression / detector |
 |---|---|
 | 1: unrelated `NOT flag` leaked negation into a later positive `EXISTS` (`95a2afad1d3`). | `KqpRboYql::ExpressionSubquery`, the `NOT bar.flag AND EXISTS` case, checks the expected row. |
 | 2–6: scalar multirow cardinality; lost subplan binding discovery; unlowered scalar projection; invalid empty optional branch; eager local cardinality error with an empty consumer (`e1e3419012c`, `52a1d7c4084`, `9e50d234264`). | `KqpRboYql::ExpressionSubquery` checks aggregate/singleton/computed projections, typed NULL, same-IU bindings, multirow errors, and empty-consumer success. [ScalarSubplanEvaluationTest](ut/test_subplans.py) separately checks model cardinality and demand. |
 | 7: CBO/input order suppressed an inherited nested-scalar error when the top-level consumer was empty (`cab0dd1e89c`; model repairs `125962c87df`, `1aaf281c07a`). | `KqpRboYql::ExpressionSubquery`, `nestedMultirowScalarWithEmptyConsumer`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `KeepsMarkedJoinOutsideCboWhileOptimizingBothSides` / `DoesNotConvertMarkedCrossJoinThroughFilterPushdown`; model `test_inherited_scalar_error_is_observed_without_a_consumer_input_row`. |
-| 8: correlation pull-up changed empty keyless `COUNT(*)` from zero to NULL. | `KqpRboYql::CorrelatedSubquery` checks projection, Filter consumption, and the originally grouped negative case. [Correlated rules](cpp_ut/correlated_scalar_rules_ut.cpp) `InlineDirectCountAddsExactOptionalZeroRepair` and [integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealHostVerifiesCorrelatedScalarCountEmptyInput` guard the exact repair. |
+| 8: correlation pull-up changed empty keyless `COUNT(*)` from zero to NULL. | `KqpRboYql::CorrelatedSubquery` checks projection, Filter consumption, and the originally grouped negative case. Historical correlated-rule fixture `InlineDirectCountAddsExactOptionalZeroRepair` and [integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealHostVerifiesCorrelatedScalarCountEmptyInput` guard the exact repair. |
 | 9: shared-IU equality was consumed as an invalid semi-join key, losing q56/q60 rows (`98176b0b48c`, `4f73b38aaaf`). | Paired String-IN diagnostic above; `KqpRboYql::SharedIUStringInPreservesFactJoinPredicate`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `PushesSharedIUPredicateToLeftOfLeftSemiJoin`. The two workload candidates shared this one root cause. |
 | 10–11: computed Map/`UNWRAP` crossed TopSort, Filter, or Join and evaluated discarded rows (`c2c66fb1d7b`, `564010e2e4e`). | [Runtime integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealRuntimeStringUnwrapOrderLimitDemand` / `RealRuntimeStringUnwrapJoinDemand`; `KqpRboYql::PushAppendKeepsComputedExpressionAboveFilter` / `PushAppendKeepsComputedExpressionAboveJoin`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `DelaysPureProjectionUntilAfterTopSort`. |
 
@@ -85,10 +99,10 @@ full-query `UNKNOWN` results are neither proofs nor evidence of current bugs.
 
 | Finding and scope | Existing focused checks |
 |---|---|
-| q12: hashing the full Aggregate key split a window partition. Routing repaired in `70ab3d3631c`; historical post-fix full query was `UNKNOWN`. Physical compilation rejected `YqlAggWin`, so no runtime confirmation. | [Window SUM](ut/test_window_sum.py) `test_hashing_all_aggregate_keys_can_split_a_window_partition` detects the bad routing; `test_hashing_the_window_partition_preserves_the_logical_result` checks the repair. [Stage rules](cpp_ut/stage_assignment_rules_ut.cpp) `AggregateThenWindowHasTwoShuffleBoundaries` checks production topology. |
-| q49: global ranks became task-local under `HashV2(item)`. Repair `27e3f260017` preserves dependencies and gathers serially. The historical extracted fixed-database slice distinguished serial from hash; full query/mutation remained `UNKNOWN`, and `YqlWin` prevented runtime replay. | [Window RANK](ut/test_window_rank.py) `test_global_rank_serial_gather_proves_and_hash_split_is_wrong`; [stage rules](cpp_ut/stage_assignment_rules_ut.cpp) `ExactGlobalRankGathersSerially` / `GlobalRankDependenciesPreventRatioAndTraitPruning`. These deliberately bad-plan detectors do not assert that current production still chooses bad routing. |
+| q12: hashing the full Aggregate key split a window partition. Routing repaired in `70ab3d3631c`; historical post-fix full query was `UNKNOWN`. Physical compilation rejected `YqlAggWin`, so no runtime confirmation. | [Window SUM](ut/test_window_sum.py) `test_hashing_all_aggregate_keys_can_split_a_window_partition` detects the bad routing; `test_hashing_the_window_partition_preserves_the_logical_result` checks the repair. Historical stage fixture `AggregateThenWindowHasTwoShuffleBoundaries` checked production topology. |
+| q49: global ranks became task-local under `HashV2(item)`. Repair `27e3f260017` preserves dependencies and gathers serially. The historical extracted fixed-database slice distinguished serial from hash; full query/mutation remained `UNKNOWN`, and `YqlWin` prevented runtime replay. | [Window RANK](ut/test_window_rank.py) `test_global_rank_serial_gather_proves_and_hash_split_is_wrong`; Historical stage fixtures `ExactGlobalRankGathersSerially` / `GlobalRankDependenciesPreventRatioAndTraitPruning`. These deliberately bad-plan detectors do not assert that current production still chooses bad routing. |
 | Robustness: source window metadata names became inconsistent during normalization (`97a03c64ab9`), causing type-annotation failure. | [Integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealHostCapturesExactTpcdsGlobalRanks` checks both supported semantic boundaries despite later physical rejection. This is a shared capture guard, not a dedicated replay of the original annotation failure. |
-| Robustness: an untracked window entered a repeated preferred-alias rewrite (`68eb64102c7`). | [Stage rules](cpp_ut/stage_assignment_rules_ut.cpp) `UntrackedRawRankBlocksPreferredAliasRewrite` checks rejection without replacing the expression. This guards preparation/termination, not wrong-result behavior. |
+| Robustness: an untracked window entered a repeated preferred-alias rewrite (`68eb64102c7`). | Historical stage fixture `UntrackedRawRankBlocksPreferredAliasRewrite` checked rejection without replacing the expression. This guarded preparation/termination, not wrong-result behavior. |
 
 ## Model corrections are not production findings
 

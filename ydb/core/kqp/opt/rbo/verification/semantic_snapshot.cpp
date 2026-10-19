@@ -444,6 +444,37 @@ NJson::TJsonValue ColumnExpr(TStringBuf name) {
     return value;
 }
 
+void RenameSnapshotExpressionColumns(
+    NJson::TJsonValue& expressionJson,
+    const THashMap<TString, TString>& renames)
+{
+    TVector<NJson::TJsonValue*> pending{&expressionJson};
+    while (!pending.empty()) {
+        auto* expression = pending.back();
+        pending.pop_back();
+        if (expression->IsMap()) {
+            const auto& fields = expression->GetMapSafe();
+            const auto kind = fields.find("kind");
+            if (kind != fields.end() && kind->second.IsString() &&
+                kind->second.GetStringSafe() == "column")
+            {
+                const auto* outer = renames.FindPtr((*expression)["column"].GetStringSafe());
+                if (outer) {
+                    (*expression)["column"] = *outer;
+                }
+            }
+            for (const auto& [name, value] : fields) {
+                Y_UNUSED(value);
+                pending.push_back(&(*expression)[name]);
+            }
+        } else if (expression->IsArray()) {
+            for (size_t index = 0; index < expression->GetArraySafe().size(); ++index) {
+                pending.push_back(&(*expression)[index]);
+            }
+        }
+    }
+}
+
 TStringBuf CanonicalStringPredicateFingerprint(TStringBuf callable) {
     if (callable == "EndsWith" || callable == "ends_with") {
         return "yql-string-predicate-v1:ends_with";
@@ -9189,8 +9220,7 @@ private:
         THashMap<const IOperator*, TVector<IOperator*>> parents;
         TVector<TOpAddDependencies*> outerBinds;
         VisitOperators(plan, nodes, [&](IOperator& op) {
-            if (false ||
-                op.GetKind() == EOperator::Limit ||
+            if (op.GetKind() == EOperator::Limit ||
                 op.GetKind() == EOperator::Sort ||
                 (op.GetKind() == EOperator::UnionAll &&
                  static_cast<const TOpUnionAll&>(op).Ordered))
@@ -9223,20 +9253,30 @@ private:
                 << "Scalar subplan binding " << binding
                 << " dependency registry disagrees with AddDependencies");
         }
-        TScalarSubplanDetails::TCorrelation result;
-        for (const auto& dependencyIU : entry.DependentIUs) {
-            const auto begin = SnapshotDependencies(*outerBind).begin();
-            const auto end = SnapshotDependencies(*outerBind).end();
-            const auto found = std::find(begin, end, dependencyIU);
-            if (found == end || std::count(begin, end, dependencyIU) != 1 ||
-                !SnapshotDependencyTypes(*outerBind)[found - begin])
+        // Native captures have a local ID distinct from their caller ID.
+        // Validate against local types and expressions; rename only exported
+        // nodes on the single path from the bind to its keyless Aggregate.
+        THashMap<TString, std::pair<TString, const TTypeAnnotationNode*>> captures;
+        for (const auto& [local, capture] : outerBind->GetDependencies().Items()) {
+            if (!capture.Type || !captures.emplace(ToString(capture.Outer),
+                    std::make_pair(ToString(local), capture.Type)).second)
             {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
+                Unsupported(TStringBuilder() << "Scalar subplan binding " << binding
+                    << " has duplicate or untyped outer captures");
+            }
+        }
+        TScalarSubplanDetails::TCorrelation result;
+        THashMap<TString, TString> localToOuter;
+        THashSet<TString> localDependencies;
+        for (const auto& dependencyIU : entry.DependentIUs) {
+            const TString outer = dependencyIU.GetFullName();
+            const auto* capture = captures.FindPtr(outer);
+            if (!capture || !localToOuter.emplace(capture->first, outer).second) {
+                Unsupported(TStringBuilder() << "Scalar subplan binding " << binding
                     << " dependency registry disagrees with AddDependencies");
             }
-            result.Dependencies.push_back({
-                dependencyIU.GetFullName(), SnapshotDependencyTypes(*outerBind)[found - begin]});
+            localDependencies.insert(capture->first);
+            result.Dependencies.push_back({outer, capture->second});
         }
 
         auto shape = plan;
@@ -9304,23 +9344,19 @@ private:
         auto innerPlan = outerBind->GetInput();
         const auto innerNames = OutputNames(*innerPlan);
         for (const auto& dependency : result.Dependencies) {
-            if (innerNames.contains(dependency.Name)) {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
-                    << " outer dependency collides with an inner column");
+            const auto& local = captures.at(dependency.Name).first;
+            if (innerNames.contains(dependency.Name) || innerNames.contains(local)) {
+                Unsupported(TStringBuilder() << "Scalar subplan binding " << binding
+                    << " outer dependency or local capture collides with an inner column");
             }
             const auto correlation = ExtractScalarCorrelation(
-                binding, dependency.Name, filter->GetFilterExpression(), innerNames, dependencies);
-            if (!SameType(
-                    ExactType(dependency.Type),
-                    ExactType(OutputType(*outerBind, dependency.Name))))
-            {
-                Unsupported(TStringBuilder()
-                    << "Scalar subplan binding " << binding
+                binding, local, filter->GetFilterExpression(), innerNames, localDependencies);
+            if (!SameType(ExactType(dependency.Type), ExactType(OutputType(*outerBind, local)))) {
+                Unsupported(TStringBuilder() << "Scalar subplan binding " << binding
                     << " outer_bind output type disagrees with AddDependencies");
             }
             ValidateCorrelationTypes(
-                "Scalar", binding, dependency.Name, dependency.Type,
+                "Scalar", binding, local, dependency.Type,
                 *innerPlan, correlation.Expression, correlation.InnerColumn);
         }
 
@@ -9331,7 +9367,7 @@ private:
             }
             for (const auto& expression : op.GetExpressions()) {
                 for (const auto& column : ExpressionColumns(expression.get())) {
-                    if (dependencies.contains(column)) {
+                    if (localDependencies.contains(column)) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " uses its outer dependency outside the "
@@ -9343,14 +9379,14 @@ private:
                 const auto& candidate =
                     static_cast<const TOpAggregate&>(op);
                 for (const auto& key : SnapshotKeyColumns(candidate)) {
-                    if (dependencies.contains(key.GetFullName())) {
+                    if (localDependencies.contains(key.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " aggregates by its outer dependency");
                     }
                 }
                 for (const auto& trait : SnapshotAggregationTraits(candidate)) {
-                    if (dependencies.contains(trait.OriginalColName.GetFullName())) {
+                    if (localDependencies.contains(trait.OriginalColName.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " aggregates its outer dependency");
@@ -9363,6 +9399,26 @@ private:
             Unsupported(TStringBuilder()
                 << "Correlated scalar subplan binding " << binding
                 << " shares AddDependencies with another subplan");
+        }
+        auto* renamed = static_cast<IOperator*>(filter);
+        while (renamed->GetKind() != EOperator::Aggregate) {
+            if (renamed->GetKind() != EOperator::Filter && renamed->GetKind() != EOperator::Map) {
+                Unsupported("Scalar capture renaming escaped its audited unary path");
+            }
+            const auto outputNames = OutputNames(*renamed);
+            for (const auto& [local, outer] : localToOuter) {
+                if (local != outer && outputNames.contains(outer)) {
+                    Unsupported("Scalar capture renaming collides with an existing output");
+                }
+            }
+            if (!ScalarCaptureRenames.emplace(renamed, localToOuter).second) {
+                Unsupported("Scalar capture renaming shares an operator with another subplan");
+            }
+            const auto* next = parents.FindPtr(renamed);
+            if (!next || next->size() != 1) {
+                Unsupported("Scalar capture renaming requires one parent up to its Aggregate");
+            }
+            renamed = next->front();
         }
         return result;
     }
@@ -10036,31 +10092,7 @@ private:
                 .Type = dependencyTypes[index],
             });
         }
-        TVector<NJson::TJsonValue*> pending{&predicateJson};
-        while (!pending.empty()) {
-            auto* expression = pending.back();
-            pending.pop_back();
-            if (expression->IsMap()) {
-                const auto& fields = expression->GetMapSafe();
-                const auto kind = fields.find("kind");
-                if (kind != fields.end() && kind->second.IsString() &&
-                    kind->second.GetStringSafe() == "column")
-                {
-                    const auto* outer = localToOuter.FindPtr((*expression)["column"].GetStringSafe());
-                    if (outer) {
-                        (*expression)["column"] = *outer;
-                    }
-                }
-                for (const auto& [name, value] : fields) {
-                    Y_UNUSED(value);
-                    pending.push_back(&(*expression)[name]);
-                }
-            } else if (expression->IsArray()) {
-                for (size_t index = 0; index < expression->GetArraySafe().size(); ++index) {
-                    pending.push_back(&(*expression)[index]);
-                }
-            }
-        }
+        RenameSnapshotExpressionColumns(predicateJson, localToOuter);
         TSubplanDescriptor result{
             .Binding = binding,
             .RegistryRoot = originalPlan,
@@ -10728,6 +10760,23 @@ private:
 
         const TString id = TStringBuilder() << "n" << Ids.size();
         auto node = ExportOperator(*op, id, children);
+        if (const auto* renames = ScalarCaptureRenames.FindPtr(op.Get())) {
+            if (op->GetKind() == EOperator::Map) {
+                for (auto& column : node["columns"].GetArraySafe()) {
+                    const auto* outer = renames->FindPtr(column["output"].GetStringSafe());
+                    if (outer) {
+                        const auto& expression = column["expression"];
+                        if (expression["kind"].GetStringSafe() != "column" ||
+                            expression["column"].GetStringSafe() != column["output"].GetStringSafe())
+                        {
+                            Unsupported("Scalar capture projection must be an exact pass-through");
+                        }
+                        column["output"] = *outer;
+                    }
+                }
+            }
+            RenameSnapshotExpressionColumns(node, *renames);
+        }
         TrackStoredStringOutputs(*op);
         TrackIntegralAverageOrderingOutputs(*op);
         Ids.emplace(op.Get(), id);
@@ -11354,32 +11403,25 @@ private:
                         "A correlated scalar outer_bind has an invalid "
                         "dependency or output shape");
                 }
-                for (size_t index = 0; index < inputIUs.size(); ++index) {
-                    const TString input = inputIUs[index].GetFullName();
-                    const TString output = outputIUs[index].GetFullName();
-                    if (input.empty() || input != output ||
-                        !SameType(
-                            ExactType(OutputType(
-                                *outerBind.GetInput(), input)),
-                            ExactType(OutputType(outerBind, output))))
+                for (const auto& inputIU : inputIUs) {
+                    const TString input = inputIU.GetFullName();
+                    if (input.empty() || !SameType(
+                            ExactType(OutputType(*outerBind.GetInput(), input)),
+                            ExactType(OutputType(outerBind, input))))
                     {
-                        Unsupported(
-                            "A correlated scalar outer_bind must preserve "
-                            "its input schema exactly and in order");
+                        Unsupported("A correlated scalar outer_bind must preserve its input schema");
                     }
                 }
-                for (size_t index = 0; index < count; ++index) {
-                    const TString dependency = SnapshotDependencies(outerBind)[index].GetFullName();
-                    if (dependency.empty() || !names.insert(dependency).second ||
-                        outputIUs[inputIUs.size() + index].GetFullName() != dependency ||
-                        !SameType(
-                            ExactType(SnapshotDependencyTypes(outerBind)[index]),
-                            ExactType(OutputType(outerBind, dependency))))
+                for (const auto& [local, capture] : outerBind.GetDependencies().Items()) {
+                    const TString dependency = ToString(local);
+                    if (!names.insert(dependency).second ||
+                        !SameType(ExactType(capture.Type), ExactType(OutputType(outerBind, dependency))))
                     {
-                        Unsupported(
-                            "A correlated scalar outer_bind dependency type or "
-                            "output position is inconsistent");
+                        Unsupported("A correlated scalar outer_bind has an inconsistent local capture");
                     }
+                }
+                if (names != OutputNames(outerBind)) {
+                    Unsupported("A correlated scalar outer_bind has inconsistent output membership");
                 }
 
                 // Binding a tuple adds no rows or choices. Reuse the typed
@@ -11387,20 +11429,23 @@ private:
                 // retains the real operator id and its complete output schema.
                 node["op"] = "outer_bind";
                 TString input = children[0];
-                for (size_t index = 0; index < count; ++index) {
+                size_t index = 0;
+                for (const auto& [local, capture] : outerBind.GetDependencies().Items()) {
+                    Y_UNUSED(local);
                     const TString nodeId = index + 1 == count
                         ? id
                         : TString(TStringBuilder() << id << ":dependency:" << index);
-                    const auto type = ExactType(SnapshotDependencyTypes(outerBind)[index]);
+                    const auto type = ExactType(capture.Type);
                     node["id"] = nodeId;
                     node["input"] = input;
-                    node["dependency"] = SnapshotDependencies(outerBind)[index].GetFullName();
+                    node["dependency"] = ToString(capture.Outer);
                     node["type"] = type.Name;
                     node["nullable"] = type.Nullable;
                     if (index + 1 < count) {
                         Nodes.AppendValue(node);
                     }
                     input = nodeId;
+                    ++index;
                 }
                 return node;
             }
@@ -12127,6 +12172,7 @@ private:
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     THashSet<const TOpAddDependencies*> AuthorizedOuterBinds;
+    THashMap<const IOperator*, THashMap<TString, TString>> ScalarCaptureRenames;
     TVector<IOperator*> NodeOrder;
     TVector<TSubplanDescriptor> Subplans;
     THashMap<TString, size_t> SubplanIndices;

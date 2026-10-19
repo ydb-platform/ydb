@@ -230,6 +230,72 @@ struct TFixture {
         return exported;
     }
 
+    TSemanticSnapshotExportResult CorrelatedScalarCount(
+        TInfoUnitId captured, bool passiveMap = false, bool wrongType = false,
+        bool aggregateCapture = false)
+    {
+        const auto pos = TPositionHandle();
+        const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+        const auto* uint64 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+        const auto* optionalUint64 = Expr.MakeType<TOptionalExprType>(uint64);
+        const auto* boolean = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+        const auto innerKey = Registry.Add(TInfoUnit("inner", "k"));
+        const auto local = Registry.Add(TInfoUnit("", "capture"));
+        const auto count = Registry.Add(TInfoUnit("", "count"));
+        const auto binding = Registry.Add(TInfoUnit("", "scalar"));
+        const auto result = Registry.Add(TInfoUnit("", "result"));
+        auto inner = MakeIntrusive<TOpRead>("inner", TUnorderedIUs{innerKey},
+            NYql::EStorageType::RowStorage,
+            NOpt::BuildTableMeta(*Table, pos, Expr).Ptr(), nullptr, nullptr,
+            std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+        SetType(*inner, {{innerKey, int32}});
+        auto capture = MakeIntrusive<TOpAddDependencies>(inner, pos,
+            TDependencyIUs{{local, {captured, wrongType ? boolean : int32}}});
+        SetType(*capture, {{innerKey, int32}, {local, int32}});
+        auto row = Expr.NewArgument(pos, "row");
+        row->SetTypeAnn(capture->Type->Cast<TListExprType>()->GetItemType());
+        auto innerMember = Expr.NewCallable(pos, "Member", {row, Expr.NewAtom(pos, ToString(innerKey))});
+        auto localMember = Expr.NewCallable(pos, "Member", {row, Expr.NewAtom(pos, ToString(local))});
+        innerMember->SetTypeAnn(int32);
+        localMember->SetTypeAnn(int32);
+        auto equals = Expr.NewCallable(pos, "==", {innerMember, localMember});
+        equals->SetTypeAnn(boolean);
+        auto predicate = Expr.NewLambda(pos, Expr.NewArguments(pos, {row}), std::move(equals));
+        auto filtered = MakeIntrusive<TOpFilter>(capture, pos,
+            TExpression(predicate, &Expr, &ExpressionProps));
+        SetType(*filtered, {{innerKey, int32}, {local, int32}});
+        TIntrusivePtr<IOperator> aggregateInput = filtered;
+        auto argument = aggregateCapture ? local : innerKey;
+        if (passiveMap) {
+            const auto copy = Registry.Add(TInfoUnit("", "copy"));
+            auto access = MakeColumnAccess(argument, pos, &Expr, &ExpressionProps);
+            access.GetExpressionBody()->SetTypeAnn(int32);
+            auto map = MakeIntrusive<TOpMap>(filtered, pos, TMapIUs{{copy, TMapElement(access)}});
+            SetType(*map, {{innerKey, int32}, {local, int32}, {copy, int32}});
+            argument = copy;
+            aggregateInput = map;
+        }
+        auto aggregate = MakeIntrusive<TOpAggregate>(aggregateInput,
+            TAggregationIUs{{count, {argument, "count", false, false}}},
+            TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+        SetType(*aggregate, {{count, uint64}});
+        auto outer = Read();
+        auto call = MakeColumnAccess(binding, pos, &Expr, &ExpressionProps);
+        call.GetExpressionBody()->SetTypeAnn(optionalUint64);
+        auto consumer = MakeIntrusive<TOpMap>(outer, pos, TMapIUs{{result, TMapElement(call)}});
+        SetType(*consumer, {{Key, int32}, {Other, int32}, {result, optionalUint64}});
+        TOpRoot root(consumer, pos, {{Key, "key"}, {result, "count"}});
+        root.PlanProps.Subplans.Add(binding, aggregate, ESubplanType::EXPR, {}, count);
+        root.PlanProps.Subplans.RefreshDependencies(binding);
+        aggregate->BindExpressionPlanProps(&root.PlanProps);
+        consumer->BindExpressionPlanProps(&root.PlanProps);
+        auto exported = Export(root);
+        UNIT_ASSERT_VALUES_EQUAL(localMember->Child(1)->Content(), ToString(local));
+        UNIT_ASSERT(localMember->GetTypeAnn() == int32);
+        UNIT_ASSERT_VALUES_EQUAL(capture->GetDependencies().At(local).Outer, captured);
+        return exported;
+    }
+
     TExprContext Expr;
     TTypeAnnotationContext Types;
     TNullTransformer TypeAnnotation;
@@ -455,6 +521,41 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         const auto exported = fixture.CorrelatedExists(fixture.Key, true);
         UNIT_ASSERT(!exported.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(exported.UnsupportedReason, "type");
+    }
+
+    Y_UNIT_TEST(NativeScalarCapturePreservesAPassiveMap) {
+        TFixture directFixture;
+        const auto before = directFixture.CorrelatedScalarCount(directFixture.Key);
+        const auto snapshot = Parse(before);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot["plan"]["subplans"][0]["dependencies"][0].GetStringSafe(),
+            ToString(directFixture.Key));
+        TFixture mapFixture;
+        const auto after = mapFixture.CorrelatedScalarCount(mapFixture.Key, true);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, true), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeScalarCaptureDetectsAChangedCallerBinding) {
+        TFixture keyFixture;
+        const auto before = keyFixture.CorrelatedScalarCount(keyFixture.Key);
+        Parse(before);
+        TFixture otherFixture;
+        const auto after = otherFixture.CorrelatedScalarCount(otherFixture.Other);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, true), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeScalarCaptureRejectsBadTypesAndOutOfScopeUses) {
+        TFixture typeFixture;
+        const auto badType = typeFixture.CorrelatedScalarCount(typeFixture.Key, false, true);
+        UNIT_ASSERT(!badType.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(badType.UnsupportedReason, "type");
+        for (bool throughMap : {false, true}) {
+            TFixture useFixture;
+            const auto badUse = useFixture.CorrelatedScalarCount(useFixture.Key, throughMap, false, true);
+            UNIT_ASSERT(!badUse.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(badUse.UnsupportedReason, "outer dependency");
+        }
     }
 
     Y_UNIT_TEST(NativeWindowRejectsUnmodeledFramesAndFunctions) {

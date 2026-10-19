@@ -2720,24 +2720,33 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .InitKikimrRunConfig();
         TServer server(settings);
         TTestActorRuntime& runtime = *server.GetRuntime();
+        THashMap<TActorId, TNodeId> whiteboardNodes;
         // TServer registers viewers by node index; offload requests address them by node ID.
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
-            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
+            const TNodeId nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.RegisterService(MakeViewerID(nodeId), viewerId, nodeIndex);
+            const TActorId whiteboardId = runtime.GetLocalServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), nodeIndex);
+            whiteboardNodes.emplace(whiteboardId, nodeId);
         }
         const TNodeId disconnectedNodeId = runtime.GetNodeId(1);
         bool disconnected = true;
         bool disconnectAll = false;
+        EFlag otherConnectedNodeState = EFlag::Red;
         size_t offloadedResponses = 0;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                const auto itNode = whiteboardNodes.find(ev->Sender);
+                if (itNode == whiteboardNodes.end() || ev->Cookie != itNode->second) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
                 if (disconnectAll || (disconnected && ev->Cookie == disconnectedNodeId)) {
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 auto* response = ev->Get<TEvWhiteboard::TEvSystemStateResponse>();
                 for (auto& info : *response->Record.MutableSystemStateInfo()) {
-                    info.SetSystemState(ev->Cookie == runtime.GetNodeId(0) ? EFlag::Yellow : EFlag::Red);
+                    info.SetSystemState(ev->Cookie == runtime.GetNodeId(0) ? EFlag::Yellow : otherConnectedNodeState);
                 }
             } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse) {
                 ++offloadedResponses;
@@ -2778,7 +2787,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT(json["Nodes"][1]["Disconnected"].GetBoolean());
         }
 
-        const auto alive = makeRequest("&alive=true&sort=NodeId");
+        const auto minimal = makeRequest("&alive=true&sort=NodeId");
+        assertCounts(minimal, 3, 2);
+        UNIT_ASSERT_VALUES_EQUAL(minimal["Nodes"].GetArray().size(), 2);
+        for (const auto& node : minimal["Nodes"].GetArray()) {
+            UNIT_ASSERT(!node.Has("SystemState"));
+        }
+
+        const auto defaults = makeRequest("&alive=true", "");
+        assertCounts(defaults, 3, 2);
+        for (const auto& node : defaults["Nodes"].GetArray()) {
+            UNIT_ASSERT(node.Has("SystemState"));
+        }
+
+        const auto alive = makeRequest("&alive=true&sort=NodeId", "NodeId,SystemState");
         assertCounts(alive, 3, 2);
         UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"].GetArray().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(alive["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
@@ -2804,9 +2826,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
             UNIT_ASSERT_VALUES_EQUAL(group["NodeCount"].GetString(), "1");
         }
 
+        otherConnectedNodeState = EFlag::Green;
         const auto problems = makeRequest("&alive=true&problems_only=true");
-        assertCounts(problems, 3, 2);
-        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"].GetArray().size(), 2);
+        assertCounts(problems, 3, 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(problems["Nodes"][0]["NodeId"].GetUInteger(), runtime.GetNodeId(0));
+        otherConnectedNodeState = EFlag::Red;
 
         const auto selected = makeRequest(TStringBuilder() << "&alive=true&node_id=" << disconnectedNodeId);
         assertCounts(selected, 1, 0);

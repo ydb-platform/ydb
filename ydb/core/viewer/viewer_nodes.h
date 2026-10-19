@@ -1195,7 +1195,7 @@ public:
         ProblemNodesOnly = FromStringWithDefault<bool>(Params.Get("problems_only"), ProblemNodesOnly);
         AliveOnly = FromStringWithDefault<bool>(Params.Get("alive"), AliveOnly);
         Filter = Params.Get("filter");
-        if (UptimeSeconds || ProblemNodesOnly || AliveOnly || !Filter.empty()) {
+        if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
         FilterPath = Params.Get("path");
@@ -1273,7 +1273,7 @@ public:
         } else if (Params.Get("filter_peer_role") == "other") {
             FilterPeerRole = EPeerRole::Other;
         }
-        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty();
+        NeedFilter = HasPendingFilters();
         if (Params.Has("offset")) {
             Offset = FromStringWithDefault<ui32>(Params.Get("offset"), 0);
             NeedLimit = true;
@@ -1345,6 +1345,9 @@ public:
             AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
+        if (AliveOnly) {
+            FieldsRequired.set(+ENodeFields::SystemState);
+        }
         if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
             FieldsRequired.set(+ENodeFields::PDisks);
         }
@@ -1493,6 +1496,11 @@ public:
                 node->RemapDisks(IncludeDDisks);
             }
         }
+    }
+
+    bool HasPendingFilters() const {
+        return (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty()
+            || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
     }
 
     bool PreFilterDone() const {
@@ -1737,7 +1745,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
+            NeedFilter = HasPendingFilters();
             FoundNodes = NodeView.size();
         }
     }

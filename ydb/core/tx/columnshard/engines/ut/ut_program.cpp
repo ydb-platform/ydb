@@ -954,5 +954,16 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         const auto noIndex = apply(makeProgram("%aaa%bbb%", true, 0), true);
         UNIT_ASSERT_C(!noIndex.first.Contains("PATTERN_MATCH"), noIndex.first);
         UNIT_ASSERT_VALUES_EQUAL(uint8Pair(noIndex.second), (std::pair<ui8, ui8>(1, 0)));
+
+        columnResolver.NgramSize = 3;
+        const auto noField = apply(makeProgram("%aaa%bbb%", true, std::nullopt), true);
+        UNIT_ASSERT_C(!noField.first.Contains("PATTERN_MATCH"), noField.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(noField.second), (std::pair<ui8, ui8>(1, 0)));
+
+        // EndsWith("b") does not match the stored suffix window, so only the "aaa" check is built.
+        const auto shortSuffix = apply(makeProgram("%aaa%b", true, 0), true);
+        UNIT_ASSERT_C(shortSuffix.first.Contains("PATTERN_MATCH"), shortSuffix.first);
+        UNIT_ASSERT_VALUES_EQUAL(checkerCount(shortSuffix.first), 1);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(shortSuffix.second), (std::pair<ui8, ui8>(1, 0)));
     }
 }

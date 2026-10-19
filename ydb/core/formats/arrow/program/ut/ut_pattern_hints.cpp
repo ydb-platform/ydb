@@ -48,6 +48,11 @@ Y_UNIT_TEST_SUITE(PatternHints) {
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa_bbb%", true), "Contains:aaa:cs,Contains:bbb:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa", true), "StartsWith:aaa:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%ab%cde%", true), "Contains:cde:cs");
+        // A one-byte suffix does not match the stored suffix window, so it is not a probe.
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%b", true), "Contains:aaa:cs");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%b", true), "");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bb", true), "StartsWith:aaa:cs");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%aaa%", true), "Contains:aaa:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%", true), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%_%", true), "");
     }

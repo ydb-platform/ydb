@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 namespace {
@@ -101,13 +103,22 @@ std::vector<TPatternIndexHint> BuildLikeIndexHints(const TStringBuf pattern, con
         return {};
     }
     std::vector<TPatternIndexHint> hints;
+    THashSet<TString> seen;
     for (const auto& run : *runs) {
         for (const auto& piece : PiecesOf(run, caseSensitive)) {
             using EOperation = TIndexCheckOperation::EOperation;
             // A piece that fills the whole pattern is a prefix. One StartsWith probe covers it.
-            const EOperation operation = piece.AtStart ? EOperation::StartsWith : (piece.AtEnd ? EOperation::EndsWith : EOperation::Contains);
+            EOperation operation = piece.AtStart ? EOperation::StartsWith : (piece.AtEnd ? EOperation::EndsWith : EOperation::Contains);
+            // EndsWith("b") probes b\0\0. Indexing "aaab" stores ab\0, so the portion is rejected.
+            if (operation == EOperation::EndsWith && piece.Bytes.size() < policy.MinContainsLength) {
+                operation = EOperation::Contains;
+            }
             const ui32 minLength = operation == EOperation::Contains ? policy.MinContainsLength : policy.MinAnchoredLength;
             if (piece.Bytes.size() < minLength) {
+                continue;
+            }
+            const TString key = TStringBuilder() << static_cast<int>(operation) << '\n' << piece.Bytes << '\n' << caseSensitive;
+            if (!seen.insert(key).second) {
                 continue;
             }
             hints.emplace_back(inputIndex, TIndexCheckOperation(operation, caseSensitive), piece.Bytes);

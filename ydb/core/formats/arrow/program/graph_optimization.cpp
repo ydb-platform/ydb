@@ -572,6 +572,9 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     }
 }
 
+// The added checks are ANDed with the kernel. A deny becomes false, while a NULL input would have
+// made the kernel NULL. That is sound for a filter (NULL is dropped either way) and unsound under NOT.
+// KQP does not push NOT/OR around this kernel; same assumption as OptimizeConditionsForIndexes.
 TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -587,7 +590,6 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
     if (IndexesConstructed.contains(condNode->GetIdentifier())) {
         return false;
     }
-    IndexesConstructed.emplace(condNode->GetIdentifier());
 
     struct TResolved {
         TResourceAddress Addr;
@@ -607,6 +609,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
     if (resolved.empty()) {
         return false;
     }
+    IndexesConstructed.emplace(condNode->GetIdentifier());
 
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();

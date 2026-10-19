@@ -4207,7 +4207,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     (1002, "bbb aaa"),
                     (1003, ")" << kelvin << R"("),
                     (1004, ")" << longS << R"("),
-                    (1005, "(?s)qqq.*zzz");
+                    (1005, "(?s)qqq.*zzz"),
+                    (1006, "aaab");
             )");
 
             auto runScan = [&](const TString& query) {
@@ -4239,6 +4240,34 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     ORDER BY key;
                 )"),
                 "literal Re2 options");
+            // The pattern is anchored at the end. EndsWith("b") would reject "aaab":
+            // the index stores ab\0, the probe is b\0\0.
+            CompareYson(R"([[1006]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%aaa%b' ORDER BY key)"),
+                "short suffix LIKE");
+            {
+                auto params = kikimr.GetTableClient().GetParamsBuilder().AddParam("$literal").Bool(true).Build().Build();
+                auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                    DECLARE $literal AS Bool;
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, $literal AS Literal))(value)
+                    ORDER BY key;
+                )", params).GetValueSync();
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                CompareYson(R"([[1005]])", StreamResultToYson(it), "parameter Literal option");
+            }
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(
+                        CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                        CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
+                    ))(value)
+                    ORDER BY key;
+                )"),
+                "positional Literal option");
 
             const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
             CompareYson(R"([[0u]])",

@@ -22,7 +22,8 @@ struct TPatternIndexHint {
 struct TPatternHintPolicy {
     // A Contains shorter than the bloom ngram size probes nothing. The caller sets this from the index.
     ui32 MinContainsLength = 3;
-    // StartsWith / EndsWith still hash boundary ngrams padded with zero bytes, so one byte is enough.
+    // StartsWith of one byte matches the stored prefix window. EndsWith shorter than the ngram does not:
+    // the index hashes only the first padded suffix window (last ngram-1 bytes plus one zero), not a slide.
     ui32 MinAnchoredLength = 1;
     // Phase 1 does not interpret ESCAPE. A pattern that has one produces no hints.
     bool AllowEscape = false;

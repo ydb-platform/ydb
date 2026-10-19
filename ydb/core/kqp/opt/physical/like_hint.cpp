@@ -2,6 +2,8 @@
 
 #include <yql/essentials/core/yql_opt_utils.h>
 
+#include <array>
+
 namespace NKikimr::NKqp::NOpt {
 
 namespace {
@@ -26,7 +28,15 @@ bool IsFalseBool(const NYql::TExprNode& node) {
 
 bool IsRe2Udf(const NYql::TExprNode& node, const std::string_view name) {
     const auto& udf = NYql::SkipCallables(node, {"AssumeStrict"});
-    return udf.IsCallable("Udf") && udf.ChildrenSize() >= 1 && udf.Head().Content().StartsWith(name);
+    if (!udf.IsCallable("Udf") || udf.ChildrenSize() < 1) {
+        return false;
+    }
+    const auto content = udf.Head().Content();
+    if (content == name) {
+        return true;
+    }
+    // A type suffix is "(...)", not another UDF whose name merely starts with this one.
+    return content.StartsWith(name) && content.size() > name.size() && content[name.size()] == '(';
 }
 
 std::optional<bool> ReadBool(const NYql::TExprNode* node) {
@@ -57,28 +67,101 @@ struct TOptionScan {
     bool Unsupported = false;
 };
 
+// Re2::Options argument order. CaseSensitive is the only one SQL LIKE/ILIKE sets.
+constexpr std::array<std::string_view, 13> Re2OptionOrder = {
+    "Utf8", "PosixSyntax", "LongestMatch", "LogErrors", "MaxMem", "Literal", "NeverNl", "DotNl",
+    "NeverCapture", "CaseSensitive", "PerlClasses", "WordBoundary", "OneLine",
+};
+
+bool IsTypeExpr(const NYql::TExprNode* node) {
+    node = UnwrapQuote(node);
+    return node && node->IsCallable({
+        "DataType", "OptionalType", "StructType", "TupleType", "ListType", "DictType", "CallableType",
+        "NullType", "VoidType", "UnitType", "ResourceType", "TaggedType", "VariantType", "PgType",
+        "EmptyListType", "EmptyDictType",
+    });
+}
+
+bool IsAbsentOption(const NYql::TExprNode* node) {
+    node = SkipJust(UnwrapQuote(node));
+    return !node || node->IsCallable({"Nothing", "Null"});
+}
+
+void AcceptCaseSensitive(const NYql::TExprNode* valueNode, TOptionScan& scan) {
+    const auto value = ReadBool(valueNode);
+    if (!value || (scan.CaseSensitive && *scan.CaseSensitive != *value)) {
+        scan.Unsupported = true;
+        return;
+    }
+    scan.CaseSensitive = *value;
+}
+
+void AcceptSetting(const std::string_view name, const NYql::TExprNode* valueNode, TOptionScan& scan) {
+    if (name == "CaseSensitive") {
+        AcceptCaseSensitive(valueNode, scan);
+        return;
+    }
+    scan.Unsupported = true;
+}
+
+void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan);
+
+void ScanPositionalOptions(const NYql::TExprNode& positional, TOptionScan& scan) {
+    ui32 index = 0;
+    for (const auto& arg : positional.Children()) {
+        if (index >= Re2OptionOrder.size()) {
+            scan.Unsupported = true;
+            return;
+        }
+        if (!IsAbsentOption(arg.Get())) {
+            AcceptSetting(Re2OptionOrder[index], arg.Get(), scan);
+            if (scan.Unsupported) {
+                return;
+            }
+        }
+        ++index;
+    }
+}
+
 void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan) {
     const auto* current = UnwrapQuote(&node);
     if (!current || scan.Unsupported) {
         return;
     }
+    if (current->IsCallable("NamedApply") && current->ChildrenSize() >= 2 && IsRe2Udf(current->Head(), "Re2.Options")) {
+        if (const auto* positional = UnwrapQuote(current->Child(1))) {
+            ScanPositionalOptions(*positional, scan);
+        }
+        if (scan.Unsupported) {
+            return;
+        }
+        if (current->ChildrenSize() >= 3) {
+            ScanOptions(*current->Child(2), scan);
+        }
+        return;
+    }
+    if (current->IsCallable("Apply") && current->ChildrenSize() >= 1 && IsRe2Udf(current->Head(), "Re2.Options")) {
+        for (ui32 index = 1; index < current->ChildrenSize(); ++index) {
+            if (index - 1 >= Re2OptionOrder.size()) {
+                scan.Unsupported = true;
+                return;
+            }
+            if (!IsAbsentOption(current->Child(index))) {
+                AcceptSetting(Re2OptionOrder[index - 1], current->Child(index), scan);
+                if (scan.Unsupported) {
+                    return;
+                }
+            }
+        }
+        return;
+    }
     if (current->ChildrenSize() >= 2) {
         const auto* name = UnwrapQuote(current->Child(0));
-        const auto* valueNode = SkipJust(UnwrapQuote(current->Child(1)));
-        // Type nodes mention every option name. A setting is a bool or an integer value.
-        const bool isSetting = valueNode && (valueNode->IsCallable("Bool") || valueNode->IsCallable("Uint64") ||
-            valueNode->IsCallable("Int64") || valueNode->IsCallable("Ui64"));
-        if (name && name->IsAtom() && isSetting && IsRe2OptionName(name->Content())) {
-            if (name->Content() != "CaseSensitive") {
-                scan.Unsupported = true;
-                return;
-            }
-            const auto value = ReadBool(valueNode);
-            if (!value || (scan.CaseSensitive && *scan.CaseSensitive != *value)) {
-                scan.Unsupported = true;
-                return;
-            }
-            scan.CaseSensitive = *value;
+        const auto* valueNode = UnwrapQuote(current->Child(1));
+        // Type nodes mention every option name. Anything else bound to that name is a setting,
+        // including a parameter: Re2::Options($x AS Literal) must not keep the hint.
+        if (name && name->IsAtom() && valueNode && !IsTypeExpr(valueNode) && IsRe2OptionName(name->Content())) {
+            AcceptSetting(name->Content(), valueNode, scan);
             return;
         }
     }
@@ -99,11 +182,29 @@ bool ExtractLiteral(const NYql::TExprNode& node, TString& value) {
     return true;
 }
 
+bool IsStringOrUtf8(const NYql::TTypeAnnotationNode* type) {
+    if (!type) {
+        return false;
+    }
+    if (type->GetKind() == NYql::ETypeAnnotationKind::Optional) {
+        type = type->Cast<NYql::TOptionalExprType>()->GetItemType();
+    }
+    if (type->GetKind() != NYql::ETypeAnnotationKind::Data) {
+        return false;
+    }
+    const auto slot = type->Cast<NYql::TDataExprType>()->GetSlot();
+    return slot == NYql::EDataSlot::String || slot == NYql::EDataSlot::Utf8;
+}
+
 // Optional columns are applied via Map/FlatMap (UDF AutoMap). The matched column is that input,
-// or Unwrap(Member) when the match is applied directly.
+// or Unwrap(Member) when the match is applied directly. SafeCast is the byte identity only for
+// String and Utf8; a cast from another type must not receive a string bloom probe.
 const NYql::TExprNode* MemberColumn(const NYql::TExprNode* node) {
     node = SkipJust(UnwrapQuote(node));
     while (node && node->IsCallable({"Unwrap", "SafeCast"})) {
+        if (node->IsCallable("SafeCast") && !IsStringOrUtf8(node->Head().GetTypeAnn())) {
+            return nullptr;
+        }
         node = SkipJust(UnwrapQuote(node->Child(0)));
     }
     if (node && node->IsCallable("Member")) {

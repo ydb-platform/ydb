@@ -776,8 +776,9 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         replacements.emplace(pptr.Get(), lambdaArgs.back());
     }
 
+    const auto likeHint = TryParseLikeHint(apply.Ref());
     std::optional<ui32> hintArgument;
-    if (const auto likeHint = TryParseLikeHint(apply.Ref())) {
+    if (likeHint) {
         for (ui32 i = 0; i < members.size(); ++i) {
             if (members[i].Get() == likeHint->Column) {
                 hintArgument = static_cast<ui32>(externalArgs.size() + i);
@@ -790,8 +791,7 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(lambdaArgs)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Args().Add(std::move(realArgs)).Build()
         .KernelName(ctx.NewAtom(apply.Pos(), ""));
-    if (hintArgument) {
-        const auto likeHint = TryParseLikeHint(apply.Ref());
+    if (hintArgument && likeHint) {
         auto hintList = ctx.NewList(apply.Pos(), {
             ctx.NewAtom(apply.Pos(), *hintArgument),
             ctx.NewAtom(apply.Pos(), likeHint->Pattern, TNodeFlags::BinaryContent),

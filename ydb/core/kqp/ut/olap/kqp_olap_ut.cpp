@@ -1622,6 +1622,54 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             walkLiteral(literalPlan);
         }
         UNIT_ASSERT_C(!literalSsa.Contains("PatternHint"), literalSsa);
+
+        const auto regexp = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message REGEXP 'aaa.*bbb')");
+        UNIT_ASSERT_C(!regexp.Contains("PatternHint"), regexp);
+
+        auto explainNoHint = [&](const TString& query, const TParams& params) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tableClient.StreamExecuteScanQuery(query, params, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            const auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(collected.Ast && collected.Ast->Contains("KqpOlapApply"), collected.Ast.GetOrElse(""));
+            TString program;
+            if (collected.PlanJson) {
+                NJson::TJsonValue plan;
+                UNIT_ASSERT(NJson::ReadJsonTree(*collected.PlanJson, &plan, true));
+                std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                    if (node.IsMap()) {
+                        for (const auto& [key, value] : node.GetMapSafe()) {
+                            if (key == "SsaProgram") {
+                                program += value.GetStringRobust();
+                            }
+                            walk(value);
+                        }
+                    } else if (node.IsArray()) {
+                        for (const auto& value : node.GetArraySafe()) {
+                            walk(value);
+                        }
+                    }
+                };
+                walk(plan);
+            }
+            UNIT_ASSERT_C(!program.Contains("PatternHint"), program);
+        };
+        const auto literalParam = tableClient.GetParamsBuilder().AddParam("$literal").Bool(true).Build().Build();
+        explainNoHint(R"(
+            DECLARE $literal AS Bool;
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, $literal AS Literal))(message);
+        )", literalParam);
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
+            ))(message);
+        )", tableClient.GetParamsBuilder().Build());
     }
 
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {

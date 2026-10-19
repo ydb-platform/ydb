@@ -21,7 +21,7 @@ public:
         return IndexInfo.GetColumnName(id, required);
     }
 
-    std::optional<ui32> GetBloomNgramSize(const ui32 columnId, const bool caseSensitive) const override {
+    std::optional<NArrow::NSSA::TBloomNgramSizes> GetBloomNgramSize(const ui32 columnId, const bool caseSensitive) const override {
         return IndexInfo.GetBloomNgramSize(columnId, caseSensitive);
     }
 

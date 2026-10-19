@@ -8,6 +8,7 @@
 #include "indexes/abstract/meta.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/abstract.h>
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -293,8 +294,8 @@ public:
         return Indexes;
     }
 
-    // Smallest ngramm_size of a bloom-ngram index on `columnId` that accepts `caseSensitive` probes.
-    std::optional<ui32> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
+    // Compatible bloom-ngram sizes on `columnId` for `caseSensitive` probes.
+    std::optional<NArrow::NSSA::TBloomNgramSizes> GetBloomNgramSize(ui32 columnId, bool caseSensitive) const;
 
     TString DebugString() const {
         TStringBuilder sb;

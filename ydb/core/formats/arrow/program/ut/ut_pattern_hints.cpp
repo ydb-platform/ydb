@@ -50,6 +50,28 @@ Y_UNIT_TEST_SUITE(PatternHints) {
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%ab%cde%", true), "Contains:cde:cs");
         // A one-byte suffix does not match the stored suffix window, so it is not a probe.
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%b", true), "Contains:aaa:cs");
+        {
+            // A size-5 index can be selected beside a size-3 one. EndsWith("bbb") is unsafe for size 5.
+            TPatternHintPolicy mixed;
+            mixed.MinContainsLength = 3;
+            mixed.MinEndsWithLength = 5;
+            TString mixedHints;
+            for (const auto& hint : BuildLikeIndexHints("aaa%bbb", {}, true, 0, mixed)) {
+                if (!mixedHints.empty()) {
+                    mixedHints += ",";
+                }
+                mixedHints += HintText(hint);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(mixedHints, "StartsWith:aaa:cs,Contains:bbb:cs");
+            mixedHints.clear();
+            for (const auto& hint : BuildLikeIndexHints("aaa%bbbbb", {}, true, 0, mixed)) {
+                if (!mixedHints.empty()) {
+                    mixedHints += ",";
+                }
+                mixedHints += HintText(hint);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(mixedHints, "StartsWith:aaa:cs,EndsWith:bbbbb:cs");
+        }
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%b", true), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bb", true), "StartsWith:aaa:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%aaa%", true), "Contains:aaa:cs");

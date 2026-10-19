@@ -109,8 +109,9 @@ std::vector<TPatternIndexHint> BuildLikeIndexHints(const TStringBuf pattern, con
             using EOperation = TIndexCheckOperation::EOperation;
             // A piece that fills the whole pattern is a prefix. One StartsWith probe covers it.
             EOperation operation = piece.AtStart ? EOperation::StartsWith : (piece.AtEnd ? EOperation::EndsWith : EOperation::Contains);
-            // EndsWith("b") probes b\0\0. Indexing "aaab" stores ab\0, so the portion is rejected.
-            if (operation == EOperation::EndsWith && piece.Bytes.size() < policy.MinContainsLength) {
+            // EndsWith("bbb") on a size-5 index probes bbb\0\0. Indexing "aaabbb" stores abbb\0.
+            // The cutoff is the largest compatible ngram size, because scan may select that index.
+            if (operation == EOperation::EndsWith && piece.Bytes.size() < policy.MinEndsWithLength) {
                 operation = EOperation::Contains;
             }
             const ui32 minLength = operation == EOperation::Contains ? policy.MinContainsLength : policy.MinAnchoredLength;

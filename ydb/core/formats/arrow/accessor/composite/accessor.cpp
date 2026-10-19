@@ -39,7 +39,7 @@ std::shared_ptr<IChunkedArray> ICompositeChunkedArray::DoISlice(const ui32 offse
     while (currentIndex < offset + count) {
         arrAddress = GetArray(arrAddress, currentIndex, nullptr);
         const auto& arr = arrAddress->GetArray();
-        if (currentIndex + arr->GetRecordsCount() < offset) {
+        if (currentIndex + arr->GetRecordsCount() <= offset) {
         } else if (currentIndex >= offset && currentIndex + arr->GetRecordsCount() <= offset + count) {
             chunks.emplace_back(arr);
         } else {

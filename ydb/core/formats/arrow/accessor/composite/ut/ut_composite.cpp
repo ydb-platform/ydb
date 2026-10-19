@@ -76,6 +76,25 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         }
     }
 
+    Y_UNIT_TEST(SliceStartingAtChunkBoundary) {
+        TCompositeChunkedArray::TBuilder builder(arrow::utf8());
+        {
+            TTrivialArray::TPlainBuilder chunk;
+            chunk.AddRecord(0, "a");
+            chunk.AddRecord(1, "b");
+            builder.AddChunk(chunk.Finish(2));
+        }
+        {
+            TTrivialArray::TPlainBuilder chunk;
+            chunk.AddRecord(0, "c");
+            chunk.AddRecord(1, "d");
+            builder.AddChunk(chunk.Finish(2));
+        }
+
+        const auto slice = builder.Finish()->ISlice(2, 2);
+        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(slice->GetChunkedArray()->ToString()), R"([["c","d"]])");
+    }
+
     Y_UNIT_TEST(FilterSimple) {
         auto arr = BuildCompositeArray();
         {

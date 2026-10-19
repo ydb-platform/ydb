@@ -6,14 +6,14 @@
 
 ```bash
 python3 ydb/ci/gh-runner-provision/provision.py create ydb/ci/gh-runner-provision/examples/tiny-worker.yaml --dry-run
-python3 ydb/ci/gh-runner-provision/provision.py register ydb/ci/gh-runner-provision/examples/static-release.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py register ydb/ci/gh-runner-provision/examples/static-relwithdebinfo-release.yaml --dry-run
 python3 ydb/ci/gh-runner-provision/provision.py create path/to/runners.yaml
 python3 ydb/ci/gh-runner-provision/provision.py register path/to/runners.yaml
 ```
 
 Один файл — один размер VM и один набор лейблов. `platform` — поле в этом файле. Имя файла его не кодирует.
 
-`name` плюс `start` и `count` нарезает новые имена (`tiny-worker-2026-10-8`). `names` — готовый список уже существующих хостов. Статики так и устроены: четыре файла, в каждом свои `names` и свои `labels`. Перенести хост в другую группу — убрать его из одного файла, добавить в другой и выполнить `register` на обоих.
+`name` плюс `start` и `count` нарезает новые имена (`tiny-worker-2026-10-8`). `names` — готовый список уже существующих хостов. Статики так и устроены: `build-preset-relwithdebinfo` есть у всех, имя файла начинается с `static-relwithdebinfo`, дальше идёт то, чем группа отличается. Перенести хост в другую группу — убрать его из одного файла, добавить в другой и выполнить `register` на обоих.
 
 `register` останавливает сервис, снимает регистрацию и записывает лейблы из конфига заново. Если раннер сейчас занят джобой, команда ничего не делает.
 

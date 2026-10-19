@@ -105,7 +105,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryCuttableIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
-    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryBlobGroupMismatches;
+    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, CutHistoryBlobGroupMismatches);
     NMonitoring::THistogramPtr CutHistoryScanDurationMs;
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;
@@ -272,16 +272,16 @@ public:
         CutHistoryScansAborted->Inc();
     }
 
-    void OnCutHistoryBlobGroupMismatches(ui64 count) const {
-        CutHistoryBlobGroupMismatches->Add(count);
+    void OnCutHistoryBlobGroupMismatch() const {
+        CutHistoryBlobGroupMismatches->Inc();
     }
 
     void OnCutHistoryScanFinished(const TDuration duration) const {
         CutHistoryScanDurationMs->Collect(duration.MilliSeconds());
     }
 
-    void OnCutHistoryRequestsSent(const ui64 count, const TDuration duration) const {
-        CutHistoryRequestsSent->Add(count);
+    void OnCutHistoryRequestSent(const TDuration duration) const {
+        CutHistoryRequestsSent->Inc();
         CutHistoryWaitDurationMs->Collect(duration.MilliSeconds());
     }
 

@@ -324,6 +324,68 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(f.Journal(), journal);
     }
 
+    Y_UNIT_TEST(RequestLimitKeepsEverySentBatchCommitted) {
+        TFixture f;
+        f.Schema();
+        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
+        constexpr ui32 intervalCount = CutHistoryRequestLimit + 1;
+        for (ui32 i = 0; i < intervalCount; ++i) {
+            f.Restart(i % 2 ? OldGroup : NewGroup);
+        }
+        TAutoPtr<IEventHandle> continuation;
+        TAutoPtr<IEventHandle> commit;
+        bool holdContinuation = true;
+        bool holdCommit = false;
+        ui32 lastHeldCommitStep = 0;
+        std::set<ui32> cutFrom;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (!ev->HasEvent()) {
+                return;
+            }
+            if (holdContinuation && dynamic_cast<TEvFindEmptyHistoryIntervals::TEvContinue*>(ev->GetBase())) {
+                continuation = ev.Release();
+            } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
+                       holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0 &&
+                       log->EntryId.Step() > lastHeldCommitStep) {
+                lastHeldCommitStep = log->EntryId.Step();
+                commit = ev.Release();
+                holdCommit = false;
+            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
+                UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetChannel(), FirstDataChannel);
+                UNIT_ASSERT(cutFrom.emplace(cut->Record.GetFromGeneration()).second);
+                ev.Reset();
+            }
+        });
+        f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(true);
+        f.Restart();
+        f.Drive(1);
+        UNIT_ASSERT(continuation);
+        f.Controller->DisableBackground(EBackground::GC);
+        holdContinuation = false;
+        holdCommit = true;
+        f.Runtime.Send(continuation.Release(), 0, true);
+        f.Drive(1);
+        UNIT_ASSERT(commit);
+        UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), 0u, "the first batch must wait for its journal commit");
+
+        holdCommit = true;
+        f.Runtime.Send(commit.Release(), 0, true);
+        f.Drive(1);
+        UNIT_ASSERT_VALUES_EQUAL_C(cutFrom.size(), CutHistoryRequestLimit, "the next batch must wait for its own journal commit");
+        UNIT_ASSERT_C(commit, "remaining intervals must continue without another scan");
+        f.Runtime.Send(commit.Release(), 0, true);
+        f.Drive(1);
+        UNIT_ASSERT_VALUES_EQUAL(cutFrom.size(), intervalCount);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), intervalCount);
+        const auto journal = f.Journal();
+        UNIT_ASSERT(!journal.Contains("FromGeneration: 0\n"));
+        for (ui32 i = 1; i < intervalCount; ++i) {
+            UNIT_ASSERT(cutFrom.contains(f.History[i].first));
+            UNIT_ASSERT_STRING_CONTAINS(journal, "FromGeneration: " + ToString(f.History[i].first) + "\n");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(OrphanCollectedWithSwappedChannelGroups, restartDuringGC) {
         TFixture f;
         f.Schema();
@@ -453,7 +515,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(cuts.at(FirstDataChannel + 1), NewGroup);
         UNIT_ASSERT_VALUES_EQUAL(f.Counters()->GetCounter("Deriviative/CutHistory/RequestsSent/Count", true)->Val(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("ScanToSend"), cuts.size());
     }
 
     Y_UNIT_TEST_TWIN(SharedBlobsExcludeOnlyOwnInterval, borrowed) {

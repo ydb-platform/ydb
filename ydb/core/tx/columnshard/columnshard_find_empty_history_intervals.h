@@ -9,6 +9,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/datetime/base.h>
 
 #include <memory>
@@ -59,13 +61,12 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
 
 NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context, NActors::TActorId resourceSubscriber,
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config,
-    TInstant started);
+    const NMonitoring::TDynamicCounters::TCounterPtr& blobGroupMismatches, TInstant started);
 
 struct TEmptyHistoryIntervalsScanResult {
     NFindEmptyHistoryIntervals::TIntervals Intervals;
     TInstant Started;
     TInstant Finished;
-    ui64 GroupMismatches = 0;
     bool Aborted = false;
 };
 
@@ -83,7 +84,7 @@ struct TEvFindEmptyHistoryIntervals {
 };
 
 class TFindEmptyHistoryIntervals {
-    bool WaitingForFirstGC = false;
+    bool WaitingForFirstGC = true;
     NActors::TActorId ScanActor;
 
 public:
@@ -95,10 +96,10 @@ public:
         NActors::TActorId ResourceSubscriber;
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& SubscribeCounters;
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
+        NMonitoring::TDynamicCounters::TCounterPtr BlobGroupMismatches;
         bool CanCutHistory;
     };
 
-    void Initialize();
     NActors::TActorId Start(ui32 completedBarrierGeneration, const TStartContext& context, const NActors::TActorContext& ctx);
     std::optional<TEmptyHistoryIntervalsScanResult> HandleFinish(
         TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, bool canCutHistory, const TCSCounters& counters);

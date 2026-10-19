@@ -531,6 +531,7 @@ private:
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
+    TFindEmptyHistoryIntervals FindEmptyHistoryIntervals;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -605,7 +606,6 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    TFindEmptyHistoryIntervals FindEmptyHistoryIntervals;
     bool CanCutHistory() const;
     void StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx);
     void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);

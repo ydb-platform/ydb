@@ -378,6 +378,9 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 
         const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
         runtime.EnableScheduleForActor(service);
+        TDispatchOptions bootstrap;
+        bootstrap.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(bootstrap);
 
         NResourcePool::TPoolSettings poolSettings;
         poolSettings.TotalMemoryLimitPercentPerNode = 30;
@@ -423,6 +426,9 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         runtime.RegisterService(MakeKqpRmServiceID(runtime.GetNodeId()), runtime.AllocateEdgeActor());
 
         const TActorId service = runtime.Register(CreateKqpComputeSchedulerService(TDuration::MilliSeconds(100)));
+        TDispatchOptions bootstrap;
+        bootstrap.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        runtime.DispatchEvents(bootstrap);
 
         auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(false);

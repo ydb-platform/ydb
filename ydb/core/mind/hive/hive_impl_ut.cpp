@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
@@ -6,6 +7,7 @@
 #include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
+#include "ut_common.h"
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -15,25 +17,6 @@
 
 using namespace NKikimr;
 using namespace NHive;
-
-namespace {
-
-class TTestHive : public THive {
-public:
-    TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
-
-    template<typename F>
-    void UpdateConfig(F func) {
-        func(ClusterConfig);
-        BuildCurrentConfig();
-    }
-
-    TBootQueue& GetBootQueue() {
-        return BootQueue;
-    }
-};
-
-} // namespace
 
 using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;

@@ -62,7 +62,6 @@ public:
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
             auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
-            auto groupRowset = db.Table<Schema::Group>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -80,8 +79,7 @@ public:
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
                     || !operationsRowset.IsReady()
-                    || !bridgePileRowset.IsReady()
-                    || !groupRowset.IsReady())
+                    || !bridgePileRowset.IsReady())
                 return false;
         }
 

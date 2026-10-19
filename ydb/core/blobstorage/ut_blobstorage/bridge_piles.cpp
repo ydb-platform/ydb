@@ -17,41 +17,6 @@ namespace {
         };
     }
 
-    // two-pile cluster which may get the third pile of nodes 17-24 added to its config
-    TEnvironmentSetup::TSettings MakeExpandableSettings() {
-        return {
-            .NodeCount = 24,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-            .LocationGenerator = GetBridgedLocation,
-            .SelfManagementConfig = true,
-            .NumPiles = 2,
-            .AutomaticBootstrap = true,
-            .InitialConfiguredNodeCount = 16,
-        };
-    }
-
-    constexpr ui32 FirstThirdPileNodeId = 17;
-    constexpr ui32 LastThirdPileNodeId = 24;
-
-    // add the third pile (named as GetBridgedLocation does) with its nodes to the main config of the cluster
-    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult AddThirdPileToConfig(TEnvironmentSetup& env) {
-        return ReplaceMainConfig(env, [](YAML::Node& config) {
-            YAML::Node pile;
-            pile["name"] = "pile_3";
-            config["bridge_config"]["piles"].push_back(pile);
-            for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
-                YAML::Node host;
-                host["host"] = "host_" + std::to_string(nodeId);
-                YAML::Node location = host["location"];
-                location["data_center"] = "my_dc";
-                location["rack"] = "rack_" + std::to_string(nodeId);
-                location["unit"] = "unit_" + std::to_string(nodeId);
-                location["bridge_pile_name"] = "pile_3";
-                config["hosts"].push_back(host);
-            }
-        });
-    }
-
     // remove the pile along with its nodes from the main config of the cluster
     NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult RemovePileFromConfig(TEnvironmentSetup& env, TString name) {
         return ReplaceMainConfig(env, [&](YAML::Node& config) {
@@ -70,17 +35,6 @@ namespace {
             }
             config["hosts"] = hosts;
         });
-    }
-
-    // pile names and states as recorded in the storage config
-    TString GetPileStates(const NKikimrBlobStorage::TStorageConfig& config) {
-        TStringBuilder res;
-        const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
-        for (size_t i = 0; i < registry.PilesSize(); ++i) {
-            res << (res.empty() ? "" : " ") << (registry.GetPiles(i).HasName() ? registry.GetPiles(i).GetName() : "-")
-                << ':' << NKikimrBridge::TClusterState::EPileState_Name(config.GetClusterState().GetPerPileState(i));
-        }
-        return res;
     }
 
     NKikimrBlobStorage::TConfigResponse UpdateBridgeGroupInfo(TEnvironmentSetup& env,
@@ -128,8 +82,11 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         env.Sim(TDuration::Seconds(10));
         const auto after = QueryStorageConfig(env);
         UNIT_ASSERT_LT(before.GetGeneration(), after.GetGeneration());
-        UNIT_ASSERT_VALUES_EQUAL(after.GetClusterStateDetails().GetPileRegistry().DebugString(),
-            before.GetClusterStateDetails().GetPileRegistry().DebugString());
+        // pile ids stay the same, but the change of their order makes the config not suitable for older versions
+        auto registry = after.GetClusterStateDetails().GetPileRegistry();
+        UNIT_ASSERT(registry.GetPileListChanged());
+        registry.ClearPileListChanged();
+        UNIT_ASSERT_VALUES_EQUAL(registry.DebugString(), before.GetClusterStateDetails().GetPileRegistry().DebugString());
         UNIT_ASSERT_VALUES_EQUAL(after.GetClusterState().GetGeneration(), before.GetClusterState().GetGeneration());
 
         res = ReplaceMainConfig(env, [](YAML::Node& config) {

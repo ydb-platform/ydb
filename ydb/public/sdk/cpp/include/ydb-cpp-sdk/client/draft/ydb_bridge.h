@@ -6,6 +6,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace NYdb::inline Dev::NBridge {
@@ -15,6 +16,8 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
 struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {};
+
+struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
 enum class EPileState {
     UNSPECIFIED = 0,
@@ -33,14 +36,27 @@ struct TPileStateUpdate {
     uint64_t Generation = 0;
 };
 
+// Operation changing the set of piles of the cluster that is not finished yet.
+struct TPendingPileOperation {
+    enum class EKind {
+        UNSPECIFIED = 0,
+        ADD = 1, // the pile is being added to the cluster: its storage groups are being created
+    };
+
+    std::string PileName;
+    EKind Kind = EKind::UNSPECIFIED;
+    std::string ErrorReason; // why the last attempt has failed; the operation is retried meanwhile
+};
+
 class TGetClusterStateResult : public TStatus {
 public:
     TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation,
-            bool conversionInProgress = false)
+            bool conversionInProgress = false, std::optional<TPendingPileOperation> pendingPileOperation = std::nullopt)
         : TStatus(std::move(status))
         , State_(std::move(state))
         , Generation_(generation)
         , ConversionInProgress_(conversionInProgress)
+        , PendingPileOperation_(std::move(pendingPileOperation))
     {}
 
     const std::vector<TPileStateUpdate>& GetState() const {
@@ -57,10 +73,15 @@ public:
         return ConversionInProgress_;
     }
 
+    const std::optional<TPendingPileOperation>& GetPendingPileOperation() const {
+        return PendingPileOperation_;
+    }
+
 private:
     std::vector<TPileStateUpdate> State_;
     uint64_t Generation_ = 0;
     bool ConversionInProgress_ = false;
+    std::optional<TPendingPileOperation> PendingPileOperation_;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
@@ -78,6 +99,10 @@ public:
     // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes must already run with
     // a single-pile bridge config.
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings = {});
+
+    // Add an INACTIVE pile, listed in the bridge config with its hosts, to the cluster. Completes when every storage
+    // group has got its part in the pile; the pile is DISCONNECTED then and may be rejoined.
+    TAsyncStatus AddPile(const std::string& pileName, const TAddPileSettings& settings = {});
 
 private:
     class TImpl;

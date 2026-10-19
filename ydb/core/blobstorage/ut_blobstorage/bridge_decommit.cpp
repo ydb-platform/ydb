@@ -63,17 +63,6 @@ namespace {
         return env.Invoke(request); // channel profiles are generated from the group's own pool
     }
 
-    // wait until the condition holds, checking it every 10 seconds of simulated time
-    void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what) {
-        for (ui32 i = 0; i < 60; ++i) {
-            if (condition()) {
-                return;
-            }
-            env.Sim(TDuration::Seconds(10));
-        }
-        UNIT_FAIL(what << " not reached");
-    }
-
     NKikimrBlobStorage::TGroupDecommitStatus::E GetDecommitStatus(TEnvironmentSetup& env, ui32 groupId) {
         return FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus();
     }
@@ -195,25 +184,6 @@ namespace {
             res.push_back(group.GetGroupId());
         }
         return res;
-    }
-
-    void SwitchPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
-        auto clusterState = QueryStorageConfig(env).GetClusterState();
-        clusterState.SetPerPileState(pileIndex, state);
-        clusterState.SetGeneration(clusterState.GetGeneration() + 1);
-        const auto res = InvokeDistconf(env, [&](auto& record) {
-            record.MutableSwitchBridgeClusterState()->MutableNewClusterState()->CopyFrom(clusterState);
-        });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
-    }
-
-    NKikimrBridge::TClusterState::EPileState GetPileState(TEnvironmentSetup& env, ui32 pileIndex) {
-        return QueryStorageConfig(env).GetClusterState().GetPerPileState(pileIndex);
-    }
-
-    void WaitForPileState(TEnvironmentSetup& env, ui32 pileIndex, NKikimrBridge::TClusterState::EPileState state) {
-        WaitUntil(env, [&] { return GetPileState(env, pileIndex) == state; },
-            TStringBuilder() << "pile state " << NKikimrBridge::TClusterState::EPileState_Name(state));
     }
 
     TEnvironmentSetup::TSettings MakeBridgedSettings() {

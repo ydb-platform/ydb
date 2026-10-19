@@ -32,6 +32,9 @@ message TPileRegistry {
     }
     repeated TPile Piles = 1; // pile with BridgePileId = i + 1 is Piles[i], in sync with TClusterState.PerPileState
     uint32 ImplicitPileId = 2; // pile of nodes without pile name and of groups without pile id; 0 if there is none
+    // set once the list of piles has been changed (piles added, dropped or reordered in BridgeConfig); nodes of older
+    // versions take pile ids from positions in their BridgeConfig, so they can't get the configuration since then
+    bool PileListChanged = 3;
 }
 
 message TClusterStateDetails {
@@ -55,6 +58,18 @@ message TClusterStateDetails {
     // absent only in configs of clusters bridged before the registry was introduced; such registry is implied by
     // BridgeConfig (piles in config order, the only pile being the implicit one) and gets persisted by the next update
     TPileRegistry PileRegistry = 4;
+
+    // operation changing the set of piles of the cluster, which is not finished yet; set by distconf along with its part
+    // of the operation, cleared when BSC reports that it has performed its part; only one operation may be pending
+    message TPendingPileOperation {
+        enum EKind {
+            ADD = 0; // pile went from INACTIVE to DISCONNECTED, BSC has to add parts in this pile to its bridged groups
+        }
+        uint32 BridgePileId = 1;
+        EKind Kind = 2;
+        optional string ErrorReason = 3; // why BSC has failed to perform its part last time (it retries meanwhile)
+    }
+    TPendingPileOperation PendingPileOperation = 5;
 }
 
 message TGroupState {

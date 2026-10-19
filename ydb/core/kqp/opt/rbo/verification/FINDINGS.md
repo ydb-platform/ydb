@@ -6,6 +6,25 @@ are different evidence. The [archived finding inventory](history/pre-audit-refac
 retains the original observations and fix commits; do not read its milestone
 statuses as fresh results.
 
+## Main-source audit, 2026-10-19
+
+Three small production fixes are isolated on branches whose parent is fetched
+main `6ceb698dd99a525fc885121dfdbcad9deca11974`. These findings come from source
+inspection and focused native regressions, not a fresh TPCH/TPCDS solver census.
+
+| Branch / commit | Defect and validation on the standalone branch |
+|---|---|
+| `fix/required-key-presence-ranges` / `bd7f15e85e1` | `RangeFor(Exists/NotExists)` sent required keys through the optional/Pg-only range builder. Required `Exists` now covers every value, including NaN; `NotExists` is empty. Both `TOptimizeYqlExpr::RangeForExists*` tests passed, including unchanged optional/Pg behavior. |
+| `fix/string-capacity-overflow` / `5c953edbb8e` | Four string growth paths computed spare capacity with wrapping 32-bit addition. Capacity now saturates at `UINT32_MAX`; compile-time boundary checks cover the first overflowing size and the maximum. `TMiniKQLStringUtils::MakeStringWithPad` and `SubstringWithLargeOffset` passed. Multi-gigabyte allocation tests were excluded. |
+| `fix/string-padding-overflow` / `6fc6fde79ee` | `MakeStringNotFilled(size, pad)` could wrap its allocation size. The regression uses `size=1, pad=UINT32_MAX`, which takes the embedded-string path on the old code without a large allocation. Both `TMiniKQLStringUtils::MakeStringWithPad*` tests passed. |
+
+Every run used at most four build workers, one linker and one test worker,
+restricted to four CPUs, with an 8 GiB hard allocation limit per process and
+a 16 GiB sampled aggregate RSS cutoff. Peak aggregate RSS was 4.27 GiB for the
+range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
+`/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
+and `/tmp/rbo-string-padding-main-tests.log`.
+
 ## Current runtime check
 
 On **2026-09-05**, the manual paired diagnostics at source `b000dfaba5f` observed:

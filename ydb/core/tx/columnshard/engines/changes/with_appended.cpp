@@ -12,6 +12,21 @@
 
 namespace NKikimr::NOlap {
 
+bool TChangesWithAppend::IsCancelled(const TColumnEngineForLogs& engine) const {
+    const auto coveredByTruncate = [&](const auto& portions) {
+        for (const auto& [_, portion] : portions) {
+            const auto& truncates = engine.GetGranuleVerified(portion->GetPathId()).GetTruncateSnapshots();
+            if (!truncates.empty() && portion->RecordSnapshotMin() < truncates.rbegin()->first) {
+                return true;
+            }
+        }
+        return false;
+    };
+    // Any covered row invalidates the whole result, including a partially covered
+    // compacted input. Written portions expose their commit snapshot here.
+    return coveredByTruncate(PortionsToRemove.GetPortions()) || coveredByTruncate(PortionsToMove.GetPortionsToRemove());
+}
+
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
     THashSet<ui64> usedPortionIds = PortionsToRemove.GetPortionIds();
     auto schemaPtr = context.EngineLogs.GetVersionedIndex().GetLastSchema();

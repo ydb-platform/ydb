@@ -521,7 +521,8 @@ std::shared_ptr<TCleanupTablesColumnEngineChanges> TColumnEngineForLogs::StartCl
     };
     for (TInternalPathId pathId : pathsToDrop) {
         if (auto g = GranulesStorage->GetGranuleOptional(pathId)) {
-            if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
+            // Retire truncate buckets before removing the granule they reference.
+            if (!g->GetTruncateSnapshots().empty() || dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
                 if (onPathProcessed()) {
                     break;
                 }
@@ -587,16 +588,54 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
                 break;
             }
             changes->AddPortionToDrop(portion);
-            if (i + 1 < portions.size()) {
-                portions[i] = std::move(portions.back());
-            }
-            portions.pop_back();
+            RemoveCleanupPortion(portion->GetPortionId());
         }
         if (limitExceeded) {
             break;
         }
         if (portions.empty()) {
-            it = CleanupPortions.erase(it);
+            bool keepBucket = false;
+            if (auto paths = TruncatePaths.find(removePlanStep); paths != TruncatePaths.end()) {
+                for (auto pathIt = paths->second.begin(); pathIt != paths->second.end();) {
+                    const auto pathId = *pathIt;
+                    const auto& granule = GetGranuleVerified(pathId);
+                    // A mixed input (min < truncate <= max) is not removed as a
+                    // whole portion and has no entry in this cleanup bucket.
+                    // Its running producer still needs the boundary to cancel.
+                    if (dataLocksManager->IsLocked(granule, NDataLocks::ELockCategory::Tables)) {
+                        ++pathIt;
+                        continue;
+                    }
+                    bool keepPath = false;
+                    const auto& history = granule.GetTruncateSnapshots();
+                    for (auto snapshotIt = history.lower_bound(TSnapshot(removePlanStep.MilliSeconds(), 0));
+                         snapshotIt != history.end() && snapshotIt->first.GetPlanInstant() == removePlanStep; ++snapshotIt) {
+                        const auto& [snapshot, state] = *snapshotIt;
+                        if (state == ETruncateState::RemovedFromDB) {
+                            continue;
+                        }
+                        if (state == ETruncateState::MarkedPortions && snapshot <= minSnapshotForNewReads) {
+                            changes->AddTruncateToRemove(pathId, snapshot);
+                        } else {
+                            keepPath = true;
+                        }
+                    }
+                    if (keepPath) {
+                        ++pathIt;
+                    } else {
+                        paths->second.erase(pathIt++);
+                    }
+                }
+                keepBucket = !paths->second.empty();
+                if (!keepBucket) {
+                    TruncatePaths.erase(paths);
+                }
+            }
+            if (keepBucket) {
+                ++it;
+            } else {
+                it = CleanupPortions.erase(it);
+            }
         } else {
             ++it;
         }
@@ -660,7 +699,7 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
     }
 
-    if (changes->GetPortionsToAccess().empty()) {
+    if (changes->GetPortionsToAccess().empty() && !changes->HasTruncatesToRemove()) {
         return nullptr;
     }
 
@@ -739,11 +778,63 @@ bool TColumnEngineForLogs::ApplyChangesOnExecute(
     return true;
 }
 
+void TColumnEngineForLogs::RemoveCleanupPortion(const ui64 portionId) {
+    const auto it = CleanupPortionPositions.find(portionId);
+    AFL_VERIFY(it != CleanupPortionPositions.end());
+    const auto position = it->second;
+    auto& portions = CleanupPortions.at(position.PlanInstant);
+    AFL_VERIFY(portions.at(position.Index)->GetPortionId() == portionId);
+    if (position.Index + 1 < portions.size()) {
+        portions[position.Index] = std::move(portions.back());
+        CleanupPortionPositions.at(portions[position.Index]->GetPortionId()).Index = position.Index;
+    }
+    portions.pop_back();
+    CleanupPortionPositions.erase(it);
+    // Leave empty buckets for StartCleanupPortions to retire their truncate markers.
+}
+
+void TColumnEngineForLogs::AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
+    AFL_VERIFY(info->HasRemoveSnapshot());
+    const auto planInstant = info->GetRemoveSnapshotVerified().GetPlanInstant();
+    if (const auto it = CleanupPortionPositions.find(info->GetPortionId()); it != CleanupPortionPositions.end()) {
+        if (it->second.PlanInstant == planInstant) {
+            return;
+        }
+        // Truncate can precede the removal snapshot of an already inactive portion.
+        AFL_VERIFY(planInstant < it->second.PlanInstant);
+        RemoveCleanupPortion(info->GetPortionId());
+    }
+    auto& portions = CleanupPortions[planInstant];
+    AFL_VERIFY(CleanupPortionPositions.emplace(info->GetPortionId(), TCleanupPosition{ planInstant, portions.size() }).second);
+    portions.emplace_back(info);
+}
+
+void TColumnEngineForLogs::ApplyTruncateSnapshots(const TInternalPathId pathId) {
+    auto granule = GetGranulePtrVerified(pathId);
+    for (const auto& [snapshot, state] : granule->GetTruncateSnapshots()) {
+        if (state == ETruncateState::RemovedFromDB) {
+            continue;
+        }
+        // Empty tables also need a cleanup transaction to retire the marker.
+        TruncatePaths[snapshot.GetPlanInstant()].emplace(pathId);
+        CleanupPortions.try_emplace(snapshot.GetPlanInstant());
+    }
+    for (const auto& [_, portion] : granule->GetPortions()) {
+        if (const auto snapshot = granule->GetApplicableTruncateSnapshot(*portion)) {
+            ModifyPortionOnComplete(portion, [&](const std::shared_ptr<TPortionInfo>& info) {
+                info->SetTruncateSnapshot(*snapshot);
+            });
+            AddCleanupPortion(portion);
+        }
+    }
+}
+
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo) {
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     AFL_VERIFY(portionInfo);
     auto granule = GetGranulePtrVerified(portionInfo->GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionId()));
+    granule->ApplyTruncateSnapshots(*portionInfo);
     Counters->AddPortion(*portionInfo);
     granule->AppendPortion(portionInfo);
     if (portionInfo->HasRemoveSnapshot()) {
@@ -756,6 +847,7 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAcces
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());
     AFL_VERIFY(!granule->GetPortionOptional(portionInfo->GetPortionInfo().GetPortionId()));
+    granule->ApplyTruncateSnapshots(*portionInfo->MutablePortionInfoPtr());
     Counters->AddPortion(portionInfo->GetPortionInfo());
     granule->AppendPortion(portionInfo);
     if (portionInfo->GetPortionInfo().HasRemoveSnapshot()) {
@@ -777,6 +869,11 @@ bool TColumnEngineForLogs::ErasePortion(const TPortionInfo& portionInfo, bool up
     } else {
         if (updateStats) {
             Counters->RemovePortion(*p);
+        }
+        // A truncate may have requeued this portion while cleanup was in flight.
+        // Retire that entry together with the portion, before another cleanup starts.
+        if (CleanupPortionPositions.contains(portion)) {
+            RemoveCleanupPortion(portion);
         }
         Y_ABORT_UNLESS(spg.ErasePortion(portion));
         return true;

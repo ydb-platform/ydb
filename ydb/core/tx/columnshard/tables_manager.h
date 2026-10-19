@@ -3,6 +3,7 @@
 #include "columnshard_schema.h"
 
 #include "blobs_action/abstract/storages_manager.h"
+#include "common/truncate.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine.h"
 #include "engines/metadata_accessor.h"
@@ -11,6 +12,7 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/protos/snapshot.pb.h>
 #include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
@@ -103,11 +105,79 @@ class TTableInfo {
         bool IsReadOnly = false;
     };
 
+private:
     TInternalPathId InternalPathId;
     std::map<TSchemeShardLocalPathId, TPathInfo> SchemeShardLocalPathIds;   // path ids the tables is known as at SchemeShard
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
+    // The table owns the history. Granules share a const view, never a second copy.
+    std::shared_ptr<NOlap::TTruncateSnapshots> Truncates = std::make_shared<NOlap::TTruncateSnapshots>();
 
 public:
+    const NOlap::TTruncateSnapshots& GetTruncateSnapshots() const {
+        return *Truncates;
+    }
+
+    std::shared_ptr<const NOlap::TTruncateSnapshots> GetTruncateSnapshotsPtr() const {
+        return Truncates;
+    }
+
+    void PersistTruncateSnapshots(NIceDb::TNiceDb& db) const {
+        NKikimrColumnShardProto::TTruncateSnapshots proto;
+        for (const auto& [snapshot, state] : *Truncates) {
+            if (state == NOlap::ETruncateState::RemovedFromDB) {
+                continue;
+            }
+            snapshot.SerializeToProto(*proto.AddSnapshots());
+        }
+        const TString serialized = proto.SerializeAsString();
+        // Each alias must retain the history if the source path is dropped.
+        for (const auto& [pathId, _] : SchemeShardLocalPathIds) {
+            db.Table<Schema::TableInfoV1>()
+                .Key(InternalPathId.GetRawValue(), pathId.GetRawValue())
+                .Update(NIceDb::TUpdate<Schema::TableInfoV1::TruncateSnapshots>(serialized));
+        }
+    }
+
+    void AddTruncate(const NOlap::TSnapshot& snapshot, NIceDb::TNiceDb& db) {
+        Truncates->try_emplace(snapshot, NOlap::ETruncateState::Created);
+        PersistTruncateSnapshots(db);
+    }
+
+    // ApplyTruncateSnapshots registers cleanup and marks loaded portions before this call.
+    // On boot the same history is applied to each portion as it is loaded.
+    // Repeated marking is harmless; changing mapped values does not invalidate iterators.
+    void MarkTruncatePortions() {
+        for (auto& [_, state] : *Truncates) {
+            if (state == NOlap::ETruncateState::Created) {
+                state = NOlap::ETruncateState::MarkedPortions;
+            }
+        }
+    }
+
+    void RemoveTruncatesOnExecute(const std::set<NOlap::TSnapshot>& snapshots, NIceDb::TNiceDb& db) {
+        // Validate the whole batch before modifying the canonical history.
+        for (const auto& snapshot : snapshots) {
+            const auto it = Truncates->find(snapshot);
+            AFL_VERIFY(it != Truncates->end())("snapshot", snapshot);
+            AFL_VERIFY(it->second == NOlap::ETruncateState::MarkedPortions)("snapshot", snapshot);
+        }
+        for (const auto& snapshot : snapshots) {
+            Truncates->at(snapshot) = NOlap::ETruncateState::RemovedFromDB;
+        }
+        // Atomic with portion metadata removal. Concurrent COPY/RENAME/truncate
+        // must also skip these boundaries when persisting the shared history.
+        PersistTruncateSnapshots(db);
+    }
+
+    void RemoveTruncatesOnComplete(const std::set<NOlap::TSnapshot>& snapshots) {
+        for (const auto& snapshot : snapshots) {
+            const auto it = Truncates->find(snapshot);
+            AFL_VERIFY(it != Truncates->end())("snapshot", snapshot);
+            AFL_VERIFY(it->second == NOlap::ETruncateState::RemovedFromDB)("snapshot", snapshot);
+            Truncates->erase(it);
+        }
+    }
+
     bool IsEmpty() const {
         return Versions.empty();
     }
@@ -160,6 +230,7 @@ public:
     void Merge(TTableInfo&& other) {
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
+        Truncates->insert(other.Truncates->begin(), other.Truncates->end());
         for (auto&& [schemeShardLocalPathId, pathInfo] : other.SchemeShardLocalPathIds) {
             SchemeShardLocalPathIds[schemeShardLocalPathId] = std::move(pathInfo);   // override
         }
@@ -245,6 +316,7 @@ public:
                                               pathInfo.LastCompletedBackupTransaction, pathInfo.IsReadOnly}})
                        .second);
         SchemeShardLocalPathIds.erase(oldPathId);
+        PersistTruncateSnapshots(db);
     }
 
     void CopySchemeShardLocalPathId(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
@@ -258,6 +330,7 @@ public:
             AFL_VERIFY(SchemeShardLocalPathIds
                            .insert({dstSchemeShardLocalPathId, TPathInfo{it->second.DropVersion, copyVersion, std::nullopt, true}})
                            .second);
+            PersistTruncateSnapshots(db);
             return;
         }
         AFL_VERIFY(dstIt->second.CopyVersion == copyVersion)("expected", copyVersion.DebugString())(
@@ -326,6 +399,14 @@ public:
         if (rowset.template HaveValue<Schema::TableInfoV1::IsReadOnly>()) {
             result.SetReadOnly(schemeShardLocalPathId, rowset.template GetValue<Schema::TableInfoV1::IsReadOnly>());
         }
+        if (rowset.template HaveValue<Schema::TableInfoV1::TruncateSnapshots>()) {
+            NKikimrColumnShardProto::TTruncateSnapshots proto;
+            AFL_VERIFY(proto.ParseFromString(rowset.template GetValue<Schema::TableInfoV1::TruncateSnapshots>()));
+            for (const auto& protoSnapshot : proto.GetSnapshots()) {
+                NOlap::TSnapshot snapshot(protoSnapshot.GetPlanStep(), protoSnapshot.GetTxId());
+                result.Truncates->try_emplace(snapshot, NOlap::ETruncateState::Created);
+            }
+        }
         return result;
     }
 };
@@ -378,6 +459,7 @@ private:
     THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;   // Paths that are being truncated
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -394,6 +476,7 @@ private:
     std::optional<TUnifiedPathId> TabletPathId;
     TInternalPathId MaxInternalPathId;
 
+    void RegisterTableInPrimaryIndex(TInternalPathId pathId);
     void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
     void RebuildReadOnlyTablesSnapshots();
 
@@ -549,7 +632,11 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
 
     void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
-    void TruncateTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId schemeShardLocalPathId);
+    TInternalPathId TruncateTableProgress(
+        const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+    void TruncateTableOnComplete(TSchemeShardLocalPathId schemeShardLocalPathId);
+    void RemoveTruncateSnapshotsOnExecute(TInternalPathId pathId, const std::set<NOlap::TSnapshot>& snapshots, NIceDb::TNiceDb& db);
+    void RemoveTruncateSnapshotsOnComplete(TInternalPathId pathId, const std::set<NOlap::TSnapshot>& snapshots);
 
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 

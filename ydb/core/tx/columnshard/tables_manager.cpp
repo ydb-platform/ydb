@@ -386,8 +386,10 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
-    for (auto&& i : Tables) {
-        PrimaryIndex->RegisterTable(i.first);
+    for (auto& [pathId, table] : Tables) {
+        RegisterTableInPrimaryIndex(pathId);
+        MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().ApplyTruncateSnapshots(pathId);
+        table.MarkTruncatePortions();
     }
     return true;
 }
@@ -487,6 +489,12 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
     Schema::SaveSchemaPresetDropVersion(db, presetId, version);
 }
 
+void TTablesManager::RegisterTableInPrimaryIndex(const TInternalPathId pathId) {
+    PrimaryIndex->RegisterTable(pathId);
+    MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(pathId).BindTruncateSnapshots(
+        Tables.at(pathId).GetTruncateSnapshotsPtr());
+}
+
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
     AFL_VERIFY(table.GetPathIds().size() == 1);
     const auto pathId = *table.GetPathIds().begin();
@@ -507,7 +515,7 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
         Schema::SaveSpecialValue(db, Schema::EValueIds::MaxInternalPathId, MaxInternalPathId.GetRawValue());
     }
     if (needRegisterTable) {
-        PrimaryIndex->RegisterTable(pathId.GetInternalPathId());
+        RegisterTableInPrimaryIndex(pathId.GetInternalPathId());
     }
 }
 
@@ -545,7 +553,7 @@ void TTablesManager::AddSchemaVersion(
             DataAccessorsManager.GetObjectPtrVerified(), StoragesManager, version, presetId,
             NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
-            PrimaryIndex->RegisterTable(i.first);
+            RegisterTableInPrimaryIndex(i.first);
         }
         PrimaryIndex->OnTieringModified(GetTtl());
     } else {
@@ -694,6 +702,7 @@ void TTablesManager::CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapsh
         table->SetCopyVersion(dstSchemeShardLocalPathId, version);
         table->SetReadOnly(dstSchemeShardLocalPathId, true);
         Schema::SaveTableCopyVersionV1(db, internalPathId, dstSchemeShardLocalPathId, version);
+        table->PersistTruncateSnapshots(db);
     } else {
         AFL_VERIFY(*table->GetCopyVersionOptional(dstSchemeShardLocalPathId) == version);
     }
@@ -750,12 +759,46 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     }
 }
 
-void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId) {
-    // TODO: implement ColumnShard truncate preparation.
+TInternalPathId TTablesManager::TruncateTableProgress(
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+    const auto* internalPathId = TruncatingLocalToInternal.FindPtr(schemeShardLocalPathId);
+    AFL_VERIFY(internalPathId)("ss", schemeShardLocalPathId);
+    const auto pathId = *internalPathId;
+    AFL_VERIFY(HasTable(pathId));
+    AFL_VERIFY(!GetTable(pathId).IsReadOnly(schemeShardLocalPathId));
+    Tables.at(pathId).AddTruncate(version, db);
+    return pathId;
 }
 
-void TTablesManager::TruncateTableProgress(NIceDb::TNiceDb&, const NOlap::TSnapshot&, const TSchemeShardLocalPathId) {
-    // TODO: implement ColumnShard truncate at the planned snapshot.
+void TTablesManager::TruncateTableOnComplete(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+    const auto pathId = TruncatingLocalToInternal.at(schemeShardLocalPathId);
+    auto& engine = MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto& table = Tables.at(pathId);
+
+    engine.ApplyTruncateSnapshots(pathId);
+    table.MarkTruncatePortions();
+
+    engine.MutableGranuleVerified(pathId).SetTruncatePending(false);
+    AFL_VERIFY(SchemeShardLocalToInternal.emplace(schemeShardLocalPathId, pathId).second);
+    AFL_VERIFY(TruncatingLocalToInternal.erase(schemeShardLocalPathId));
+}
+
+void TTablesManager::RemoveTruncateSnapshotsOnExecute(
+    const TInternalPathId pathId, const std::set<NOlap::TSnapshot>& snapshots, NIceDb::TNiceDb& db) {
+    auto& table = Tables.at(pathId);
+    table.RemoveTruncatesOnExecute(snapshots, db);
+}
+
+void TTablesManager::RemoveTruncateSnapshotsOnComplete(const TInternalPathId pathId, const std::set<NOlap::TSnapshot>& snapshots) {
+    Tables.at(pathId).RemoveTruncatesOnComplete(snapshots);
+}
+
+void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+    const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
+    AFL_VERIFY(internalPathId);
+    AFL_VERIFY(TruncatingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second);
+    MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(*internalPathId).SetTruncatePending(true);
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
 }
 
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
@@ -823,7 +866,13 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
     const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
-    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
+    auto internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
+    if (!internalPathId) {
+        // Truncate fences writes, but snapshot reads still use the same table.
+        if (const auto* truncatingPathId = TruncatingLocalToInternal.FindPtr(externalPathId)) {
+            internalPathId = *truncatingPathId;
+        }
+    }
     auto path = TFsPath(tablePath).Fix();
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(
         std::tuple{ path.Parent().GetName(), path.GetName() });

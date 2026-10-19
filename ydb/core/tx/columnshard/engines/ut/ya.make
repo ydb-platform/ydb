@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tablet_flat/test/libs/table
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/engines/predicate
     yql/essentials/sql/pg_dummy
@@ -26,7 +27,6 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/indexes/min_max
     ydb/core/tx/columnshard/engines/storage/indexes/bloom
     ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm
-
     yql/essentials/udfs/common/json2
 )
 
@@ -41,6 +41,7 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    truncate_ut.cpp
     ut_actualizer.cpp
     ut_program.cpp
     ut_snapshot_holders.cpp

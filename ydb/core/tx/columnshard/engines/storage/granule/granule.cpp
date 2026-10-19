@@ -15,6 +15,24 @@
 
 namespace NKikimr::NOlap {
 
+std::optional<TSnapshot> TGranuleMeta::GetApplicableTruncateSnapshot(const TPortionInfo& portion) const {
+    if (!portion.IsCommitted() || portion.IsAborted()) {
+        return std::nullopt;
+    }
+    // Written portions expose the commit snapshot; compacted ones the maximum record snapshot.
+    const auto it = TruncateSnapshots->upper_bound(portion.RecordSnapshotMax());
+    if (it == TruncateSnapshots->end() || (portion.HasRemoveSnapshot() && portion.GetRemoveSnapshotVerified() <= it->first)) {
+        return std::nullopt;
+    }
+    return it->first;
+}
+
+void TGranuleMeta::ApplyTruncateSnapshots(TPortionInfo& portion) const {
+    if (const auto snapshot = GetApplicableTruncateSnapshot(portion)) {
+        portion.SetTruncateSnapshot(*snapshot);
+    }
+}
+
 void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
     YDB_LOG_TRACE("",
         {"event", "upsert_portion"},
@@ -177,6 +195,7 @@ TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage&
 }
 
 void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& portion) {
+    ApplyTruncateSnapshots(*portion);
     if (portion->GetPortionType() == EPortionType::Written) {
         auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portion);
         const TInsertWriteId insertWriteId = writtenPortion->GetInsertWriteId();

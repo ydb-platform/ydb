@@ -13,6 +13,7 @@ private:
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
     TRemovePortionsChange PortionsToRemove;
     THashSet<TInternalPathId> TablesToDrop;
+    std::map<TInternalPathId, std::set<TSnapshot>> TruncatesToRemove;
     TSnapshot MinSnapshotForNewReads = TSnapshot::Zero();
 
 protected:
@@ -52,8 +53,12 @@ protected:
             TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
         auto portionsRemoveLock =
             PortionsToRemove.BuildDataLock(TypeString() + "::REMOVE::" + GetTaskIdentifier(), NDataLocks::ELockCategory::Compaction);
+        auto lockedTables = TablesToDrop;
+        for (const auto& [pathId, _] : TruncatesToRemove) {
+            lockedTables.emplace(pathId);
+        }
         auto tablesLock = std::make_shared<NDataLocks::TListTablesLock>(
-            TypeString() + "::TABLES::" + GetTaskIdentifier(), TablesToDrop, NDataLocks::ELockCategory::Tables);
+            TypeString() + "::TABLES::" + GetTaskIdentifier(), lockedTables, NDataLocks::ELockCategory::Tables);
         return NDataLocks::TCompositeLock::Build(TypeString() + "::COMPOSITE::" + GetTaskIdentifier(), {portionsDropLock, portionsRemoveLock, tablesLock});
     }
 
@@ -61,6 +66,14 @@ public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS)
     {
+    }
+
+    void AddTruncateToRemove(const TInternalPathId pathId, const TSnapshot& snapshot) {
+        TruncatesToRemove[pathId].emplace(snapshot);
+    }
+
+    bool HasTruncatesToRemove() const {
+        return !TruncatesToRemove.empty();
     }
 
     void AddTableToDrop(const TInternalPathId pathId) {

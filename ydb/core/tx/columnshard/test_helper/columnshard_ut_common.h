@@ -363,7 +363,7 @@ struct TTestSchema {
     }
 
     static TString AlterTableTxBody(ui64 pathId, bool standalone, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials, bool setTtlSettings = true) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*table);
@@ -378,9 +378,11 @@ struct TTestSchema {
             preset->MutableSchema()->SetVersion(version);
         }
 
-        auto* ttlSettings = table->MutableTtlSettings();
-        if (!InitTiersAndTtl(specials, ttlSettings)) {
-            ttlSettings->MutableDisabled();
+        if (setTtlSettings) {
+            auto* ttlSettings = table->MutableTtlSettings();
+            if (!InitTiersAndTtl(specials, ttlSettings)) {
+                ttlSettings->MutableDisabled();
+            }
         }
 
         Cerr << "AlterTable: " << tx << "\n";
@@ -415,6 +417,16 @@ struct TTestSchema {
         tx.MutableCopyTable()->SetSrcPathId(srcPathId);
         tx.MutableCopyTable()->SetDstPathId(dstPathId);
         tx.MutableSeqNo()->SetRound(version);
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
+    static TString TruncateTableTxBody(ui64 pathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableTruncateTable());
+        tx.MutableSeqNo()->SetRound(version);
+
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
         return out;

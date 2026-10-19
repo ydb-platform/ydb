@@ -91,6 +91,9 @@ private:
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TThreadSafeOptional<TSnapshot> RemoveSnapshot;
+    // A separate write-once boundary keeps references held by concurrent readers valid.
+    // It is derived from table history, and may precede a background removal snapshot.
+    TThreadSafeOptional<TSnapshot> TruncateSnapshot;
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
@@ -227,6 +230,15 @@ public:
         RemoveSnapshot.Set(snap);
     }
 
+    void SetTruncateSnapshot(const TSnapshot& snapshot) {
+        if (TruncateSnapshot.Has()) {
+            // Planned schema snapshots are ordered; the first applicable boundary wins.
+            AFL_VERIFY(TruncateSnapshot.Get() <= snapshot);
+            return;
+        }
+        TruncateSnapshot.Set(snapshot);
+    }
+
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
         SetRemoveSnapshot(TSnapshot(planStep, txId));
     }
@@ -356,7 +368,7 @@ public:
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshot.Has();
+        return RemoveSnapshot.Has() || TruncateSnapshot.Has();
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -388,13 +400,15 @@ public:
     }
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
-        AFL_VERIFY(HasRemoveSnapshot());
+        if (TruncateSnapshot.Has() && (!RemoveSnapshot.Has() || TruncateSnapshot.Get() < RemoveSnapshot.Get())) {
+            return TruncateSnapshot.Get();
+        }
         return RemoveSnapshot.Get();
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
         if (HasRemoveSnapshot()) {
-            return RemoveSnapshot.Get();
+            return GetRemoveSnapshotVerified();
         } else {
             return {};
         }

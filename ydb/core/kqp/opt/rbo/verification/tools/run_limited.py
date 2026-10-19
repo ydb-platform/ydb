@@ -75,37 +75,43 @@ def interrupt(signum, frame):
 signal.signal(signal.SIGTERM, interrupt)
 signal.signal(signal.SIGINT, interrupt)
 print(f'BUILD LIMITS: CPUs={sorted(cpus)}, data/process=8 GiB, address-space/process=64 GiB, process-tree RSS guard=16 GiB', flush=True)
-while process.poll() is None:
-    pending = [process.pid, *known]
-    seen = set()
-    total = 0
-    while pending:
-        pid = pending.pop()
-        if pid in seen:
-            continue
-        seen.add(pid)
-        current = inspect(pid)
-        if current is None:
-            known.pop(pid, None)
-            continue
-        start, rss, children = current
-        if pid in known and known[pid] != start:
-            known.pop(pid, None)
-            continue
-        known[pid] = start
-        total += rss
-        pending.extend(children)
-    peak = max(peak, total)
-    available = next((int(line.split()[1]) * 1024 for line in open("/proc/meminfo") if line.startswith("MemAvailable:")), 0)
-    if total > TREE_LIMIT or available < 16 * GIB or interrupted:
-        print(f'BUILD STOPPED: tree RSS={total / GIB:.2f} GiB; available={available / GIB:.2f} GiB; interrupted={interrupted}', flush=True)
-        stop()
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            stop(signal.SIGKILL)
-            process.wait()
-        raise SystemExit(130 if interrupted else 137)
-    time.sleep(0.1)
+try:
+    while process.poll() is None:
+        pending = [process.pid, *known]
+        seen = set()
+        total = 0
+        while pending:
+            pid = pending.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            current = inspect(pid)
+            if current is None:
+                known.pop(pid, None)
+                continue
+            start, rss, children = current
+            if pid in known and known[pid] != start:
+                known.pop(pid, None)
+                continue
+            known[pid] = start
+            total += rss
+            pending.extend(children)
+        peak = max(peak, total)
+        available = next((int(line.split()[1]) * 1024 for line in open("/proc/meminfo") if line.startswith("MemAvailable:")), 0)
+        if total > TREE_LIMIT or available < 16 * GIB or interrupted:
+            print(f'BUILD STOPPED: tree RSS={total / GIB:.2f} GiB; available={available / GIB:.2f} GiB; interrupted={interrupted}', flush=True)
+            stop()
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                stop(signal.SIGKILL)
+                process.wait()
+            raise SystemExit(130 if interrupted else 137)
+        time.sleep(0.1)
+finally:
+    # The driver may exit before its children, including on interruption. Always
+    # remove the owned process group and tracked descendants before returning.
+    stop(signal.SIGKILL)
+    process.wait()
 print(f'BUILD PEAK PROCESS-TREE RSS: {peak / GIB:.2f} GiB', flush=True)
-raise SystemExit(process.returncode if process.returncode >= 0 else 128 - process.returncode)
+raise SystemExit(130 if interrupted else (process.returncode if process.returncode >= 0 else 128 - process.returncode))

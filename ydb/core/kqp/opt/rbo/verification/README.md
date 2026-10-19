@@ -36,6 +36,13 @@ aggregate RSS guard when resident. Use `RBO_BUILD_CPUS=1` and `--threads=1`
 for a conservative link retry that reuses the existing compilation cache.
 After measuring memory headroom, `RBO_BUILD_CPUS=4` and `--threads=4` permit
 four workers with the same memory limits. The guard rejects CPU counts above four.
+It also kills tracked descendants when the build driver exits, including children
+that ignore termination. Its small process-lifecycle checks need no compiler or
+large allocation:
+
+```bash
+python3 -m unittest ydb.core.kqp.opt.rbo.verification.tools.test_run_limited
+```
 
 ```bash
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
@@ -46,7 +53,7 @@ python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
   ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
-  ydb/core/kqp/opt/rbo/verification/cpp_ut 2>&1 | tail -n 100
+  ydb/core/kqp/opt/rbo/verification/native_cpp_ut 2>&1 | tail -n 100
 
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
   ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
@@ -55,6 +62,10 @@ python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
 ```
 
 Tests include the build; add `-F '*test-filter*'` for a focused run.
+`native_cpp_ut` uses main's numeric column identities and current operator API.
+The older `cpp_ut` fixtures still require migration from the previous API;
+they remain in the recursive target and currently prevent a successful full
+recursive C++ build. Passing the focused target does not resolve that gap.
 The recursive verification target also includes inspector, replay, confirmation,
 localization, prefix-capture, and benchmark tests. The intentionally failing
 [Decimal runtime diagnostic](runtime_ut/README.md) is manual and not recursed.

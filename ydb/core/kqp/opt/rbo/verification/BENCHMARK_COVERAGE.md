@@ -127,17 +127,23 @@ executability or correctness of later lowering/runtime behavior.
 
 ```bash
 set -o pipefail
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*::TPCH' --test-env=RBO_COVERAGE_USE_SOLVER=0 \
   2>&1 | tail -n 100
 
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*::TPCDS' --test-env=RBO_COVERAGE_USE_SOLVER=0 \
   2>&1 | tail -n 100
 
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*ProofFloor*' 2>&1 | tail -n 100
 ```
@@ -236,7 +242,9 @@ floor evaluation, and policy-report rendering. Its
 [small unit target](benchmark_policy/ut) runs without KQP, Z3, or per-test forks:
 
 ```bash
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_policy/ut 2>&1 | tail -n 100
 ```
 

@@ -1,7 +1,7 @@
 # DISTINCT и DISTINCT ON
 
-status: pending
-commit:
+status: done
+commit: ad23553fe390ec933b41d5beeefead08908be5da
 id: select-distinct
 depends: select-where-limit
 

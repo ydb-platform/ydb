@@ -298,6 +298,10 @@ private:
             Register(CreateAlterSequenceActor(SelfId(), Database, *parsed.AlterSequence));
             return;
         }
+        if (parsed.Select && parsed.Combine != ECombine::None && parsed.SelectRight) {
+            Register(CreateSetOpActor(SelfId(), Database, sql, *parsed.Select, *parsed.SelectRight, parsed.Combine, InternalErrorRetries, Tx == ETx::Open ? TxId : 0));
+            return;
+        }
         if (parsed.Select) {
             const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
             if ((catalog || parsed.Select->Join)

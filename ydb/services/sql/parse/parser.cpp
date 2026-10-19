@@ -574,7 +574,27 @@ public:
                 return *error;
             }
         }
-        if (IsKeyword("union") || IsKeyword("intersect") || IsKeyword("except") || IsKeyword("for")) {
+        if (IsKeyword("union")) {
+            Advance();
+            ECombine combine = ECombine::Union;
+            if (IsKeyword("all")) {
+                combine = ECombine::UnionAll;
+                Advance();
+            }
+            TParseResult right = SelectStmt();
+            if (!right.SqlState.empty()) {
+                return right;
+            }
+            if (!right.Select || right.Combine != ECombine::None) {
+                return Unsupported("union");
+            }
+            TParseResult result;
+            result.Select = std::move(select);
+            result.Combine = combine;
+            result.SelectRight = std::move(right.Select);
+            return result;
+        }
+        if (IsKeyword("intersect") || IsKeyword("except") || IsKeyword("for")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("limit")) {

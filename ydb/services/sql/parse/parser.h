@@ -269,8 +269,18 @@ struct TShowStmt {
     TString Name;
 };
 
+enum class ECombine {
+    None,
+    Union,
+    UnionAll,
+    Intersect,
+    Except,
+};
+
 struct TParseResult {
     std::optional<TSelectStmt> Select;
+    ECombine Combine = ECombine::None;
+    std::optional<TSelectStmt> SelectRight;
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;

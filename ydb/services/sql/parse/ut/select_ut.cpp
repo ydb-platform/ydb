@@ -170,6 +170,18 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Select->DistinctOn[0].Name, "note");
     }
 
+    Y_UNIT_TEST(UnionAllIsSeparateFromUnion) {
+        const TParseResult all = Parse("SELECT a FROM t UNION ALL SELECT a FROM u");
+        UNIT_ASSERT(all.Select);
+        UNIT_ASSERT(all.SelectRight);
+        UNIT_ASSERT(all.Combine == ECombine::UnionAll);
+        UNIT_ASSERT_VALUES_EQUAL(all.Select->From.Name, "t");
+        UNIT_ASSERT_VALUES_EQUAL(all.SelectRight->From.Name, "u");
+
+        const TParseResult once = Parse("SELECT a FROM t UNION SELECT a FROM u");
+        UNIT_ASSERT(once.Combine == ECombine::Union);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

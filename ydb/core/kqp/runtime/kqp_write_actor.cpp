@@ -461,6 +461,18 @@ TVector<ui64> FindCoveringShards(
     return result;
 }
 
+// Whether writes of this transaction participate in the WriteSeqNum protocol —
+// the only user of the split/merge partitioning metadata
+// (FindCoveringShards/MoveShardTo), so shard metas are collected only then.
+// Shared by the table write actor (its AttachWriteSeqNum member) and the buffer
+// write actor (which serves tables with different schemas and becomes
+// InconsistentTx only with the first write task).
+bool ShouldAttachWriteSeqNum(bool inconsistentTx, bool isOlap) {
+    return AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
+        && !inconsistentTx
+        && !isOlap;
+}
+
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
     using TBase = TActorBootstrapped<TKqpTableWriteActor>;
 
@@ -530,10 +542,7 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
-        , AttachWriteSeqNum(
-              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
-              && !inconsistentTx
-              && !isOlap)
+        , AttachWriteSeqNum(ShouldAttachWriteSeqNum(inconsistentTx, isOlap))
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -1413,8 +1422,12 @@ public:
 
     // Borders/version of the shard in the partitioning this actor currently works
     // with. Empty for column tables (no range info per partition).
+    // The only consumer of the registered partitioning metadata is the split/merge
+    // handling (FindCoveringShards/MoveShardTo), so it is collected only when this
+    // actor participates in the WriteSeqNum protocol; everywhere else shards are
+    // registered without metadata.
     TShardMeta MakeShardMeta(const ui64 shardId) const {
-        if (IsOlap) {
+        if (!AttachWriteSeqNum) {
             TShardMeta meta;
             meta.TableId = TableId;
             return meta;
@@ -4129,6 +4142,9 @@ public:
             .LockNodeId = LockNodeId,
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
+
+            .CollectShardMetas = ShouldAttachWriteSeqNum(
+                settings.TransactionSettings.InconsistentTx, settings.IsOlap),
 
             .TxManager = TxManager,
             .Alloc = Alloc,

@@ -50,6 +50,12 @@ struct TKqpBufferLockSettings {
     NKikimrDataEvents::ELockMode LockMode;
     ui64 QuerySpanId = 0;
 
+    // Remember the partitioning metadata (borders/version) of every shard that
+    // received a lock request and register it on the lock echo. The only consumer
+    // of that metadata is the split/merge handling (MoveShardTo), enabled only
+    // under the WriteSeqNum protocol, so it is collected only then.
+    bool CollectShardMetas = false;
+
     IKqpTransactionManagerPtr TxManager;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;

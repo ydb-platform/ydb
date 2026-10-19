@@ -114,6 +114,13 @@ public:
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , MaxInFlightLocks(MaxInFlightLocksStreamLookup())
         , Counters(counters)
+        , CollectShardMetas(
+            // The only consumer of the registered partitioning metadata is the
+            // split/merge handling (MoveShardTo), enabled only under the WriteSeqNum
+            // protocol (pessimistic ReadCommitted locks only): reuse the same
+            // feature flag as the write actor's AttachWriteSeqNum.
+            LockMode && *LockMode == NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE
+            && AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum())
         , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "Lookup rows")
     {
@@ -1017,9 +1024,18 @@ private:
         // Optimistic locks ride inside EvRead requests and their shards are registered
         // by the executer without metas, so repartitioning during an optimistic tx is
         // not verified (not currently supported).
-        ShardMetas[shardId] = MakeShardMeta(
-            StreamLookupWorker->GetTableId(), Partitioning, shardId,
-            StreamLookupWorker->GetKeyColumnTypes().size());
+        // The only consumer of the registered metadata is the split/merge handling
+        // (MoveShardTo), enabled only under the WriteSeqNum protocol, so it is
+        // collected only then.
+        // During a re-resolve Partitioning is reset until the scheme cache replies: a
+        // scheduled lock retry may fire here and compute a version-less (unknown) meta
+        // against the empty partitioning, clobbering the meta remembered at send time.
+        // Keep the first (correct) one — same pattern as the buffer lock actor.
+        if (CollectShardMetas && !ShardMetas.contains(shardId)) {
+            ShardMetas.emplace(shardId, MakeShardMeta(
+                StreamLookupWorker->GetTableId(), Partitioning, shardId,
+                StreamLookupWorker->GetKeyColumnTypes().size()));
+        }
 
         ui64 requestId = request->Record.GetRequestId();
 
@@ -1462,7 +1478,8 @@ private:
     // lock request, shipped to the executer together with the collected locks via
     // ExtraData(). Optimistic locks ride inside EvRead requests and are registered
     // without metas: repartitioning is not verified for optimistic transactions
-    // (not currently supported).
+    // (not currently supported). Collected only when CollectShardMetas is set (the
+    // metadata is consumed only by the WriteSeqNum split/merge handling).
     THashMap<ui64, TShardMeta> ShardMetas;
     NKqpProto::EStreamLookupStrategy LookupStrategy;
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
@@ -1490,6 +1507,7 @@ private:
     ui64 MaxInFlightLocks = 50;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    const bool CollectShardMetas;
     TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
 
     TShardReadTrace ShardReadTrace;

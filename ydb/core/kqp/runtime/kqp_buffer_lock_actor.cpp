@@ -294,7 +294,7 @@ public:
 
         shardState.HasPipe = true;
 
-        if (!ShardMetas.contains(shardId)) {
+        if (Settings.CollectShardMetas && !ShardMetas.contains(shardId)) {
             AFL_ENSURE(Partitioning);
             ShardMetas[shardId] = MakeShardMeta(Settings.TableId, Partitioning, shardId, KeyColumnTypes.size());
         }
@@ -326,7 +326,11 @@ public:
         const auto cookie = requestState.LockCookie;
 
         // TODO: Add Action Lock?
-        Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
+        if (Settings.CollectShardMetas) {
+            Settings.TxManager->AddShard(shardId, false, Settings.TablePath, ShardMetas.at(shardId));
+        } else {
+            Settings.TxManager->AddShard(shardId, false, Settings.TablePath);
+        }
         Settings.TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         auto& lockState = CookieToLockState.at(cookie);

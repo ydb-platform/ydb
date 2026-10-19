@@ -79,6 +79,28 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
         UNIT_ASSERT(SameBorders(txManager->GetShardMeta(1).Borders, withBorders.Borders));
     }
 
+    Y_UNIT_TEST(BordersAdoptIncomingVersion) {
+        // When a stored version-only meta later receives borders, the borders must
+        // bring their own version with them (never mixed with the stored one): the
+        // stored version-only value described a different partitioning snapshot.
+        auto txManager = CreateKqpTransactionManager();
+
+        TShardMeta versionOnly;
+        versionOnly.TableId = TTableId(1, 100);
+        versionOnly.PartitioningVersion = 9;
+        txManager->AddShard(1, false, "/Root/Table", versionOnly);
+
+        TShardMeta withBorders;
+        withBorders.TableId = TTableId(1, 100);
+        withBorders.Borders = TOwnedTableRange(SingleCell(10), true, SingleCell(20), false);
+        withBorders.PartitioningVersion = 7;
+        txManager->AddShard(1, false, "/Root/Table", withBorders);
+
+        UNIT_ASSERT(txManager->GetShardMeta(1).IsKnown());
+        UNIT_ASSERT_VALUES_EQUAL(txManager->GetShardMeta(1).PartitioningVersion, 7);
+        UNIT_ASSERT(SameBorders(txManager->GetShardMeta(1).Borders, withBorders.Borders));
+    }
+
     Y_UNIT_TEST(VersionMax) {
         auto txManager = CreateKqpTransactionManager();
 
@@ -93,6 +115,7 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
         older.Borders = meta.Borders;
         older.PartitioningVersion = 3;
         txManager->AddShard(1, false, "/Root/Table", older);
+        // An older snapshot of the same borders must not move the version backwards.
         UNIT_ASSERT_VALUES_EQUAL(txManager->GetShardMeta(1).PartitioningVersion, 5);
 
         TShardMeta newer;
@@ -101,6 +124,7 @@ Y_UNIT_TEST_SUITE(TxManagerShardMeta) {
         newer.PartitioningVersion = 12;
         txManager->AddShard(1, false, "/Root/Table", newer);
         UNIT_ASSERT_VALUES_EQUAL(txManager->GetShardMeta(1).PartitioningVersion, 12);
+        UNIT_ASSERT(SameBorders(txManager->GetShardMeta(1).Borders, meta.Borders));
     }
 
     Y_UNIT_TEST(BorderMismatchAborts) {

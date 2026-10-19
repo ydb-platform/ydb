@@ -65,8 +65,10 @@ TShardMeta MakeShardMeta(
 // Proto wire format of TShardMeta for TEvKqpInputActorResultInfo.
 void FillShardPartitioningInfo(NKikimrTxDataShard::TShardPartitioningInfo& proto, ui64 shardId, const TShardMeta& meta);
 
-// Inverse of FillShardPartitioningInfo.
-TShardMeta ToShardMeta(const NKikimrTxDataShard::TShardPartitioningInfo& proto, const TTableId& tableId);
+// Inverse of FillShardPartitioningInfo: the table id (with schema version) comes
+// from the proto itself — the table the sending actor resolved the partitioning
+// against, which is not necessarily the producing stage's table meta.
+TShardMeta ToShardMeta(const NKikimrTxDataShard::TShardPartitioningInfo& proto);
 
 } // namespace NKqp
 } // namespace NKikimr

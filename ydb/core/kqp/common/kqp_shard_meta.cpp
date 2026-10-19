@@ -138,6 +138,10 @@ TShardMeta MakeShardMeta(
 void FillShardPartitioningInfo(NKikimrTxDataShard::TShardPartitioningInfo& proto, ui64 shardId, const TShardMeta& meta) {
     proto.SetShardId(shardId);
     proto.SetPartitioningVersion(meta.PartitioningVersion);
+    auto* tableId = proto.MutableTableId();
+    tableId->SetOwnerId(meta.TableId.PathId.OwnerId);
+    tableId->SetTableId(meta.TableId.PathId.LocalPathId);
+    tableId->SetSchemaVersion(meta.TableId.SchemaVersion);
     // A defined shard range always starts at the min key or at the previous
     // partition boundary, so From is non-empty; undefined borders stay unset.
     if (!meta.Borders.From.empty()) {
@@ -149,10 +153,16 @@ void FillShardPartitioningInfo(NKikimrTxDataShard::TShardPartitioningInfo& proto
     }
 }
 
-// Inverse of FillShardPartitioningInfo.
-TShardMeta ToShardMeta(const NKikimrTxDataShard::TShardPartitioningInfo& proto, const TTableId& tableId) {
+// Inverse of FillShardPartitioningInfo: the table id (with schema version) comes
+// from the proto itself — the table the sending actor resolved the partitioning
+// against, which is not necessarily the producing stage's table meta.
+TShardMeta ToShardMeta(const NKikimrTxDataShard::TShardPartitioningInfo& proto) {
     TShardMeta meta;
-    meta.TableId = tableId;
+    const auto& protoTableId = proto.GetTableId();
+    meta.TableId = TTableId(
+        protoTableId.GetOwnerId(),
+        protoTableId.GetTableId(),
+        protoTableId.GetSchemaVersion());
     meta.PartitioningVersion = proto.GetPartitioningVersion();
     if (proto.HasBorders()) {
         const auto& borders = proto.GetBorders();

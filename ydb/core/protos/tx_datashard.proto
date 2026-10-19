@@ -276,6 +276,10 @@ message TShardPartitioningInfo {
     optional uint64 PartitioningVersion = 2;
     // Absent when the shard has no representable key range (e.g. column tables).
     optional TBorders Borders = 3;
+    // The table whose resolved partitioning the borders came from, as known to the
+    // actor that sent the lock request. Absent in messages from older actors: the
+    // executer then falls back to the producing stage's table meta.
+    optional NKikimrDataEvents.TTableId TableId = 4;
 }
 
 message TEvKqpInputActorResultInfo {

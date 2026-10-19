@@ -123,8 +123,15 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
         NKikimrTxDataShard::TShardPartitioningInfo proto;
         FillShardPartitioningInfo(proto, 2, meta);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetShardId(), 2);
-        auto restored = ToShardMeta(proto, TTableId(1, 100));
+        // The table id (with schema version) is carried in the proto, so the
+        // executer restores the exact table the metas were computed against.
+        UNIT_ASSERT(proto.HasTableId());
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetOwnerId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetTableId(), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetSchemaVersion(), 0u);
+        auto restored = ToShardMeta(proto);
 
+        UNIT_ASSERT(restored.TableId == meta.TableId);
         UNIT_ASSERT_VALUES_EQUAL(restored.PartitioningVersion, 6);
         UNIT_ASSERT(SameBorders(restored.Borders, meta.Borders));
     }
@@ -137,9 +144,24 @@ Y_UNIT_TEST_SUITE(ShardMetaHelpers) {
         FillShardPartitioningInfo(proto, 42, unknown);
         UNIT_ASSERT(!proto.HasBorders());
 
-        auto restored = ToShardMeta(proto, TTableId(1, 100));
+        auto restored = ToShardMeta(proto);
         UNIT_ASSERT(restored.IsKnown());
+        UNIT_ASSERT(restored.TableId == TTableId(1, 100));
         UNIT_ASSERT(restored.Borders.From.empty() && restored.Borders.To.empty());
+    }
+
+    Y_UNIT_TEST(ProtoRoundTripSchemaVersion) {
+        auto partitioning = MakePartitioning({{1, 10}, {2, Max<ui32>()}}, 6);
+        TTableId tableId(TPathId(1, 100), TString(), 77);
+        auto meta = MakeShardMeta(tableId, partitioning, 2, 1);
+
+        NKikimrTxDataShard::TShardPartitioningInfo proto;
+        FillShardPartitioningInfo(proto, 2, meta);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetTableId().GetSchemaVersion(), 77u);
+
+        auto restored = ToShardMeta(proto);
+        UNIT_ASSERT(restored.TableId == tableId);
+        UNIT_ASSERT(restored.TableId.SchemaVersion == 77);
     }
 
     Y_UNIT_TEST(ShardPartitionIndex) {

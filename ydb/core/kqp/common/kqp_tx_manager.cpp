@@ -133,11 +133,20 @@ public:
                         ("incomingTo", meta.Borders.To.size())
                         ("incomingVersion", meta.PartitioningVersion);
                 }
-                if (!bordersKnown || incomingBorders) {
-                    stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
-                }
-                if (incomingBorders && !bordersKnown) {
+                if (incomingBorders) {
+                    // Borders always belong to the partitioning snapshot they came
+                    // from: when they are adopted, take the incoming version with
+                    // them instead of mixing versions across snapshots. When the
+                    // incoming borders match the stored ones (the usual echo of an
+                    // older snapshot), the stored version must not move backwards.
                     stored.Borders = meta.Borders;
+                    if (bordersKnown) {
+                        stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
+                    } else {
+                        stored.PartitioningVersion = meta.PartitioningVersion;
+                    }
+                } else if (!bordersKnown) {
+                    stored.PartitioningVersion = Max(stored.PartitioningVersion, meta.PartitioningVersion);
                 }
             } else {
                 stored = meta;
@@ -283,13 +292,7 @@ public:
         ShardsIds.erase(fromShardId);
         AFL_ENSURE(from.State == EShardState::PROCESSING);
         AFL_ENSURE(!from.IsOlap);
-
-        // The moved table's key schema, used below to compare shard key borders.
-        // The table metadata is stored by the executer for every resolved table.
         AFL_ENSURE(from.Meta.IsKnown());
-        const auto* tableMeta = TableMetas.FindPtr(from.Meta.TableId);
-        AFL_ENSURE(tableMeta)("tableId", from.Meta.TableId);
-        const auto& keyColumnTypes = tableMeta->KeyColumnTypes;
 
         bool locksConsistent = true;
         for (const ui64 toShardId : toShardIds) {
@@ -301,11 +304,20 @@ public:
             // borders-less metadata — e.g. a fresh EnsureShards-only target — is
             // safely skipped): the target must be a shard of a strictly newer
             // partitioning whose range intersects the removed shard's range. The
-            // border comparison uses the moved table's key schema (SetTableMeta).
+            // border comparison uses the moved table's key schema (SetTableMeta),
+            // stored by the executer for every resolved table; the lookup is kept
+            // inside the checked branch so paths that skip the comparison do not
+            // require it. Both metas carry the exact table id (path + schema
+            // version) the partitioning was resolved against, so they must match
+            // exactly — a schema version mismatch means the borders are not
+            // comparable byte-wise.
             const bool fromMetaUsable = from.Meta.IsKnown() && !from.Meta.Borders.From.empty();
             const bool toMetaUsable = to.Meta.IsKnown() && !to.Meta.Borders.From.empty();
             if (fromMetaUsable && toMetaUsable) {
-                AFL_ENSURE(from.Meta.TableId.HasSamePath(to.Meta.TableId))
+                const auto* tableMeta = TableMetas.FindPtr(from.Meta.TableId);
+                AFL_ENSURE(tableMeta)("tableId", from.Meta.TableId);
+                const auto& keyColumnTypes = tableMeta->KeyColumnTypes;
+                AFL_ENSURE(from.Meta.TableId == to.Meta.TableId)
                     ("fromShardId", fromShardId)
                     ("toShardId", toShardId)
                     ("fromTableId", from.Meta.TableId)

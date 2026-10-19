@@ -1428,7 +1428,11 @@ private:
                 const auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
                 THashMap<ui64, TShardMeta> shardMetas;
                 for (const auto& shardInfo : info.GetShardPartitioningInfo()) {
-                    shardMetas.emplace(shardInfo.GetShardId(), ToShardMeta(shardInfo, stageInfo.Meta.TableId));
+                    // Each meta carries the id of the table its partitioning was
+                    // resolved against (e.g. the lookup table), which is not
+                    // necessarily the producing stage's table meta: a stage with a
+                    // table sink has the sink table's id in its meta.
+                    shardMetas.emplace(shardInfo.GetShardId(), ToShardMeta(shardInfo));
                 }
                 for (const auto& lock : info.GetLocks()) {
                     ShardIdToTableInfo->Add(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);

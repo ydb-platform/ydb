@@ -405,17 +405,20 @@ def _render_term(
     """Render one scope with an explicit stack and optional let aliases."""
 
     pieces: list[str] = []
-    pending: list[tuple[str, Term | str, int | None]] = [
-        ("term", root, defining),
-    ]
+    pending: list[Term | str] = [root]
+    first = True
     while pending:
-        kind, item, bypass = pending.pop()
-        if kind == "text":
-            assert isinstance(item, str)
+        item = pending.pop()
+        if isinstance(item, str):
             pieces.append(item)
             continue
 
-        assert isinstance(item, Term)
+        if first:
+            bypass = defining
+            first = False
+        else:
+            pieces.append(" ")
+            bypass = None
         render_id = (
             id(item)
             if structural_ids is None
@@ -455,10 +458,8 @@ def _render_term(
             continue
 
         pieces.append(f"({item.operation}")
-        pending.append(("text", ")", None))
-        for argument in reversed(item.arguments):
-            pending.append(("term", argument, None))
-            pending.append(("text", " ", None))
+        pending.append(")")
+        pending.extend(reversed(item.arguments))
     return "".join(pieces)
 
 

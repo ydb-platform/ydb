@@ -34,9 +34,8 @@ namespace NKikimr {
             return;
         }
 
-        YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "DSProxy dormancy state changed",
-            {"group", GroupId},
-            {"isDormant", IsDormant});
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "DSProxy dormancy state changed"
+                << " Group# " << GroupId << " IsDormant# " << IsDormant);
 
         if (Mon) {
             Mon->CountDormancyTransition(IsDormant);

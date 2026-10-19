@@ -20,12 +20,6 @@ extern TControlWrapper PredictedDelayMultiplierDefaultControl;
 extern TControlWrapper MaxNumOfSlowDisksDefaultControl;
 extern TControlWrapper LongRequestThresholdDefaultControl;
 extern TControlWrapper MaxPutTimeoutDefaultControl;
-<<<<<<< HEAD
-=======
 extern TControlWrapper DormantTimeoutDefaultControl;
-extern TControlWrapper EnableStorageRetroTraceGenerationDefaultControl;
-extern TControlWrapper EnableStorageRetroTraceCollectionSlowRequestsDefaultControl;
-extern TControlWrapper EnableChecksumCalcAndValidationOnDsProxyDefaultControl;
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
 
 }

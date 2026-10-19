@@ -368,16 +368,9 @@ namespace NKikimr {
     }
 
     void TBlobStorageGroupProxy::Handle(TEvRequestProxySessionsState::TPtr &ev) {
-<<<<<<< HEAD
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "RequestProxySessionsState Group# " << GroupId
                 << " Marker# DSP59");
-        Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr));
-=======
-        YDB_LOG_DEBUG("RequestProxySessionsState",
-            {"group", GroupId},
-            {"marker", "DSP59"});
         Send(ev->Sender, new TEvProxySessionsState(Sessions ? Sessions->GroupQueues : nullptr, IsDormant));
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
     }
 
 #define SELECT_CONTROL_BY_DEVICE_TYPE(prefix, info) \

@@ -1972,21 +1972,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 60000,
             DefaultValue: 1000 }];
-<<<<<<< HEAD
-=======
 
-        optional uint64 EnableChecksumCalcAndValidationOnDsProxy = 17 [(ControlOptions) = {
-            Description: "Enable checksum calculation and validation on DSProxy read and write paths",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
-
-        optional uint64 DormantTimeoutMinutes = 18 [(ControlOptions) = {
+        optional uint64 DormantTimeoutMinutes = 17 [(ControlOptions) = {
             Description: "Time without user requests after which DSProxy enters dormant state, in minutes (disabled if 0)",
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
     }
 
     message TBlobDepotControls {

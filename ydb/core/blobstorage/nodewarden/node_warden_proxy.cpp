@@ -11,16 +11,9 @@ using namespace NKikimr;
 using namespace NStorage;
 
 TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
-<<<<<<< HEAD
     STLOG(PRI_DEBUG, BS_NODE, NW10, "StartErrorProxy", (GroupId, groupId));
-    return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
-=======
-    YDB_LOG_DEBUG("StartErrorProxy",
-        {"marker", "NW10"},
-        {"groupId", groupId});
     return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
         TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
 }
 
 #define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
@@ -66,13 +59,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                                 .EnablePutBatching = EnablePutBatching,
                                 .EnableVPatch = EnableVPatch,
                                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-<<<<<<< HEAD
-=======
                                 .DormantTimeoutMinutes = TControlWrapper(0, 0, 1'000'000),
-                                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -99,13 +86,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
                             .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-<<<<<<< HEAD
-=======
                             .DormantTimeoutMinutes = DormantTimeoutMinutes,
-                            .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                            .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                            .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
                             ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                             ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
@@ -122,13 +103,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 .EnablePutBatching = EnablePutBatching,
                 .EnableVPatch = EnableVPatch,
                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
-<<<<<<< HEAD
-=======
                 .DormantTimeoutMinutes = DormantTimeoutMinutes,
-                .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
-                .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
-                .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
                 ADD_CONTROLS_FOR_DEVICE_TYPES(SlowDiskThreshold),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(PredictedDelayMultiplier),
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),

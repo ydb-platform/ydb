@@ -686,17 +686,17 @@ Y_UNIT_TEST_SUITE(DDisk) {
     };
 
     void CheckPersistentBufferAllocationMode(NKikimrBlobStorage::EPersistentBufferAllocationMode mode, ui32 drivesPerNode) {
+        // Keep multiple slots per PDisk while staying within the test's memory budget.
         TDDiskTestContext f(64_KB, 128_MB, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
             true, mode == NKikimrBlobStorage::BALANCED
-                ? std::nullopt : std::optional(mode), drivesPerNode, 16);
+                ? std::nullopt : std::optional(mode), drivesPerNode, /*numDDiskGroups=*/8);
         std::map<std::pair<ui32, ui32>, std::set<ui32>> slotsPerPDisk;
         auto collect = [&](ui64 firstGroupId) {
             for (ui64 i = 0; i < 64; ++i) {
                 auto group = f.DefineDirectBlockGroup(firstGroupId + i, 3, 1, 3);
                 for (size_t k = 0; k < group.PersistentBufferDDiskIdSize(); ++k) {
                     const auto& pb = group.GetPersistentBufferDDiskId(k);
-                    UNIT_ASSERT_C(TDDiskId(pb) != TDDiskId(group.GetDDiskId(k)),
-                        "PB allocated on the excluded data DDisk");
+                    UNIT_ASSERT_VALUES_EQUAL(pb.GetNodeId(), group.GetDDiskId(k).GetNodeId());
                     slotsPerPDisk[{pb.GetNodeId(), pb.GetPDiskId()}].insert(pb.GetDDiskSlotId());
                 }
             }
@@ -759,6 +759,29 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
     Y_UNIT_TEST(PersistentBufferAllocationMultiplePDisks) {
         CheckPersistentBufferAllocationMode(NKikimrBlobStorage::ONE_PER_PDISK, 2);
+    }
+
+    void CheckPersistentBufferAllocationSingleSlot(NKikimrBlobStorage::EPersistentBufferAllocationMode mode) {
+        TDDiskTestContext f(64_KB, 128_MB, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+            true, mode, /*drivesPerNode=*/1, /*numDDiskGroups=*/1);
+        // Each eligible node has only one slot. Its PB must remain usable even
+        // when the data role selects the same DDisk, in either allocation mode.
+        auto group = f.DefineDirectBlockGroup(1, 3, 1, 3);
+        UNIT_ASSERT_VALUES_EQUAL(group.DDiskIdSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(group.PersistentBufferDDiskIdSize(), 3);
+        for (size_t k = 0; k < group.DDiskIdSize(); ++k) {
+            const TDDiskId pb(group.GetPersistentBufferDDiskId(k));
+            const TDDiskId ddisk(group.GetDDiskId(k));
+            UNIT_ASSERT_C(pb == ddisk, "PB# " << pb.ToString() << " DDisk# " << ddisk.ToString());
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationSingleSlotBalanced) {
+        CheckPersistentBufferAllocationSingleSlot(NKikimrBlobStorage::BALANCED);
+    }
+
+    Y_UNIT_TEST(PersistentBufferAllocationSingleSlotOnePerPDisk) {
+        CheckPersistentBufferAllocationSingleSlot(NKikimrBlobStorage::ONE_PER_PDISK);
     }
 
     Y_UNIT_TEST(PersistentBufferAllocationInvalidMode) {

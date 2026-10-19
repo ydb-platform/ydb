@@ -228,15 +228,14 @@ namespace NKikimr::NBsController {
                     Y_ABORT_UNLESS(jt != NodeMap.end());
                     const auto& [diskCommonId, diskDistinctId] = jt->second;
                     if (commonId.value_or(diskCommonId) == diskCommonId && !distinctIds.contains(diskDistinctId)) {
-                        auto candidatePbIt = it->second.end();
+                        // Prefer another slot, but allow the same DDisk's PB when
+                        // it is the only candidate on the co-located node.
+                        auto candidatePbIt = it->second.begin();
                         for (auto pbIt = it->second.begin(); pbIt != it->second.end(); pbIt++) {
                             if (!ddisks.contains(std::get<1>(*pbIt))) {
                                 candidatePbIt = pbIt;
                                 break;
                             }
-                        }
-                        if (candidatePbIt == it->second.end()) {
-                            return std::nullopt;
                         }
                         auto nh = it->second.extract(candidatePbIt);
                         auto& [cnt, ddId] = nh.value();

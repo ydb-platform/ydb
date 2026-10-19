@@ -366,6 +366,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/backup/common
     ydb/core/backup/regexp
+    ydb/core/backup/yt
     ydb/core/blob_depot
     ydb/core/blobstorage/base
     ydb/core/blockstore/core

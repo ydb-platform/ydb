@@ -17,7 +17,9 @@ PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/double-conversion
     library/cpp/streams/zstd
+    library/cpp/yson
     library/cpp/string_utils/quote
+    ydb/core/cms/console
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util

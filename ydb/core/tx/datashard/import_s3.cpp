@@ -330,6 +330,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             {"taskId", ev->Get()->TaskId});
 
         TaskId = ev->Get()->TaskId;
+        if (YtSource && !YtPart) {
+            return Finish();
+        }
         Restart();
     }
 
@@ -368,7 +371,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         Client = this->RegisterWithSameMailbox(CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
-        HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
+        HeadObject(GetDataKey());
         this->Become(&TThis::StateDownloadData);
     }
 
@@ -397,6 +400,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
+        if (YtSource) {
+            request.SetIfMatch(YtPart->GetETag());
+        }
         this->Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
@@ -457,7 +463,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
-            const auto dataKey = Settings.GetDataKey(DataFormat, CompressionCodec);
+            const auto dataKey = GetDataKey();
             switch (result.GetError().GetErrorType()) {
             case S3Errors::RESOURCE_NOT_FOUND:
             case S3Errors::NO_SUCH_KEY:
@@ -470,7 +476,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 return RetryOrFinish(result.GetError(), dataKey);
             }
 
-            if (DataFormatSelected) {
+            if (!AllowDataFileFallback) {
                 return RetryOrFinish(result.GetError(), dataKey);
             }
 
@@ -489,10 +495,16 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                     << ": " << Settings.GetObjectKeyPattern());
             }
 
-            return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
+            return HeadObject(GetDataKey());
         }
 
-        DataFormatSelected = true;
+        // S3 objects can be replaced after planning. Import only the pinned object,
+        // including when a retry or tablet restart downloads it again.
+        if (YtSource && (result.GetResult().GetETag() != YtPart->GetETag()
+            || static_cast<ui64>(result.GetResult().GetContentLength()) != YtPart->GetContentLength())) {
+            return Finish(false, "YT source object does not match the completed import plan");
+        }
+        AllowDataFileFallback = false;
         if (DataFormat == NBackupRestoreTraits::EDataFormat::Parquet
             && !AppData()->FeatureFlags.GetEnableImportInParquet()) {
             return Finish(false, "Parquet import is disabled by feature flag EnableImportInParquet");
@@ -509,7 +521,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (Engine->HasLiveState()
                 || (DirectImport && DirectImport->State() != TDirectImportWriter::EState::Pending))
             {
-                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return Finish(false, TStringBuilder() << GetDataKey()
                     << ": the data file has changed during the import");
             }
             Engine.Reset();
@@ -517,7 +529,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
             // Encrypted file can not have zero length
-            const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            const TString error = TStringBuilder() << GetDataKey()
                 << ": file is corrupted";
             YDB_LOG_ERROR("[Import] Import data file is corrupted",
                 {"logPrefix", LogPrefix()},
@@ -575,7 +587,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 Checksum->SetState(info.ProcessedChecksumState);
             }
             if (auto result = Engine->RestoreFromState(info.ProcessedBytes, DownloadState); !result) {
-                const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                const TString error = TStringBuilder() << GetDataKey()
                     << ": failed to restore import engine state: " << result.error();
                 YDB_LOG_ERROR("[Import]",
                     {"logPrefix", LogPrefix()},
@@ -629,7 +641,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 }
             }
 
-            CheckResult(result, marker, Settings.GetDataKey(DataFormat, CompressionCodec));
+            CheckResult(result, marker, GetDataKey());
             return;
         }
 
@@ -648,7 +660,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         ReadBytes += msg.Body.size();
         if (auto putResult = Engine->PutRange(*requestedRange, std::move(msg.Body)); !putResult) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": cannot accept source range: " << putResult.error());
         }
         Process();
@@ -751,7 +763,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         Counters.LatencyProcess.Finish(Now());
 
         if (!result) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": cannot process data: " << result.error());
         }
 
@@ -771,7 +783,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 // Direct mode persists nothing until the final attach, so Commit() only releases
                 // the batch; a restart replays the whole file.
                 if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
-                    return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    return Finish(false, TStringBuilder() << GetDataKey()
                         << ": cannot commit import-engine batch: " << commitResult.error());
                 }
                 return ContinueDirectImport();
@@ -785,7 +797,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         case IImportS3Engine::EDataStatus::NeedInput: {
             auto next = Engine->NextRange();
             if (!next) {
-                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return Finish(false, TStringBuilder() << GetDataKey()
                     << ": cannot request source range: " << next.error());
             }
 
@@ -793,7 +805,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             case IImportS3Engine::ENextRangeStatus::Ready:
                 Y_ENSURE(next->Range.Length > 0);
                 Counters.LatencyRead.Start(Now());
-                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec), {
+                return GetObject(GetDataKey(), {
                     next->Range.Offset,
                     next->Range.End() - 1,
                 });
@@ -803,7 +815,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 break;
             }
 
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": cannot request source range: import engine needs input after exhausting source ranges");
         }
 
@@ -842,7 +854,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         auto* msg = ev->Get();
         if (!msg->Success) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": cannot begin direct part write: " << msg->Error);
         }
 
@@ -854,7 +866,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     // fetch the next chunk, or pause for blob-write backpressure.
     void ContinueDirectImport() {
         if (DirectImport->IsFailed()) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": " << DirectImport->Error());
         }
 
@@ -868,7 +880,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             auto ctx = TActivationContext::AsActorContext();
             DirectImport->Finalize(ctx);
             if (DirectImport->IsFailed()) {
-                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return Finish(false, TStringBuilder() << GetDataKey()
                     << ": " << DirectImport->Error());
             }
             if (DirectImport->IsComplete()) {
@@ -916,7 +928,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         auto* msg = ev->Get();
         if (!msg->Success) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": cannot attach direct part: " << msg->Error);
         }
 
@@ -935,7 +947,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         DirectImport->OnPutResult(*ev->Get(), ctx);
 
         if (DirectImport->IsFailed()) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": " << DirectImport->Error());
         }
 
@@ -989,7 +1001,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         if (record.GetStatus() == NKikimrTxDataShard::TError::OK) {
             *Counters.BytesWritten += RequestBuilder.GetCellBytes();
             if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
-                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                return Finish(false, TStringBuilder() << GetDataKey()
                     << ": cannot commit import-engine batch: " << commitResult.error());
             }
             PendingBatchDataBytes = 0;
@@ -1002,7 +1014,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return RetryOrFinish(record.GetErrorDescription());
         } else {
             RollbackPendingBatchProgress();
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            return Finish(false, TStringBuilder() << GetDataKey()
                 << ": " << record.GetErrorDescription());
         }
     }
@@ -1038,7 +1050,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return true;
         }
 
-        const TString error = TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+        const TString error = TStringBuilder() << GetDataKey()
             << ": ETag mismatch at '" << marker << "'"
             << ": expected '" << expected << "'"
             << ", got '" << got << "'";
@@ -1144,7 +1156,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     template <typename T>
     void RetryOrFinish(const T& error) {
-        RetryOrFinish(error, Settings.GetDataKey(DataFormat, CompressionCodec));
+        RetryOrFinish(error, GetDataKey());
     }
 
     template <typename T>
@@ -1228,15 +1240,18 @@ public:
         , Settings(TStorageSettings::FromRestoreTask<TSettings>(task))
         , DataFormat(NBackupRestoreTraits::EDataFormat::YdbDump)
         , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
+        , AllowDataFileFallback(!task.HasYtImport())
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(GetReadBatchSize(task))
         , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
-        , Checksum(task.GetValidateChecksums() ? CreateChecksum() : nullptr)
+        , Checksum(!task.HasYtImport() && task.GetValidateChecksums() ? CreateChecksum() : nullptr)
         , ProcessedChecksumState(Checksum ? Checksum->GetState() : NKikimrBackup::TChecksumState())
         , Counters(GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "import"))
-        , DirectPartImportEnabled(AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
+        , DirectPartImportEnabled(!task.HasYtImport() && AppData()->FeatureFlags.GetEnableDataShardDirectPartImport())
+        , YtSource(task.HasYtImport())
+        , YtPart(task.GetYtImport().HasPart() ? TMaybe<NKikimrSchemeOp::TYtImportPart>(task.GetYtImport().GetPart()) : Nothing())
     {
     }
 
@@ -1293,6 +1308,10 @@ public:
     }
 
 private:
+    TString GetDataKey() const {
+        return YtSource && YtPart ? YtPart->GetObjectKey() : Settings.GetDataKey(DataFormat, CompressionCodec);
+    }
+
     bool PrepareDataImport() {
         if (Engine) {
             return true;
@@ -1306,6 +1325,15 @@ private:
         engineSettings.BufferSizeLimit = ReadBufferSizeLimit;
         engineSettings.ZstdBlockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(0);
         engineSettings.ValidateChecksum = static_cast<bool>(Checksum);
+        engineSettings.YtSource = YtSource;
+        if (YtSource) {
+            if (!YtPart || YtPart->GetEndRow() < YtPart->GetStartRow()
+                || YtPart->GetEndRow() - YtPart->GetStartRow() == Max<ui64>()) {
+                Finish(false, "invalid YT source part descriptor");
+                return false;
+            }
+            engineSettings.YtExpectedRows = YtPart->GetEndRow() - YtPart->GetStartRow() + 1;
+        }
 
         if (Settings.EncryptionSettings.EncryptedBackup) {
             engineSettings.EncryptionKey = *Settings.EncryptionSettings.Key;
@@ -1318,7 +1346,7 @@ private:
 
         auto engineResult = CreateImportS3Engine(engineSettings, TableInfo, Scheme);
         if (!engineResult) {
-            Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+            Finish(false, TStringBuilder() << GetDataKey()
                 << ": failed to create import engine: " << engineResult.error());
             return false;
         }
@@ -1340,7 +1368,7 @@ private:
     const TStorageSettings Settings;
     NBackupRestoreTraits::EDataFormat DataFormat;
     NBackupRestoreTraits::ECompressionCodec CompressionCodec;
-    bool DataFormatSelected = false;
+    bool AllowDataFileFallback;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
     TMaybe<TNotNullColumns> NotNullColumns; // set by the first row: the scheme is checked by then
@@ -1381,6 +1409,8 @@ private:
 
     bool DirectPartImportEnabled;
     THolder<TDirectImportWriter> DirectImport; // set iff DirectPartImportEnabled
+    bool YtSource = false;
+    TMaybe<NKikimrSchemeOp::TYtImportPart> YtPart;
 
 }; // TS3Downloader
 

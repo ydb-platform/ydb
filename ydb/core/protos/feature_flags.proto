@@ -456,4 +456,7 @@ message TFeatureFlags {
     optional bool EnableColumnShardSetNotNull = 367 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    // Enable only after SchemeShard, DataShard and ColumnShard hosts support YT import.
+    // Finish or cancel active YT imports before downgrading those hosts.
+    optional bool EnableImportFromYt = 369 [default = false];
 }

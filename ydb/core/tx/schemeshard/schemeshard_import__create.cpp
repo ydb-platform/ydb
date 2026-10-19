@@ -303,6 +303,54 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
             {
                 auto settings = request.GetRequest().GetImportFromS3Settings();
+                switch (settings.destination_store_type()) {
+                case Ydb::Table::STORE_TYPE_UNSPECIFIED:
+                case Ydb::Table::STORE_TYPE_ROW:
+                case Ydb::Table::STORE_TYPE_COLUMN:
+                    break;
+                default:
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Unknown import destination store type");
+                }
+                if (settings.destination_store_type() != Ydb::Table::STORE_TYPE_UNSPECIFIED &&
+                    settings.source_format() != Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT)
+                {
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                        "destination_store_type is supported only for YT imports");
+                }
+
+                switch (settings.source_format()) {
+                case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YDB:
+                    break;
+                case Ydb::Import::ImportFromS3Settings::SOURCE_FORMAT_YT:
+                    if (!AppData()->FeatureFlags.GetEnableImportFromYt()) {
+                        return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
+                            "YT import is disabled by feature flag EnableImportFromYt");
+                    }
+                    if (settings.destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+                        return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
+                            "YT column import is not supported yet");
+                    }
+                    if (!settings.source_prefix().empty() || !settings.destination_path().empty() ||
+                        settings.has_encryption_settings() || !settings.exclude_regexps().empty() ||
+                        settings.items().empty() ||
+                        (settings.index_population_mode() != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_UNSPECIFIED &&
+                         settings.index_population_mode() != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD))
+                    {
+                        return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                            "YT import requires explicit items and does not support schema mapping, encryption, exclusions or materialized indexes");
+                    }
+                    for (const auto& item : settings.items()) {
+                        if (!item.has_source_prefix() || item.source_prefix().empty() || item.destination_path().empty()) {
+                            return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST,
+                                "YT import requires source_prefix and destination_path for every item");
+                        }
+                    }
+                    settings.set_no_acl(true);
+                    break;
+                default:
+                    return Reply(std::move(response), Ydb::StatusIds::BAD_REQUEST, "Unknown S3 import source format");
+                }
+
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
                 }
@@ -578,7 +626,10 @@ private:
             {"item", item.ToString(itemIdx)},
         );
 
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
+        const TPath domainPath = TPath::Init(importInfo->DomainPathId, Self);
+        const auto maxShardsInPath = domainPath.DomainInfo()->GetSchemeLimits().MaxShardsInPath;
+        auto* schemeGetter = CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV, maxShardsInPath);
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(schemeGetter);
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
     }
 

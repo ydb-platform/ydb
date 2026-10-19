@@ -5,6 +5,7 @@ import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 
 import "google/protobuf/timestamp.proto";
 
@@ -34,6 +35,13 @@ message ImportItemProgress {
 
 /// S3
 message ImportFromS3Settings {
+    enum SourceFormat {
+        SOURCE_FORMAT_YDB = 0; // Default, including requests that omit source_format
+        SOURCE_FORMAT_YT = 2; // Completed YT S3 export: metadata YSON and gzip YSON parts
+        reserved 1;
+        reserved "SOURCE_FORMAT_UNSPECIFIED";
+    }
+
     enum Scheme {
         UNSPECIFIED = 0;
         HTTP = 1;
@@ -121,6 +129,12 @@ message ImportFromS3Settings {
     // - Patterns are matched against the database object names stored in the backup listing.
     // - Object is excluded from import operation if it matches any of the specified exclude regexps.
     repeated string exclude_regexps = 17;
+
+    SourceFormat source_format = 18;
+
+    // Destination storage for YT imports only; unspecified selects a row table.
+    // Explicit values are rejected for YDB backup imports.
+    Ydb.Table.StoreType destination_store_type = 19;
 }
 
 message ImportFromS3Result {

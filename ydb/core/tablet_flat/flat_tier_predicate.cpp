@@ -4,6 +4,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -91,6 +92,19 @@ namespace {
         }
     }
 
+    i64 UnitMicros(EUnit unit) {
+        switch (unit) {
+            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
+                return MicrosPerSecond;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
+                return MicrosPerMilli;
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
+                return 1;
+            default:
+                Y_ENSURE(false, "Unexpected unit " << static_cast<ui32>(unit));
+        }
+    }
+
     i64 FloorDiv(i64 value, i64 divisor) {
         i64 result = value / divisor;
         if (value % divisor != 0 && value < 0) {
@@ -99,47 +113,283 @@ namespace {
         return result;
     }
 
-    // Threshold (in microseconds since epoch) converted to a value in the given unit,
-    // rounded down, so that `value <= result` iff `instant(value) <= threshold`
-    i64 MicrosToUnitFloor(i64 thresholdUs, EUnit unit) {
-        switch (unit) {
-            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-                return FloorDiv(thresholdUs, MicrosPerSecond);
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                return FloorDiv(thresholdUs, MicrosPerMilli);
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-                return thresholdUs;
-            default:
-                Y_ENSURE(false, "Unexpected unit " << static_cast<ui32>(unit));
+    i64 CeilDiv(i64 value, i64 divisor) {
+        return FloorDiv(value, divisor) + (value % divisor != 0 ? 1 : 0);
+    }
+
+    // An integer wider than i64/ui64 (sign + magnitude), with infinities
+    struct TWide {
+        int Inf = 0; // -1 for minus infinity, +1 for plus infinity
+        bool Neg = false;
+        ui64 Abs = 0;
+
+        static TWide Signed(i64 value) {
+            TWide result;
+            result.Neg = value < 0;
+            result.Abs = value < 0 ? static_cast<ui64>(-(value + 1)) + 1 : static_cast<ui64>(value);
+            return result;
         }
+
+        static TWide Unsigned(ui64 value) {
+            TWide result;
+            result.Abs = value;
+            return result;
+        }
+
+        static TWide Infinity(int sign) {
+            TWide result;
+            result.Inf = sign;
+            return result;
+        }
+
+        i64 AsSigned() const {
+            Y_ENSURE(!Inf);
+            return Neg ? -static_cast<i64>(Abs - 1) - 1 : static_cast<i64>(Abs);
+        }
+
+        friend int CompareWide(const TWide& a, const TWide& b) {
+            if (a.Inf != b.Inf) {
+                return a.Inf < b.Inf ? -1 : 1;
+            }
+            if (a.Inf) {
+                return 0;
+            }
+            if (a.Neg != b.Neg) {
+                return a.Neg ? -1 : 1;
+            }
+            if (a.Abs == b.Abs) {
+                return 0;
+            }
+            return (a.Abs < b.Abs) != a.Neg ? -1 : 1;
+        }
+    };
+
+    // How a column value maps to a moment in time
+    enum class EScale {
+        // instant(value) = value * unit
+        Multiple,
+        // instant(value) = floor(value / 1000) microseconds (Uint columns in nanoseconds, like TTL)
+        NanosWholeMicros,
+        // instant(value) = value nanoseconds (Pg integer columns in nanoseconds, like TTL)
+        NanosExact,
+    };
+
+    // The smallest (>=) or the largest (<=, <) integer column value satisfying
+    // `instant(value) cmp micros`, as a wide integer that may exceed the column range
+    TWide IntegerBound(i64 micros, bool lessOrEqual, EScale scale, i64 unitMicros) {
+        switch (scale) {
+            case EScale::Multiple:
+                // value * unit <= micros  <=>  value <= floor(micros / unit)
+                // value * unit <  micros  <=>  value <  ceil(micros / unit)
+                // value * unit >= micros  <=>  value >= ceil(micros / unit)
+                return TWide::Signed(lessOrEqual ? FloorDiv(micros, unitMicros) : CeilDiv(micros, unitMicros));
+            case EScale::NanosWholeMicros:
+            case EScale::NanosExact: {
+                // value / 1000 <= micros  <=>  value <= micros * 1000 + 999
+                const ui64 extra = scale == EScale::NanosWholeMicros && lessOrEqual ? 999 : 0;
+                if (micros >= 0) {
+                    const ui64 us = static_cast<ui64>(micros);
+                    if (us > (Max<ui64>() - extra) / 1000) {
+                        return TWide::Infinity(+1);
+                    }
+                    return TWide::Unsigned(us * 1000 + extra);
+                }
+                if (micros < Min<i64>() / 1000) {
+                    return TWide::Infinity(-1);
+                }
+                return TWide::Signed(micros * 1000 + static_cast<i64>(extra));
+            }
+        }
+        Y_ENSURE(false, "Unreachable");
     }
 
     // Threshold as a decimal number in the given unit, as row table TTL does for
     // serialized (DyNumber, Pg integer) columns: seconds and milliseconds are
     // rounded down, nanoseconds are exact microseconds * 1000
-    TString MicrosToUnitString(i64 thresholdUs, EUnit unit) {
+    TString MicrosToUnitFloorString(i64 micros, EUnit unit) {
         if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
-            // Appending zeros avoids overflow of thresholdUs * 1000
-            return thresholdUs == 0 ? TString("0") : ToString(thresholdUs) + "000";
+            // Appending zeros avoids overflow of micros * 1000
+            return micros == 0 ? TString("0") : ToString(micros) + "000";
         }
-        return ToString(MicrosToUnitFloor(thresholdUs, unit));
+        return ToString(FloorDiv(micros, UnitMicros(unit)));
     }
+
+    // Exact decimal number of units, e.g. 1.5 seconds for 1500000 microseconds
+    TString MicrosToUnitExactString(i64 micros, EUnit unit) {
+        if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS
+            || unit == NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS)
+        {
+            return MicrosToUnitFloorString(micros, unit);
+        }
+
+        const ui64 divisor = static_cast<ui64>(UnitMicros(unit));
+        const TWide wide = TWide::Signed(micros);
+        TString result = wide.Neg ? "-" : "";
+        result += ToString(wide.Abs / divisor);
+        if (const ui64 fraction = wide.Abs % divisor) {
+            const size_t digits = ToString(divisor).size() - 1;
+            TString text = ToString(fraction);
+            text = TString(digits - text.size(), '0') + text;
+            while (text.back() == '0') {
+                text.pop_back();
+            }
+            result += "." + text;
+        }
+        return result;
+    }
+
+    struct TCivilDate {
+        i64 Year;
+        ui32 Month;
+        ui32 Day;
+    };
+
+    // Days since the epoch to a proleptic Gregorian date
+    // (http://howardhinnant.github.io/date_algorithms.html#civil_from_days)
+    TCivilDate CivilFromDays(i64 days) {
+        days += 719468;
+        const i64 era = (days >= 0 ? days : days - 146096) / 146097;
+        const i64 doe = days - era * 146097;
+        const i64 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+        const i64 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        const i64 mp = (5 * doy + 2) / 153;
+        const i64 day = doy - (153 * mp + 2) / 5 + 1;
+        const i64 month = mp < 10 ? mp + 3 : mp - 9;
+        return {yoe + era * 400 + (month <= 2 ? 1 : 0), static_cast<ui32>(month), static_cast<ui32>(day)};
+    }
+
+    // Postgres text for a date, years before 1 AD are not supported
+    TMaybe<TString> FormatPgDate(i64 days) {
+        const auto date = CivilFromDays(days);
+        if (date.Year < 1) {
+            return Nothing();
+        }
+        return Sprintf("%04lld-%02u-%02u", static_cast<long long>(date.Year), date.Month, date.Day);
+    }
+
+    // Postgres text for a timestamp without time zone, years before 1 AD are not supported
+    TMaybe<TString> FormatPgTimestamp(i64 micros) {
+        const i64 days = FloorDiv(micros, MicrosPerDay);
+        const i64 timeOfDay = micros - days * MicrosPerDay;
+        auto date = FormatPgDate(days);
+        if (!date) {
+            return Nothing();
+        }
+        return Sprintf("%s %02lld:%02lld:%02lld.%06lld", date->c_str(),
+            static_cast<long long>(timeOfDay / (3600 * MicrosPerSecond)),
+            static_cast<long long>(timeOfDay / (60 * MicrosPerSecond) % 60),
+            static_cast<long long>(timeOfDay / MicrosPerSecond % 60),
+            static_cast<long long>(timeOfDay % MicrosPerSecond));
+    }
+
+    // DyNumber binary representation is ordered bytewise, except that negative
+    // numbers store inverted digits without a terminator: when one negative
+    // mantissa is a prefix of another, the shorter one is the greater number
+    // (as if it was padded with inverted zero digits)
+    int CompareDyNumbers(TStringBuf left, TStringBuf right) {
+        const size_t common = Min(left.size(), right.size());
+        if (const int result = left.Head(common).compare(right.Head(common))) {
+            return result;
+        }
+        if (left.size() == right.size()) {
+            return 0;
+        }
+        const bool negative = !left.empty() && left[0] == '\x00';
+        const bool leftShorter = left.size() < right.size();
+        return leftShorter != negative ? -1 : 1;
+    }
+
+    bool IsRelative(const TTierBound& bound) {
+        return std::holds_alternative<TTierRelativeBound>(bound);
+    }
+
+    // Absolute range as [Lo, HiExclusive), Nothing() means infinity
+    struct TAbsoluteSpan {
+        TMaybe<i64> Lo;
+        TMaybe<i64> HiExclusive;
+
+        explicit TAbsoluteSpan(const TTierRange& range) {
+            if (range.From) {
+                Lo = std::get<TTierAbsoluteBound>(*range.From).Micros;
+            }
+            if (range.To) {
+                const i64 to = std::get<TTierAbsoluteBound>(*range.To).Micros;
+                if (!range.ToInclusive) {
+                    HiExclusive = to;
+                } else if (to != Max<i64>()) {
+                    HiExclusive = to + 1;
+                }
+            }
+        }
+
+        bool Overlaps(const TAbsoluteSpan& other) const {
+            auto below = [](const TMaybe<i64>& lo, const TMaybe<i64>& hiExclusive) {
+                return !lo || !hiExclusive || *lo < *hiExclusive;
+            };
+            return below(Lo, other.HiExclusive) && below(other.Lo, HiExclusive);
+        }
+    };
 
 } // namespace
 
     TTierPredicate::TTierPredicate(const TTieringPolicy& policy)
         : Policy(policy)
     {
-        // Rules go from the coldest tier to the warmest, so relative offsets must strictly decrease
-        TMaybe<TDuration> prevOffset;
+        std::optional<bool> relative;
         for (const auto& rule : Policy.Rules) {
             Y_ENSURE(rule.TierId != Max<ui32>(), "Invalid tier id");
+            Y_ENSURE(!rule.Ranges.empty(), "Tiering rule for tier " << rule.TierId << " has no ranges");
 
-            const auto& bound = std::get<TTierRelativeBound>(rule.Before);
-            Y_ENSURE(!prevOffset || bound.Offset < *prevOffset,
-                "Tiering rules must be ordered from the coldest tier to the warmest: offset "
-                << bound.Offset << " for tier " << rule.TierId << " follows offset " << *prevOffset);
-            prevOffset = bound.Offset;
+            for (const auto& range : rule.Ranges) {
+                Y_ENSURE(range.From || range.To, "Tiering rule for tier " << rule.TierId << " has an unbounded range");
+                for (const auto* bound : {&range.From, &range.To}) {
+                    if (*bound) {
+                        Y_ENSURE(!relative || *relative == IsRelative(**bound),
+                            "Relative and absolute tiering bounds cannot be mixed in one policy");
+                        relative = IsRelative(**bound);
+                    }
+                }
+            }
+        }
+
+        if (relative.value_or(true)) {
+            // Rules go from the coldest tier to the warmest, so interval offsets must strictly decrease
+            TMaybe<TDuration> prevOffset;
+            for (const auto& rule : Policy.Rules) {
+                const bool interval = rule.Ranges.size() == 1 && !rule.Ranges[0].From && rule.Ranges[0].To;
+                if (!interval) {
+                    continue;
+                }
+                const auto& bound = std::get<TTierRelativeBound>(*rule.Ranges[0].To);
+                Y_ENSURE(!prevOffset || bound.Offset < *prevOffset,
+                    "Tiering rules must be ordered from the coldest tier to the warmest: offset "
+                    << bound.Offset << " for tier " << rule.TierId << " follows offset " << *prevOffset);
+                prevOffset = bound.Offset;
+            }
+        } else {
+            for (const auto& rule : Policy.Rules) {
+                for (const auto& range : rule.Ranges) {
+                    if (range.From && range.To) {
+                        const i64 from = std::get<TTierAbsoluteBound>(*range.From).Micros;
+                        const i64 to = std::get<TTierAbsoluteBound>(*range.To).Micros;
+                        Y_ENSURE(from < to || (range.ToInclusive && from == to),
+                            "Empty tiering range for tier " << rule.TierId);
+                    }
+                }
+            }
+
+            // Ranges of different rules must not overlap, so the rule order does not matter
+            for (size_t i = 0; i < Policy.Rules.size(); ++i) {
+                for (size_t j = i + 1; j < Policy.Rules.size(); ++j) {
+                    for (const auto& left : Policy.Rules[i].Ranges) {
+                        for (const auto& right : Policy.Rules[j].Ranges) {
+                            Y_ENSURE(!TAbsoluteSpan(left).Overlaps(TAbsoluteSpan(right)),
+                                "Tiering ranges of tiers " << Policy.Rules[i].TierId
+                                << " and " << Policy.Rules[j].TierId << " overlap");
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -159,14 +409,22 @@ namespace {
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
-        Thresholds.clear();
-        Thresholds.reserve(Policy.Rules.size());
+        Compiled.clear();
+        Compiled.reserve(Policy.Rules.size());
 
         for (const auto& rule : Policy.Rules) {
-            const auto& bound = std::get<TTierRelativeBound>(rule.Before);
-            const i64 offsetUs = static_cast<i64>(Min(bound.Offset.MicroSeconds(), static_cast<ui64>(Max<i64>())));
-            // Both operands are non-negative, so there is no overflow
-            Thresholds.push_back(MakeThreshold(nowUs - offsetUs));
+            auto& ranges = Compiled.emplace_back();
+            ranges.reserve(rule.Ranges.size());
+            for (const auto& range : rule.Ranges) {
+                auto& compiled = ranges.emplace_back();
+                if (range.From) {
+                    compiled.From = MakeThreshold(ToMicros(*range.From, nowUs), ECmp::GreaterOrEqual);
+                }
+                if (range.To) {
+                    compiled.To = MakeThreshold(ToMicros(*range.To, nowUs),
+                        range.ToInclusive ? ECmp::LessOrEqual : ECmp::Less);
+                }
+            }
         }
 
         Bound = true;
@@ -175,33 +433,68 @@ namespace {
     TVector<ui32> TTierPredicate::GetUnrepresentableTierIds() const {
         Y_ENSURE(Bound);
 
+        auto unrepresentable = [](const std::optional<TThreshold>& threshold) {
+            return threshold && threshold->Kind == TThreshold::EKind::Unrepresentable;
+        };
+
         TVector<ui32> result;
         for (size_t i = 0; i < Policy.Rules.size(); ++i) {
-            if (Thresholds[i].Kind == TThreshold::EKind::Unrepresentable) {
-                result.push_back(Policy.Rules[i].TierId);
+            for (const auto& range : Compiled[i]) {
+                if (unrepresentable(range.From) || unrepresentable(range.To)) {
+                    result.push_back(Policy.Rules[i].TierId);
+                    break;
+                }
             }
         }
         return result;
     }
 
-    TTierPredicate::TThreshold TTierPredicate::MakeThreshold(i64 thresholdUs) const {
+    i64 TTierPredicate::ToMicros(const TTierBound& bound, i64 nowUs) const {
+        if (const auto* relative = std::get_if<TTierRelativeBound>(&bound)) {
+            const i64 offsetUs = static_cast<i64>(Min(relative->Offset.MicroSeconds(), static_cast<ui64>(Max<i64>())));
+            // Both operands are non-negative, so there is no overflow
+            return nowUs - offsetUs;
+        }
+        return std::get<TTierAbsoluteBound>(bound).Micros;
+    }
+
+    TTierPredicate::TThreshold TTierPredicate::MakeThreshold(i64 micros, ECmp cmp) const {
         using EKind = TThreshold::EKind;
 
         TThreshold result;
+        result.Cmp = cmp;
+        const bool lessOrEqual = cmp == ECmp::LessOrEqual;
 
-        auto setUnsigned = [&](i64 value) {
-            // Unsigned columns cannot hold values below zero, nothing matches
-            if (value >= 0) {
-                result.Kind = EKind::Value;
-                result.Unsigned = static_cast<ui64>(value);
-            } else {
-                result.Kind = EKind::NeverMatch;
+        // Integer columns: clamp the bound to the column range
+        auto setInteger = [&](TWide bound, TWide min, TWide max, bool isSigned) {
+            const int toMin = CompareWide(bound, min);
+            const int toMax = CompareWide(bound, max);
+            switch (cmp) {
+                case ECmp::LessOrEqual:
+                    result.Kind = toMax >= 0 ? EKind::AlwaysMatch : toMin < 0 ? EKind::NeverMatch : EKind::Value;
+                    break;
+                case ECmp::Less:
+                    result.Kind = toMax > 0 ? EKind::AlwaysMatch : toMin <= 0 ? EKind::NeverMatch : EKind::Value;
+                    break;
+                case ECmp::GreaterOrEqual:
+                    result.Kind = toMin <= 0 ? EKind::AlwaysMatch : toMax > 0 ? EKind::NeverMatch : EKind::Value;
+                    break;
+            }
+            if (result.Kind == EKind::Value) {
+                if (isSigned) {
+                    result.Signed = bound.AsSigned();
+                } else {
+                    result.Unsigned = bound.Abs;
+                }
             }
         };
 
-        auto setSigned = [&](i64 value) {
-            result.Kind = EKind::Value;
-            result.Signed = value;
+        auto setUnsigned = [&](TWide bound, ui64 max) {
+            setInteger(bound, TWide::Unsigned(0), TWide::Unsigned(max), false);
+        };
+
+        auto setSigned = [&](TWide bound, i64 min, i64 max) {
+            setInteger(bound, TWide::Signed(min), TWide::Signed(max), true);
         };
 
         auto setSerialized = [&](TMaybe<TString> serialized) {
@@ -221,79 +514,68 @@ namespace {
             return std::move(converted.Str);
         };
 
+        auto unitBound = [&](EScale nanosScale) {
+            if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
+                return IntegerBound(micros, lessOrEqual, nanosScale, 1);
+            }
+            return IntegerBound(micros, lessOrEqual, EScale::Multiple, UnitMicros(Policy.Unit));
+        };
+
         switch (Type.GetTypeId()) {
             case NScheme::NTypeIds::Date:
-                setUnsigned(FloorDiv(thresholdUs, MicrosPerDay));
+                setUnsigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, MicrosPerDay), Max<ui16>());
                 break;
             case NScheme::NTypeIds::Datetime:
-                setUnsigned(FloorDiv(thresholdUs, MicrosPerSecond));
+                setUnsigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, MicrosPerSecond), Max<ui32>());
                 break;
             case NScheme::NTypeIds::Timestamp:
-                setUnsigned(thresholdUs);
+                setUnsigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, 1), Max<ui64>());
                 break;
             case NScheme::NTypeIds::Date32:
-                setSigned(FloorDiv(thresholdUs, MicrosPerDay));
+                setSigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, MicrosPerDay), Min<i32>(), Max<i32>());
                 break;
             case NScheme::NTypeIds::Datetime64:
-                setSigned(FloorDiv(thresholdUs, MicrosPerSecond));
+                setSigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, MicrosPerSecond), Min<i64>(), Max<i64>());
                 break;
             case NScheme::NTypeIds::Timestamp64:
-                setSigned(thresholdUs);
+                setSigned(IntegerBound(micros, lessOrEqual, EScale::Multiple, 1), Min<i64>(), Max<i64>());
                 break;
             case NScheme::NTypeIds::Uint32:
+                setUnsigned(unitBound(EScale::NanosWholeMicros), Max<ui32>());
+                break;
             case NScheme::NTypeIds::Uint64:
-                if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
-                    // TTL compares whole microseconds: value / 1000 <= threshold
-                    if (thresholdUs >= 0) {
-                        result.Kind = EKind::Value;
-                        const ui64 us = static_cast<ui64>(thresholdUs);
-                        result.Unsigned = us > (Max<ui64>() - 999) / 1000 ? Max<ui64>() : us * 1000 + 999;
-                    } else {
-                        result.Kind = EKind::NeverMatch;
-                    }
-                } else {
-                    setUnsigned(MicrosToUnitFloor(thresholdUs, Policy.Unit));
-                }
+                setUnsigned(unitBound(EScale::NanosWholeMicros), Max<ui64>());
                 break;
             case NScheme::NTypeIds::DyNumber:
-                // DyNumber has arbitrary precision, so any threshold is representable
-                setSerialized(NDyNumber::ParseDyNumberString(MicrosToUnitString(thresholdUs, Policy.Unit)));
+                // DyNumber has arbitrary precision, so any bound is representable. An inclusive
+                // upper bound keeps TTL rounding, other bounds are exact (values may be fractional).
+                setSerialized(NDyNumber::ParseDyNumberString(lessOrEqual
+                    ? MicrosToUnitFloorString(micros, Policy.Unit)
+                    : MicrosToUnitExactString(micros, Policy.Unit)));
                 break;
             case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
                     case EPgKind::Date:
+                        // A date denotes the start of its day
+                        if (auto text = FormatPgDate(lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay))) {
+                            setSerialized(toPg(*text));
+                        }
+                        break;
                     case EPgKind::Timestamp:
-                        // TInstant cannot express moments before the epoch
-                        if (thresholdUs >= 0) {
-                            setSerialized(toPg(TInstant::MicroSeconds(thresholdUs).ToString()));
+                        if (auto text = FormatPgTimestamp(micros)) {
+                            setSerialized(toPg(*text));
                         }
                         break;
                     case EPgKind::Int4:
                     case EPgKind::Int8: {
-                        // A threshold outside of the integer range is not an error:
+                        const bool int4 = GetPgKind(Type) == EPgKind::Int4;
+                        // A bound outside of the integer range is not an error:
                         // all values are either below or above it
-                        const i64 typeMax = GetPgKind(Type) == EPgKind::Int4 ? Max<i32>() : Max<i64>();
-                        const i64 typeMin = GetPgKind(Type) == EPgKind::Int4 ? Min<i32>() : Min<i64>();
-                        i64 value;
-                        if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
-                            if (thresholdUs > typeMax / 1000) {
-                                result.Kind = EKind::AlwaysMatch;
-                                break;
-                            }
-                            if (thresholdUs < typeMin / 1000) {
-                                result.Kind = EKind::NeverMatch;
-                                break;
-                            }
-                            value = thresholdUs * 1000;
-                        } else {
-                            value = MicrosToUnitFloor(thresholdUs, Policy.Unit);
-                        }
-                        if (value > typeMax) {
-                            result.Kind = EKind::AlwaysMatch;
-                        } else if (value < typeMin) {
-                            result.Kind = EKind::NeverMatch;
-                        } else {
-                            setSerialized(toPg(ToString(value)));
+                        setSigned(unitBound(EScale::NanosExact),
+                            int4 ? Min<i32>() : Min<i64>(), int4 ? Max<i32>() : Max<i64>());
+                        if (result.Kind == EKind::Value) {
+                            result.Kind = EKind::Unrepresentable;
+                            setSerialized(toPg(ToString(result.Signed)));
                         }
                         break;
                     }
@@ -308,6 +590,37 @@ namespace {
         return result;
     }
 
+    int TTierPredicate::Compare(const TCell& cell, const TThreshold& threshold) const {
+        auto compare = [](auto value, auto bound) {
+            return value < bound ? -1 : value > bound ? 1 : 0;
+        };
+
+        switch (Type.GetTypeId()) {
+            case NScheme::NTypeIds::Date:
+                return compare(ui64(cell.AsValue<ui16>()), threshold.Unsigned);
+            case NScheme::NTypeIds::Datetime:
+            case NScheme::NTypeIds::Uint32:
+                return compare(ui64(cell.AsValue<ui32>()), threshold.Unsigned);
+            case NScheme::NTypeIds::Timestamp:
+            case NScheme::NTypeIds::Uint64:
+                return compare(cell.AsValue<ui64>(), threshold.Unsigned);
+            case NScheme::NTypeIds::Date32:
+                return compare(i64(cell.AsValue<i32>()), threshold.Signed);
+            case NScheme::NTypeIds::Datetime64:
+            case NScheme::NTypeIds::Timestamp64:
+                return compare(cell.AsValue<i64>(), threshold.Signed);
+            case NScheme::NTypeIds::DyNumber:
+                return CompareDyNumbers(cell.AsBuf(), threshold.Serialized);
+            case NScheme::NTypeIds::Pg:
+                return NPg::PgNativeBinaryCompare(
+                    cell.Data(), cell.Size(),
+                    threshold.Serialized.data(), threshold.Serialized.size(),
+                    Type.GetPgTypeDesc());
+            default:
+                Y_ENSURE(false, "Unreachable");
+        }
+    }
+
     bool TTierPredicate::Matches(const TCell& cell, const TThreshold& threshold) const {
         switch (threshold.Kind) {
             case TThreshold::EKind::Value:
@@ -319,30 +632,16 @@ namespace {
                 return false;
         }
 
-        switch (Type.GetTypeId()) {
-            case NScheme::NTypeIds::Date:
-                return cell.AsValue<ui16>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Datetime:
-            case NScheme::NTypeIds::Uint32:
-                return cell.AsValue<ui32>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Timestamp:
-            case NScheme::NTypeIds::Uint64:
-                return cell.AsValue<ui64>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Date32:
-                return cell.AsValue<i32>() <= threshold.Signed;
-            case NScheme::NTypeIds::Datetime64:
-            case NScheme::NTypeIds::Timestamp64:
-                return cell.AsValue<i64>() <= threshold.Signed;
-            case NScheme::NTypeIds::DyNumber:
-                return cell.AsBuf() <= TStringBuf(threshold.Serialized);
-            case NScheme::NTypeIds::Pg:
-                return NPg::PgNativeBinaryCompare(
-                    cell.Data(), cell.Size(),
-                    threshold.Serialized.data(), threshold.Serialized.size(),
-                    Type.GetPgTypeDesc()) <= 0;
-            default:
-                Y_ENSURE(false, "Unreachable");
+        const int result = Compare(cell, threshold);
+        switch (threshold.Cmp) {
+            case ECmp::Less:
+                return result < 0;
+            case ECmp::LessOrEqual:
+                return result <= 0;
+            case ECmp::GreaterOrEqual:
+                return result >= 0;
         }
+        Y_ENSURE(false, "Unreachable");
     }
 
     TTierDecision TTierPredicate::Evaluate(const TRowState& row) const {
@@ -366,8 +665,10 @@ namespace {
         }
 
         for (size_t i = 0; i < Policy.Rules.size(); ++i) {
-            if (Matches(cell, Thresholds[i])) {
-                return TTierDecision::Tier(Policy.Rules[i].TierId);
+            for (const auto& range : Compiled[i]) {
+                if ((!range.From || Matches(cell, *range.From)) && (!range.To || Matches(cell, *range.To))) {
+                    return TTierDecision::Tier(Policy.Rules[i].TierId);
+                }
             }
         }
 

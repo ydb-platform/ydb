@@ -10,29 +10,56 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+#include <optional>
 #include <variant>
 
 namespace NKikimr {
 namespace NTable {
 
     /**
-     * Relative tier bound: a row matches when its value <= now - Offset
+     * Relative tier bound: the moment now - Offset
      */
     struct TTierRelativeBound {
         TDuration Offset;
     };
 
-    using TTierBound = std::variant<TTierRelativeBound>;
+    /**
+     * Absolute tier bound: a fixed moment in microseconds since the epoch,
+     * may be negative (before the epoch)
+     */
+    struct TTierAbsoluteBound {
+        i64 Micros = 0;
+    };
 
-    struct TTierRule {
-        ui32 TierId = 0;
-        TTierBound Before;
+    using TTierBound = std::variant<TTierRelativeBound, TTierAbsoluteBound>;
+
+    /**
+     * A range of column values in time: [From, To) or [From, To] when ToInclusive.
+     * A missing bound means the range is open on that side.
+     */
+    struct TTierRange {
+        std::optional<TTierBound> From;
+        std::optional<TTierBound> To;
+        bool ToInclusive = false;
     };
 
     /**
-     * Tiering policy over a single column. Rules are ordered from the coldest
-     * tier to the warmest one (strictly descending offsets, enforced by
-     * TTierPredicate), the first matching rule wins.
+     * A rule matches a row when the value falls into any of its ranges.
+     * Interval("P1D") is a single range {To = Relative(1d), ToInclusive = true},
+     * YEAR(c) = 2025 is a single range [2025-01-01, 2026-01-01).
+     */
+    struct TTierRule {
+        ui32 TierId = 0;
+        TVector<TTierRange> Ranges;
+    };
+
+    /**
+     * Tiering policy over a single column, enforced by TTierPredicate:
+     * - all bounds are either relative or absolute;
+     * - relative rules are ordered from the coldest tier to the warmest one
+     *   (strictly descending offsets), the first matching rule wins;
+     * - ranges of different absolute rules do not overlap, so their order
+     *   does not matter.
      */
     struct TTieringPolicy {
         TTag ColumnTag = Max<TTag>();
@@ -74,11 +101,11 @@ namespace NTable {
     /**
      * Evaluates the desired tier of a row according to a tiering policy.
      *
-     * Bind() resolves the column in the given scheme and converts thresholds into
-     * the column's native representation once, so Evaluate() is a single
-     * comparison per rule without allocations. Rows passed to Evaluate() must
-     * follow the layout of the scheme from the last Bind() call.
-     * Comparison semantics match row table TTL (value <= now - offset).
+     * Bind() resolves the column in the given scheme and converts range bounds
+     * into the column's native representation once, so Evaluate() does a couple
+     * of comparisons per range without allocations. Rows passed to Evaluate()
+     * must follow the layout of the scheme from the last Bind() call.
+     * An inclusive upper bound matches row table TTL (value <= now - offset).
      */
     class TTierPredicate {
     public:
@@ -96,42 +123,55 @@ namespace NTable {
         }
 
         /**
-         * Tier ids of rules whose threshold could not be converted into the
-         * column type on the last Bind(). Such rules never match, so callers
-         * should report them instead of silently skipping tiering.
+         * Tier ids of rules with a bound that could not be converted into the
+         * column type on the last Bind(). Ranges with such bounds never match,
+         * so callers should report them instead of silently skipping tiering.
          *
-         * Thresholds before the epoch are not supported for Pg date/timestamp
-         * columns and are reported here.
+         * Pg date/timestamp bounds before year 1 AD are reported here.
          */
         TVector<ui32> GetUnrepresentableTierIds() const;
 
     private:
+        enum class ECmp {
+            Less,
+            LessOrEqual,
+            GreaterOrEqual,
+        };
+
         struct TThreshold {
             enum class EKind {
                 // Compare the value with the threshold
                 Value,
-                // Every value of the column type is below the threshold
+                // Every value of the column type satisfies the comparison
                 AlwaysMatch,
-                // Every value of the column type is above the threshold
+                // No value of the column type satisfies the comparison
                 NeverMatch,
-                // Conversion failed, the rule never matches
+                // Conversion failed, the comparison never holds
                 Unrepresentable,
             };
 
             EKind Kind = EKind::Unrepresentable;
+            ECmp Cmp = ECmp::LessOrEqual;
             i64 Signed = 0;
             ui64 Unsigned = 0;
             TString Serialized;
         };
 
-        TThreshold MakeThreshold(i64 thresholdUs) const;
+        struct TCompiledRange {
+            std::optional<TThreshold> From;
+            std::optional<TThreshold> To;
+        };
+
+        TThreshold MakeThreshold(i64 micros, ECmp cmp) const;
+        i64 ToMicros(const TTierBound& bound, i64 nowUs) const;
         bool Matches(const TCell& cell, const TThreshold& threshold) const;
+        int Compare(const TCell& cell, const TThreshold& threshold) const;
 
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
         TPos Pos = Max<TPos>();
-        TVector<TThreshold> Thresholds;
+        TVector<TVector<TCompiledRange>> Compiled;
         bool Bound = false;
     };
 

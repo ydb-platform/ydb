@@ -199,6 +199,8 @@ For a column group, attributes that affect data storage and caching are set:
 * Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm compression);
 * caching mode.
 
+For compression settings and algorithm choice, see [{#T}](../../compression.md).
+
 Column group attributes are set during table creation and can be modified later. Storage attribute changes aren't immediately applied to existing data; instead, they take effect during subsequent background [LSM compaction](../../glossary.md#compaction). Caching attribute changes take effect immediately.
 
 Access to data stored in the fields of the main column group is faster and requires fewer resources than access to data of the same table row stored in the fields of additionally created column groups. Primary key lookup is always performed in the main column group. When accessing fields in other column groups, in addition to the primary key lookup, additional lookup operations are required to determine the specific storage position of these fields. Changing the caching mode does not affect the need for additional operations for non-main columns, so with the same caching modes, access to the main column group will also be faster.
@@ -248,7 +250,7 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 
 * Only `NOT NULL` columns can be used as the primary key.
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns.
-* You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later.
+* You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later. See also [{#T}](../../compression.md).
 * You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md#encoding) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#encoding) it later.
 
 Let's recreate the `article` table, this time in column-oriented format, using the following YQL command:

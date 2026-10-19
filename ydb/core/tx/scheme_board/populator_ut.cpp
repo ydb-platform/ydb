@@ -1,5 +1,6 @@
 #include "events_schemeshard.h"
 #include "populator.h"
+#include "mon_events.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/base/statestorage_impl.h>
@@ -256,7 +257,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             }
         }
 
-        ackBlocker.Stop();
+        // Keep blocking ACKs from configuration-triggered retries as well.
         auto requiredAcks = GetAcksRequiredForQuorum(ackBlocker, populatorToReplicaMap, stateStorageInfo->RingGroups);
         UNIT_ASSERT(!requiredAcks.empty());
         if (reconfiguration == EReconfiguration::DuplicateAck) {
@@ -279,11 +280,89 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(updated)));
             UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
         }
+        ackBlocker.Stop();
         runtime.Send(requiredAcks.back().Release());
 
         auto mainAck = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
         UNIT_ASSERT_VALUES_EQUAL_C(mainAck->Sender, populator, mainAck->ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(mainAck->Get()->GetPathId(), pathId, mainAck->ToString());
+    }
+
+    void TestPublicationSurvivesReplicaReplacement(bool deletion) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}, {}}, ReplicasInRingGroup));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
+        const auto info = GetStateStorageInfo(runtime);
+        auto original = MakeIntrusive<TStateStorageInfo>();
+        original->RingGroups.push_back(info->RingGroups[0]);
+        auto replacement = MakeIntrusive<TStateStorageInfo>();
+        replacement->RingGroups.push_back(info->RingGroups[1]);
+        THashSet<TActorId> newReplicaActors;
+        for (const auto& ring : replacement->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                newReplicaActors.insert(runtime.GetLocalServiceId(replica));
+            }
+        }
+        TActorId populator;
+        auto configObserver = runtime.AddObserver<TEvStateStorage::TEvListSchemeBoardResult>([&](auto& ev) {
+            if (ev->Recipient == populator) {
+                ev->Get()->Info = original;
+            }
+        });
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        TWaitForFirstEvent<TEvStateStorage::TEvListSchemeBoardResult> initialized(runtime);
+        populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        initialized.Wait(TDuration::Seconds(10));
+        initialized.Stop();
+        auto publish = [&](ui64 cookie, bool remove) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe("/Root/TestPath", pathId, remove ? 2 : 1);
+            desc->Record.SetStatus(remove ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+        if (deletion) {
+            publish(10, false);
+            auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 10);
+        }
+        constexpr ui64 cookie = 12345;
+        TBlockEvents<TUpdateAck> oldAcks(runtime, [&](const TUpdateAck::TPtr& ev) {
+            return ev->Recipient == populator && ev->Cookie == cookie;
+        });
+        publish(cookie, deletion);
+        runtime.WaitFor("original publication ACKs", [&] { return oldAcks.size() == 3; }, TDuration::Seconds(10));
+        configObserver.Remove();
+        TBlockEvents<NInternalEvents::TEvHandshakeResponse> newHandshakes(runtime, [&](const auto& ev) {
+            return newReplicaActors.contains(ev->Sender);
+        });
+        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(replacement)));
+        runtime.WaitFor("replacement replica handshakes", [&] { return newHandshakes.size() == 3; }, TDuration::Seconds(10));
+        oldAcks.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 0,
+            "ACKs from removed replica incarnations must not complete the publication");
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto& ev) {
+            if (newReplicaActors.contains(ev->Sender)) {
+                ++committed;
+            }
+        });
+        newHandshakes.Stop().Unblock();
+        runtime.WaitFor("replacement replicas fully synchronized", [&] { return committed == 3; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 1,
+            "publication must finish on the new replica configuration without a client retry");
+        runtime.Send(new IEventHandle(populator, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+        auto response = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetPopulatorResponse().UpdateAcksSize(), 0);
+    }
+
+    Y_UNIT_TEST(PublicationSurvivesReplicaReplacement) {
+        TestPublicationSurvivesReplicaReplacement(false);
+    }
+
+    Y_UNIT_TEST(DeletionSurvivesReplicaReplacement) {
+        TestPublicationSurvivesReplicaReplacement(true);
     }
 
     Y_UNIT_TEST(OneRingGroup) {

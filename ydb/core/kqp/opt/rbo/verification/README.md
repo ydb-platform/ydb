@@ -24,16 +24,27 @@ operator inspection and counterexample traces, outside the proof-producing code.
 
 ## Build and test
 
-From the repository root:
+From the repository root. On this memory-constrained development host, use
+[the Linux build guard](tools/run_limited.py): it restricts CPU affinity to two
+CPUs, sets a hard 8 GiB address-space cap per process, and stops the process tree
+when sampled aggregate RSS exceeds 16 GiB or host available memory falls below
+16 GiB. The aggregate cutoff is monitored, not a kernel cgroup limit. Keep the
+explicit worker limits too; `ya --memory-limit` alone is not a hard memory cap.
 
 ```bash
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/ut 2>&1 | tail -n 100
 
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/cpp_ut 2>&1 | tail -n 100
 
-./ya make --build relwithdebinfo -tA \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/integration_ut 2>&1 | tail -n 100
 ```
 

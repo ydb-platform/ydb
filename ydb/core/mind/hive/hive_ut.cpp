@@ -576,6 +576,10 @@ public:
         return NKikimrServices::TActivity::TEST_ACTOR_RUNTIME;
     }
 
+    NMemory::EMemoryZone GetExecutorMemoryZone() const {
+        return Executor()->GetMemoryZone();
+    }
+
     TMemoryProbeTablet(const TActorId &tablet, TTabletStorageInfo *info, TIntrusivePtr<TMemoryProbeState> state)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -12315,8 +12319,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Setup(Runtime, false, 1, [hostEnabled](TAppPrepare& app) {
                 app.FeatureFlags.SetEnableTabletMemoryHost(hostEnabled);
             });
-            // Advance the initialized clock so boot reports are not throttled at the synthetic epoch.
-            Runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+            if (initialZone) {
+                // Exercise an immediate boot report outside the synthetic epoch's send throttle.
+                Runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+            }
             const ui64 hiveTablet = MakeDefaultHiveID();
             const ui64 testerTablet = MakeTabletID(false, 1);
             const TActorId hiveActor = CreateTestBootstrapper(Runtime,
@@ -12462,21 +12468,23 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* follower = dynamic_cast<TMemoryProbeTablet*>(runtime.FindActor(followerActor));
         UNIT_ASSERT(follower);
         const auto executor = follower->ExecutorID();
+        const auto followerSystem = follower->Tablet();
 
         // The old grant must be withdrawn even if the promoted leader has no elastic demand.
         probe->Report = {.Used = 40_MB, .Demand = 40_MB, .Reclaimable = 0};
-        TBlockEvents<TEvTablet::TEvPromoteToLeader> promote(runtime);
+        bool promotionObserved = false;
+        const auto observePromotion = runtime.AddObserver<TEvTablet::TEvPromoteToLeader>([&](auto& event) {
+            if (event->GetRecipientRewrite() == followerSystem) {
+                promotionObserved = true;
+            }
+        });
         SendKillLocal(runtime, leaderNode);
-        for (ui32 attempt = 0; attempt != 100 && promote.empty(); ++attempt) {
-            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
-        }
-        UNIT_ASSERT(!promote.empty());
-        promote.Stop().Unblock();
         pipe.AllowFollower = false; // Wait for promotion, not another connection to the follower.
         bool isLeader = false;
         MakeSureTabletIsUp(runtime, tabletId, followerNode, &pipe, &isLeader);
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(isLeader);
+        UNIT_ASSERT(promotionObserved);
         UNIT_ASSERT_VALUES_EQUAL(probe->TabletActor, followerActor);
         auto* promoted = dynamic_cast<TMemoryProbeTablet*>(runtime.FindActor(probe->TabletActor));
         UNIT_ASSERT(promoted);
@@ -12657,22 +12665,25 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         env.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(env.Probe->LastZone);
 
-        // A restarted tablet is a new instance: nothing changed on the node, yet it must not stay Green
-        env.Probe->LastZone.reset();
+        // A restarted tablet must inherit the node's existing pressure without another controller tick.
+        const auto oldActor = env.Probe->TabletActor;
         const TActorId tablet = ResolveTablet(env.Runtime, env.TabletId);
-        TBlockEvents<TEvTablet::TEvReady> ready(env.Runtime);
+        TBlockEvents<TEvTablet::TEvReady> ready(env.Runtime, [&](const auto& event) {
+            return event->Get()->TabletID == env.TabletId;
+        });
         env.Runtime.Send(new IEventHandle(tablet, TActorId(), new TEvents::TEvPoisonPill()));
         for (ui32 attempt = 0; attempt != 100 && ready.empty(); ++attempt) {
             env.Runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
         }
         UNIT_ASSERT(!ready.empty());
-        // Ignore feedback to the dying executor and wait for the new incarnation's readiness.
-        env.Probe->LastZone.reset();
         ready.Stop().Unblock();
         MakeSureTabletIsUp(env.Runtime, env.TabletId, 0);
         env.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(env.Probe->LastZone);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(*env.Probe->LastZone), static_cast<ui32>(NMemory::EMemoryZone::Red));
+        UNIT_ASSERT_VALUES_UNEQUAL(env.Probe->TabletActor, oldActor);
+        auto* restarted = dynamic_cast<TMemoryProbeTablet*>(env.Runtime.FindActor(env.Probe->TabletActor));
+        UNIT_ASSERT(restarted);
+        UNIT_ASSERT_EQUAL(restarted->GetExecutorMemoryZone(), NMemory::EMemoryZone::Red);
+        UNIT_ASSERT_VALUES_EQUAL(env.Controller->Tablets->Last.Used, 30_MB);
     }
 
     Y_UNIT_TEST(TestTabletMemoryReportsCoalesceShareFeedback) {

@@ -1,0 +1,11 @@
+# 4 vCPU / 8 GB, non-replicated SSD. disk_gb must be a multiple of 93.
+name: tiny-worker-2026-10
+start: 8
+count: 1
+platform: standard-v3
+cores: 4
+memory_gb: 8
+disk_gb: 186
+preset: tiny-worker
+labels:
+  - tiny-worker

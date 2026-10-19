@@ -1,0 +1,13 @@
+# Same footprint as the other relwithdebinfo+release statics, with its own public address.
+names:
+  - static-relwithdebinfo-d-04
+platform: standard-v4a
+cores: 64
+memory_gb: 256
+disk_gb: 2418
+preset: relwithdebinfo
+public_ip: true
+labels:
+  - auto-provisioned
+  - build-preset-relwithdebinfo
+  - build-preset-release

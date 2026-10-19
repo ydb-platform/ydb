@@ -1,0 +1,13 @@
+# 8 vCPU / 64 GB on standard-v4a. disk_gb must be a multiple of 93.
+# No ghrun label: the autoscaler deletes idle runners that carry it.
+name: analytic-node-2026-10
+start: 1
+count: 3
+platform: standard-v4a
+cores: 8
+memory_gb: 64
+disk_gb: 186
+preset: analytic-node
+labels:
+  - auto-provisioned
+  - build-preset-analytic-node

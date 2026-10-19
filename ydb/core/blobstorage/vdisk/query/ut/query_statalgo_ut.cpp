@@ -61,7 +61,7 @@ namespace {
             }
 
             auto sst = MakeIntrusive<TLevelSegment>(Contexts.GetVCtx());
-            sst->LoadLinearIndex(records);
+            sst->LoadLinearIndex(std::move(records));
             sst->VolatileOrderId = 1;
             Index->CurSlice->Level0.Put(sst);
         }

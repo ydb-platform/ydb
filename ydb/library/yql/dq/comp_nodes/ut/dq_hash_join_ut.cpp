@@ -14,6 +14,12 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
+// MiniKQL filters the true twin under sanitizers because that variant normally enables LLVM.
+// BlockJoin is not an LLVM toggle, so use the generic YDB helper that registers both variants.
+#undef Y_UNIT_TEST_TWIN
+#undef Y_UNIT_TEST_QUAD
+#include <ydb/library/testlib/helpers.h>
+
 #include <arrow/util/bit_util.h>
 
 #include <bit>
@@ -2631,7 +2637,40 @@ void TestWithSlowSpiller(TJoinTestData testData, bool blockJoin) {
     }
 }
 
+struct TDispatchedPhysicalJoin {
+    virtual ~TDispatchedPhysicalJoin() = default;
+    virtual TPhysicalJoin GetPhysicalJoin() const = 0;
+};
+
+template <TPhysicalJoin Join>
+struct TDispatchedPhysicalJoinImpl : TDispatchedPhysicalJoin {
+    TPhysicalJoin GetPhysicalJoin() const override {
+        return Join;
+    }
+};
+
+TPhysicalJoin DispatchPhysicalJoin(EJoinKind kind, ESide preservedSide, bool isGrid) {
+    std::unique_ptr<TDispatchedPhysicalJoin> dispatched(
+        DispatchHashJoinByKind<TDispatchedPhysicalJoinImpl, TDispatchedPhysicalJoin>(
+            kind, preservedSide, isGrid, "unsupported test join kind"));
+    return dispatched->GetPhysicalJoin();
+}
+
 } // namespace
+
+Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
+    Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
+        const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);
+        UNIT_ASSERT(inner.Kind == EJoinKind::Inner);
+        UNIT_ASSERT(inner.Preserved == ESide::Build);
+        UNIT_ASSERT(!inner.IsGrid);
+
+        const auto cross = DispatchPhysicalJoin(EJoinKind::Cross, ESide::Build, true);
+        UNIT_ASSERT(cross.Kind == EJoinKind::Cross);
+        UNIT_ASSERT(cross.Preserved == ESide::Build);
+        UNIT_ASSERT(cross.IsGrid);
+    }
+}
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST_TWIN(TestBasicPassthrough, BlockJoin) {

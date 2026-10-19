@@ -1,5 +1,7 @@
 #include "query_actor.h"
+
 #include <ydb/core/testlib/test_client.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -8,7 +10,7 @@
 
 namespace NKikimr {
 
-struct TTestQueryActorBase : public TQueryBase {
+struct TTestQueryActorBase: public TQueryBase {
     struct TResult {
         Ydb::StatusIds::StatusCode StatusCode;
         NYql::TIssues Issues;
@@ -18,12 +20,14 @@ struct TTestQueryActorBase : public TQueryBase {
             : StatusCode(statusCode)
             , Issues(std::move(issues))
             , ResultSets(std::move(resultSets))
-        {}
+        {
+        }
     };
 
     TTestQueryActorBase()
         : TQueryBase(NKikimrServices::KQP_PROXY, "", Tests::TestDomainName)
-    {}
+    {
+    }
 
     NThreading::TFuture<TResult> GetResult() const {
         return Result.GetFuture();
@@ -53,8 +57,7 @@ struct TTestServer {
             Columns { Name: "Key", Type: "Uint64" }
             Columns { Name: "Value", Type: "String" }
             KeyColumnNames: ["Key"]
-            )"
-        );
+            )");
 
         Server->GetRuntime()->SetLogPriority(NKikimrServices::EServiceKikimr::KQP_PROXY, NActors::NLog::EPriority::PRI_DEBUG);
     }
@@ -82,7 +85,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
     Y_UNIT_TEST(SimpleQuery) {
         TTestServer server;
 
-        struct TQuery : public TTestQueryActorBase {
+        struct TQuery: public TTestQueryActorBase {
             void OnRunQuery() override {
                 RunDataQuery("SELECT 42");
             }
@@ -91,6 +94,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                 Finish();
             }
         };
+
         auto result = server.RunQueryActor<TQuery>();
         UNIT_ASSERT_VALUES_EQUAL(result.StatusCode, Ydb::StatusIds::SUCCESS);
     }
@@ -98,21 +102,16 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
     Y_UNIT_TEST(Rollback) {
         TTestServer server;
 
-        struct TQuery : public TTestQueryActorBase {
+        struct TQuery: public TTestQueryActorBase {
             TQuery(ui64 val, bool commit)
                 : Val(val)
                 , Commit(commit)
-            {}
+            {
+            }
 
             void OnRunQuery() override {
                 NYdb::TParamsBuilder params;
-                params
-                    .AddParam("$k")
-                        .Uint64(Val)
-                        .Build()
-                    .AddParam("$v")
-                        .String(ToString(Val))
-                        .Build();
+                params.AddParam("$k").Uint64(Val).Build() .AddParam("$v").String(ToString(Val)).Build();
                 RunDataQuery(R"(
                     DECLARE $k As Uint64;
                     DECLARE $v As String;
@@ -130,7 +129,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
             bool Commit = false;
         };
 
-        struct TSelectQuery : public TTestQueryActorBase {
+        struct TSelectQuery: public TTestQueryActorBase {
             void OnRunQuery() override {
                 RunDataQuery("SELECT * FROM TestTable");
             }
@@ -145,7 +144,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(result.StatusCode, Ydb::StatusIds::SUCCESS);
         }
 
-        auto assertValues = [&](){
+        auto assertValues = [&]() {
             auto result = server.RunQueryActor<TSelectQuery>();
             UNIT_ASSERT_VALUES_EQUAL(result.StatusCode, Ydb::StatusIds::SUCCESS);
 
@@ -175,14 +174,14 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
     Y_UNIT_TEST(Commit) {
         TTestServer server;
 
-        struct TSelectQuery : public TTestQueryActorBase {
+        struct TSelectQuery: public TTestQueryActorBase {
             void OnRunQuery() override {
                 RunDataQuery("SELECT * FROM TestTable", nullptr, TTxControl::BeginTx());
                 SetQueryResultHandler(&TSelectQuery::MyResultHandler);
             }
 
             void MyResultHandler() {
-                CommitTransaction(); // Finish will be after successful commit
+                CommitTransaction();   // Finish will be after successful commit
             }
 
             void OnQueryResult() override {
@@ -197,12 +196,13 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
     Y_UNIT_TEST(StreamQuery) {
         TTestServer server;
 
-        struct TSelectStreamQuery : public TTestQueryActorBase {
+        struct TSelectStreamQuery: public TTestQueryActorBase {
             TSelectStreamQuery(const TString& value, ui64 tableSize, ui64 rowsToRead)
                 : Value(value)
                 , TableSize(tableSize)
                 , RowsToRead(rowsToRead)
-            {}
+            {
+            }
 
             void OnRunQuery() override {
                 TString sql = R"(
@@ -215,13 +215,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
                 )";
 
                 NYdb::TParamsBuilder params;
-                params
-                    .AddParam("$value")
-                        .Utf8(Value)
-                        .Build()
-                    .AddParam("$table_size")
-                        .Uint64(TableSize)
-                        .Build();
+                params.AddParam("$value").Utf8(Value).Build() .AddParam("$table_size").Uint64(TableSize).Build();
 
                 RunStreamQuery(sql, &params, Value.size() * 10);
             }
@@ -234,7 +228,7 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
 
                 while (result.TryNextRow()) {
                     const std::string& row = result.ColumnParser(0).GetUtf8();
-                    UNIT_ASSERT_VALUES_EQUAL_C(TString{row}, Value, "Ivalid row value");
+                    UNIT_ASSERT_VALUES_EQUAL_C(TString{ row }, Value, "Ivalid row value");
 
                     if (ReadedRows >= RowsToRead) {
                         CancelStreamQuery();
@@ -262,13 +256,13 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
             Ydb::ResultSet FinalResult;
         };
 
-        {  // Read part of table
+        {   // Read part of table
             auto result = server.RunQueryActor<TSelectStreamQuery>("0123456789ABCDEF", 4000000000, 1000);
             UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.ResultSets[0].RowsCount(), 1000);
         }
 
-        {  // Read all table
+        {   // Read all table
             auto result = server.RunQueryActor<TSelectStreamQuery>("0123456789ABCDEF", 1000, 2000);
             UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.ResultSets[0].RowsCount(), 1000);
@@ -279,11 +273,10 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
         TTestServer server;
 
         auto& runtime = *server.Server->GetRuntime();
-        runtime.Send(NKqp::MakeKqpProxyID(runtime.GetFirstNodeId()), {}, new NKqp::TEvKqp::TEvInitiateShutdownRequest(
-            MakeIntrusive<NKqp::TKqpShutdownState>()
-        ));
+        runtime.Send(NKqp::MakeKqpProxyID(runtime.GetFirstNodeId()), {},
+            new NKqp::TEvKqp::TEvInitiateShutdownRequest(MakeIntrusive<NKqp::TKqpShutdownState>()));
 
-        struct TQuery : public TTestQueryActorBase {
+        struct TQuery: public TTestQueryActorBase {
             void OnRunQuery() override {
                 RunDataQuery("SELECT 42");
             }
@@ -299,4 +292,4 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
     }
 }
 
-} // namespace NKikimr
+}   // namespace NKikimr

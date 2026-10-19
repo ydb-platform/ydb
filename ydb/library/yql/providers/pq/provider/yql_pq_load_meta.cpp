@@ -3,7 +3,6 @@
 #include "yql_pq_topic_key_parser.h"
 
 #include <ydb/library/yql/providers/common/message_stream/provider.h>
-
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -21,21 +20,24 @@ using namespace NNodes;
 
 namespace {
 
-class TPqLoadTopicMetadataTransformer : public TGraphTransformerBase {
+class TPqLoadTopicMetadataTransformer: public TGraphTransformerBase {
 private:
     struct TPendingTopic {
         TPqState::TTopicMeta Meta;
         IPqGateway::TAsyncDescribeFederatedTopicResult Future;
     };
+
     using TTopicKey = std::pair<TString, TString>;
     using TTopics = THashMap<TTopicKey, TPendingTopic>;
 
 public:
     explicit TPqLoadTopicMetadataTransformer(TPqState::TPtr state)
         : State_(std::move(state))
-    {}
+    {
+    }
 
-    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
+    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec,
+        TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
         const auto topicKey = std::make_pair(cluster, topicPath);
         if (State_->Topics.contains(topicKey) || pendingTopics.FindPtr(topicKey)) {
             return;
@@ -64,12 +66,14 @@ public:
                 }
 
                 TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx);
-                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
+                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(),
+                    topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
             } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
                 TPqWrite write = maybePqWrite.Cast();
                 if (write.DataSink().Category().Value() == PqProviderName) {
                     TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx);
-                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
+                    AddToPendingTopics(
+                        write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
                 }
             }
             return true;
@@ -85,12 +89,8 @@ public:
         auto launchFetch = [&](TTopics& pendingTopics) {
             for (auto& [key, pending] : pendingTopics) {
                 auto& [cluster, topic] = key;
-                pending.Future = State_->Gateway->DescribeFederatedTopic(
-                    State_->SessionId,
-                    cluster,
-                    State_->Configuration->GetDatabaseForTopic(cluster),
-                    topic,
-                    State_->Configuration->Tokens.at(cluster));
+                pending.Future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster,
+                    State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
 
                 // Use a completion promise that always resolves with a value (never exceptional),
                 // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
@@ -164,8 +164,6 @@ private:
         return TStatus::Ok;
     }
 
-
-
     void Rewind() final {
         PendingWriteTopics_.clear();
         PendingReadTopics_.clear();
@@ -179,10 +177,10 @@ private:
     NThreading::TFuture<void> AsyncFuture_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqLoadTopicMetadataTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

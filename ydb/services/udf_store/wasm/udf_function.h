@@ -1,25 +1,22 @@
 #pragma once
 
-#include "registry.h"
-#include "bridge_types.h"
 #include "bridge_node_table.h"
+#include "bridge_types.h"
+#include "registry.h"
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 
 namespace NYdb::NWasm {
 struct IWebAssemblyCompartment;
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm
 
 namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYql::NUdf;
 
 //! Build the exact manifest type, with a depth bound for hand-built descriptors.
-TType* BuildTypeFromWasmTypeNode(
-    IFunctionTypeInfoBuilder& builder,
-    const TWasmTypeNode& node,
-    ui32 depth = 0);
+TType* BuildTypeFromWasmTypeNode(IFunctionTypeInfoBuilder& builder, const TWasmTypeNode& node, ui32 depth = 0);
 
 //! Declared result reduced to what a returned handle can be checked against.
 //! Optionality is transparent on both sides of the bridge and says nothing
@@ -45,9 +42,7 @@ struct TDeclaredResultShape {
     //! MiniKQL represents an Optional container as the container itself, so
     //! there is nothing left to compare, while an optional scalar or string
     //! always arrives with its payload named.
-    bool Accepts(
-        EBridgeValueKind kind,
-        std::optional<EBridgeValueKind> payload = std::nullopt) const;
+    bool Accepts(EBridgeValueKind kind, std::optional<EBridgeValueKind> payload = std::nullopt) const;
 
     //! Same question asked of the family a value will present to MiniKQL,
     //! which is what a node knows once its type is taken into account.
@@ -60,25 +55,16 @@ TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelpe
 class TWasmBridgeFunction: public TBoxedValue {
 public:
     static std::unique_ptr<TWasmBridgeFunction> Create(
-        IFunctionTypeInfoBuilder& builder,
-        TWasmCompartmentStatePtr state,
-        const TWasmUdfDescriptor& descriptor);
+        IFunctionTypeInfoBuilder& builder, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor);
 
     //! Shared bridge invocation for plain calls and object lifecycle callbacks.
     TUnboxedValue Invoke(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const;
 
     static void Register(
-        IFunctionTypeInfoBuilder& builder,
-        bool typesOnly,
-        TWasmCompartmentStatePtr state,
-        const TWasmUdfDescriptor& descriptor);
+        IFunctionTypeInfoBuilder& builder, bool typesOnly, TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor);
 
 private:
-    TWasmBridgeFunction(
-        TWasmCompartmentStatePtr state,
-        const TWasmUdfDescriptor& descriptor,
-        TVector<TType*> argTypes,
-        TType* resultType,
+    TWasmBridgeFunction(TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor, TVector<TType*> argTypes, TType* resultType,
         ITypeInfoHelper::TPtr typeInfoHelper);
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override;
@@ -106,11 +92,7 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final;
 
     void BuildFunctionTypeInfo(
-        const TStringRef& name,
-        TType* userType,
-        const TStringRef& typeConfig,
-        ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const final;
+        const TStringRef& name, TType* userType, const TStringRef& typeConfig, ui32 flags, IFunctionTypeInfoBuilder& builder) const final;
 
 private:
     TWasmCompartmentStatePtr State_;
@@ -119,4 +101,4 @@ private:
 
 TUniquePtr<IUdfModule> BuildWasmSoModule(TWasmCompartmentStatePtr state);
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

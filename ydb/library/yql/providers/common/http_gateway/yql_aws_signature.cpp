@@ -2,10 +2,10 @@
 
 #include <ydb/library/actors/http/http.h>
 
+#include <contrib/libs/openssl/include/openssl/evp.h>
+#include <contrib/libs/openssl/include/openssl/sha.h>
 #include <openssl/hmac.h>
-
 #include <util/datetime/base.h>
-#include <util/generic/string.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/stream/mem.h>
@@ -13,12 +13,10 @@
 #include <util/string/hex.h>
 #include <util/string/split.h>
 
-#include <contrib/libs/openssl/include/openssl/evp.h>
-#include <contrib/libs/openssl/include/openssl/sha.h>
-
 namespace NYql {
 
-TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload, const TString& awsSigV4, const TString& userPwd, const TInstant& currentTime)
+TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TString& contentType, const TString& payload,
+    const TString& awsSigV4, const TString& userPwd, const TInstant& currentTime)
     : Method(method)
     , Url(url)
     , ContentType(contentType)
@@ -47,7 +45,7 @@ TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TS
 
     TStringBuf path;
     TStringBuf cgi;
-    TStringBuf{Uri}.Split('?', path, cgi);
+    TStringBuf{ Uri }.Split('?', path, cgi);
 
     Uri = path;
     Cgi = cgi;
@@ -56,10 +54,9 @@ TAwsSignature::TAwsSignature(const TString& method, const TString& url, const TS
 }
 
 TString TAwsSignature::GetAuthorization() const {
-    return TStringBuilder{} 
-        << "AWS4-HMAC-SHA256 Credential=" << AccessKey << "/" << GetDate() << "/" << Region << "/" << Service << "/aws4_request, "
-        << "SignedHeaders=" << GetListSignedHeaders() 
-        << ", Signature=" << CalcSignature();
+    return TStringBuilder{} << "AWS4-HMAC-SHA256 Credential=" << AccessKey << "/" << GetDate() << "/" << Region << "/" << Service
+                            << "/aws4_request, "
+                            << "SignedHeaders=" << GetListSignedHeaders() << ", Signature=" << CalcSignature();
 }
 
 TString TAwsSignature::GetXAmzContentSha256() const {
@@ -79,27 +76,19 @@ TString TAwsSignature::GetListSignedHeaders() const {
 }
 
 TString TAwsSignature::SignHeaders() const {
-    return TStringBuilder{} << (ContentType ? (TStringBuilder{} << "content-type:" << GetContentType() << Endl) : TString{})
-            << "host:" << Host << Endl
-            << "x-amz-content-sha256:" << GetXAmzContentSha256() << Endl
-            << "x-amz-date:" << GetAmzDate();
+    return TStringBuilder{} << (ContentType ? (TStringBuilder{} << "content-type:" << GetContentType() << Endl) : TString{}) << "host:" << Host
+                            << Endl << "x-amz-content-sha256:" << GetXAmzContentSha256() << Endl << "x-amz-date:" << GetAmzDate();
 }
 
 TString TAwsSignature::CreateHttpCanonicalRequest() const {
-    return TStringBuilder{} << Method << Endl
-            << UriEncode(Uri) << Endl
-            << Cgi << Endl
-            << SignHeaders() << Endl << Endl
-            << GetListSignedHeaders() << Endl
-            << GetXAmzContentSha256();
+    return TStringBuilder{} << Method << Endl << UriEncode(Uri) << Endl << Cgi << Endl << SignHeaders() << Endl << Endl << GetListSignedHeaders()
+                            << Endl << GetXAmzContentSha256();
 }
 
 TString TAwsSignature::CreateStringToSign() const {
     auto canonical = CreateHttpCanonicalRequest();
-    return TStringBuilder{} << "AWS4-HMAC-SHA256" << Endl
-            << GetAmzDate() << Endl
-            << GetDate() << "/" << Region << "/" << Service << "/" << "aws4_request" << Endl
-            << HashSHA256(canonical);
+    return TStringBuilder{} << "AWS4-HMAC-SHA256" << Endl << GetAmzDate() << Endl << GetDate() << "/" << Region << "/" << Service << "/"
+                            << "aws4_request" << Endl << HashSHA256(canonical);
 }
 
 TString TAwsSignature::CalcSignature() const {
@@ -121,11 +110,11 @@ TString TAwsSignature::HmacSHA256(TStringBuf key, TStringBuf data) {
     const auto* res = HMAC(EVP_sha256(), key.data(), key.size(), reinterpret_cast<const unsigned char*>(data.data()), data.size(), hash, &hl);
     Y_ENSURE(res);
     Y_ENSURE(hl == SHA256_DIGEST_LENGTH);
-    return TString{reinterpret_cast<const char*>(res), hl};
+    return TString{ reinterpret_cast<const char*>(res), hl };
 }
 
 TString TAwsSignature::HashSHA256(TStringBuf data) {
-    TMemoryInput stream{data};
+    TMemoryInput stream{ data };
     SHA256_CTX hasher;
     SHA256_Init(&hasher);
     char buf[4096];
@@ -141,8 +130,8 @@ TString TAwsSignature::HashSHA256(TStringBuf data) {
 TString TAwsSignature::UriEncode(const TStringBuf input, bool encodeSlash, bool encodePercent) {
     TStringStream result;
     for (const char ch : input) {
-        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' ||
-            ch == '-' || ch == '~' || ch == '.' || (ch == '%' && !encodePercent)) {
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '~' ||
+            ch == '.' || (ch == '%' && !encodePercent)) {
             result << ch;
         } else if (ch == '/') {
             if (encodeSlash) {
@@ -192,4 +181,4 @@ void TAwsSignature::PrepareCgiParameters() {
     }
 }
 
-}
+}   // namespace NYql

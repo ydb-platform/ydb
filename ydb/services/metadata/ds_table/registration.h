@@ -8,6 +8,7 @@ namespace NKikimr::NMetadata::NProvider {
 class TBehavioursId {
 private:
     YDB_READONLY_DEF(std::set<TString>, BehaviourIds);
+
 public:
     TBehavioursId(const std::vector<IClassBehaviour::TPtr>& managers) {
         for (auto&& i : managers) {
@@ -28,11 +29,12 @@ class TWaitEvent {
 private:
     TAutoPtr<IEventBase> Event;
     const TActorId Sender;
+
 public:
     TWaitEvent(TAutoPtr<IEventBase> ev, const TActorId& sender)
         : Event(ev)
-        , Sender(sender) {
-
+        , Sender(sender)
+    {
     }
 
     void Resend(const TActorIdentity& receiver) {
@@ -43,6 +45,7 @@ public:
 class TEventsWaiter {
 private:
     std::deque<TWaitEvent> Events;
+
 public:
     bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender) {
         if (Events.size() > 10000) {
@@ -92,6 +95,7 @@ class TTaggedEventsWaiter {
 private:
     std::map<TString, TEventsWaiter> TaggedEvents;
     ui32 EventsCount = 0;
+
 public:
     bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender, const TString& tag) {
         if (EventsCount > 10000) {
@@ -138,10 +142,11 @@ class TEventsCollector {
 private:
     const TActorIdentity OwnerId;
     std::map<TBehavioursId, TEventsWaiter> Events;
+
 public:
     TEventsCollector(const TActorIdentity& ownerId)
-        : OwnerId(ownerId) {
-
+        : OwnerId(ownerId)
+    {
     }
 
     const TActorIdentity& GetOwnerId() const {
@@ -168,6 +173,7 @@ private:
     mutable TMutex Mutex;
     std::shared_ptr<NInitializer::TSnapshot> InitializationSnapshot;
     friend class TRegistrationData;
+
     void SetInitializationSnapshot(NFetcher::ISnapshot::TPtr s) {
         auto snapshot = dynamic_pointer_cast<NInitializer::TSnapshot>(s);
         Y_ABORT_UNLESS(snapshot);
@@ -179,17 +185,18 @@ private:
         TGuard<TMutex> g(Mutex);
         InitializationSnapshot = std::make_shared<NInitializer::TSnapshot>(TInstant::Zero());
     }
+
 public:
     bool HasInitializationSnapshot() const {
         TGuard<TMutex> g(Mutex);
         return !!InitializationSnapshot;
     }
+
     bool HasModification(const TString& componentId, const TString& modificationId) const {
         NInitializer::TDBInitializationKey key(componentId, modificationId);
         TGuard<TMutex> g(Mutex);
         return InitializationSnapshot->GetObjects().contains(key);
     }
-
 };
 
 class TRegistrationData {
@@ -199,10 +206,12 @@ public:
         WaitInitializerInfo,
         Active
     };
+
 private:
     YDB_READONLY(EStage, Stage, EStage::Created);
     YDB_READONLY_DEF(std::shared_ptr<NInitializer::TFetcher>, InitializationFetcher);
     YDB_READONLY_DEF(std::shared_ptr<TInitializationSnapshotOwner>, SnapshotOwner);
+
 public:
     TRegistrationData();
 
@@ -216,7 +225,6 @@ public:
     void NoInitializationSnapshot();
 
     void InitializationFinished(const TString& initId);
-
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

@@ -7,17 +7,16 @@
 
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
-class TCreateSessionRPC : public TRpcOperationRequestActor<
-    TCreateSessionRPC, TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>> {
+class TCreateSessionRPC: public TRpcOperationRequestActor<TCreateSessionRPC,
+                             TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>> {
 public:
-    using TBase = TRpcOperationRequestActor<
-        TCreateSessionRPC,
+    using TBase = TRpcOperationRequestActor<TCreateSessionRPC,
         TGrpcRequestOperationCall<Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>>;
     using TBase::Become;
-    using TBase::Send;
+    using TBase::GetProtoRequest;
     using TBase::PassAway;
     using TBase::Request_;
-    using TBase::GetProtoRequest;
+    using TBase::Send;
 
     using TBase::TBase;
 
@@ -35,17 +34,16 @@ private:
     }
 };
 
-class TDeleteSessionRPC : public TRpcOperationRequestActor<
-    TCreateSessionRPC, TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>> {
+class TDeleteSessionRPC: public TRpcOperationRequestActor<TCreateSessionRPC,
+                             TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>> {
 public:
-    using TBase = TRpcOperationRequestActor<
-        TCreateSessionRPC,
+    using TBase = TRpcOperationRequestActor<TCreateSessionRPC,
         TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>>;
     using TBase::Become;
-    using TBase::Send;
+    using TBase::GetProtoRequest;
     using TBase::PassAway;
     using TBase::Request_;
-    using TBase::GetProtoRequest;
+    using TBase::Send;
 
     using TBase::TBase;
 
@@ -77,4 +75,4 @@ std::function<void(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)> Ge
     };
 }
 
-} // namespace NKikimr::NGRpcService::NYdbOverFq
+}   // namespace NKikimr::NGRpcService::NYdbOverFq

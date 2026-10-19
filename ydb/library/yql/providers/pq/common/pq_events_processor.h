@@ -8,11 +8,12 @@
 namespace NYql {
 
 template <typename TEv, ui32 TEventType>
-class TTopicEventBase : public NActors::TEventLocal<TEv, TEventType> {
+class TTopicEventBase: public NActors::TEventLocal<TEv, TEventType> {
 public:
     explicit TTopicEventBase(NYdb::IExecutor::TFunction&& f)
         : Function(std::move(f))
-    {}
+    {
+    }
 
     void Execute() {
         Function();
@@ -24,7 +25,7 @@ private:
 
 template <typename TTopicEvent>
 class TTopicEventProcessor {
-    class TEventProxy final : public NYdb::IExecutor {
+    class TEventProxy final: public NYdb::IExecutor {
     public:
         TEventProxy(NActors::TActorSystem* actorSystem, const NActors::TActorId& executerId)
             : ActorSystem(actorSystem)
@@ -73,4 +74,4 @@ private:
     NYdb::IExecutor::TPtr ExecuterProxy;
 };
 
-} // namespace NYql
+}   // namespace NYql

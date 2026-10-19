@@ -19,8 +19,10 @@ namespace NSysView {
 
 class TCreateTableFormatter {
 public:
-    TCreateTableFormatter()
-        : Alloc(__LOCATION__)
+    // Emit global indexes as separate ALTER TABLE ADD INDEX statements when enabled.
+    explicit TCreateTableFormatter(bool separateGlobalIndexes = false)
+        : SeparateGlobalIndexes(separateGlobalIndexes)
+        , Alloc(__LOCATION__)
     {
         Alloc.Release();
     }
@@ -82,6 +84,7 @@ private:
 
     TString ValueToString(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
 
+    const bool SeparateGlobalIndexes;
     TStringStream Stream;
     NMiniKQL::TScopedAlloc Alloc;
 };

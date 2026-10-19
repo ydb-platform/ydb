@@ -6,7 +6,7 @@ namespace NKikimr::NKqp::NLocalTopicTests {
 
 namespace {
 
-class TLocalTopicWriteSessionFixture : public TLocalTopicClientFixture {
+class TLocalTopicWriteSessionFixture: public TLocalTopicClientFixture {
 public:
     static void AssertPendingInitSeqNo(IWriteSession& session) {
         // The first request after closure must return a pending future without
@@ -33,7 +33,7 @@ public:
     }
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
     Y_UNIT_TEST_F(WriteMessagesWithAutomaticSequenceNumbers, TLocalTopicClientFixture) {
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
         UNIT_ASSERT_VALUES_EQUAL(session->GetCounters()->BytesInflightTotal->Val(), 0);
         CloseSession(*session);
         AssertTopicEndOffset(3);
-        AssertTopicMessages({"first", "second", "third"});
+        AssertTopicMessages({ "first", "second", "third" });
     }
 
     Y_UNIT_TEST_F(DeduplicateAndResumeSequenceNumbers, TLocalTopicClientFixture) {
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
         AssertAck(writer.Write(std::move(next)), 43, 1);
         CloseSession(*session);
         AssertTopicEndOffset(2);
-        AssertTopicMessages({"first", "next"});
+        AssertTopicMessages({ "first", "next" });
     }
 
     Y_UNIT_TEST_F(WriteMetadataAndTimestamp, TLocalTopicClientFixture) {
@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
         TTestWriter writer(session);
         const auto createdAt = TInstant::MilliSeconds(1700000000123);
         auto message = TWriteMessage("metadata message");
-        message.SeqNo(42).CreateTimestamp(createdAt).MessageMeta({{"message-key", "message-value"}});
+        message.SeqNo(42).CreateTimestamp(createdAt).MessageMeta({ { "message-key", "message-value" } });
         AssertAck(writer.Write(std::move(message)), 42, 0);
         CloseSession(*session);
 
@@ -117,14 +117,13 @@ Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
         const std::string_view data(compressed.Data(), compressed.Size());
         AssertAck(writer.Write(TWriteMessage::CompressedMessage(data, ECodec::GZIP, payload.size()), true), 1, 0);
         CloseSession(*session);
-        AssertTopicMessages({payload});
+        AssertTopicMessages({ payload });
     }
 
     Y_UNIT_TEST_F(WriteToExplicitPartitionWithoutDeduplication, TLocalTopicClientFixture) {
         constexpr char topic[] = "/Root/partitioned-topic";
         CreateTopic(topic, 2);
-        auto session = CreateWriteSession(WriteSettings(topic)
-            .ProducerId("").MessageGroupId("").PartitionId(1).DeduplicationEnabled(false));
+        auto session = CreateWriteSession(WriteSettings(topic).ProducerId("").MessageGroupId("").PartitionId(1).DeduplicationEnabled(false));
         TTestWriter writer(session);
         AssertAck(writer.Write(TWriteMessage("partition message")), 1, 0, 1);
         CloseSession(*session);
@@ -203,4 +202,4 @@ Y_UNIT_TEST_SUITE(TLocalTopicWriteSession) {
     }
 }
 
-} // namespace NKikimr::NKqp::NLocalTopicTests
+}   // namespace NKikimr::NKqp::NLocalTopicTests

@@ -4,10 +4,12 @@
 
 namespace NFq::NRowDispatcher {
 
-TMemoryLimitedDataPacker::TMemoryLimitedDataPacker(NYql::NDq::IMemoryQuotaManager::TPtr manager, ui64 itemSizeOverhead, NMonitoring::TDynamicCounterPtr counters)
+TMemoryLimitedDataPacker::TMemoryLimitedDataPacker(
+    NYql::NDq::IMemoryQuotaManager::TPtr manager, ui64 itemSizeOverhead, NMonitoring::TDynamicCounterPtr counters)
     : ItemSizeOverhead(itemSizeOverhead)
     , PackingMemory(std::move(manager), "PackingMemory", std::move(counters))
-{}
+{
+}
 
 size_t TMemoryLimitedDataPacker::PackedSizeEstimate() const {
     Y_VALIDATE(Packer, "Packer is not initialized");
@@ -20,7 +22,8 @@ bool TMemoryLimitedDataPacker::IsEmpty() const {
 }
 
 void TMemoryLimitedDataPacker::SetPackerType(const NKikimr::NMiniKQL::TType* type) {
-    Packer = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(type, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode);
+    Packer = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(
+        type, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode);
     Y_VALIDATE(!Packer->IsBlock(), "Block type is not supported");
     ItemsCount = 0;
 }
@@ -46,7 +49,7 @@ std::pair<NYql::TChunkedBuffer, ui64> TMemoryLimitedDataPacker::Finish() {
         const auto finalSize = EstimateMemoryUsage(data.Size());
         ItemsCount = 0;
         PackingMemory.Reserve(finalSize);
-        return {std::move(data), finalSize};
+        return { std::move(data), finalSize };
     } catch (...) {
         Packer->Clear();
         ItemsCount = 0;
@@ -61,4 +64,4 @@ ui64 TMemoryLimitedDataPacker::EstimateMemoryUsage(size_t packedSize) const {
     return ((packedSize + pageCapacity - 1) / pageCapacity) * pageSize + ItemSizeOverhead * ItemsCount;
 }
 
-} // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

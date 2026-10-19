@@ -40,6 +40,7 @@ public:
         Self->BlockedOwners.clear();
         Self->BridgePiles.clear();
         Self->RecentNodeEvents.Clear();
+        Self->RecentTabletEvents.Clear();
 
         Self->ResetTotalResourceValues();
 
@@ -381,6 +382,14 @@ public:
                 }
                 node.LastSeenServicedDomains = node.ServicedDomains; // to keep Down and Freeze flags on restarts
                 node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
+                if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get());
+                        !node.BridgePileId && implicitPileId) {
+                    // node was registered before the cluster got its single-pile bridge config (it is being converted into
+                    // bridged one), so it implicitly belongs to the only pile; its Local may survive Hive restart and
+                    // register again without the change of actor id, so the pile is assigned here
+                    node.BridgePileId = implicitPileId;
+                    db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                }
                 node.Drain = nodeRowset.GetValueOrDefault<Schema::Node::Drain>();
                 node.DrainInitiators = nodeRowset.GetValueOrDefault<Schema::Node::DrainInitiators>();
                 node.Statistics = nodeRowset.GetValueOrDefault<Schema::Node::Statistics>();
@@ -536,7 +545,7 @@ public:
                             || !tablet.LockedToActor
                             || !Self->CurrentConfig.GetLockedTabletsSendMetrics())
                     {
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 } else {
                     auto it = Self->Nodes.find(tablet.NodeId);
@@ -544,7 +553,7 @@ public:
                         tablet.BecomeUnknown(&it->second);
                     } else {
                         tablet.NodeId = 0;
-                        tablet.BecomeStopped();
+                        tablet.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     }
                 }
                 tablet.InitTabletMetrics();
@@ -718,13 +727,13 @@ public:
                         Self->DataCenters[dc].Followers[{tabletId, followerGroup.Id}].push_back(std::prev(tablet->Followers.end()));
                     }
                     if (nodeId == 0) {
-                        follower.BecomeStopped();
+                        follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                     } else {
                         auto it = Self->Nodes.find(nodeId);
                         if (it != Self->Nodes.end() && it->second.IsUnknown()) {
                             follower.BecomeUnknown(&it->second);
                         } else {
-                            follower.BecomeStopped();
+                            follower.BecomeStopped(EHiveEventReason::LoadedFromDatabase);
                         }
                     }
                     follower.InitTabletMetrics();

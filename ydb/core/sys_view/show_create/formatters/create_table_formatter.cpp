@@ -44,6 +44,25 @@ namespace {
         }
         return descr.SplitBoundarySize() + 1;
     }
+
+    bool IsGlobalIndex(const TableIndex& index) {
+        switch (index.type_case()) {
+            case TableIndex::kGlobalIndex:
+            case TableIndex::kGlobalAsyncIndex:
+            case TableIndex::kGlobalUniqueIndex:
+            case TableIndex::kGlobalVectorKmeansTreeIndex:
+            case TableIndex::kGlobalFulltextPlainIndex:
+            case TableIndex::kGlobalFulltextRelevanceIndex:
+            case TableIndex::kGlobalJsonIndex:
+                return true;
+            case TableIndex::kLocalBloomFilterIndex:
+            case TableIndex::kLocalBloomNgramFilterIndex:
+            case TableIndex::kLocalMinMaxIndex:
+            case TableIndex::TYPE_NOT_SET:
+                return false;
+        }
+        Y_UNREACHABLE();
+    }
 }
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
@@ -328,12 +347,13 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     if (!createRequest.indexes().empty()) {
-        Stream << ",\n";
         try {
-            Format(createRequest.indexes(0));
-            for (int i = 1; i < createRequest.indexes().size(); i++) {
-                Stream << ",\n";
-                Format(createRequest.indexes(i));
+            for (const auto& index : createRequest.indexes()) {
+                if (SeparateGlobalIndexes && IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << ",\n\t";
+                Format(index);
             }
         } catch (const TFormatFail& ex) {
             return TFormatResult(ex.Status, ex.Error);
@@ -456,6 +476,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     Stream << ";";
 
+    if (SeparateGlobalIndexes) {
+        try {
+            for (const auto& index : createRequest.indexes()) {
+                if (!IsGlobalIndex(index)) {
+                    continue;
+                }
+                Stream << "\nALTER TABLE ";
+                EscapeName(tablePath, Stream);
+                Stream << " ADD ";
+                Format(index);
+                Stream << ";";
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
+    }
+
     if (!tableDesc.GetCdcStreams().empty()) {
         Y_ENSURE((ui32)tableDesc.GetCdcStreams().size() == persQueues.size(),
             "Number of CDC streams does not match the number of resolved changefeed topic descriptions");
@@ -563,7 +602,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 }
 
 void TCreateTableFormatter::Format(const TableIndex& index) {
-    Stream << "\tINDEX ";
+    Stream << "INDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
     std::optional<FulltextIndexSettings> fulltextIndexSettings;

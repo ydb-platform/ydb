@@ -1,7 +1,34 @@
 #include "distconf.h"
 #include <contrib/libs/xxhash/xxhash.h>
+#include <google/protobuf/util/message_differencer.h>
+
+#include <array>
 
 namespace NKikimr::NStorage {
+
+    namespace {
+
+        // apply the callback to every state storage, state storage board and scheme board config present in the storage
+        // config; stop at the first error returned by the callback
+        template<typename T>
+        std::optional<TString> ForEachStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config, T&& callback) {
+            using TConfig = NKikimrBlobStorage::TStorageConfig;
+            static constexpr std::array fields{
+                std::make_pair(&TConfig::HasStateStorageConfig, &TConfig::MutableStateStorageConfig),
+                std::make_pair(&TConfig::HasStateStorageBoardConfig, &TConfig::MutableStateStorageBoardConfig),
+                std::make_pair(&TConfig::HasSchemeBoardConfig, &TConfig::MutableSchemeBoardConfig),
+            };
+            for (const auto& [has, mutableConfig] : fields) {
+                if ((config->*has)()) {
+                    if (std::optional<TString> error = callback((config->*mutableConfig)())) {
+                        return error;
+                    }
+                }
+            }
+            return std::nullopt;
+        }
+
+    } // anonymous
 
     bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config) {
         bool changes = false;
@@ -31,9 +58,62 @@ namespace NKikimr::NStorage {
                     changes = true;
                 }
             }
+
+            // persist pile registry of the cluster bridged before the registry was introduced; it is implied by
+            // BridgeConfig, so pile ids stay the same
+            if (auto *details = config->MutableClusterStateDetails(); !details->HasPileRegistry() && Cfg &&
+                    Cfg->BridgeConfig) {
+                auto registry = NBridge::MakeImpliedPileRegistry(*Cfg->BridgeConfig);
+                if (!NBridge::ValidatePileRegistry(registry, *clusterState)) {
+                    details->MutablePileRegistry()->Swap(&registry);
+                    changes = true;
+                }
+            }
         }
 
         return changes;
+    }
+
+    std::optional<NKikimrBridge::TPileRegistry> GetPileRegistry(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrConfig::TBridgeConfig *bridgeConfig) {
+        if (!bridgeConfig) {
+            return std::nullopt;
+        } else if (const auto& details = config.GetClusterStateDetails(); details.HasPileRegistry()) {
+            return details.GetPileRegistry();
+        } else {
+            return NBridge::MakeImpliedPileRegistry(*bridgeConfig);
+        }
+    }
+
+    std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
+            NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig) {
+        if (!config->HasClusterState()) {
+            return std::nullopt; // the cluster is not bridged one yet, pile ids are not persisted anywhere
+        }
+        const auto registry = GetPileRegistry(*config, localBridgeConfig);
+        if (!registry) {
+            return "this node runs without BridgeConfig while the cluster is bridged one";
+        }
+        auto makeError = [&](TStringBuf message) {
+            TStringBuilder err;
+            err << message << ", expected piles#";
+            for (const auto& pile : registry->GetPiles()) {
+                if (pile.HasName()) {
+                    err << " '" << pile.GetName() << "'";
+                }
+            }
+            return err;
+        };
+        auto next = NBridge::AssignPileIds(*registry, bridgeConfig);
+        auto equals = google::protobuf::util::MessageDifferencer::Equals;
+        if (!equals(next, *registry)) {
+            return makeError("list of bridge piles can't be changed");
+        } else if (!equals(NBridge::MakeImpliedPileRegistry(bridgeConfig), next)) {
+            // nodes running older versions take pile ids from positions of piles in their BridgeConfig
+            return makeError("order of bridge piles can't be changed");
+        }
+        config->MutableClusterStateDetails()->MutablePileRegistry()->Swap(&next);
+        return std::nullopt;
     }
 
     void TDistributedConfigKeeper::GenerateBridgeInitialState(const TNodeWardenConfig& cfg,
@@ -44,15 +124,8 @@ namespace NKikimr::NStorage {
             return; // some cluster state has been already defined
         }
 
-        auto *state = config->MutableClusterState();
-        auto *piles = state->MutablePerPileState();
-        for (size_t i = 0; i < cfg.BridgeConfig->PilesSize(); ++i) {
-            piles->Add(NKikimrBridge::TClusterState::SYNCHRONIZED);
-        }
-        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPrimaryPile);
-        TBridgePileId::FromPileIndex(0).CopyToProto(state, &NKikimrBridge::TClusterState::SetPromotedPile);
-
-        config->MutableClusterStateDetails();
+        config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(cfg.BridgeConfig->PilesSize()));
+        *config->MutableClusterStateDetails()->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(*cfg.BridgeConfig);
     }
 
     std::optional<TString> TDistributedConfigKeeper::TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config) {
@@ -107,6 +180,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config) {
         if (config->HasClusterState() && (!config->GetPrevConfig().GetGeneration() ||
+                !config->GetPrevConfig().HasClusterState() || // conversion from non-bridged cluster
                 !NBridge::IsSameClusterState(config->GetClusterState(), config->GetPrevConfig().GetClusterState()))) {
             // update cluster state generation if something has changed
             auto *clusterState = config->MutableClusterState();
@@ -162,7 +236,7 @@ namespace NKikimr::NStorage {
     std::optional<TString> TDistributedConfigKeeper::ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config) {
         // copy bridge info into state storage configs for easier access in replica processors/proxies
         if (config->HasClusterState()) {
-            auto fillInBridge = [&](auto *pb) -> std::optional<TString> {
+            return ForEachStateStorageConfig(config, [&](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
                 auto& clusterState = config->GetClusterState();
 
                 // copy cluster state generation
@@ -218,22 +292,62 @@ namespace NKikimr::NStorage {
                     }
                 }
                 return std::nullopt;
-            };
-
-            std::optional<TString> error;
-            if (!error && config->HasStateStorageConfig()) {
-                error = fillInBridge(config->MutableStateStorageConfig());
-            }
-            if (!error && config->HasStateStorageBoardConfig()) {
-                error = fillInBridge(config->MutableStateStorageBoardConfig());
-            }
-            if (!error && config->HasSchemeBoardConfig()) {
-                error = fillInBridge(config->MutableSchemeBoardConfig());
-            }
-            return error;
+            });
         }
 
         return std::nullopt;
+    }
+
+    std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
+            const NKikimrConfig::TBridgeConfig& bridgeConfig) {
+        if (config->HasClusterState()) {
+            return "cluster is already bridged one";
+        } else if (bridgeConfig.PilesSize() != 1) {
+            return "BridgeConfig must contain exactly one pile to convert cluster to bridged one";
+        }
+
+        // the cluster has the only pile which is the primary one; generation and history are filled in when committing;
+        // the pile is the implicit one, as nodes and groups of the cluster have no pile settings yet
+        config->MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(1));
+        auto *details = config->MutableClusterStateDetails();
+        details->SetBscConversionPending(true);
+        *details->MutablePileRegistry() = NBridge::MakeImpliedPileRegistry(bridgeConfig);
+
+        // make every static group an inline pile of itself; this requires generation change to make proxies and VDisks
+        // pick up new group info
+        auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, ui32> prevGenerations;
+        for (auto& group : *ss->MutableGroups()) {
+            if (group.HasBridgeGroupState() || group.HasBridgeProxyGroupId() || group.HasBridgePileId()) {
+                return "static group already has bridge settings";
+            }
+            const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            prevGenerations.emplace(groupId, group.GetGroupGeneration());
+            group.SetGroupGeneration(group.GetGroupGeneration() + 1);
+            NBridge::MakeInlinePile(&group);
+        }
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (const auto it = prevGenerations.find(vdiskId.GroupID); it != prevGenerations.end() &&
+                    it->second == vdiskId.GroupGeneration) { // donors keep their generations
+                ++vdiskId.GroupGeneration;
+                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
+            }
+        }
+
+        // bridged cluster requires every ring group to be bound to some pile; legacy Ring is turned into the ring group
+        // with the same replica actor ids
+        return ForEachStateStorageConfig(config, [](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+            if (pb->HasRing()) {
+                pb->AddRingGroups()->Swap(pb->MutableRing());
+                pb->ClearRing();
+            }
+            for (auto& ringGroup : *pb->MutableRingGroups()) {
+                TBridgePileId::FromPileIndex(0).CopyToProto(&ringGroup,
+                    &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
+            }
+            return std::nullopt;
+        });
     }
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState) {

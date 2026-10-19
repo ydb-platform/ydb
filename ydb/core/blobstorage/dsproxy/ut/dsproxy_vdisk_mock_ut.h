@@ -178,8 +178,8 @@ public:
         auto vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const NKikimrBlobStorage::TRangeQuery& query = record.GetRangeQuery();
 
-        auto first = LogoBlobIDFromLogoBlobID(query.GetFrom());
-        auto last = LogoBlobIDFromLogoBlobID(query.GetTo());
+        const auto first = LogoBlobIDFromLogoBlobID(query.GetFrom()).FullID();
+        const auto last = LogoBlobIDFromLogoBlobID(query.GetTo()).FullID();
 
         ui64 *cookie = nullptr;
         ui64 cookieValue = 0;
@@ -189,37 +189,34 @@ public:
         }
 
         TMap<TLogoBlobID, TIngress> resultBlobs;
-
-        if (first <= last) {
-            auto from = Blobs.lower_bound(first);
-            auto to = Blobs.upper_bound(last);
-            for (auto it = from; it != to; ++it) {
-                auto& id = it->first;
-                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
-                resultBlobs[id.FullID()].Merge(*ingress);
-            }
-            for (auto it = resultBlobs.begin(); it != resultBlobs.end(); ++it) {
-                ui64 ingr = it->second.Raw();
-                ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
-                const NMatrix::TVectorType local = it->second.LocalParts(Info->GetTopology().GType);
-                outVGetResult.AddResult(NKikimrProto::OK, it->first, cookie, pingr, &local, true, false);
-            }
-        } else {
-            auto from = Blobs.upper_bound(first);
-            auto to = Blobs.lower_bound(last);
-            for (auto it = std::reverse_iterator(from); it != std::reverse_iterator(to); ++it) {
-                auto& id = it->first;
-                auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
-                resultBlobs[id.FullID()].Merge(*ingress);
-            }
-            for (auto it = resultBlobs.rbegin(); it != resultBlobs.rend(); ++it) {
-                ui64 ingr = it->second.Raw();
-                ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
-                const NMatrix::TVectorType local = it->second.LocalParts(Info->GetTopology().GType);
-                outVGetResult.AddResult(NKikimrProto::OK, it->first, cookie, pingr, &local, true, false);
-            }
+        // The index contains one entry per full blob, with all local parts merged.
+        // Both bounds include the whole blob, including its nonzero part IDs.
+        for (auto it = Blobs.lower_bound(Min(first, last));
+                it != Blobs.end() && it->first.FullID() <= Max(first, last); ++it) {
+            const auto& id = it->first;
+            auto ingress = TIngress::CreateIngressWithLocal(&Info->GetTopology(), vDiskId, id);
+            resultBlobs[id.FullID()].Merge(*ingress);
         }
 
+        ui32 remaining = query.HasMaxResults() ? query.GetMaxResults() : Max<ui32>();
+        const auto append = [&](auto it, auto end) {
+            for (; it != end && remaining; ++it, --remaining) {
+                ui64 ingr = it->second.Raw();
+                ui64 *pingr = (record.GetShowInternals() ? &ingr : nullptr);
+                const NMatrix::TVectorType local = it->second.LocalParts(Info->GetTopology().GType);
+                outVGetResult.AddResult(NKikimrProto::OK, it->first, cookie, pingr, &local, true, false);
+            }
+        };
+        if (first <= last) {
+            append(resultBlobs.begin(), resultBlobs.end());
+        } else {
+            append(resultBlobs.rbegin(), resultBlobs.rend());
+        }
+        // Match query_range.cpp: reaching the limit marks overflow even when
+        // there are exactly MaxResults blobs and the following page is empty.
+        if (!remaining) {
+            outVGetResult.MarkRangeOverflow();
+        }
     }
 };
 

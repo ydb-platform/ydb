@@ -22,7 +22,7 @@ For the full list of levels and `log_config` parameters, see [{#T}](../../refere
 
 Full wording and `log_config` parameters are in [{#T}](../../reference/configuration/log_config.md#log-levels).
 
-**The rest of this article** covers **production** verbosity: baseline levels and when to temporarily raise to `INFO`, `DEBUG`, or `TRACE`. Levels `EMERG` through `WARN` reflect errors and emergencies—you do not select them manually as a “logging mode”; components emit them when the corresponding condition occurs.
+Levels `EMERG` through `WARN` reflect errors and emergencies. Do not select them as a logging mode. A component emits them when the corresponding condition occurs. For routine operation keep `NOTICE`, and for temporary diagnosis raise verbosity to `INFO`, `DEBUG`, or `TRACE`.
 
 ## Which level to use when {#when}
 
@@ -38,7 +38,7 @@ In production, keep the baseline at **`NOTICE`** (or `INFO` if your observabilit
 
 ### Static configuration
 
-Set the `log_config` section in the cluster configuration, for example:
+Set the `log_config` section in the cluster configuration. `KQP` in the example is the log name of the query processor ([Query Processor](../../concepts/glossary.md#kqp)):
 
 ```yaml
 log_config:
@@ -57,6 +57,8 @@ The `log_config` section is [dynamically updatable](../configuration-management/
 ```bash
 {{ ydb-cli }} admin config replace -f dynconfig.yaml
 ```
+
+The command replaces the dynamic configuration as a whole. Keep the current cluster file in `dynconfig.yaml` and change its `log_config` section. The snippets above are not a complete file to upload.
 
 After the configuration propagates, new levels take effect without restarting nodes.
 
@@ -102,7 +104,7 @@ Higher verbosity means more log lines:
 
 To reduce overload, use `log_config` options:
 
-- `allow_drop_entries` and `time_threshold_ms` — buffering and dropping lower-priority records when the log pipeline is saturated;
+- `allow_drop_entries` — in-memory buffer: records flush after 10 messages or after `time_threshold_ms`; if the buffer overflows, lower-priority records can be dropped. `time_threshold_ms` is that flush period, in milliseconds;
 - `default_sampling_level`, `default_sampling_rate`, and `sampling_*` in `entry` — partial recording between the main and sampling levels (see [{#T}](../../reference/configuration/log_config.md)).
 
 Request tracing (OpenTelemetry) is configured **separately** from log levels—see [{#T}](../../reference/observability/tracing/setup.md). The **`fraction`** field belongs to **`tracing_config.sampling`**, not `log_config`: it sets the share of traced requests, not log lines.
@@ -110,10 +112,10 @@ Request tracing (OpenTelemetry) is configured **separately** from log levels—s
 ```yaml
 tracing_config:
   sampling:
-    - level: 10  # trace detail; see the reference
-      fraction: 0.01  # roughly 1% of requests
-    - level: 14
-      fraction: 0.001  # deeper detail — even less often
+    - level: 10  # Detailed: production diagnosis, not the maximum
+      fraction: 0.01  # 1% of requests
+    - level: 14  # Diagnostic: debug detail on every layer
+      fraction: 0.001
 ```
 
 ### Example production configuration

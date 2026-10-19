@@ -5,6 +5,7 @@ SIZE(MEDIUM)
 TEST_SRCS(
     test_cardinality_projection.py
     test_checked_concat.py
+    test_cli_budget.py
     test_ir.py
     test_analysis.py
     test_join.py

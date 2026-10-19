@@ -46,6 +46,7 @@ using namespace NVerificationCoverage;
 constexpr const char* TestCluster = "local_ut";
 constexpr ui64 DefaultTimeoutMs = 10'000;
 constexpr ui64 ProofFloorTimeoutMs = 60'000;
+constexpr ui64 ConstructionTimeoutMs = 60'000;
 constexpr const char* CoverageReportFormat =
     "ydb-rbo-benchmark-coverage";
 constexpr ui64 CoverageReportVersion = 5;
@@ -825,6 +826,7 @@ TOutcome RunVerifier(
     process.Arguments.insert(process.Arguments.end(), {
         "--rows", ToString(RowBound),
         "--timeout-ms", ToString(timeoutMs),
+        "--construction-timeout-ms", ToString(ConstructionTimeoutMs),
         "--emit-smt", formulaPath.GetPath(),
     });
     if (solver) {
@@ -1353,6 +1355,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
 
     NJson::TJsonValue report = CoverageReportHeader(suite);
     report["solver_present"] = solver.Defined();
+    report["construction_timeout_ms"] = ConstructionTimeoutMs;
     report["timeout_ms"] = timeoutResolved
         ? NJson::TJsonValue(timeoutMs)
         : NJson::TJsonValue(NJson::JSON_NULL);

@@ -5,7 +5,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import signal
 import sys
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Sequence
 
@@ -24,6 +27,40 @@ from .verify import (
 )
 
 
+class _ConstructionTimeout(Exception):
+    pass
+
+
+class _ConstructionDeadlineUnavailable(Exception):
+    pass
+
+
+@contextmanager
+def _construction_deadline(timeout_ms: int | None):
+    """Interrupt only construction, before any solver subprocess can exist."""
+    if timeout_ms is None:
+        yield
+        return
+    if not all(hasattr(signal, name) for name in ("SIGALRM", "ITIMER_REAL", "setitimer", "getitimer")):
+        raise _ConstructionDeadlineUnavailable("construction deadline requires POSIX interval timers")
+    if threading.current_thread() is not threading.main_thread():
+        raise _ConstructionDeadlineUnavailable("construction deadline requires the main thread")
+    if any(signal.getitimer(signal.ITIMER_REAL)):
+        raise _ConstructionDeadlineUnavailable("construction deadline cannot replace an active interval timer")
+    previous = signal.getsignal(signal.SIGALRM)
+
+    def expired(signum, frame):
+        raise _ConstructionTimeout(f"construction deadline exceeded ({timeout_ms} ms); no proof was attempted")
+
+    signal.signal(signal.SIGALRM, expired)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, timeout_ms / 1000)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Check bounded equivalence of two new-RBO snapshots")
     result.add_argument("before", type=Path, nargs="?")
@@ -31,6 +68,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--bundle", type=Path, help="strict v1 buffered result-bundle manifest (instead of two snapshots)")
     result.add_argument("--rows", type=int, default=2, help="symbolic row slots per table")
     result.add_argument("--timeout-ms", type=int, default=10_000)
+    result.add_argument(
+        "--construction-timeout-ms", type=int,
+        help="POSIX deadline for loading, model construction and --emit-smt rendering; expiry is UNKNOWN",
+    )
     result.add_argument("--solver", type=Path, help="explicit Z3 executable")
     result.add_argument(
         "--diagnose-nonempty-output", action="store_true",
@@ -85,6 +126,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         return _error(
             "INVALID_ARGUMENT", "--timeout-ms must be positive", comparison_scope
         )
+    if options.construction_timeout_ms is not None and options.construction_timeout_ms <= 0:
+        return _error("INVALID_ARGUMENT", "--construction-timeout-ms must be positive", comparison_scope)
     if options.solver is None and options.emit_smt is None:
         return _error(
             "INVALID_ARGUMENT",
@@ -101,27 +144,29 @@ def main(arguments: Sequence[str] | None = None) -> int:
     observation_options = {} if observer is None else {"boundary_observer": observer}
     observation_metadata: dict[str, object] = {}
     try:
-        if options.diagnostic_observation_snapshot is not None:
-            try:
-                source = options.diagnostic_observation_snapshot.read_bytes()
-                observation_metadata["observation_snapshot_sha256"] = hashlib.sha256(source).hexdigest()
-                observation_options["observation_snapshot"] = parse_snapshot(json.loads(source.decode("utf-8")))
-            except (OSError, UnicodeError, ValueError, RecursionError) as error:
-                raise SnapshotError(f"cannot load observation snapshot: {error}") from error
-        if options.bundle is not None:
-            problem = build_bundle_problem(
-                load_bundle(options.bundle), options.rows, options.timeout_ms, **observation_options,
-            )
-        else:
-            before = load_snapshot(options.before)
-            after = load_snapshot(options.after)
-            builder = (build_transformation_pair_problem if options.diagnostic_transformation_pair
-                       else build_transformation_prefix_problem if options.diagnostic_transformation_prefix else build_problem)
-            problem = builder(before, after, options.rows, options.timeout_ms, **observation_options)
+        with _construction_deadline(options.construction_timeout_ms):
+            if options.diagnostic_observation_snapshot is not None:
+                try:
+                    source = options.diagnostic_observation_snapshot.read_bytes()
+                    observation_metadata["observation_snapshot_sha256"] = hashlib.sha256(source).hexdigest()
+                    observation_options["observation_snapshot"] = parse_snapshot(json.loads(source.decode("utf-8")))
+                except (OSError, UnicodeError, ValueError, RecursionError) as error:
+                    raise SnapshotError(f"cannot load observation snapshot: {error}") from error
+            if options.bundle is not None:
+                problem = build_bundle_problem(
+                    load_bundle(options.bundle), options.rows, options.timeout_ms, **observation_options,
+                )
+            else:
+                before = load_snapshot(options.before)
+                after = load_snapshot(options.after)
+                builder = (build_transformation_pair_problem if options.diagnostic_transformation_pair
+                           else build_transformation_prefix_problem if options.diagnostic_transformation_prefix else build_problem)
+                problem = builder(before, after, options.rows, options.timeout_ms, **observation_options)
+            formula = problem.formula() if options.emit_smt is not None else None
         if problem.observation_kind is not None:
             observation_metadata["observation_kind"] = problem.observation_kind
         if options.emit_smt is not None:
-            options.emit_smt.write_text(problem.formula(), encoding="utf-8")
+            options.emit_smt.write_text(formula, encoding="utf-8")
         if options.solver is None:
             verdict = _scoped(
                 {
@@ -135,6 +180,16 @@ def main(arguments: Sequence[str] | None = None) -> int:
             print(json.dumps(verdict, sort_keys=True))
             return 0
         result = solve(problem, options.solver, options.rows, options.timeout_ms)
+    except _ConstructionTimeout as error:
+        verdict = _scoped({
+            "status": "UNKNOWN", "reason": str(error), "phase": "construction",
+            "row_bound": options.rows, "task_bound": TASKS,
+            "construction_timeout_ms": options.construction_timeout_ms,
+        }, comparison_scope, observation_metadata)
+        print(json.dumps(verdict, sort_keys=True))
+        return 2
+    except _ConstructionDeadlineUnavailable as error:
+        return _error("INVALID_ARGUMENT", str(error), comparison_scope)
     except SchemaMismatch as error:
         verdict = _scoped(
             {

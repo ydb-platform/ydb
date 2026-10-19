@@ -12430,7 +12430,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             controllers[node] = MakeIntrusive<TStubMemoryControllerState>();
             controllers[node]->InitialZone = NMemory::EMemoryZone::Green;
             const auto controller = runtime.Register(new TStubMemoryController(controllers[node]), node);
-            runtime.RegisterService(NMemory::MakeMemoryControllerId(runtime.GetNodeId(node)), controller, node);
+            runtime.RegisterService(NMemory::MakeMemoryControllerId(), controller, node);
             CreateLocal(runtime, node, MakeMemoryProbeLocalConfig(probes[node]));
         }
         const ui64 hive = MakeDefaultHiveID();
@@ -12453,6 +12453,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui32 leaderNode = leaders[0] ? 0 : 1;
         const ui32 followerNode = 1 - leaderNode;
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(controllers[followerNode]->Tablets);
+        UNIT_ASSERT(controllers[followerNode]->TabletsElastic);
         auto& probe = probes[followerNode];
         UNIT_ASSERT(probe->LastShare);
         UNIT_ASSERT_VALUES_EQUAL(*probe->LastShare, 4_MB);

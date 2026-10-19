@@ -237,6 +237,7 @@ message TPQConfig {
     }
 
     optional TCloudEventsConfig CloudEventsConfig = 61;
+    optional uint64 MinOffset = 63;
 }
 
 message TChannelProfile {

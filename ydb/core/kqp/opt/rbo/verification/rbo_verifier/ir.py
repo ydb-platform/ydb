@@ -1439,8 +1439,8 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     ),
                 )
             )
-        if len(inputs) != 2:
-            _fail(f"{path}.inputs", "requires exactly two inputs")
+        if len(inputs) < 2:
+            _fail(f"{path}.inputs", "requires at least two inputs")
         output = tuple(
             _string(column, f"{path}.output[{index}]")
             for index, column in enumerate(_array(obj["output"], f"{path}.output"))

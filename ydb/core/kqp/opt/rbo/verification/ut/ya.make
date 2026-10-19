@@ -24,6 +24,7 @@ TEST_SRCS(
     test_string_order.py
     test_string_proof.py
     test_subplans.py
+    test_union_all_variadic.py
     test_smt.py
     test_verify.py
     test_window_avg.py

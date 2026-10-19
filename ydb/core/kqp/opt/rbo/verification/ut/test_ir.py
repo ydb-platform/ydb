@@ -4193,7 +4193,7 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "must cross stage boundaries"):
             parse_snapshot(value)
 
-    def test_union_all_is_exactly_binary(self):
+    def test_union_all_requires_at_least_two_inputs(self):
         value = copy.deepcopy(minimal_snapshot())
         value["plan"] = {
             "nodes": [
@@ -4202,8 +4202,6 @@ class SnapshotTest(unittest.TestCase):
                     "id": "union",
                     "op": "union_all",
                     "inputs": [
-                        {"node": "scan", "columns": ["a.k"]},
-                        {"node": "scan", "columns": ["a.k"]},
                         {"node": "scan", "columns": ["a.k"]},
                     ],
                     "output": ["u.k"],
@@ -4214,7 +4212,7 @@ class SnapshotTest(unittest.TestCase):
             "output": ["u.k"],
             "subplans": [],
         }
-        with self.assertRaisesRegex(SnapshotError, "requires exactly two inputs"):
+        with self.assertRaisesRegex(SnapshotError, "requires at least two inputs"):
             parse_snapshot(value)
 
     def test_union_all_ordered_flag_is_required_and_strict(self):

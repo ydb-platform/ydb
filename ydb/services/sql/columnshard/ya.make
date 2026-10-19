@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    delete.cpp
     insert.cpp
     select.cpp
     update.cpp

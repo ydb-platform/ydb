@@ -271,4 +271,25 @@ Y_UNIT_TEST_SUITE(ColumnTable) {
         UNIT_ASSERT_VALUES_EQUAL(selected.Rows.size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(selected.Rows[0][0].Text, "9");
     }
+
+    Y_UNIT_TEST(DeleteRemovesTheRow) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+        TSqlClient sql(server, database);
+
+        const auto created = sql.Exec("CREATE TABLE removed (id int8 PRIMARY KEY, qty int8) WITH (store = column)");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+        const auto inserted = sql.Exec("INSERT INTO removed (id, qty) VALUES (1, 7)");
+        UNIT_ASSERT_C(inserted.Ok, inserted.SqlState + " " + inserted.Message);
+        const auto deleted = sql.Exec("DELETE FROM removed WHERE id = 1");
+        UNIT_ASSERT_C(deleted.Ok, deleted.SqlState + " " + deleted.Message);
+        UNIT_ASSERT_VALUES_EQUAL(deleted.CommandTag, "DELETE 1");
+        const auto selected = sql.Exec("SELECT qty FROM removed WHERE id = 1");
+        UNIT_ASSERT_C(selected.Ok, selected.SqlState + " " + selected.Message);
+        UNIT_ASSERT_VALUES_EQUAL(selected.Rows.size(), 0u);
+    }
 }

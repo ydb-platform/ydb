@@ -1,7 +1,7 @@
 # UPDATE колоночной таблицы
 
-status: pending
-commit:
+status: done
+commit: 0c926cfdd335d7cbee79350114643d6809ca9989
 id: column-update
 depends: column-insert
 

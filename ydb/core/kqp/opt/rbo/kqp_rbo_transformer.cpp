@@ -3,6 +3,7 @@
 #include "kqp_plan_conversion_utils.h"
 #include "kqp_rbo_rules.h"
 #include "traces/kqp_rbo_trace_output.h"
+#include "verification/semantic_snapshot.h"
 
 #include <ydb/core/kqp/host/kqp_transform.h>
 
@@ -25,6 +26,77 @@ using namespace NKikimr::NKqp;
 using namespace NYql::NDq;
 
 namespace {
+
+// Optimizer roots and client result positions are separate identities. Bind
+// them only when the complete read-only AST result list matches distinct roots.
+class TResultSlotSnapshotSink final : public IRBOSemanticSnapshotSink {
+public:
+    TResultSlotSnapshotSink(IRBOSemanticSnapshotSink& sink, const TExprNode& resultList,
+        const TVector<TIntrusivePtr<TOpRoot>>& roots)
+        : Sink(sink)
+    {
+        if (roots.empty() || roots.size() > Max<ui32>()) {
+            return;
+        }
+        THashMap<const TExprNode*, ui32> ordinals;
+        for (const auto& slot : resultList.Children()) {
+            if (slot->IsList() && slot->ChildrenSize() == 0) {
+                continue; // Empty query preamble.
+            }
+            if (!slot->IsList() || slot->ChildrenSize() != 2 || !slot->Child(1)->IsList()) {
+                return;
+            }
+            const TExprNode* root = slot->Child(0);
+            if (TCoUnordered::Match(root)) {
+                root = root->Child(0);
+            }
+            if (!TKqpOpRoot::Match(root) || !ordinals.emplace(root, ordinals.size()).second) {
+                return;
+            }
+            for (const auto& column : slot->Child(1)->Children()) {
+                if (!column->IsAtom()) {
+                    return;
+                }
+            }
+        }
+        if (ordinals.size() != roots.size()) {
+            return;
+        }
+        TVector<ui32> mapping;
+        THashSet<const TExprNode*> seen;
+        for (const auto& root : roots) {
+            if (!root || root->PlanProps.WithEffects || !root->Node ||
+                !seen.insert(root->Node.Get()).second || root->GetColumns().Items().empty())
+            {
+                return;
+            }
+            const auto* ordinal = ordinals.FindPtr(root->Node.Get());
+            if (!ordinal) {
+                return;
+            }
+            mapping.push_back(*ordinal);
+        }
+        ResultOrdinals = std::move(mapping);
+    }
+
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        result.ResultOrdinal.reset();
+        result.ResultCount = 0;
+        if (result.RootCount == ResultOrdinals.size() && result.RootOrdinal < ResultOrdinals.size()) {
+            result.ResultOrdinal = ResultOrdinals[result.RootOrdinal];
+            result.ResultCount = static_cast<ui32>(ResultOrdinals.size());
+        }
+        Sink.OnSemanticSnapshot(std::move(result));
+    }
+
+    std::optional<ui64> GetTransformationPrefixTarget() const override {
+        return Sink.GetTransformationPrefixTarget();
+    }
+
+private:
+    IRBOSemanticSnapshotSink& Sink;
+    TVector<ui32> ResultOrdinals;
+};
 
 NJson::TJsonValue MakeNewRBOOptimizerStats(const NOpt::TKqpOptimizeContext& kqpCtx) {
     const auto& cboStats = kqpCtx.CBOStats;
@@ -508,9 +580,18 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
     TRBOTraceOutput traceOutput(rboCtx);
     const auto semanticSnapshotSink = TransformCtx->RBOSemanticSnapshotSink;
-    auto optimizedPlan = RBO.Optimize(Roots, rboCtx, semanticSnapshotSink.get());
+    std::optional<TResultSlotSnapshotSink> resultSlotSink;
+    if (semanticSnapshotSink && containers.size() == 1) {
+        resultSlotSink.emplace(*semanticSnapshotSink, *containers.front(), Roots);
+    }
+    auto optimizedPlan = RBO.Optimize(Roots, rboCtx,
+        resultSlotSink ? &*resultSlotSink : semanticSnapshotSink.get());
     traceOutput.Flush();
     AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+    // Prefix capture stops before producing an executable physical plan.
+    if (!optimizedPlan) {
+        return TStatus::Error;
+    }
 
     TNodeOnNodeOwnedMap replacements;
     for (const auto& container : containers) {

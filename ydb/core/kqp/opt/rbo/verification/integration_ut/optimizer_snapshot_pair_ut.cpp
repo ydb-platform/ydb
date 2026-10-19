@@ -783,10 +783,11 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(R"(--!syntax_v1
+        const TString query = R"(--!syntax_v1
             SELECT Key FROM `/Root/KeyValue`;
             SELECT Key AS OtherKey FROM `/Root/KeyValue`;
-        )", settings);
+        )";
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
         const auto results = sink->Extract();
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 4);
@@ -799,6 +800,11 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             UNIT_ASSERT_VALUES_EQUAL(final.RootOrdinal, index);
             UNIT_ASSERT_VALUES_EQUAL(initial.RootCount, 2);
             UNIT_ASSERT_VALUES_EQUAL(final.RootCount, 2);
+            UNIT_ASSERT(initial.ResultOrdinal && final.ResultOrdinal);
+            UNIT_ASSERT_VALUES_EQUAL(*initial.ResultOrdinal, index);
+            UNIT_ASSERT_VALUES_EQUAL(*final.ResultOrdinal, index);
+            UNIT_ASSERT_VALUES_EQUAL(initial.ResultCount, 2);
+            UNIT_ASSERT_VALUES_EQUAL(final.ResultCount, 2);
             UNIT_ASSERT(ParseSnapshot(initial)["stage_graph"].IsNull());
             const auto snapshot = ParseSnapshot(final);
             const auto& stages = snapshot["stage_graph"]["stages"].GetArraySafe();
@@ -848,7 +854,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(R"(--!syntax_v1
+        const TString query = R"(--!syntax_v1
             SELECT SUM(Total) OVER (
                 PARTITION BY Bucket ORDER BY Id ROWS UNBOUNDED PRECEDING
             ) AS RunningTotal
@@ -856,7 +862,8 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                 SELECT Bucket, Id, SUM(Price) AS Total
                 FROM `/Root/RboNativeWindow` GROUP BY Bucket, Id
             );
-        )", settings);
+        )";
+        const auto prepared = host->SyncPrepareDataQuery(query, settings);
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
         const auto results = sink->Extract();
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);

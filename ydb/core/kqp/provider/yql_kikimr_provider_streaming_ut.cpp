@@ -166,7 +166,7 @@ struct TStreamingAggregationTypeAnnTest {
         const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), Config,
             CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
         session->SetInternalTypeAnnTransformer(NKikimr::NKqp::NOpt::CreateKqpTypeAnnotationTransformer(
-            session->GetCluster(), session->TablesPtr(), session->ConfigPtr()));
+            session->GetCluster(), session->TablesPtr(), session->ConfigPtr(), Types));
         auto sinkTypeAnn = CreateKiSinkTypeAnnotationTransformer(nullptr, session, Types);
         auto coreTypeAnn = CreateExtCallableTypeAnnotationTransformer(Types);
         auto callableTypeAnn = CreateFunctorTransformer([&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

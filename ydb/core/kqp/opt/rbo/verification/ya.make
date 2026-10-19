@@ -37,6 +37,7 @@ RECURSE_FOR_TESTS(
     cpp_ut
     inspect_ut
     integration_ut
+    native_cpp_ut
     prefix_capture/ut
     replay_ut
     ut

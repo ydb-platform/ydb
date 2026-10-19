@@ -9872,44 +9872,35 @@ private:
     void ValidatePeeledExistsAddDependencies(
         TStringBuf binding,
         TOpAddDependencies& addDependencies,
-        const TVector<TString>& dependencies)
+        const TVector<TString>& localDependencies)
     {
-        const auto& inputIUs = SnapshotOutputIUs(*addDependencies.GetInput());
-        const auto& outputIUs = SnapshotOutputIUs(addDependencies);
-        if (outputIUs.size() != inputIUs.size() + dependencies.size() ||
-            OutputStructType(addDependencies)->GetItems().size() !=
-                outputIUs.size())
-        {
-            Unsupported(TStringBuilder()
-                << "EXISTS subplan binding " << binding
-                << " AddDependencies has an invalid output shape");
-        }
-        for (size_t index = 0; index < inputIUs.size(); ++index) {
-            const TString input = inputIUs[index].GetFullName();
-            const TString output = outputIUs[index].GetFullName();
-            if (input.empty() || output != input ||
-                !SameType(
-                    ExactType(OutputType(*addDependencies.GetInput(), input)),
-                    ExactType(OutputType(addDependencies, output))))
-            {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " AddDependencies must preserve its input schema "
-                       "exactly and in order");
+        const auto inputs = OutputNames(*addDependencies.GetInput());
+        const auto outputs = OutputNames(addDependencies);
+        auto expected = inputs;
+        for (const auto& local : localDependencies) {
+            if (!expected.insert(local).second) {
+                Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
+                    << " has a duplicate or colliding local capture");
             }
         }
-        for (size_t index = 0; index < dependencies.size(); ++index) {
-            const TString output =
-                outputIUs[inputIUs.size() + index].GetFullName();
-            if (output != dependencies[index] ||
-                !SameType(
-                    ExactType(SnapshotDependencyTypes(addDependencies)[index]),
-                    ExactType(OutputType(addDependencies, output))))
+        if (outputs != expected || OutputStructType(addDependencies)->GetItems().size() != outputs.size()) {
+            Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
+                << " AddDependencies has an invalid output shape");
+        }
+        for (const auto& input : inputs) {
+            if (!SameType(ExactType(OutputType(*addDependencies.GetInput(), input)),
+                    ExactType(OutputType(addDependencies, input))))
             {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
-                    << " AddDependencies dependency type or output order "
-                       "is inconsistent");
+                Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
+                    << " AddDependencies must preserve its input schema exactly");
+            }
+        }
+        for (const auto& [local, capture] : addDependencies.GetDependencies().Items()) {
+            if (!capture.Type || !SameType(ExactType(capture.Type),
+                    ExactType(OutputType(addDependencies, ToString(local)))))
+            {
+                Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
+                    << " AddDependencies dependency type is inconsistent");
             }
         }
     }
@@ -9987,15 +9978,29 @@ private:
                 << "EXISTS subplan binding " << binding
                 << " dependency registry disagrees with AddDependencies");
         }
-        for (size_t index = 0; index < entry.DependentIUs.size(); ++index) {
-            if (!SnapshotDependencyTypes(*addDependencies)[index] ||
-                SnapshotDependencies(*addDependencies)[index] !=
-                    entry.DependentIUs[index])
+        // Native captures define fresh local IDs. The existing EXISTS model
+        // binds caller IDs, so audit native types first and alpha-rename only
+        // the serialized predicate. Keep the compiler's expression untouched.
+        THashMap<TString, std::pair<TString, const TTypeAnnotationNode*>> captures;
+        for (const auto& [local, capture] : addDependencies->GetDependencies().Items()) {
+            if (!capture.Type || !captures.emplace(ToString(capture.Outer),
+                    std::make_pair(ToString(local), capture.Type)).second)
             {
-                Unsupported(TStringBuilder()
-                    << "EXISTS subplan binding " << binding
+                Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
+                    << " has duplicate or untyped outer captures");
+            }
+        }
+        TVector<TString> localDependencies;
+        TVector<const TTypeAnnotationNode*> dependencyTypes;
+        THashMap<TString, TString> localToOuter;
+        for (const auto& dependency : dependencies) {
+            const auto* capture = captures.FindPtr(dependency);
+            if (!capture || !localToOuter.emplace(capture->first, dependency).second) {
+                Unsupported(TStringBuilder() << "EXISTS subplan binding " << binding
                     << " dependency registry disagrees with AddDependencies");
             }
+            localDependencies.push_back(capture->first);
+            dependencyTypes.push_back(capture->second);
         }
 
         auto innerPlan = addDependencies->GetInput();
@@ -10013,13 +10018,13 @@ private:
             [&]() {
                 auto visible = innerNames;
                 visible.insert(
-                    dependencies.begin(),
-                    dependencies.end());
+                    localDependencies.begin(),
+                    localDependencies.end());
                 return visible;
             }());
         const auto correlations = ExtractExistsCorrelations(
             binding,
-            dependencies,
+            localDependencies,
             filter->GetFilterExpression(),
             innerNames);
 
@@ -10028,8 +10033,33 @@ private:
         for (size_t index = 0; index < dependencies.size(); ++index) {
             descriptorDependencies.push_back({
                 .Name = dependencies[index],
-                .Type = SnapshotDependencyTypes(*addDependencies)[index],
+                .Type = dependencyTypes[index],
             });
+        }
+        TVector<NJson::TJsonValue*> pending{&predicateJson};
+        while (!pending.empty()) {
+            auto* expression = pending.back();
+            pending.pop_back();
+            if (expression->IsMap()) {
+                const auto& fields = expression->GetMapSafe();
+                const auto kind = fields.find("kind");
+                if (kind != fields.end() && kind->second.IsString() &&
+                    kind->second.GetStringSafe() == "column")
+                {
+                    const auto* outer = localToOuter.FindPtr((*expression)["column"].GetStringSafe());
+                    if (outer) {
+                        (*expression)["column"] = *outer;
+                    }
+                }
+                for (const auto& [name, value] : fields) {
+                    Y_UNUSED(value);
+                    pending.push_back(&(*expression)[name]);
+                }
+            } else if (expression->IsArray()) {
+                for (size_t index = 0; index < expression->GetArraySafe().size(); ++index) {
+                    pending.push_back(&(*expression)[index]);
+                }
+            }
         }
         TSubplanDescriptor result{
             .Binding = binding,
@@ -10046,7 +10076,7 @@ private:
         ValidatePeeledExistsAddDependencies(
             binding,
             *addDependencies,
-            dependencies);
+            localDependencies);
         const auto& details = ExistsDetails(result);
         Y_ENSURE(
             details.Correlation,
@@ -10058,11 +10088,11 @@ private:
             const auto& correlation = correlations[index];
             const auto& dependency =
                 details.Correlation->Dependencies[index];
-            Y_ENSURE(correlation.Dependency == dependency.Name);
+            Y_ENSURE(correlation.Dependency == localDependencies[index]);
             ValidateCorrelationTypes(
                 "EXISTS",
                 result.Binding,
-                dependency.Name,
+                localDependencies[index],
                 dependency.Type,
                 *result.ExportedRoot,
                 correlation.Expression,
@@ -10776,12 +10806,12 @@ private:
                     }
                 }
                 for (const auto& element : SnapshotMapElements(map)) {
-                    if (element.IsRename() &&
-                        input.contains(element.GetRename().GetFullName()))
+                    if (element.IsColumnAccess() &&
+                        input.contains(element.GetColumnAccess().GetFullName()))
                     {
                         result.emplace(
                             element.GetElementName().GetFullName(),
-                            *input.FindPtr(element.GetRename().GetFullName()));
+                            *input.FindPtr(element.GetColumnAccess().GetFullName()));
                     }
                 }
                 break;

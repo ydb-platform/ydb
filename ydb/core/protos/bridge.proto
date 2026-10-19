@@ -10,6 +10,9 @@ message TClusterState {
         NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
         SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
         SUSPENDED = 4; // gracefully taken down; treat like disconnected for data quorum; config quorum allowed; connections allowed
+        // listed in BridgeConfig, but has no resources in the cluster (not added yet, or already removed); takes no part in
+        // any quorum, connections not allowed
+        INACTIVE = 5;
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
@@ -21,7 +24,8 @@ message TClusterState {
 // Persistent mapping of pile names to pile ids. Pile id is the slot of the pile in Piles: a pile keeps its slot while it
 // stays in BridgeConfig, wherever it is listed there. The slot of a pile dropped from BridgeConfig gets free and is taken
 // by the next pile added; free slots at the end are trimmed, so the list never gets longer than the maximum number of
-// piles configured at once.
+// piles configured at once. Piles appear in the registry INACTIVE and may be dropped only being INACTIVE; free slots
+// are INACTIVE too.
 message TPileRegistry {
     message TPile {
         optional string Name = 1; // as written in BridgeConfig and node locations, may be empty; unset for a free slot
@@ -67,7 +71,10 @@ message TGroupState {
         uint32 GroupGeneration = 2; // for race-checking in syncer and proxy proxy
         EStage Stage = 3; // synchronization stage
         uint64 BecameUnsyncedGeneration = 4; // cluster state generation from TPileSyncState.BecameUnsyncedGeneration
+        bool Absent = 5; // the group has no part in this pile (the pile is INACTIVE); other fields are not filled in
     }
 
-    repeated TPile Pile = 1; // for every pile, synced or unsynced
+    // for every pile, synced or unsynced, indexed by pile id; the group has no parts in the piles beyond the end of the
+    // list, which is the case for INACTIVE piles at the end of pile registry
+    repeated TPile Pile = 1;
 }

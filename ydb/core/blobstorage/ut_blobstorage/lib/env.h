@@ -87,9 +87,16 @@ struct TEnvironmentSetup {
         const bool SetupResourceBroker = false;
         // Global blob_storage_config knob. Unset stays unset, so the flag alone leaves the size-class heap.
         const std::optional<ui32> VDiskHeapAllocatorNumLeadingDisks = std::nullopt;
+        // number of nodes listed in the initial config of automatically bootstrapped cluster (all of them, if zero);
+        // nodes not listed there are not started until the test adds them to the config, see ConfiguredNodeCount
+        const ui32 InitialConfiguredNodeCount = 0;
     };
 
     const TSettings Settings;
+
+    // number of first nodes listed in the config of automatically bootstrapped cluster; the test changes it when it
+    // adds nodes to the cluster config, so that nodes started afterwards get the new startup config
+    ui32 ConfiguredNodeCount = 0;
 
     class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
         std::unordered_set<TActorId> Subscribers;
@@ -207,6 +214,7 @@ struct TEnvironmentSetup {
 
     TEnvironmentSetup(TSettings&& settings)
         : Settings(std::move(settings))
+        , ConfiguredNodeCount(Settings.InitialConfiguredNodeCount ? Settings.InitialConfiguredNodeCount : Settings.NodeCount)
     {
         struct TSetupEnv { TSetupEnv() { TEnvironmentSetup::SetupEnv(); } };
         Singleton<TSetupEnv>();
@@ -314,8 +322,16 @@ struct TEnvironmentSetup {
         SetupStorage();
         SetupTablet();
         for (ui32 nodeId : Runtime->GetNodes()) {
-            SetupTenantPool(nodeId);
+            if (IsNodeConfigured(nodeId)) {
+                SetupTenantPool(nodeId);
+            } else {
+                Runtime->StopNode(nodeId); // node is not part of the cluster config yet
+            }
         }
+    }
+
+    bool IsNodeConfigured(ui32 nodeId) const {
+        return nodeId <= ConfiguredNodeCount;
     }
 
     void StopNode(ui32 nodeId) {
@@ -429,7 +445,7 @@ struct TEnvironmentSetup {
 
     void SetupStorage(ui32 targetNodeId = 0) {
         for (ui32 nodeId : Runtime->GetNodes()) {
-            if (targetNodeId && nodeId != targetNodeId) {
+            if (targetNodeId ? nodeId != targetNodeId : !IsNodeConfigured(nodeId)) {
                 continue;
             }
 
@@ -456,6 +472,9 @@ struct TEnvironmentSetup {
 
                         auto *box = config->BlobStorageConfig->MutableDefineBox();
                         for (ui32 nodeId : Runtime->GetNodes()) {
+                            if (!IsNodeConfigured(nodeId)) {
+                                continue;
+                            }
                             auto *node = config->NameserviceConfig->AddNode();
                             node->SetNodeId(nodeId);
                             node->SetHost(TStringBuilder() << "host_" << nodeId);
@@ -470,6 +489,9 @@ struct TEnvironmentSetup {
                         auto makeHosts = [&] {
                             TStringBuilder res;
                             for (ui32 nodeId : Runtime->GetNodes()) {
+                                if (!IsNodeConfigured(nodeId)) {
+                                    continue;
+                                }
                                 res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
                                     << nodeId << ", unit: unit_" << nodeId;
                                 if (Settings.NumPiles) {
@@ -483,10 +505,11 @@ struct TEnvironmentSetup {
                         auto makeBridgeConfig = [&] {
                             TStringBuilder res;
                             if (Settings.NumPiles) {
+                                // the test may change the set of piles, then nodes started after that get new one
                                 res << "  bridge_config:\n";
                                 res << "    piles:\n";
-                                for (ui32 i = 0; i < Settings.NumPiles; ++i) {
-                                    res << "    - name: pile_" << i + 1 << "\n";
+                                for (const auto& pile : Runtime->GetAppDataBridgeConfig().GetPiles()) {
+                                    res << "    - name: " << pile.GetName() << "\n";
                                 }
                             }
                             return res;
@@ -506,11 +529,7 @@ config:
     automatic_bootstrap: true
 )" << makeBridgeConfig() << R"(  host_configs:
   - nvme:
-    - SectorMap:0:1000
-    - SectorMap:1:1000
-    - SectorMap:2:1000
-    - SectorMap:3:1000
-    - SectorMap:4:1000
+    - SectorMap:X:1000
   hosts:
 )" << makeHosts();
                     }

@@ -43,6 +43,8 @@ namespace {
                     return Ydb::Bridge::PileState::NOT_SYNCHRONIZED;
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
                     return Ydb::Bridge::PileState::SYNCHRONIZED;
+                case NKikimrBridge::TClusterState::INACTIVE:
+                    return Ydb::Bridge::PileState::INACTIVE;
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_ABORT();
@@ -53,8 +55,11 @@ namespace {
 
 void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, const TBridgeInfo& bridgeInfo, Ydb::Bridge::GetClusterStateResult& to) {
     for (ui32 i = 0; i < from.PerPileStateSize(); ++i) {
+        const auto* pile = bridgeInfo.FindPile(TBridgePileId::FromPileIndex(i));
+        if (!pile || pile->IsFreeSlot) {
+            continue;
+        }
         auto* state = to.add_pile_states();
-        const auto* pile = bridgeInfo.GetPile(TBridgePileId::FromPileIndex(i));
         state->set_pile_name(pile->Name);
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
@@ -164,7 +169,9 @@ private:
 
         THashMap<TString, TBridgePileId> nameToId;
         for (const auto& pile : bridgeInfo->Piles) {
-            nameToId.emplace(pile.Name, pile.BridgePileId);
+            if (!pile.IsFreeSlot) {
+                nameToId.emplace(pile.Name, pile.BridgePileId);
+            }
         }
 
         const auto& currentClusterState = config->GetClusterState();
@@ -184,11 +191,15 @@ private:
             updates[pileId] = update.state();
         }
 
-        // prohibit updates to suspended piles
+        // prohibit updates to suspended piles and to the ones not added to the cluster
         for (const auto& [pileId, state] : updates) {
             if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot update suspended pile: " << pileId,
                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            } else if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::INACTIVE) {
+                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "pile is not added to the cluster: "
+                    << bridgeInfo->GetPile(pileId)->Name, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                 return;
             }
         }
@@ -199,7 +210,8 @@ private:
         for (ui32 i = 0; i < currentClusterState.PerPileStateSize(); ++i) {
             const TBridgePileId pileId = TBridgePileId::FromPileIndex(i);
             Ydb::Bridge::PileState::State publicState;
-            if (auto it = updates.find(pileId); it != updates.end()) {
+            const auto it = updates.find(pileId);
+            if (it != updates.end()) {
                 publicState = it->second;
             } else {
                 publicState = GetPublicState(currentClusterState, pileId);
@@ -219,6 +231,10 @@ private:
                 finalPromoted = pileId;
             }
 
+            if (it == updates.end()) {
+                continue; // piles not mentioned in the request keep their exact internal state
+            }
+
             NKikimrBridge::TClusterState::EPileState internalState;
             switch (publicState) {
                 case Ydb::Bridge::PileState::PRIMARY:
@@ -235,6 +251,10 @@ private:
                 case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::SUSPENDED;
                     break;
+                case Ydb::Bridge::PileState::INACTIVE:
+                    self->Reply(Ydb::StatusIds::BAD_REQUEST, "Pile can't be switched to INACTIVE state, it has to be"
+                        " removed from the cluster instead", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    return;
                 default:
                     self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported pile state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;

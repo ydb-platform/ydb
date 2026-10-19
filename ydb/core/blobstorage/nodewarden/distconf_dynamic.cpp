@@ -18,6 +18,7 @@ namespace NKikimr::NStorage {
             ConnectedToStaticNode = *nodeId;
             auto ev = std::make_unique<TEvNodeWardenDynamicConfigSubscribe>();
             ev->Record.SetBridgeCapable(static_cast<bool>(Cfg->BridgeConfig));
+            ev->Record.SetPileListChangeCapable(true);
             TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(ConnectedToStaticNode), SelfId(),
                 ev.release(), IEventHandle::FlagSubscribeOnSession, ++StaticNodeSubscriptionCookie));
         } else if (timestamp != TMonotonic::Max()) {
@@ -81,12 +82,14 @@ namespace NKikimr::NStorage {
             UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
             ConnectedDynamicNodes.clear();
             BridgeCapableDynamicNodes.clear();
+            PileListChangeCapableDynamicNodes.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
         BridgeCapableDynamicNodes.erase(nodeId);
+        PileListChangeCapableDynamicNodes.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
         UnsubscribeQueue.insert(nodeId);
     }
@@ -110,6 +113,11 @@ namespace NKikimr::NStorage {
             BridgeCapableDynamicNodes.insert(peerNodeId);
         } else {
             BridgeCapableDynamicNodes.erase(peerNodeId);
+        }
+        if (ev->Get()->Record.GetPileListChangeCapable()) {
+            PileListChangeCapableDynamicNodes.insert(peerNodeId);
+        } else {
+            PileListChangeCapableDynamicNodes.erase(peerNodeId);
         }
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);

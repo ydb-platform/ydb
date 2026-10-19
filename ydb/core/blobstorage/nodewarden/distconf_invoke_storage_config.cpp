@@ -342,6 +342,7 @@ namespace NKikimr::NStorage {
         // start deriving a config from current one
         TString state;
         NKikimrBlobStorage::TStorageConfig config(*Self->StorageConfig);
+        bool pileListChanged = false;
 
         try {
             auto load = [&](const TString& yaml, ui64& version, const char *expectedKind) {
@@ -406,16 +407,24 @@ namespace NKikimr::NStorage {
             if (config.HasClusterState()) {
                 state = "checking bridge config";
                 auto parse = [](const TString& yaml) { return NYaml::Yaml2Json(YAML::Load(yaml), true); };
-                if (!NewYaml && Self->MainConfigYaml) {
-                    main = parse(Self->MainConfigYaml);
+                const NJson::TJsonValue currentMain = Self->MainConfigYaml ? parse(Self->MainConfigYaml)
+                    : NJson::TJsonValue();
+                const NJson::TJsonValue currentStorage = Self->StorageConfigYaml ? parse(*Self->StorageConfigYaml)
+                    : NJson::TJsonValue();
+                if (!NewYaml) {
+                    main = currentMain;
                 }
                 const bool dedicatedStorageSection = request.GetDedicatedStorageSectionConfigMode();
-                if (!NewStorageYaml && dedicatedStorageSection && Self->StorageConfigYaml) {
-                    storage = parse(*Self->StorageConfigYaml);
+                if (!NewStorageYaml && dedicatedStorageSection) {
+                    storage = currentStorage;
                 }
                 const auto bridgeConfig = GetMergedBridgeConfig(main, dedicatedStorageSection ? &storage : nullptr,
                     request.GetAllowUnknownFields());
-                if (auto error = UpdatePileRegistry(bridgeConfig, &config, Self->Cfg->BridgeConfig.get())) {
+                // the bridge config of the configs being replaced, to see if positions of piles change
+                const auto currentBridgeConfig = GetMergedBridgeConfig(currentMain,
+                    Self->StorageConfigYaml ? &currentStorage : nullptr, true);
+                if (auto error = UpdatePileRegistry(bridgeConfig, &config, Self->Cfg->BridgeConfig.get(),
+                        Self->MainConfigYaml ? &currentBridgeConfig : nullptr, &pileListChanged)) {
                     throw TExError() << *error;
                 }
             }
@@ -431,20 +440,52 @@ namespace NKikimr::NStorage {
         // make it proposed one
         ProposedStorageConfig = std::move(config);
 
-        // check if we are enabling distconf by this operation and handle it accordingly
-        if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
-            if (IsDryRun) {
-                throw TExError() << "DryRun is not supported when enabling distconf";
-            }
-            ControllerOp = EControllerOp::ENABLE_DISTCONF;
-            TryEnableDistconf(); // collect quorum of configs first to see if we have to do rolling restart of the cluster
-        } else {
-            if (Self->SelfManagementEnabled && !ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
-                ControllerOp = EControllerOp::DISABLE_DISTCONF;
+        auto proceed = [this] {
+            // check if we are enabling distconf by this operation and handle it accordingly
+            if (!Self->SelfManagementEnabled && ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                if (IsDryRun) {
+                    throw TExError() << "DryRun is not supported when enabling distconf";
+                }
+                ControllerOp = EControllerOp::ENABLE_DISTCONF;
+                // collect quorum of configs first to see if we have to do rolling restart of the cluster
+                TryEnableDistconf();
             } else {
-                ControllerOp = EControllerOp::OTHER;
+                if (Self->SelfManagementEnabled && !ProposedStorageConfig.GetSelfManagementConfig().GetEnabled()) {
+                    ControllerOp = EControllerOp::DISABLE_DISTCONF;
+                } else {
+                    ControllerOp = EControllerOp::OTHER;
+                }
+                ConnectToController();
             }
-            ConnectToController();
+        };
+
+        if (pileListChanged) {
+            // every node remaining in the cluster must take pile ids from pile registry; static nodes being removed
+            // from the config, as well as the nodes of INACTIVE piles, don't take part in the cluster
+            THashSet<ui32> staticNodeIds;
+            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
+                staticNodeIds.insert(node.GetNodeId());
+            }
+            const auto registry = Self->GetConfigPileRegistry(ProposedStorageConfig);
+            THashSet<ui32> requiredNodeIds;
+            for (const auto& node : ProposedStorageConfig.GetAllNodes()) {
+                const auto bridgePileId = ResolveNodePileId(registry, TNodeLocation(node.GetLocation()));
+                const bool inactive = bridgePileId && *bridgePileId && NBridge::GetPileState(
+                    ProposedStorageConfig.GetClusterState(), *bridgePileId) == NKikimrBridge::TClusterState::INACTIVE;
+                if (staticNodeIds.contains(node.GetNodeId()) && !inactive) {
+                    requiredNodeIds.insert(node.GetNodeId());
+                }
+                staticNodeIds.insert(node.GetNodeId());
+            }
+            THashSet<ui32> ignoredNodeIds;
+            for (const ui32 nodeId : staticNodeIds) {
+                if (!requiredNodeIds.contains(nodeId)) {
+                    ignoredNodeIds.insert(nodeId);
+                }
+            }
+            RequireBridgeCapability(true, std::move(requiredNodeIds), std::move(ignoredNodeIds), std::move(proceed));
+        } else {
+            proceed();
         }
     }
 

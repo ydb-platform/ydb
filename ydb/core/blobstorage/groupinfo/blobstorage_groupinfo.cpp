@@ -4,6 +4,7 @@
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
 #include "blobstorage_groupinfo_data_check.h"
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -810,9 +811,10 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
 
     // parse bridge mode fields
     if (group.HasBridgeGroupState()) {
-        for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
-           res->BridgeGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-        }
+        NBridge::ForEachGroupPile(group.GetBridgeGroupState(), [&](TBridgePileId,
+                const NKikimrBridge::TGroupState::TPile& pile) {
+            res->BridgeGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+        });
     }
     if (group.HasBridgeProxyGroupId()) {
         res->BridgeProxyGroupId.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));

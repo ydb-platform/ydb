@@ -1501,6 +1501,40 @@ Y_UNIT_TEST(TabletsElasticBoundsFromRegistrants) {
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/TabletsElastic/LimitMax"), 10_MB);
 }
 
+// Integration coverage for the RSS allocator budget and Local admission feedback.
+Y_UNIT_TEST(ConsumerZoneFollowsRssBudgetConfiguration) {
+    for (bool rssAware : {false, true}) {
+        for (ui64 reclaimable : {0_MB, 150_MB}) {
+            NKikimrConfig::TMemoryControllerConfig config;
+            config.SetHardLimitBytes(200_MB);
+            config.SetRssAwareBudget(rssAware);
+            config.SetRssBudgetSlackBytes(10_MB);
+            TControllerFixture fixture(config);
+            auto& info = fixture.Provider->ProcessMemoryInfo;
+            info.AllocatedMemory = 30_MB;
+            info.AnonRss = 180_MB;
+            info.AllocatorCachesMemory = reclaimable;
+            info.AllocatorCachesReclaimable = reclaimable;
+            const auto local = fixture.Runtime.AllocateEdgeActor();
+            fixture.Register(local, EMemoryConsumerKind::Tablets);
+            fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+            fixture.Tick();
+            const auto expected = rssAware && reclaimable == 0 ? EMemoryZone::Red : EMemoryZone::Green;
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/TabletMemoryZone"), static_cast<i64>(expected));
+            bool delivered = false;
+            for (ui32 attempt = 0; attempt != 10 && !delivered; ++attempt) {
+                delivered = fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(local)->Get()->Zone == expected;
+            }
+            UNIT_ASSERT(delivered);
+            if (expected == EMemoryZone::Red) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+            } else {
+                UNIT_ASSERT_GT(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
+            }
+        }
+    }
+}
+
 Y_UNIT_TEST(ConsumerZoneIncludesExternalPressure) {
     NKikimrConfig::TMemoryControllerConfig config;
     TControllerFixture fixture(config);

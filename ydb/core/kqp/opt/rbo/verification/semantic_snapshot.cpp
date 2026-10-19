@@ -195,6 +195,12 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             }
             return;
 
+        case EOperator::Replicate:
+            if (children != 1) {
+                Unsupported("Replicate must have one shared input");
+            }
+            return;
+
         case EOperator::Window:
         case EOperator::Map:
             if (children != 1) {
@@ -394,12 +400,13 @@ bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
     // including Project/Filter/Limit wrappers that otherwise do not trigger
     // the legacy Aggregate/Sort materialization path. A checked Map likewise
     // needs an independently materialized output type before its exceptional
-    // projection can be admitted.
+    // projection can be admitted. Replicate ports need typed source/local
+    // correspondences before their passive projections can be audited.
     bool result = !root.PlanProps.Subplans.Empty();
     THashSet<const IOperator*> visited;
     const auto inspect = [&](IOperator& op) {
         result = result || op.GetKind() == EOperator::Aggregate ||
-            op.GetKind() == EOperator::Sort;
+            op.GetKind() == EOperator::Sort || op.GetKind() == EOperator::Replicate;
         if (op.GetKind() != EOperator::Map) {
             return;
         }
@@ -10838,6 +10845,18 @@ private:
                 break;
             }
 
+            case EOperator::Replicate: {
+                auto& port = static_cast<TOpReplicate&>(base);
+                const auto& input = StoredStringOutputs(*port.GetInput());
+                for (const auto source : port.GetInput()->GetOutputIUs()) {
+                    if (const auto* provenance = input.FindPtr(ToString(source))) {
+                        const auto output = port.IsPrimary() ? source : port.GetRebindings().At(source);
+                        result.emplace(ToString(output), *provenance);
+                    }
+                }
+                break;
+            }
+
             case EOperator::Map: {
                 auto& map = static_cast<TOpMap&>(base);
                 const auto& input = StoredStringOutputs(*map.GetInput());
@@ -11006,6 +11025,15 @@ private:
             case EOperator::EmptySource:
             case EOperator::Source:
                 break;
+
+            case EOperator::Replicate: {
+                auto& port = static_cast<TOpReplicate&>(base);
+                for (const auto source : port.GetInput()->GetOutputIUs()) {
+                    const auto output = port.IsPrimary() ? source : port.GetRebindings().At(source);
+                    certifyDirectCarrier(*port.GetInput(), ToString(source), ToString(output));
+                }
+                break;
+            }
 
             case EOperator::Map: {
                 auto& map = static_cast<TOpMap&>(base);
@@ -11367,6 +11395,48 @@ private:
                 node["pushed_limit"] = read.Limit
                     ? Uint64LiteralExpr(*read.Limit, "Read pushed limit")
                     : NJson::TJsonValue(NJson::JSON_NULL);
+                return node;
+            }
+
+            case EOperator::Replicate: {
+                if (StageGraphPresent) {
+                    Unsupported("Native Replicate stage outputs require a separate routing audit");
+                }
+                if (children.size() != 1) {
+                    Unsupported("Native Replicate must have exactly one shared producer");
+                }
+                auto& port = static_cast<TOpReplicate&>(base);
+                auto& input = *port.GetInput();
+                auto columns = JsonArray();
+                THashSet<TString> outputs;
+                for (const auto source : input.GetOutputIUs()) {
+                    const auto* binding = port.IsPrimary() ? &source : port.GetRebindings().Find(source);
+                    if (!binding) {
+                        Unsupported("Native Replicate has no binding for a current input column");
+                    }
+                    const TString inputName = ToString(source);
+                    const TString outputName = ToString(*binding);
+                    if (!outputs.insert(outputName).second ||
+                        !SameType(ExactType(OutputType(input, inputName)), ExactType(OutputType(port, outputName))))
+                    {
+                        Unsupported("Native Replicate has duplicate outputs or inconsistent column types");
+                    }
+                    auto column = JsonMap();
+                    column["output"] = outputName;
+                    column["expression"] = ColumnExpr(inputName);
+                    columns.AppendValue(std::move(column));
+                }
+                if (outputs.empty() || outputs != OutputNames(port) ||
+                    OutputStructType(port)->GetItems().size() != outputs.size())
+                {
+                    Unsupported("Native Replicate has an inconsistent output schema");
+                }
+                // Every port points at the same exported producer node. Its
+                // choices and errors stay shared; only the column IDs change.
+                node["op"] = "project";
+                node["input"] = children.front();
+                node["columns"] = std::move(columns);
+                node["ordered"] = true;
                 return node;
             }
 

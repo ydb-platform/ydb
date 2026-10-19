@@ -296,6 +296,49 @@ struct TFixture {
         return exported;
     }
 
+    TSemanticSnapshotExportResult SharedReadJoin(
+        bool shared, bool staged, bool changeJoinKey = false, bool wrongType = false)
+    {
+        const auto pos = TPositionHandle();
+        const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+        auto read = Read();
+        auto hub = TReplicate::Create(read, pos, Registry);
+        auto primary = hub->AddOutput();
+        auto secondary = hub->AddOutput();
+        const auto rightKey = secondary->GetRebindings().At(Key);
+        const auto rightOther = secondary->GetRebindings().At(Other);
+        SetType(*secondary, {{rightKey, int32}, {rightOther, wrongType
+            ? Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool) : int32}});
+        TIntrusivePtr<IOperator> left = primary;
+        TIntrusivePtr<IOperator> right = secondary;
+        if (!shared) {
+            left = read;
+            right = MakeIntrusive<TOpRead>("same", TUnorderedIUs{rightKey, rightOther},
+                NYql::EStorageType::RowStorage,
+                NOpt::BuildTableMeta(*Table, pos, Expr).Ptr(), nullptr, nullptr,
+                std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+            SetType(*right, {{rightKey, int32}, {rightOther, int32}});
+        }
+        TJoinIUs keys;
+        keys.Add(Key, changeJoinKey ? rightOther : rightKey);
+        auto join = MakeIntrusive<TOpJoin>(left, right, pos, "Inner", keys);
+        SetType(*join, {{Key, int32}, {Other, int32}, {rightKey, int32}, {rightOther, int32}});
+        TOpRoot root(join, pos, {{Key, "key"}, {Other, "left"}, {rightOther, "right"}});
+        if (staged) {
+            auto& graph = root.PlanProps.StageGraph;
+            const auto leftStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const auto rightStage = shared ? leftStage : graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const auto joinedStage = graph.AddStage();
+            read->Props.StageId = leftStage;
+            left->Props.StageId = leftStage;
+            right->Props.StageId = rightStage;
+            join->Props.StageId = joinedStage;
+            graph.Connect(leftStage, joinedStage, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(leftStage)));
+            graph.Connect(rightStage, joinedStage, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(rightStage)));
+        }
+        return Export(root);
+    }
+
     TExprContext Expr;
     TTypeAnnotationContext Types;
     TNullTransformer TypeAnnotation;
@@ -556,6 +599,48 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
             UNIT_ASSERT(!badUse.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(badUse.UnsupportedReason, "outer dependency");
         }
+    }
+
+    Y_UNIT_TEST(NativeSharedReadPortsPreserveTheirProducer) {
+        TFixture sharedFixture;
+        const auto before = sharedFixture.SharedReadJoin(true, false);
+        const auto snapshot = Parse(before);
+        TVector<TString> portInputs;
+        size_t scans = 0;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            scans += node["op"].GetStringSafe() == "scan";
+            if (node["op"].GetStringSafe() == "project" && node["id"].GetStringSafe() != "result") {
+                portInputs.push_back(node["input"].GetStringSafe());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(scans, 1);
+        UNIT_ASSERT_VALUES_EQUAL(portInputs.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(portInputs[0], portInputs[1]);
+        TFixture copiedFixture;
+        const auto after = copiedFixture.SharedReadJoin(false, true);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeSharedReadProofDetectsChangedJoinKeys) {
+        TFixture sharedFixture;
+        const auto before = sharedFixture.SharedReadJoin(true, false);
+        Parse(before);
+        TFixture changedFixture;
+        const auto after = changedFixture.SharedReadJoin(false, true, true);
+        Parse(after);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeSharedReadRejectsBadTypesAndUnauditedStagePorts) {
+        TFixture typedFixture;
+        const auto badType = typedFixture.SharedReadJoin(true, false, false, true);
+        UNIT_ASSERT(!badType.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(badType.UnsupportedReason, "column types");
+        TFixture stagedFixture;
+        const auto staged = stagedFixture.SharedReadJoin(true, true);
+        UNIT_ASSERT(!staged.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(staged.UnsupportedReason, "routing audit");
     }
 
     Y_UNIT_TEST(NativeWindowRejectsUnmodeledFramesAndFunctions) {

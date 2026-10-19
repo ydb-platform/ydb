@@ -44,6 +44,14 @@ equivalent and detect a changed caller binding; negative tests reject bad types
 and capture uses outside the correlation Filter. These are exporter/model
 regressions, not fresh optimizer or distributed-runtime results.
 
+Logical native Replicate ports are now exported as typed passive projections
+of one shared producer. The full native target passed all 18 tests at peak
+aggregate RSS 10.37 GiB (`/tmp/rbo-native-replicate-after.log`). A normal
+Initial/Final proof compares a shared read used on both sides of a join with
+two explicit final scans; changing a join key produces a counterexample.
+Incorrect port types are rejected. Replicate ports that survive into a
+StageGraph remain unsupported pending a separate multi-output routing audit.
+
 ## Current runtime check
 
 On **2026-09-05**, the manual paired diagnostics at source `b000dfaba5f` observed:

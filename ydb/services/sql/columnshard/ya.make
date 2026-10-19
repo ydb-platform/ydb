@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     insert.cpp
     select.cpp
+    update.cpp
 )
 
 PEERDIR(

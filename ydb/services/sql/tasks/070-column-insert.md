@@ -1,7 +1,7 @@
 # INSERT в колоночную таблицу
 
-status: pending
-commit:
+status: done
+commit: 1d2c9e6de09dfd239e116708f6e75eea4bf8c72b
 id: column-insert
 depends: column-select
 

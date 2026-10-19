@@ -580,6 +580,10 @@ public:
         return Executor()->GetMemoryZone();
     }
 
+    std::optional<ui64> GetExecutorMemoryShare() const {
+        return Executor()->GetMemoryShare();
+    }
+
     TMemoryProbeTablet(const TActorId &tablet, TTabletStorageInfo *info, TIntrusivePtr<TMemoryProbeState> state)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -12478,6 +12482,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
                 promotionObserved = true;
             }
         });
+        // Keep Hive's replacement follower from reusing this node's probe and accounting slot.
+        TBlockEvents<TEvLocal::TEvBootTablet> replacementFollower(runtime, [&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            return record.GetInfo().GetTabletID() == tabletId
+                && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER;
+        });
         SendKillLocal(runtime, leaderNode);
         pipe.AllowFollower = false; // Wait for promotion, not another connection to the follower.
         bool isLeader = false;
@@ -12489,6 +12499,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto* promoted = dynamic_cast<TMemoryProbeTablet*>(runtime.FindActor(probe->TabletActor));
         UNIT_ASSERT(promoted);
         UNIT_ASSERT_VALUES_EQUAL(promoted->ExecutorID(), executor);
+        UNIT_ASSERT(!promoted->GetExecutorMemoryShare());
         UNIT_ASSERT(!probe->LastShare);
         UNIT_ASSERT_VALUES_EQUAL(controllers[followerNode]->Tablets->Last.Used, 40_MB);
         UNIT_ASSERT_VALUES_EQUAL(controllers[followerNode]->TabletsElastic->Last.Demand, 0);
@@ -12682,6 +12693,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(env.Probe->TabletActor, oldActor);
         auto* restarted = dynamic_cast<TMemoryProbeTablet*>(env.Runtime.FindActor(env.Probe->TabletActor));
         UNIT_ASSERT(restarted);
+        // Boot I/O can consume the metrics send throttle before counters publish the owner report.
+        // Allow its first periodic report, but send no new pressure notification from the controller.
+        env.Runtime.WaitFor("restarted executor receives existing node pressure", [&] {
+            return restarted->GetExecutorMemoryZone() == NMemory::EMemoryZone::Red;
+        }, TDuration::Seconds(20));
         UNIT_ASSERT_EQUAL(restarted->GetExecutorMemoryZone(), NMemory::EMemoryZone::Red);
         UNIT_ASSERT_VALUES_EQUAL(env.Controller->Tablets->Last.Used, 30_MB);
     }

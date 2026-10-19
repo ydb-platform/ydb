@@ -14,6 +14,7 @@
 
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
@@ -442,6 +443,73 @@ TString Verify(const TString& before, const TString& after, bool diagnosticPrefi
     return status;
 }
 
+
+class TNativeCaptureSink final : public IRBOSemanticSnapshotSink {
+public:
+    void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+        Results.push_back(std::move(result));
+    }
+    TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
+};
+
+TExpression NativeScalarFromExpr(TFixture& fixture, bool predicate) {
+    const auto pos = TPositionHandle();
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* resultType = predicate
+        ? fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool) : int32;
+    auto row = fixture.Expr.NewArgument(pos, "source_row");
+    row->SetTypeAnn(fixture.Expr.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+        fixture.Expr.MakeType<TItemExprType>("k", int32)}));
+    auto member = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, "k")});
+    member->SetTypeAnn(int32);
+    auto one = fixture.Expr.NewCallable(pos, "Int32", {fixture.Expr.NewAtom(pos, "1")});
+    one->SetTypeAnn(int32);
+    auto body = fixture.Expr.NewCallable(pos, predicate ? "==" : "+", {member, one});
+    body->SetTypeAnn(resultType);
+    auto lambda = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+    lambda->SetTypeAnn(resultType);
+    auto expression = TExpression::FromExpr(std::move(lambda), {{"k", fixture.Key}},
+        fixture.Expr, fixture.ExpressionProps);
+    // Exercise main's real conversion, which creates fresh numeric members and
+    // deliberately invalidates annotations while rebinding the row argument.
+    UNIT_ASSERT(!expression.GetExpressionBody()->GetTypeAnn());
+    UNIT_ASSERT(!expression.GetLambda()->GetTypeAnn());
+    UNIT_ASSERT_VALUES_EQUAL(expression.GetExpressionBody()->Head().Tail().Content(), ToString(fixture.Key));
+    return expression;
+}
+
+void CheckNativeInitialScalarTypes(bool predicate) {
+    TFixture fixture;
+    auto expression = NativeScalarFromExpr(fixture, predicate);
+    auto read = fixture.Read();
+    TIntrusivePtr<IOperator> input;
+    TInfoUnitId result = fixture.Key;
+    if (predicate) {
+        input = MakeIntrusive<TOpFilter>(read, TPositionHandle(), expression);
+    } else {
+        result = fixture.Registry.Add(TInfoUnit("", "incremented"));
+        input = MakeIntrusive<TOpMap>(read, TPositionHandle(), TMapIUs{{result, TMapElement(expression)}});
+    }
+    UNIT_ASSERT(!input->Type);
+    TOpRoot root(input, TPositionHandle(), {{result, "answer"}});
+    root.PlanProps.InfoUnitRegistry = fixture.Registry;
+    auto annotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(fixture.Types), fixture.Types);
+    TRBOContext rbo(fixture.Optimize, fixture.Expr, fixture.Types, *annotation, *fixture.Functions);
+    TNativeCaptureSink sink;
+    TSemanticSnapshotPairCaptureV1 capture(&sink);
+    capture.CaptureInitial(root, rbo);
+    UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+    UNIT_ASSERT_C(sink.Results.front().IsSupported(), sink.Results.front().UnsupportedReason);
+    UNIT_ASSERT(input->Type);
+    UNIT_ASSERT(input->GetExpressions().front().get().GetExpressionBody()->GetTypeAnn());
+    fixture.StageSerial(root);
+    capture.CaptureFinal(root, rbo);
+    UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+    UNIT_ASSERT_C(sink.Results.back().IsSupported(), sink.Results.back().UnsupportedReason);
+    UNIT_ASSERT_VALUES_EQUAL(Verify(sink.Results.front().Json, sink.Results.back().Json), "VERIFIED_BOUNDED");
+}
+
 TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
     TFixture fixture;
     auto read = fixture.Read();
@@ -458,6 +526,26 @@ TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
+    Y_UNIT_TEST(InitialBoundaryMaterializesNativeFilterTypes) {
+        CheckNativeInitialScalarTypes(true);
+    }
+
+    Y_UNIT_TEST(InitialBoundaryMaterializesNativeComputedMapTypes) {
+        CheckNativeInitialScalarTypes(false);
+    }
+
+    Y_UNIT_TEST(NullSinkSkipsNativeTypeMaterialization) {
+        TFixture fixture;
+        auto expression = NativeScalarFromExpr(fixture, true);
+        auto filter = MakeIntrusive<TOpFilter>(fixture.Read(), TPositionHandle(), expression);
+        TOpRoot root(filter, TPositionHandle(), {{fixture.Key, "answer"}});
+        root.PlanProps.InfoUnitRegistry = fixture.Registry;
+        TSemanticSnapshotPairCaptureV1 capture(nullptr);
+        capture.CaptureInitial(root, fixture.Rbo);
+        UNIT_ASSERT(!filter->Type);
+        UNIT_ASSERT(!filter->GetFilterExpression().GetExpressionBody()->GetTypeAnn());
+    }
+
     Y_UNIT_TEST(ResultProjectionRetainsRepeatedBindingsAndLabels) {
         TFixture fixture;
         TOpRoot root(fixture.Read(), TPositionHandle(), {

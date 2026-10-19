@@ -25,7 +25,7 @@ range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
 `/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
 and `/tmp/rbo-string-padding-main-tests.log`.
 
-The rebased verifier's focused native target passed all **20 tests**. Normal
+The rebased verifier's focused native target passed all **23 tests**. Normal
 Initial/Final proofs cover repeated result positions, stored-String copies,
 whole-partition Decimal SUM/AVG, and one shared logical read expanded into two
 final scans. Deliberate output, window-function, and join-key changes produce
@@ -34,6 +34,16 @@ the explicitly diagnostic logical-prefix scope, including changed caller
 bindings, passive projections, preserved annotations, and rejected type/scope
 mismatches. Replicate ports surviving into a StageGraph remain unsupported
 pending a separate multi-output routing audit.
+
+Initial capture now requests production type annotation when an operator or
+scalar lambda is untyped. Main's `FromExpr` conversion deliberately clears
+annotations when it assigns numeric column IDs; previously a simple computed
+projection was rejected with `Scalar expression has no type annotation`.
+Regressions exercise the real conversion and annotator, prove ordinary Filter
+and computed-Map Initial/Final pairs, and check that a null sink skips annotation.
+All 23 native tests passed with peak aggregate RSS of 10.38 GiB;
+`/tmp/rbo-native-types-before.log` retains the pre-fix failures and
+`/tmp/rbo-native-types-after.log` the passing run.
 
 Native scalar `Ensure(value, count <= Uint64(1), literal-message)` projections
 now carry a mandatory totality obligation. The native tests prove a safe guard,

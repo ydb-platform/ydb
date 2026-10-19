@@ -405,6 +405,14 @@ bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
     bool result = !root.PlanProps.Subplans.Empty();
     THashSet<const IOperator*> visited;
     const auto inspect = [&](IOperator& op) {
+        // Native FromExpr assigns numeric column IDs by rewriting the row and
+        // clears its scalar annotations. Simple filters and computed Maps need
+        // the same production type annotation as aggregates and subplans.
+        result = result || !op.Type;
+        for (const auto expression : op.GetExpressions()) {
+            const auto& lambda = expression.get().GetLambda();
+            result = result || !lambda || !lambda->GetTypeAnn();
+        }
         result = result || op.GetKind() == EOperator::Aggregate ||
             op.GetKind() == EOperator::Sort || op.GetKind() == EOperator::Replicate;
         if (op.GetKind() != EOperator::Map) {

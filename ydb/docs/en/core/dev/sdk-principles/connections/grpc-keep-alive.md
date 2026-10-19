@@ -96,9 +96,9 @@ To watch the state of connections:
 
 ### Special cases
 
-**Serverless environments**
+#### Serverless environments
 
-In a serverless environment, increase the interval.
+In a serverless environment, increase `grpc_keep_alive_timeout`. In the Python SDK this one number sets both the ping interval and the reply timeout.
 
 ```python
 driver_config = ydb.DriverConfig(
@@ -109,7 +109,7 @@ driver_config = ydb.DriverConfig(
 )
 ```
 
-**High-load systems**
+#### High-load systems
 
 Under high load, set a shorter interval and timeout.
 
@@ -121,4 +121,8 @@ keepAliveParams := keepalive.ClientParameters{
 }
 ```
 
-> **Important**: If your case needs different settings, test them in conditions as close to production as possible before you settle on the values.
+{% note warning %}
+
+If your case needs different settings, test them in conditions as close to production as possible before you settle on the values.
+
+{% endnote %}

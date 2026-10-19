@@ -142,7 +142,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return true;
     }
 
-    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TString& owner, const TOperationContext& context) const {
+    TStreamingQueryInfo::TPtr GetAlteredQueryInfo(const TPath& dstPath, const TOperationContext& context) const {
         const auto& oldStreamingQueryInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         AFL_ENSURE(oldStreamingQueryInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
 
@@ -166,7 +166,7 @@ class TAlterStreamingQuery : public TSubOperation {
         if (const auto it = oldProperties.find("__created_by"); it != oldProperties.end()) {
             properties["__created_by"] = it->second;
         }
-        const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
+        const TString userSID = context.UserToken ? context.UserToken->GetUserSID() : TString();
         const bool isFinalization = oldStreamingQueryInfo->OperationOwnerActorId && !info.HasOperationOwnerActorId();
         if (isFinalization) {
             // Completing an operation must not replace its user's attribution with the service identity.
@@ -280,7 +280,7 @@ class TAlterStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();
@@ -301,7 +301,7 @@ public:
 
         const auto oldInfo = context.SS->StreamingQueries.Value(dstPath->PathId, nullptr);
         Y_ABORT_UNLESS(oldInfo);
-        const auto queryInfo = GetAlteredQueryInfo(dstPath, owner, context);
+        const auto queryInfo = GetAlteredQueryInfo(dstPath, context);
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, oldInfo, queryInfo));
 
         // Compute delta for COUNTER_RUNNING_STREAMING_QUERY_COUNT before persisting the alter

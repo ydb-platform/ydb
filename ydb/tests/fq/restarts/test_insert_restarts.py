@@ -29,9 +29,7 @@ class TestS3(object):
             select COUNT(idx) from {0}.`{1}` with (format={2}, schema(
                 idx Int NOT NULL
             ))
-        '''.format(
-            connection, prefix, format
-        )
+        '''.format(connection, prefix, format)
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
@@ -43,7 +41,11 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_atomic_upload_commit(self, kikimr, s3, client):
         resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key", region_name="us-east-1"
+            "s3",
+            endpoint_url=s3.s3_url,
+            aws_access_key_id="key",
+            aws_secret_access_key="secret_key",
+            region_name="us-east-1",
         )
 
         # Creating select content

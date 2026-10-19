@@ -98,6 +98,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    logbroker_federation
     compatibility
     stability
     clients

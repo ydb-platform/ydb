@@ -54,6 +54,7 @@ PY_SRCS(
     dstool_cmd_node_list.py
 
     dstool_cmd_cluster_balance.py
+    dstool_cmd_cluster_reanimate.py
     dstool_cmd_cluster_get.py
     dstool_cmd_cluster_set.py
     dstool_cmd_cluster_workload_run.py

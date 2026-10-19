@@ -407,12 +407,33 @@ message TRowsetDescriptor
     optional TTableSchema schema = 5;
 }
 
+message TTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 wait_time = 1;
+    optional uint64 read_time = 2;
+    optional uint64 idle_time = 3;
+}
+
+// Timing statistics of the table reader on the proxy side; mirrors NApi::TRemoteTableReaderTimingStatistics.
+message TRemoteTableReaderTimingStatistics
+{
+    // All durations are in microseconds.
+    optional uint64 master_fetch_time = 1;
+    optional TTimingStatistics data_read_timing = 2;
+    optional uint64 total_time = 3;
+    optional uint64 encode_time = 4;
+    optional uint64 write_stall_time = 5;
+    optional uint64 window_drained_time = 6;
+}
+
 // Could be embedded into response attachment block sequence along with the actual data
 // to indidate the progress of table reader/writer.
 message TRowsetStatistics
 {
     required int64 total_row_count = 1;
     required NYT.NChunkClient.NProto.TDataStatistics data_statistics = 2;
+    optional TRemoteTableReaderTimingStatistics timing_statistics = 3;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

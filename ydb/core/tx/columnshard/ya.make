@@ -110,6 +110,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     find_empty_history_intervals
+    hooks/abstract
     ut_cut_history
     ut_rw
     ut_schema

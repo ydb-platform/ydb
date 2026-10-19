@@ -18,13 +18,13 @@ namespace NKikimr::NKqp {
 namespace {
 
 // Default rsyslog $MaxMessageSize is 8 KB.
-// Part-1 budget: 64 B log prefix + 950 B envelope/completed fields + 6 KB data + 1 KB issues = 8182 B.
+// Part-1 budget: 64 B log prefix + 1014 B envelope/completed fields + (6 KB - 64 B) data + 1 KB issues = 8182 B.
 constexpr size_t RSYSLOG_MAX_MESSAGE_SIZE = 8_KB;
 constexpr size_t LOG_LINE_OVERHEAD = 64;
-constexpr size_t PART1_JSON_OVERHEAD = 982;
+constexpr size_t PART1_JSON_OVERHEAD = 1014;
 
-constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 32;
-constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB - 32;
+constexpr size_t QUERY_TEXT_LIMIT = 6_KB - 64;
+constexpr size_t SQL_TEXT_MAX_SIZE = 6_KB - 64;
 constexpr size_t ISSUES_CHUNK_WITH_DATA = 1_KB;
 constexpr size_t ISSUES_CHUNK_SOLO = SQL_TEXT_MAX_SIZE + ISSUES_CHUNK_WITH_DATA;
 constexpr size_t ISSUES_TEXT_MAX_TOTAL = 64_KB;
@@ -70,6 +70,7 @@ struct TCompletedFields {
     bool HasCompileStats = false;
     bool CompileFromCache = false;
     ui64 CompileTimeUs = 0;
+    bool UsedNewRbo = false;
 };
 
 void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
@@ -111,6 +112,7 @@ void WriteCompletedFields(NJsonWriter::TBuf& json, const TCompletedFields& f) {
         json.WriteKey("compile_from_cache").WriteBool(f.CompileFromCache);
         json.WriteKey("compile_time_us").WriteULongLong(f.CompileTimeUs);
     }
+    json.WriteKey("used_new_rbo").WriteBool(f.UsedNewRbo);
 }
 
 void WriteJsonChunks(NActors::NLog::EPriority prio,
@@ -311,6 +313,7 @@ TLogQuery TLogQuery::Completed(const TKqpQueryState& state,
             fields.HasCompileStats = true;
             fields.CompileFromCache = state.QueryStats.Compilation->FromCache;
             fields.CompileTimeUs = state.QueryStats.Compilation->DurationUs;
+            fields.UsedNewRbo = state.QueryStats.Compilation->UsedNewRbo;
         }
 
         const bool truncate = !IsLogPriorityEnabled(NActors::NLog::PRI_TRACE);

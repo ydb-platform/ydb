@@ -103,6 +103,8 @@ void TImportActor::AbortImport(const TString& errorMessage) {
         return;
     }
     ImportSession->Abort(errorMessage);
+    PendingBlobs.clear();
+    PendingPayloadSchema.clear();
     if (ImportActorId) {
         Send(ImportActorId, new NActors::TEvents::TEvPoisonPill());
         ImportActorId = {};
@@ -169,15 +171,40 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     AFL_VERIFY(ev->Get()->Data)("error", "empty record batch");
     NArrow::TBatchSplittingContext context(48 * 1024 * 1024);
     auto blobsSplittedConclusion = NArrow::SplitByBlobSize(ev->Get()->Data, context);
-    AFL_VERIFY(blobsSplittedConclusion.IsSuccess());
-    AFL_VERIFY(blobsSplittedConclusion.GetResult().size() == 1);
+    TString splitError;
+    if (blobsSplittedConclusion.IsFail()) {
+        splitError = blobsSplittedConclusion.GetErrorMessage();
+    } else if (blobsSplittedConclusion.GetResult().empty()) {
+        splitError = "import batch split produced no blobs";
+    }
+    if (splitError) {
+        Counters.OnError();
+        ImportSession->Abort(splitError);
+        Counters.OnSaveProgressStarted();
+        SaveProgressStartTime = TInstant::Now();
+        SaveSessionProgress();
+        return;
+    }
+
+    AFL_VERIFY(PendingBlobs.empty());
+    PendingPayloadSchema = NArrow::SerializeSchema(*ev->Get()->Data->schema());
+    for (const auto& blob : blobsSplittedConclusion.GetResult()) {
+        PendingBlobs.push_back(blob.GetData());
+    }
+    SendNextBlob();
+    SwitchStage(EStage::WaitData, EStage::WaitWriting);
+}
+
+void TImportActor::SendNextBlob() {
+    AFL_VERIFY(!PendingBlobs.empty());
+    AFL_VERIFY(PendingPayloadSchema);
     auto writeEvent = MakeHolder<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     NKikimr::NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*writeEvent);
-    TString data = blobsSplittedConclusion.GetResult()[0].GetData();
-    writer.AddDataToPayload(std::move(data));
+    writer.AddDataToPayload(std::move(PendingBlobs.front()));
+    PendingBlobs.pop_front();
 
     auto* operation = writeEvent->Record.AddOperations();
-    operation->SetPayloadSchema(NArrow::SerializeSchema(*ev->Get()->Data->schema()));
+    operation->SetPayloadSchema(PendingPayloadSchema);
     operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE);
     operation->SetPayloadFormat(NKikimrDataEvents::FORMAT_ARROW);
     operation->SetPayloadIndex(0);
@@ -187,7 +214,6 @@ void TImportActor::Handle(NColumnShard::TEvPrivate::TEvBackupImportRecordBatch::
     Send(TabletActorId, writeEvent.Release());
     Counters.OnWriteStarted();
     WriteStartTime = TInstant::Now();
-    SwitchStage(EStage::WaitData, EStage::WaitWriting);
 }
 
 void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -201,6 +227,12 @@ void TImportActor::Handle(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
     }
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
     AFL_VERIFY(ev->Get()->IsComplete())("error", ev->Get()->GetError());
+    if (!PendingBlobs.empty()) {
+        SendNextBlob();
+        StageStartTime = TInstant::Now();
+        return;
+    }
+    PendingPayloadSchema.clear();
     SwitchStage(EStage::WaitWriting, EStage::WaitData);
     Counters.OnSaveProgressStarted();
     SaveProgressStartTime = TInstant::Now();
@@ -224,8 +256,8 @@ void TImportActor::OnBootstrap(const TActorContext& /*ctx*/) {
 
     const auto& restoreTask = ImportSession->GetTask().GetRestoreTask();
     auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
-    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
-        SelfId(), 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
+    auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(SelfId(), static_cast<ui64>(TabletId), 0, restoreTask,
+        NKikimr::NDataShard::TTableInfo{ 0, userTable }, ImportSession->GetTask().GetColumns());
     ImportActorId = Register(importActor.release());
     SwitchStage(EStage::Initialization, EStage::WaitData);
     Counters.OnReadStarted();

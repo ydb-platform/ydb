@@ -90,17 +90,20 @@ void TAggregatedTabletCounters::Apply(
     ui64 tabletId,
     const TTabletCountersBase* counters,
     TTabletTypes::EType tabletType,
-    TInstant now)
+    TInstant now,
+    ui32 followerId)
 {
     Y_ABORT_UNLESS(counters);
 
-    auto it = LastAggregateUpdateTime.find(tabletId);
+    const TTabletKey key{tabletId, followerId};
+
+    auto it = LastAggregateUpdateTime.find(key);
     TDuration diff;
     if (it != LastAggregateUpdateTime.end()) {
         diff = now - it->second;
         it->second = now;
     } else {
-        LastAggregateUpdateTime.emplace(tabletId, now);
+        LastAggregateUpdateTime.emplace(key, now);
     }
 
     // simple counters
@@ -115,7 +118,7 @@ void TAggregatedTabletCounters::Apply(
         const ui64 value = counters->Simple()[i].Get();
         simpleValues[offset] = value;
     }
-    AggregatedSimpleCounters.SetValues(tabletId, simpleValues, tabletType);
+    AggregatedSimpleCounters.SetValues(key, simpleValues, tabletType);
 
     // cumulative counters
     ui32 nextCumulativeOffset = 0;
@@ -131,7 +134,7 @@ void TAggregatedTabletCounters::Apply(
         Y_ABORT_UNLESS(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
         *CumulativeCounters[offset] += valueDiff;
     }
-    AggregatedCumulativeCounters.SetValues(tabletId, cumulativeValues, tabletType);
+    AggregatedCumulativeCounters.SetValues(key, cumulativeValues, tabletType);
 
     // percentile counters
     ui32 nextPercentileOffset = 0;
@@ -142,7 +145,7 @@ void TAggregatedTabletCounters::Apply(
 
         const ui32 offset = nextPercentileOffset++;
         AggregatedHistogramCounters.SetValue(
-            tabletId,
+            key,
             offset,
             counters->Percentile()[i],
             counters->PercentileCounterName(i),
@@ -150,13 +153,15 @@ void TAggregatedTabletCounters::Apply(
     }
 }
 
-void TAggregatedTabletCounters::Forget(ui64 tabletId) {
+void TAggregatedTabletCounters::Forget(ui64 tabletId, ui32 followerId) {
     Y_ABORT_UNLESS(IsInitialized);
 
-    AggregatedSimpleCounters.ForgetTablet(tabletId);
-    AggregatedCumulativeCounters.ForgetTablet(tabletId);
-    AggregatedHistogramCounters.ForgetTablet(tabletId);
-    LastAggregateUpdateTime.erase(tabletId);
+    const TTabletKey key{tabletId, followerId};
+
+    AggregatedSimpleCounters.ForgetTablet(key);
+    AggregatedCumulativeCounters.ForgetTablet(key);
+    AggregatedHistogramCounters.ForgetTablet(key);
+    LastAggregateUpdateTime.erase(key);
 }
 
 void TAggregatedTabletCounters::RecalcAll() {

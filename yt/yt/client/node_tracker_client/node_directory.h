@@ -13,8 +13,8 @@
 #include <library/cpp/yt/misc/enum.h>
 #include <library/cpp/yt/misc/property.h>
 
-#include <library/cpp/yt/threading/copyable_atomic.h>
-#include <library/cpp/yt/threading/rw_spin_lock.h>
+#include <library/cpp/yt/system/copyable_atomic.h>
+#include <library/cpp/yt/system/rw_spin_lock.h>
 
 namespace NYT::NNodeTrackerClient {
 
@@ -78,7 +78,7 @@ private:
     std::vector<std::string> Tags_;
 
     // Not persisted.
-    mutable NThreading::TCopyableAtomic<TCpuInstant> LastSeenTime_;
+    mutable TCopyableAtomic<TCpuInstant> LastSeenTime_;
 };
 
 const std::string& NullNodeAddress();
@@ -168,7 +168,7 @@ public:
     void Load(TStreamLoadContext& context);
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SpinLock_);
     THashMap<TNodeId, const TNodeDescriptor*> IdToDescriptor_;
     THashMap<std::string, const TNodeDescriptor*> AddressToDescriptor_;
     THashSet<TNodeDescriptor> Descriptors_;

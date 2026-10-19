@@ -21,6 +21,7 @@ void TDDiskActor::CountTabletIo(ui64 tabletId, TTabletStatsEntry* entry, ETablet
 }
 
 void TDDiskActor::CountTabletChunks(ui64 tabletId, i64 delta) {
+    MonMappedDataChunks += delta;
     TabletStats.AddChunks(tabletId, delta, TActivationContext::Monotonic());
     NotifyTabletStats();
 }

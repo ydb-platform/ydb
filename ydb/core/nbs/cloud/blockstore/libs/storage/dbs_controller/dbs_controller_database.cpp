@@ -273,6 +273,7 @@ bool TDbsControllerDatabase::GetPartitionsForDDisk(
 
 bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
     const TVector<ui32>& nodeIds,
+    const THashSet<ui32>& lockedNodes,
     THashMap<TDirectKey, ui64>& outDbgs)
 {
     using TTable = TDbsControllerSchema::InverseMap;
@@ -296,6 +297,13 @@ bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
                        logicalNode.GetPersistentBuffer().GetNodeId());
         };
 
+        auto isAlreadyLocked = [&lockedNodes](const auto& logicalNode)
+        {
+            return lockedNodes.contains(logicalNode.GetDDisk().GetNodeId()) ||
+                   lockedNodes.contains(
+                       logicalNode.GetPersistentBuffer().GetNodeId());
+        };
+
         for (const auto& key: ExtractGroups(it)) {
             NProto::TDirectBlockGroupDDisks record;
             if (!LoadDirectRecord(key, record)) {
@@ -304,6 +312,7 @@ bool TDbsControllerDatabase::GetAffectedDBGsWithNodeCounts(
             auto& logicalNodes = *record.MutableDDiskIds();
             for (int i = 0; i < logicalNodes.size(); ++i) {
                 if (isGoingToMaintenance(logicalNodes.Get(i)) ||
+                    isAlreadyLocked(logicalNodes.Get(i)) ||
                     logicalNodes.Get(i).GetHealth() !=
                         NProto::EHostHealth::ONLINE)
                 {

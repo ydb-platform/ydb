@@ -461,6 +461,17 @@ Y_UNIT_TEST(AlterAutoPartitioningAndCodecs) {
     {
         Ydb::Topic::AlterTopicRequest request;
         request.set_path(path);
+        request.mutable_alter_partitioning_settings()->set_set_max_active_partitions(0);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+
+        const auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetMinPartitionCount(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionStrategy().GetMaxPartitionCount(), 2u);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
         request.mutable_set_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
         request.mutable_set_supported_codecs()->add_codecs(Ydb::Topic::CODEC_GZIP);
         request.set_set_metrics_level(1);

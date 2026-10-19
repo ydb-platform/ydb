@@ -7,11 +7,10 @@
 #include <yt/yt/core/misc/proc.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
 
+#include <library/cpp/yt/system/notification_handle.h>
 #include <library/cpp/yt/system/tscp.h>
 
 #include <yt/yt/core/threading/thread.h>
-
-#include <library/cpp/yt/threading/notification_handle.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 

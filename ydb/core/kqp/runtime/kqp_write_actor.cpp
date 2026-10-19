@@ -1062,10 +1062,13 @@ public:
                     {"tablePath", TablePath},
                     {"shardID", ev->Get()->Record.GetOrigin()},
                     {"sink", this->SelfId()});
-                // The shard acknowledged the wait: don't let resends burn the bounded
-                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
-                // will reset the attempts again right before the resend.
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
             }
             return;
         }

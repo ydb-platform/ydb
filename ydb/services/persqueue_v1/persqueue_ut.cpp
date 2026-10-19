@@ -17,6 +17,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -2167,6 +2168,206 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             /*doWait=*/true, /*canWrite=*/true, "dc1", consumers, "account");
         server->WaitInit("account/" + shortTopicName);
         return server;
+    }
+
+    Y_UNIT_TEST_QUAD(ClientDataWrites, enableClientModifications, topicProtocol) {
+        auto settings = PQSettings();
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(false);
+
+        NPersQueue::TTestServer server(settings);
+        const TString topic = "/Root/PQ/client-data-writes";
+        server.AnnoyingClient->CreateTopicNoLegacy(topic, 1);
+
+        // The test server populates its cluster configuration tables through SQL during initialization.
+        server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+
+        for (size_t size : {size_t(16), size_t(600 * 1024)}) {
+            grpc::ClientContext context;
+            context.AddMetadata("x-ydb-database", "/Root");
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+
+            auto stream = [&] {
+                if constexpr (topicProtocol) {
+                    return Ydb::Topic::V1::TopicService::NewStub(channel)->StreamWrite(&context);
+                } else {
+                    return Ydb::PersQueue::V1::PersQueueService::NewStub(channel)->StreamingWrite(&context);
+                }
+            }();
+
+            std::conditional_t<topicProtocol, Ydb::Topic::StreamWriteMessage::FromClient,
+                Ydb::PersQueue::V1::StreamingWriteClientMessage> request;
+            std::conditional_t<topicProtocol, Ydb::Topic::StreamWriteMessage::FromServer,
+                Ydb::PersQueue::V1::StreamingWriteServerMessage> response;
+
+            auto* init = request.mutable_init_request();
+            init->set_message_group_id(ToString(size));
+
+            if constexpr (topicProtocol) {
+                init->set_path(topic);
+                init->set_producer_id(ToString(size));
+            } else {
+                init->set_topic(topic);
+            }
+
+            UNIT_ASSERT(stream->Write(request));
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+
+            request.Clear();
+            auto* write = request.mutable_write_request();
+            const TString data(size, 'x');
+
+            if constexpr (topicProtocol) {
+                write->set_codec(Ydb::Topic::CODEC_RAW);
+                for (ui32 i = 1; i <= 2; ++i) {
+                    auto* message = write->add_messages();
+                    message->set_seq_no(i);
+                    message->set_data(data);
+                    message->set_uncompressed_size(size);
+                }
+            } else {
+                for (ui32 i = 1; i <= 2; ++i) {
+                    write->add_sequence_numbers(i);
+                    write->add_message_sizes(size);
+                    write->add_created_at_ms(TInstant::Now().MilliSeconds());
+                    write->add_sent_at_ms(TInstant::Now().MilliSeconds());
+                    write->add_blocks_offsets(i - 1);
+                    write->add_blocks_part_numbers(0);
+                    write->add_blocks_message_counts(1);
+                    write->add_blocks_uncompressed_sizes(size);
+                    write->add_blocks_headers(TString(1, '\0'));
+                    write->add_blocks_data(data);
+                }
+            }
+
+            UNIT_ASSERT(stream->Write(request));
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(),
+                enableClientModifications ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::PRECONDITION_FAILED,
+                response.ShortDebugString());
+
+            if (!enableClientModifications) {
+                UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Client data writes are disabled");
+            }
+
+            context.TryCancel();
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(ClientModificationsStreamOffsets, enableClientModifications, topicProtocol) {
+        for (bool initialCommit : {false, true}) {
+            auto server = SetupLbFederationServerWithTopic("topic1", 1, {"user"});
+            const TString topic = "account/topic1";
+
+            NYdb::TDriver driver(NYdb::TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << server->GrpcPort).SetDatabase("/Root"));
+
+            auto writer = CreateSimpleWriter(driver, topic, "source");
+            UNIT_ASSERT(writer->Write(TString(initialCommit ? 600 * 1024 : 16, 'x'), 1));
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+
+            server->CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableClientModifications(enableClientModifications);
+            auto channel = grpc::CreateChannel("localhost:" + ToString(server->GrpcPort), grpc::InsecureChannelCredentials());
+
+            grpc::ClientContext context;
+            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(30));
+            auto stream = [&] {
+                if constexpr (topicProtocol) {
+                    return Ydb::Topic::V1::TopicService::NewStub(channel)->StreamRead(&context);
+                } else {
+                    return Ydb::PersQueue::V1::PersQueueService::NewStub(channel)->MigrationStreamingRead(&context);
+                }
+            }();
+
+            std::conditional_t<topicProtocol, Ydb::Topic::StreamReadMessage::FromClient,
+                Ydb::PersQueue::V1::MigrationStreamingReadClientMessage> request;
+            std::conditional_t<topicProtocol, Ydb::Topic::StreamReadMessage::FromServer,
+                Ydb::PersQueue::V1::MigrationStreamingReadServerMessage> response;
+
+            auto* init = request.mutable_init_request();
+            init->set_consumer("user");
+            if constexpr (topicProtocol) {
+                init->add_topics_read_settings()->set_path(topic);
+            } else {
+                init->add_topics_read_settings()->set_topic(topic);
+                init->set_ranges_mode(true);
+            }
+            UNIT_ASSERT(stream->Write(request));
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+            UNIT_ASSERT(stream->Read(&response));
+            UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+
+            request.Clear();
+
+            ui64 assignId;
+            if constexpr (topicProtocol) {
+                assignId = response.start_partition_session_request().partition_session().partition_session_id();
+                auto* start = request.mutable_start_partition_session_response();
+                start->set_partition_session_id(assignId);
+
+                if (initialCommit) {
+                    start->set_read_offset(1);
+                    start->set_commit_offset(1);
+                }
+            } else {
+                assignId = response.assigned().assign_id();
+                auto* start = request.mutable_start_read();
+                start->set_assign_id(assignId);
+
+                if (initialCommit) {
+                    start->set_read_offset(1);
+                    start->set_commit_offset(1);
+                }
+            }
+            UNIT_ASSERT(stream->Write(request));
+
+            if (!initialCommit) {
+                request.Clear();
+
+                if constexpr (topicProtocol) {
+                    request.mutable_read_request()->set_bytes_size(2_MB);
+                } else {
+                    request.mutable_read();
+                }
+
+                UNIT_ASSERT(stream->Write(request));
+                UNIT_ASSERT(stream->Read(&response));
+                UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+                request.Clear();
+
+                if constexpr (topicProtocol) {
+                    auto* commit = request.mutable_commit_offset_request()->add_commit_offsets();
+                    commit->set_partition_session_id(assignId);
+                    auto* range = commit->add_offsets();
+                    range->set_start(0);
+                    range->set_end(1);
+                } else {
+                    auto* range = request.mutable_commit()->add_offset_ranges();
+                    range->set_assign_id(assignId);
+                    range->set_start_offset(0);
+                    range->set_end_offset(1);
+                }
+
+                UNIT_ASSERT(stream->Write(request));
+            }
+
+            if (!enableClientModifications || !initialCommit) {
+                UNIT_ASSERT(stream->Read(&response));
+
+                if (enableClientModifications) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::SUCCESS, response.ShortDebugString());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::PRECONDITION_FAILED, response.ShortDebugString());
+                    UNIT_ASSERT_STRING_CONTAINS(response.ShortDebugString(), "Consumer offset commits are disabled");
+                }
+            }
+
+            context.TryCancel();
+            stream->Finish();
+        }
     }
 
     Y_UNIT_TEST(TopicServiceCommitOffset) {

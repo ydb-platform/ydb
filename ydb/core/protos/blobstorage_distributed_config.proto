@@ -97,6 +97,9 @@ message TEvNodeConfigScatter {
         repeated NActorsProto.TTraceId TraceId = 1;
     }
 
+    message TCollectBridgeCapability {
+    }
+
     optional uint64 Cookie = 1;
     optional fixed64 TaskId = 4; // random (and not necessarily unique) identifier
     optional bool Targeted = 5; // set when issuing updates to newly added nodes
@@ -105,6 +108,7 @@ message TEvNodeConfigScatter {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
         TDemandRetroTrace DemandRetroTrace = 6;
+        TCollectBridgeCapability CollectBridgeCapability = 7;
     }
 }
 
@@ -158,6 +162,11 @@ message TEvNodeConfigGather {
     message TDemandRetroTrace {
     }
 
+    message TCollectBridgeCapability {
+        repeated uint32 CapableNodeIds = 1; // nodes running with BridgeConfig (static ones and their dynamic subscribers)
+        repeated uint32 NotCapableNodeIds = 2; // nodes running without BridgeConfig
+    }
+
     optional uint64 Cookie = 1;
     optional bool Aborted = 4;
 
@@ -165,6 +174,7 @@ message TEvNodeConfigGather {
         TCollectConfigs CollectConfigs = 2;
         TProposeStorageConfig ProposeStorageConfig = 3;
         TDemandRetroTrace DemandRetroTrace = 5;
+        TCollectBridgeCapability CollectBridgeCapability = 6;
     }
 }
 
@@ -328,6 +338,16 @@ message TEvNodeConfigInvokeOnRoot {
         repeated NActorsProto.TTraceId TraceId = 1;
     }
 
+    // Convert ordinary (not bridged) cluster into the single-pile bridged one: set up ClusterState and turn static
+    // groups into inline piles; groups managed by BSC are converted by BSC itself afterwards.
+    message TConvertToBridge {
+    }
+
+    // Sent by BSC when it has converted all of its groups into bridged ones (and no groups remain that can't be
+    // converted yet); clears ClusterStateDetails.BscConversionPending flag.
+    message TNotifyBscConversionFinished {
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -350,6 +370,8 @@ message TEvNodeConfigInvokeOnRoot {
         TDescendCommittedStorageConfig DescendCommittedStorageConfig = 22;
         TDemandRetroTrace DemandRetroTrace = 23;
         TQueryWorkingRoot QueryWorkingRoot = 24;
+        TConvertToBridge ConvertToBridge = 25;
+        TNotifyBscConversionFinished NotifyBscConversionFinished = 26;
     }
 }
 
@@ -402,6 +424,10 @@ message TEvNodeConfigInvokeOnRootResult {
     }
 }
 
+message TEvNodeWardenDynamicConfigSubscribe {
+    bool BridgeCapable = 1; // dynamic node runs with BridgeConfig
+}
+
 message TEvNodeWardenDynamicConfigPush {
     TStorageConfig Config = 1;
     bool NoQuorum = 2;
@@ -412,4 +438,5 @@ message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
+    optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
 }

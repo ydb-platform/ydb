@@ -2,22 +2,27 @@
 #include "validation_functions.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <ydb/library/yql/providers/ydb_external/common/settings.h>
+
+#include <util/string/cast.h>
 
 namespace NKikimr::NExternalSource {
 
 namespace {
 
-struct TExternalDataSource : public IExternalSource {
-    TExternalDataSource(const TString& name, const TVector<TString>& authMethods, const TSet<TString>& availableProperties, const std::vector<TRegExMatch>& hostnamePatterns)
+struct TExternalDataSource: public IExternalSource {
+    TExternalDataSource(const TString& name, const TVector<TString>& authMethods, const TSet<TString>& availableProperties,
+        const std::vector<TRegExMatch>& hostnamePatterns)
         : Name(name)
         , AuthMethods(authMethods)
         , AvailableProperties(availableProperties)
         , HostnamePatterns(hostnamePatterns)
-    {}
-    
-    virtual TString Pack(const NKikimrExternalSources::TSchema&,
-                         const NKikimrExternalSources::TGeneral&) const override {
+    {
+    }
+
+    virtual TString Pack(const NKikimrExternalSources::TSchema&, const NKikimrExternalSources::TGeneral&) const override {
         ythrow TExternalSourceException() << "Internal error. Only external table supports pack operation";
     }
 
@@ -38,7 +43,7 @@ struct TExternalDataSource : public IExternalSource {
     }
 
     bool DataSourceMustHaveDataBaseName(const TProtoStringType& sourceType) const {
-        return IsIn({"Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "MongoDB"}, sourceType);
+        return IsIn({ "Greenplum", "PostgreSQL", "MySQL", "MsSQLServer", "ClickHouse", "MongoDB" }, sourceType);
     }
 
     virtual void ValidateExternalDataSource(const TString& externalDataSourceDescription) const override {
@@ -47,7 +52,7 @@ struct TExternalDataSource : public IExternalSource {
             ythrow TExternalSourceException() << "Internal error. Couldn't parse protobuf with external data source description";
         }
 
-        for (const auto& [key, value]: proto.GetProperties().GetProperties()) {
+        for (const auto& [key, value] : proto.GetProperties().GetProperties()) {
             if (AvailableProperties.contains(key)) {
                 continue;
             }
@@ -69,8 +74,18 @@ struct TExternalDataSource : public IExternalSource {
             const bool hasDatabaseName = props.contains("database_name") && !props.at("database_name").empty();
             const bool hasDatabaseId = props.contains("database_id") && !props.at("database_id").empty();
             if (!hasDatabaseName && !hasDatabaseId) {
-                throw TExternalSourceException()
-                    << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
+                throw TExternalSourceException() << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
+            }
+        }
+
+        if (proto.GetSourceType() == ToString(NYql::EDatabaseType::YdbExternal)) {
+            const auto& props = proto.GetProperties().GetProperties();
+            const auto database = props.find("database_name");
+            const auto tls = props.find("use_tls");
+            const auto error = NYql::NYdbExternal::ValidateConnectionSettings(proto.GetLocation(),
+                database == props.end() ? TString() : TString(database->second), tls == props.end() ? TString("false") : TString(tls->second));
+            if (error) {
+                throw TExternalSourceException() << error;
             }
         }
 
@@ -92,10 +107,11 @@ private:
     const std::vector<TRegExMatch> HostnamePatterns;
 };
 
-}
+}   // namespace
 
-IExternalSource::TPtr CreateExternalDataSource(const TString& name, const TVector<TString>& authMethods, const TSet<TString>& availableProperties, const std::vector<TRegExMatch>& hostnamePatterns) {
+IExternalSource::TPtr CreateExternalDataSource(const TString& name, const TVector<TString>& authMethods,
+    const TSet<TString>& availableProperties, const std::vector<TRegExMatch>& hostnamePatterns) {
     return MakeIntrusive<TExternalDataSource>(name, authMethods, availableProperties, hostnamePatterns);
 }
 
-}
+}   // namespace NKikimr::NExternalSource

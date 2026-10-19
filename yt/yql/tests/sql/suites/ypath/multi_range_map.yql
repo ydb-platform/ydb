@@ -1,0 +1,5 @@
+SELECT
+    CAST(key AS Uint64) + 1ul AS key
+FROM
+    plato.`Input[#0,#4]`
+;

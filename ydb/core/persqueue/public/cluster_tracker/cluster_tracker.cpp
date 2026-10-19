@@ -312,6 +312,16 @@ private:
                     }
                     return;
                 }
+                if (IssuesLookLikeMissingVersionsTable(issues)) {
+                    // ListBalancers joins Versions, so a dropped Versions table fails this query.
+                    YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, CREATE TABLE Versions",
+                        {"record", record});
+                    ClustersList = nullptr;
+                    PendingClustersList = nullptr;
+                    ReplyAllGetClustersListRequests(false);
+                    BeginDdl(EQueryKind::MigrateCreateVersions, MakeCreateVersionsQuery(Cfg().GetVersionTablePath()));
+                    return;
+                }
                 {
                     const bool missing = IssuesLookLikeClusterSchemaGone(issues);
                     YDB_LOG_ERROR_CTX(Ctx(), "Failed to list balancers, publish clusters with last balancer cache",
@@ -397,7 +407,7 @@ private:
             if (!name.empty()) {
                 clustersList->Balancers[name] = ParseFnxClusterCsv(csv);
             }
-            clustersList->BalancerVersion = std::max(
+            clustersList->BalancerVersion = std::max<i64>(
                 clustersList->BalancerVersion,
                 parser.ColumnParser(2).GetOptionalInt64().value_or(0));
         }

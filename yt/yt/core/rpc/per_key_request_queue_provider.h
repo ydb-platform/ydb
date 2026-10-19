@@ -7,7 +7,7 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/syncmap/map.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <library/cpp/yt/system/atomic_object.h>
 
 namespace NYT::NRpc {
 
@@ -47,12 +47,12 @@ private:
 
     NConcurrency::TSyncMap<TKey, TRequestQueuePtr> RequestQueues_;
 
-    NThreading::TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
+    TAtomicObject<TRequestQueueThrottlerConfigs> DefaultConfigs_;
 
     TKeyFromRequestHeaderCallback KeyFromRequestHeader_;
     TReconfigurationCallback ReconfigurationCallback_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, ThrottlingEnabledFlagsSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, ThrottlingEnabledFlagsSpinLock_);
     bool WeightThrottlingEnabled_ = true;
     bool BytesThrottlingEnabled_ = false;
 };

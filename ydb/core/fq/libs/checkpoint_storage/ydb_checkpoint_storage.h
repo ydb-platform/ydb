@@ -10,10 +10,7 @@ namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckpointStoragePtr NewYdbCheckpointStorage(
-    const TExternalStorageSettings& config,
-    const IEntityIdGenerator::TPtr& entityIdGenerator,
-    const IYdbConnection::TPtr& ydbConnection,
-    TCheckpointProviderIntegrations checkpointProviderIntegrations = {});
+TCheckpointStoragePtr NewYdbCheckpointStorage(const TExternalStorageSettings& config, const IEntityIdGenerator::TPtr& entityIdGenerator,
+    const IYdbConnection::TPtr& ydbConnection, TCheckpointProviderIntegrations checkpointProviderIntegrations = {});
 
-} // namespace NFq
+}   // namespace NFq

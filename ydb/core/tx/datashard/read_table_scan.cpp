@@ -204,6 +204,31 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
     return true;
 }
 
+bool AddRowToYdbResultSet(
+    Ydb::ResultSet& resultSet,
+    TConstArrayRef<NScheme::TTypeInfo> types,
+    TConstArrayRef<TCell> cells,
+    TString& error)
+{
+    if (types.size() != cells.size()) {
+        error = TStringBuilder()
+            << "Types count " << types.size()
+            << " does not match cells count " << cells.size();
+        return false;
+    }
+
+    auto* protoRow = resultSet.add_rows();
+    protoRow->mutable_items()->Reserve(cells.size());
+    for (size_t i = 0; i < cells.size(); ++i) {
+        if (!AddCell(*protoRow, types[i], cells[i], error)) {
+            resultSet.mutable_rows()->RemoveLast();
+            return false;
+        }
+    }
+
+    return true;
+}
+
 class TRowsToResult {
 public:
     TRowsToResult(const NKikimrTxDataShard::TReadTableTransaction &request)
@@ -331,14 +356,9 @@ public:
 private:
     bool DoPutRow(const NTable::TRowState& row, TString& err) override
     {
-        auto &protoRow = *YdbResultSet.add_rows();
-        auto cells = *row;
-
-        for (size_t col = 0; col < cells.size(); ++col) {
-            if (!AddCell(protoRow, ColTypes[col], cells[col], err))
-                return false;
+        if (!AddRowToYdbResultSet(YdbResultSet, ColTypes, *row, err)) {
+            return false;
         }
-
         YdbResultSet.SerializeToArcadiaStream(&ResultStream);
         YdbResultSet.Clear();
         return true;

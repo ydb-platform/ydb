@@ -1,11 +1,10 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
-#include <yql/essentials/public/issue/yql_issue.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <util/system/mutex.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NFq {
 
@@ -44,4 +43,4 @@ private:
 
 TString LabelNameFromStatusCodeAndIssues(NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
-} // namespace NFq
+}   // namespace NFq

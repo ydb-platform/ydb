@@ -1,9 +1,10 @@
 #include "yql_arrow_column_converters.h"
 
+#include <arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/exception.h>
-
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -15,8 +16,6 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <arrow/api.h>
-
 #ifdef THROW
 #undef THROW
 #endif
@@ -24,17 +23,17 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
+#undef NO_SANITIZE_THREAD
+
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Functions/FunctionsConversion.h>
 
 #pragma clang diagnostic pop
 
 namespace {
 
-#define THROW_ARROW_NOT_OK(status)                                     \
-    do                                                                 \
-    {                                                                  \
-        if (::arrow::Status _s = (status); !_s.ok())                   \
-            throw yexception() << _s.ToString(); \
+#define THROW_ARROW_NOT_OK(status)                                                        \
+    do {                                                                                  \
+        if (::arrow::Status _s = (status); !_s.ok()) throw yexception() << _s.ToString(); \
     } while (false)
 
 using namespace NYql;
@@ -100,8 +99,10 @@ ui32 GetMultiplierForDatetime(arrow::TimeUnit::type unit) {
 
 // DateTime Converters
 template <bool isOptional, typename TArrowType>
-std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<TArrowType, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -116,12 +117,14 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow
 
         const TArrowType baseValue = item.As<TArrowType>();
         if (baseValue < 0 || baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME)) {
-            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
+            throw parquet::ParquetException(
+                TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "]: " << baseValue);
         }
 
         const ui64 v = baseValue * static_cast<ui64>(multiplier);
         if (v > ::NYql::NUdf::MAX_DATETIME) {
-            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "] after transformation: " << v);
+            throw parquet::ParquetException(
+                TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "] after transformation: " << v);
         }
         builder.Add(NUdf::TBlockItem(static_cast<ui32>(v)));
     }
@@ -129,8 +132,10 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDatetime(const std::shared_ptr<arrow
 }
 
 template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<i64, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -145,15 +150,13 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<
 
         const i64 baseValue = item.As<i64>();
         if (baseValue < 0 || baseValue > static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME) * multiplier) {
-            throw parquet::ParquetException(TStringBuilder()
-                << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME << "](seconds): "
-                << baseValue << "(seconds)");
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [0, " << ::NYql::NUdf::MAX_DATETIME
+                                                             << "](seconds): " << baseValue << "(seconds)");
         }
 
         if (baseValue % multiplier) {
-            throw parquet::ParquetException(TStringBuilder()
-                << "datetime in parquet should have integer amount of seconds, have: "
-                << baseValue * 1.0 / multiplier);
+            throw parquet::ParquetException(
+                TStringBuilder() << "datetime in parquet should have integer amount of seconds, have: " << baseValue * 1.0 / multiplier);
         }
         const ui32 v = baseValue / multiplier;
         builder.Add(NUdf::TBlockItem(v));
@@ -162,8 +165,10 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime(const std::shared_ptr<
 }
 
 template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime64(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<i64, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime64(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui32 multiplier) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<i64, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<i64, isOptional> reader;
     const i64 minDatetime64 = static_cast<int64_t>(::NYql::NUdf::MIN_DATETIME64);
     const i64 maxDatetime64 = static_cast<int64_t>(::NYql::NUdf::MAX_DATETIME64);
@@ -180,15 +185,13 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime64(const std::shared_pt
 
         const i64 baseValue = item.As<i64>();
         if (baseValue < minDatetime64 * multiplier || baseValue > maxDatetime64 * multiplier) {
-            throw parquet::ParquetException(TStringBuilder()
-                << "datetime in parquet is out of range [" << minDatetime64 << ", " << maxDatetime64 << "](seconds): "
-                << baseValue / multiplier << "(seconds)");
+            throw parquet::ParquetException(TStringBuilder() << "datetime in parquet is out of range [" << minDatetime64 << ", " << maxDatetime64
+                                                             << "](seconds): " << baseValue / multiplier << "(seconds)");
         }
 
         if (baseValue % multiplier) {
-            throw parquet::ParquetException(TStringBuilder()
-                << "datetime in parquet should have integer amount of seconds, have: "
-                << baseValue * 1.0 / multiplier);
+            throw parquet::ParquetException(
+                TStringBuilder() << "datetime in parquet should have integer amount of seconds, have: " << baseValue * 1.0 / multiplier);
         }
         const i64 v = baseValue / static_cast<i64>(multiplier);
         builder.Add(NUdf::TBlockItem(v));
@@ -197,8 +200,10 @@ std::shared_ptr<arrow::Array> ArrowTimestampAsYqlDatetime64(const std::shared_pt
 }
 
 template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowStringAsYqlDateTime(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowStringAsYqlDateTime(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TStringBlockReader<arrow::BinaryType, isOptional, NKikimr::NUdf::EDataSlot::String> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -213,7 +218,7 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlDateTime(const std::shared_ptr<arr
         }
 
         auto ref = item.AsStringRef();
-        NDB::ReadBufferFromMemory rb{ref.Data(), ref.Size()};
+        NDB::ReadBufferFromMemory rb{ ref.Data(), ref.Size() };
         uint32_t result = 0;
         parseImpl<NDB::DataTypeDateTime>(result, rb, nullptr, formatSettings);
         builder.Add(NUdf::TBlockItem(static_cast<ui32>(result)));
@@ -222,8 +227,10 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlDateTime(const std::shared_ptr<arr
 }
 
 template <bool isOptional, typename TArrowType>
-std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui64 multiplier) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui64, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui64 multiplier) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui64, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<TArrowType, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -237,12 +244,14 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arro
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
-            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+            throw parquet::ParquetException(
+                TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 
         if (static_cast<ui64>(baseValue) > ::NYql::NUdf::MAX_TIMESTAMP / multiplier) {
-            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "] after transformation: " << baseValue);
+            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP
+                                                             << "] after transformation: " << baseValue);
         }
 
         const ui64 v = baseValue * multiplier;
@@ -252,8 +261,10 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlTimestamp(const std::shared_ptr<arro
 }
 
 template <bool isOptional, typename TArrowType>
-std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, ui64 multiplier, const TString& format = {}) {
-    ::NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::DataType>& targetType,
+    const std::shared_ptr<arrow::Array>& value, ui64 multiplier, const TString& format = {}) {
+    ::NYql::NUdf::TStringArrayBuilder<arrow::BinaryType, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<TArrowType, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -267,24 +278,34 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlString(const std::shared_ptr<arrow::
         }
 
         const TArrowType baseValue = item.As<TArrowType>();
-        if (baseValue < 0 && baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
-            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
+        if (baseValue < 0 || baseValue > static_cast<i64>(::NYql::NUdf::MAX_TIMESTAMP)) {
+            throw parquet::ParquetException(
+                TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "]: " << baseValue);
         }
 
         if (static_cast<ui64>(baseValue) > ::NYql::NUdf::MAX_TIMESTAMP / multiplier) {
-            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP << "] after transformation: " << baseValue);
+            throw parquet::ParquetException(TStringBuilder() << "timestamp in parquet is out of range [0, " << ::NYql::NUdf::MAX_TIMESTAMP
+                                                             << "] after transformation: " << baseValue);
         }
 
         const ui64 v = baseValue * multiplier;
         TString result = format ? TInstant::FromValue(v).FormatGmTime(format.c_str()) : TInstant::FromValue(v).ToString();
         builder.Add(NUdf::TBlockItem(NUdf::TStringRef(result.c_str(), result.size())));
     }
-    return builder.Build(true).make_array();
+    auto datum = builder.Build(true);
+    if (datum.is_array()) {
+        return datum.make_array();
+    }
+    auto result = arrow::Concatenate(datum.chunks(), arrow::system_memory_pool());
+    THROW_ARROW_NOT_OK(result.status());
+    return std::move(result).ValueOrDie();
 }
 
 template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowStringAsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui64, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowStringAsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui64, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TStringBlockReader<arrow::BinaryType, isOptional, NKikimr::NUdf::EDataSlot::String> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -299,7 +320,7 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlTimestamp(const std::shared_ptr<ar
         }
 
         auto ref = item.AsStringRef();
-        NDB::ReadBufferFromMemory rb{ref.Data(), ref.Size()};
+        NDB::ReadBufferFromMemory rb{ ref.Data(), ref.Size() };
         NDB::DateTime64 result = 0;
         readTextTimestamp64(result, 0, rb, DateLUT::instance(), formatSettings);
         builder.Add(NUdf::TBlockItem(static_cast<ui64>(result)));
@@ -308,8 +329,10 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlTimestamp(const std::shared_ptr<ar
 }
 
 template <bool isOptional, typename TArrowType>
-std::shared_ptr<arrow::Array> ArrowTypeAsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui16, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowTypeAsYqlDate(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui16, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TFixedSizeBlockReader<TArrowType, isOptional> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         const NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -332,8 +355,10 @@ std::shared_ptr<arrow::Array> ArrowTypeAsYqlDate(const std::shared_ptr<arrow::Da
 }
 
 template <bool isOptional>
-std::shared_ptr<arrow::Array> ArrowStringAsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
-    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
+std::shared_ptr<arrow::Array> ArrowStringAsYqlDate(
+    const std::shared_ptr<arrow::DataType>& targetType, const std::shared_ptr<arrow::Array>& value, const NDB::FormatSettings& formatSettings) {
+    ::NYql::NUdf::TFixedSizeArrayBuilder<ui32, isOptional> builder(
+        NKikimr::NMiniKQL::TTypeInfoHelper(), targetType, *arrow::system_memory_pool(), value->length());
     ::NYql::NUdf::TStringBlockReader<arrow::BinaryType, isOptional, NKikimr::NUdf::EDataSlot::String> reader;
     for (i64 i = 0; i < value->length(); ++i) {
         NUdf::TBlockItem item = reader.GetItem(*value->data(), i);
@@ -348,7 +373,7 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlDate(const std::shared_ptr<arrow::
         }
 
         auto ref = item.AsStringRef();
-        NDB::ReadBufferFromMemory rb{ref.Data(), ref.Size()};
+        NDB::ReadBufferFromMemory rb{ ref.Data(), ref.Size() };
         uint16_t result = 0;
         parseImpl<NDB::DataTypeDate>(result, rb, nullptr, formatSettings);
         builder.Add(NUdf::TBlockItem(static_cast<ui16>(result)));
@@ -358,217 +383,190 @@ std::shared_ptr<arrow::Array> ArrowStringAsYqlDate(const std::shared_ptr<arrow::
 
 TColumnConverter ArrowUInt32AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, ui32>(targetType, value, 1)
-                : ArrowTypeAsYqlDatetime<false, ui32>(targetType, value, 1);
+        return isOptional ? ArrowTypeAsYqlDatetime<true, ui32>(targetType, value, 1) : ArrowTypeAsYqlDatetime<false, ui32>(targetType, value, 1);
     };
 }
 
 TColumnConverter ArrowInt64AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, i64>(targetType, value, 1)
-                : ArrowTypeAsYqlDatetime<false, i64>(targetType, value, 1);
+        return isOptional ? ArrowTypeAsYqlDatetime<true, i64>(targetType, value, 1) : ArrowTypeAsYqlDatetime<false, i64>(targetType, value, 1);
     };
 }
 
 TColumnConverter ArrowUInt16AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, ui16>(targetType, value, 24*3600)
-                : ArrowTypeAsYqlDatetime<false, ui16>(targetType, value, 24*3600);
+        return isOptional ? ArrowTypeAsYqlDatetime<true, ui16>(targetType, value, 24 * 3600)
+                          : ArrowTypeAsYqlDatetime<false, ui16>(targetType, value, 24 * 3600);
     };
 }
 
 TColumnConverter ArrowUInt64AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, ui64>(targetType, value, 1)
-                : ArrowTypeAsYqlDatetime<false, ui64>(targetType, value, 1);
+        return isOptional ? ArrowTypeAsYqlDatetime<true, ui64>(targetType, value, 1) : ArrowTypeAsYqlDatetime<false, ui64>(targetType, value, 1);
     };
 }
 
 TColumnConverter ArrowDate64AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlDatetime<false, i64>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlDatetime<true, i64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlDatetime<false, i64>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowTimestampAsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
+TColumnConverter ArrowTimestampAsYqlDatetime(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
     return [targetType, isOptional, multiplier = GetMultiplierForDatetime(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTimestampAsYqlDatetime<true>(targetType, value, multiplier)
-                : ArrowTimestampAsYqlDatetime<false>(targetType, value, multiplier);
+        return isOptional ? ArrowTimestampAsYqlDatetime<true>(targetType, value, multiplier)
+                          : ArrowTimestampAsYqlDatetime<false>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowTimestampAsYqlDatetime64(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
+TColumnConverter ArrowTimestampAsYqlDatetime64(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
     return [targetType, isOptional, multiplier = GetMultiplierForDatetime(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTimestampAsYqlDatetime64<true>(targetType, value, multiplier)
-                : ArrowTimestampAsYqlDatetime64<false>(targetType, value, multiplier);
+        return isOptional ? ArrowTimestampAsYqlDatetime64<true>(targetType, value, multiplier)
+                          : ArrowTimestampAsYqlDatetime64<false>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowStringAsYqlDateTime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
+TColumnConverter ArrowStringAsYqlDateTime(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
     return [targetType, isOptional, formatSettings](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-            ? ArrowStringAsYqlDateTime<true>(targetType, value, formatSettings)
-            : ArrowStringAsYqlDateTime<false>(targetType, value, formatSettings);
+        return isOptional ? ArrowStringAsYqlDateTime<true>(targetType, value, formatSettings)
+                          : ArrowStringAsYqlDateTime<false>(targetType, value, formatSettings);
     };
 }
 
 TColumnConverter ArrowInt32AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, i32>(targetType, value, 1)
-                : ArrowTypeAsYqlDatetime<false, i32>(targetType, value, 1);
+        return isOptional ? ArrowTypeAsYqlDatetime<true, i32>(targetType, value, 1) : ArrowTypeAsYqlDatetime<false, i32>(targetType, value, 1);
     };
 }
 
 TColumnConverter ArrowDate32AsYqlDatetime(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDatetime<true, i32>(targetType, value, multiplier)
-                : ArrowTypeAsYqlDatetime<false, i32>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlDatetime<true, i32>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlDatetime<false, i32>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowStringAsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
+TColumnConverter ArrowStringAsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
     return [targetType, isOptional, formatSettings](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowStringAsYqlTimestamp<true>(targetType, value, formatSettings)
-                : ArrowStringAsYqlTimestamp<false>(targetType, value, formatSettings);
+        return isOptional ? ArrowStringAsYqlTimestamp<true>(targetType, value, formatSettings)
+                          : ArrowStringAsYqlTimestamp<false>(targetType, value, formatSettings);
     };
 }
 
 TColumnConverter ArrowDate64AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
     };
 }
 
 TColumnConverter ArrowDate32AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, i32>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, i32>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, i32>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, i32>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowInt32AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
+TColumnConverter ArrowInt32AsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
     return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, i32>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, i32>(targetType, value, multiplier);
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, i32>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, i32>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowInt64AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
+TColumnConverter ArrowInt64AsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowUInt64AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
-                ? ArrowTypeAsYqlTimestamp<true, ui64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, ui64>(targetType, value, multiplier);
+TColumnConverter ArrowUInt64AsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, ui64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, ui64>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowUInt32AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, ui32>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, ui32>(targetType, value, multiplier);
+TColumnConverter ArrowUInt32AsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, NDB::FormatSettings::TimestampFormat timestampFormat) {
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timestampFormat)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, ui32>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, ui32>(targetType, value, multiplier);
     };
 }
 
 TColumnConverter ArrowUInt16AsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
-    return [targetType, isOptional, multiplier=24*3600*1000000ULL](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlTimestamp<true, ui16>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, ui16>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = 24 * 3600 * 1000000ULL](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, ui16>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, ui16>(targetType, value, multiplier);
     };
 }
 
-TColumnConverter ArrowTimestampAsYqlTimestamp(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
-                ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
+TColumnConverter ArrowTimestampAsYqlTimestamp(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlTimestamp<true, i64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlTimestamp<false, i64>(targetType, value, multiplier);
     };
 }
 
 TColumnConverter ArrowTimestampAsYqlString(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::TimeUnit::type timeUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier)
-                : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier);
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(timeUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier)
+                          : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier);
     };
 }
 
 TColumnConverter ArrowDate64AsYqlString(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier, "%Y-%m-%d")
-                : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier, "%Y-%m-%d");
+    return [targetType, isOptional, multiplier = GetMultiplierForDatetime(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlString<true, i64>(targetType, value, multiplier, "%Y-%m-%d")
+                          : ArrowTypeAsYqlString<false, i64>(targetType, value, multiplier, "%Y-%m-%d");
     };
 }
 
 TColumnConverter ArrowDate32AsYqlString(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, arrow::DateUnit dateUnit) {
-    return [targetType, isOptional, multiplier=GetMultiplierForTimestamp(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlString<true, i32>(targetType, value, multiplier, "%Y-%m-%d")
-                : ArrowTypeAsYqlString<false, i32>(targetType, value, multiplier, "%Y-%m-%d");
+    return [targetType, isOptional, multiplier = GetMultiplierForTimestamp(dateUnit)](const std::shared_ptr<arrow::Array>& value) {
+        return isOptional ? ArrowTypeAsYqlString<true, i32>(targetType, value, multiplier, "%Y-%m-%d")
+                          : ArrowTypeAsYqlString<false, i32>(targetType, value, multiplier, "%Y-%m-%d");
     };
 }
 
 TColumnConverter ArrowUInt16AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDate<true, ui16>(targetType, value)
-                : ArrowTypeAsYqlDate<false, ui16>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, ui16>(targetType, value) : ArrowTypeAsYqlDate<false, ui16>(targetType, value);
     };
 }
 
 TColumnConverter ArrowInt32AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDate<true, i32>(targetType, value)
-                : ArrowTypeAsYqlDate<false, i32>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, i32>(targetType, value) : ArrowTypeAsYqlDate<false, i32>(targetType, value);
     };
 }
 
 TColumnConverter ArrowUInt32AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDate<true, ui32>(targetType, value)
-                : ArrowTypeAsYqlDate<false, ui32>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, ui32>(targetType, value) : ArrowTypeAsYqlDate<false, ui32>(targetType, value);
     };
 }
 
 TColumnConverter ArrowInt64AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDate<true, i64>(targetType, value)
-                : ArrowTypeAsYqlDate<false, i64>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, i64>(targetType, value) : ArrowTypeAsYqlDate<false, i64>(targetType, value);
     };
 }
 
 TColumnConverter ArrowUInt64AsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional) {
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional
-                ? ArrowTypeAsYqlDate<true, ui64>(targetType, value)
-                : ArrowTypeAsYqlDate<false, ui64>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, ui64>(targetType, value) : ArrowTypeAsYqlDate<false, ui64>(targetType, value);
     };
 }
 
@@ -577,21 +575,20 @@ TColumnConverter ArrowDate32AsYqlDate(const std::shared_ptr<arrow::DataType>& ta
         throw parquet::ParquetException(TStringBuilder() << "millisecond accuracy does not fit into the date");
     }
     return [targetType, isOptional](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
-                ? ArrowTypeAsYqlDate<true, i32>(targetType, value)
-                : ArrowTypeAsYqlDate<false, i32>(targetType, value);
+        return isOptional ? ArrowTypeAsYqlDate<true, i32>(targetType, value) : ArrowTypeAsYqlDate<false, i32>(targetType, value);
     };
 }
 
-TColumnConverter ArrowStringAsYqlDate(const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
+TColumnConverter ArrowStringAsYqlDate(
+    const std::shared_ptr<arrow::DataType>& targetType, bool isOptional, const NDB::FormatSettings& formatSettings) {
     return [targetType, isOptional, formatSettings](const std::shared_ptr<arrow::Array>& value) {
-        return isOptional 
-                ? ArrowStringAsYqlDate<true>(targetType, value, formatSettings)
-                : ArrowStringAsYqlDate<false>(targetType, value, formatSettings);
+        return isOptional ? ArrowStringAsYqlDate<true>(targetType, value, formatSettings)
+                          : ArrowStringAsYqlDate<false>(targetType, value, formatSettings);
     };
 }
 
-TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
+TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType,
+    TType* yqlType, const NDB::FormatSettings& formatSettings) {
     // TODO: support more than 1 optional level
     bool isOptional = false;
     auto unpackedYqlType = UnpackOptional(yqlType, isOptional);
@@ -728,12 +725,12 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
         case arrow::Type::DECIMAL128: {
             switch (slotItem) {
                 case NUdf::EDataSlot::Decimal: {
-                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY && 
-                        (static_cast<arrow::FixedSizeBinaryType&>(*targetType)).byte_width() == 16
-                    ) {
+                    if (targetType->id() == arrow::Type::FIXED_SIZE_BINARY &&
+                        (static_cast<arrow::FixedSizeBinaryType&>(*targetType)).byte_width() == 16) {
                         return [](const std::shared_ptr<arrow::Array>& value) {
                             auto decimals = std::static_pointer_cast<arrow::Decimal128Array>(value);
-                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(), decimals->values(), decimals->null_bitmap(), decimals->null_count());
+                            auto output = std::make_shared<arrow::FixedSizeBinaryArray>(arrow::fixed_size_binary(16), decimals->length(),
+                                decimals->values(), decimals->null_bitmap(), decimals->null_count());
                             return output;
                         };
                     }
@@ -748,8 +745,10 @@ TColumnConverter BuildCustomConverter(const std::shared_ptr<arrow::DataType>& or
     }
 }
 
-TColumnConverter ArrowComputeConvertor(const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
-    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType), "Cannot cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
+TColumnConverter ArrowComputeConvertor(
+    const std::string& columnName, const std::shared_ptr<arrow::DataType>& sourceType, const std::shared_ptr<arrow::DataType>& targetType) {
+    YQL_ENSURE(arrow::compute::CanCast(*sourceType, *targetType),
+        "Cannot cast column " << columnName << ", from source type " << sourceType->ToString() << " to target type " << targetType->ToString());
     return [targetType](const std::shared_ptr<arrow::Array>& value) {
         auto res = arrow::compute::Cast(*value, targetType);
         THROW_ARROW_NOT_OK(res.status());
@@ -761,7 +760,8 @@ TColumnConverter YqlBlockTzDateToArrow(const std::string& columnName, const std:
     YQL_ENSURE(sourceType->id() == arrow::Type::STRUCT, "Yql Tz block shoud have struct type");
     YQL_ENSURE(sourceType->num_fields() == 2, "Yql Tz block shoud have two fields");
     return [columnName, sourceType](const std::shared_ptr<arrow::Array>& value) {
-        YQL_ENSURE(value->type()->Equals(sourceType), "Unexpected block type: " << value->type()->ToString() << ", expected type: " << sourceType->ToString() << " in column: " << columnName);
+        YQL_ENSURE(value->type()->Equals(sourceType), "Unexpected block type: " << value->type()->ToString() << ", expected type: "
+                                                                                << sourceType->ToString() << " in column: " << columnName);
         const auto structValue = std::static_pointer_cast<arrow::StructArray>(value);
         const auto dateField = structValue->field(0)->data()->Copy();
         dateField->null_count = structValue->null_count();
@@ -803,17 +803,18 @@ TColumnConverter DecimalToArrowConverter(bool isOptional, const std::shared_ptr<
     }
 }
 
-}
+}   // namespace
 
 namespace NYql::NDq {
 
-TColumnConverter BuildColumnConverter(const std::string& columnName, const std::shared_ptr<arrow::DataType>& originalType, const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
+TColumnConverter BuildColumnConverter(const std::string& columnName, const std::shared_ptr<arrow::DataType>& originalType,
+    const std::shared_ptr<arrow::DataType>& targetType, TType* yqlType, const NDB::FormatSettings& formatSettings) {
     if (yqlType->IsPg()) {
         auto pgType = AS_TYPE(TPgType, yqlType);
         auto conv = BuildPgColumnConverter(originalType, pgType);
         if (!conv) {
-            throw parquet::ParquetException(TStringBuilder() << "Arrow type: " << originalType->ToString() <<
-                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name);
+            throw parquet::ParquetException(TStringBuilder() << "Arrow type: " << originalType->ToString() << " of field: " << columnName
+                                                             << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name);
         }
 
         return conv;
@@ -828,8 +829,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
     }
 
     if (!arrow::compute::CanCast(*originalType, *targetType)) {
-        throw parquet::ParquetException(TStringBuilder() << "Mismatch type for field: " << columnName << ", expected: "
-            << targetType->ToString() << ", got: " << originalType->ToString());
+        throw parquet::ParquetException(TStringBuilder() << "Mismatch type for field: " << columnName << ", expected: " << targetType->ToString()
+                                                         << ", got: " << originalType->ToString());
     }
 
     return ArrowComputeConvertor(columnName, originalType, targetType);
@@ -838,7 +839,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
 TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKikimr::NMiniKQL::TType* columnType) {
     std::shared_ptr<arrow::DataType> yqlArrowType, s3OutputType;
     YQL_ENSURE(ConvertArrowType(columnType, yqlArrowType), "Got unsupported yql block type: " << *columnType << " in column " << columnName);
-    YQL_ENSURE(S3ConvertArrowOutputType(columnType, s3OutputType), "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
+    YQL_ENSURE(S3ConvertArrowOutputType(columnType, s3OutputType),
+        "Got unsupported s3 output block type: " << *columnType << " in column " << columnName);
 
     bool isOptional = columnType->IsOptional();
 
@@ -892,17 +894,15 @@ TColumnConverter BuildOutputColumnConverter(const std::string& columnName, NKiki
 void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::shared_ptr<arrow::Schema> dataSchema,
     std::vector<int>& columnIndices, std::vector<TColumnConverter>& columnConverters, TMissingColumns& missingColumns,
     std::unordered_map<TStringBuf, NKikimr::NMiniKQL::TType*, THash<TStringBuf>> rowTypes, const NDB::FormatSettings& settings) {
-
     for (int i = 0; i < dataSchema->num_fields(); ++i) {
         switch (dataSchema->field(i)->type()->id()) {
-        case arrow::Type::LIST:
-            throw parquet::ParquetException(TStringBuilder() << "File contains LIST field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
-        case arrow::Type::STRUCT:
-            throw parquet::ParquetException(TStringBuilder() << "File contains STRUCT field "
-                << dataSchema->field(i)->name() << " and can't be parsed");
-        default:
-            ;
+            case arrow::Type::LIST:
+                throw parquet::ParquetException(
+                    TStringBuilder() << "File contains LIST field " << dataSchema->field(i)->name() << " and can't be parsed");
+            case arrow::Type::STRUCT:
+                throw parquet::ParquetException(
+                    TStringBuilder() << "File contains STRUCT field " << dataSchema->field(i)->name() << " and can't be parsed");
+            default:;
         }
     }
 
@@ -915,8 +915,9 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         auto srcFieldIndex = dataSchema->GetFieldIndex(targetField->name());
         if (srcFieldIndex == -1) {
             if (!rowSpecColumnIt->second->IsOptional()) {
-                throw parquet::ParquetException(TStringBuilder() << "Missing field: " << targetField->name()
-                    << " (only optional fields may be absent in file), found fields in arrow file: " << dataSchema->ToString());
+                throw parquet::ParquetException(
+                    TStringBuilder() << "Missing field: " << targetField->name()
+                                     << " (only optional fields may be absent in file), found fields in arrow file: " << dataSchema->ToString());
             }
             missingColumns.Columns.emplace_back(static_cast<size_t>(i), targetField);
             continue;
@@ -924,16 +925,16 @@ void BuildColumnConverters(std::shared_ptr<arrow::Schema> outputSchema, std::sha
         auto targetType = targetField->type();
         auto originalType = dataSchema->field(srcFieldIndex)->type();
         if (originalType->layout().has_dictionary) {
-            throw parquet::ParquetException(TStringBuilder() << "Unsupported dictionary encoding is used for field: "
-                << targetField->name() << ", type: " << originalType->ToString());
+            throw parquet::ParquetException(TStringBuilder() << "Unsupported dictionary encoding is used for field: " << targetField->name()
+                                                             << ", type: " << originalType->ToString());
         }
         columnIndices.push_back(srcFieldIndex);
         columnConverters.emplace_back(BuildColumnConverter(targetField->name(), originalType, targetType, rowSpecColumnIt->second, settings));
     }
 }
 
-std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters,
-    const TMissingColumns& missingColumns) {
+std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(
+    std::shared_ptr<arrow::RecordBatch> batch, std::vector<TColumnConverter>& columnConverters, const TMissingColumns& missingColumns) {
     auto columns = batch->columns();
     for (size_t i = 0; i < columnConverters.size(); ++i) {
         auto converter = columnConverters[i];
@@ -947,8 +948,9 @@ std::shared_ptr<arrow::RecordBatch> ConvertArrowColumns(std::shared_ptr<arrow::R
     }
 
     const size_t numColumns = missingColumns.Schema->num_fields();
-    YQL_ENSURE(columns.size() + missingColumns.Columns.size() == numColumns, "Batch has " << columns.size() << " columns and "
-        << missingColumns.Columns.size() << " missing columns, expected " << numColumns << " columns in total");
+    YQL_ENSURE(columns.size() + missingColumns.Columns.size() == numColumns,
+        "Batch has " << columns.size() << " columns and " << missingColumns.Columns.size() << " missing columns, expected " << numColumns
+                     << " columns in total");
 
     std::vector<std::shared_ptr<arrow::Array>> result;
     result.reserve(numColumns);
@@ -1067,4 +1069,4 @@ void BuildOutputColumnConverters(const NKikimr::NMiniKQL::TStructType* outputStr
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

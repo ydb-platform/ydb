@@ -282,7 +282,7 @@ private:
     std::atomic<i64> QueueTotalAmount_ = 0;
 
     //! Protects the section immediately following it.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     // -1 indicates no limit
     std::atomic<double> Limit_;
     std::atomic<TDuration> Period_;
@@ -497,7 +497,7 @@ private:
         ProcessRequests(std::move(guard));
     }
 
-    void ProcessRequests(TGuard<NThreading::TSpinLock> guard)
+    void ProcessRequests(TGuard<TSpinLock> guard)
     {
         YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
 
@@ -1105,7 +1105,7 @@ private:
 
     const TLogger Logger;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
 
     //! The amount already received from the Underlying_ and not yet consumed.
     //! That is the amount that can be handed to incoming requests immediately and without requests to the Underlying_.

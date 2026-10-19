@@ -459,7 +459,7 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
 
     groupInfo->BridgePileId.CopyToProto(info, &std::decay_t<decltype(*info)>::SetBridgePileId);
 
-    if (groupInfo->BridgeProxyGroupId) {
+    if (groupInfo->BridgeProxyGroupId && !groupInfo->IsInlinePile()) { // inline pile is shown as an ordinary group
         groupInfo->BridgeProxyGroupId->CopyToProto(info, &std::decay_t<decltype(*info)>::SetProxyGroupId);
     }
 
@@ -688,7 +688,7 @@ void TBlobStorageController::UpdateSystemViews() {
 
                 info->GetBridgePileId().CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetBridgePileId);
 
-                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId()) {
+                if (const auto& proxyGroupId = info->GetBridgeProxyGroupId(); proxyGroupId && !info->IsInlinePile()) {
                     proxyGroupId->CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetProxyGroupId);
                 }
             }

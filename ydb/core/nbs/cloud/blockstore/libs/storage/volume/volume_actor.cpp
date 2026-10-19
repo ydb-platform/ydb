@@ -15,7 +15,10 @@ using namespace NKikimr;
 TVolumeActor::TVolumeActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
-    : TTabletExecutedFlat(info, tablet, new NKikimr::NMiniKQL::TMiniKQLFactory)
+    : NBlockStore::NStorage::TTabletBase<TVolumeActor>(
+          tablet,
+          NKikimr::TTabletStorageInfoPtr(info),
+          nullptr)
 {}
 
 void TVolumeActor::Bootstrap(const TActorContext& ctx)
@@ -46,15 +49,13 @@ void TVolumeActor::OnTabletDead(
 
 void TVolumeActor::OnActivateExecutor(const TActorContext& ctx)
 {
-    // RunTxInitSchema(ctx);
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_VOLUME,
         "OnActivateExecutor: tablet id %lu",
         TabletID());
 
-    // allow pipes to connect
-    SignalTabletActive(ctx);
+    ExecuteTx(ctx, CreateTx<TInitSchema>());
 
     ReportTabletState(ctx);
 }
@@ -320,8 +321,31 @@ void TVolumeActor::HandleUpdateVolumeConfig(
 
     Y_ABORT_UNLESS(msg->Record.GetPartitions().size() == 1);
 
+    const ui64 partitionTabletId = msg->Record.GetPartitions(0).GetTabletId();
+    ExecuteTx(
+        ctx,
+        CreateTx<TStorePartitionTabletId>(
+            partitionTabletId,
+            std::move(msg->Record)));
+}
+
+void TVolumeActor::ForwardUpdateVolumeConfig(
+    const NActors::TActorContext& ctx,
+    const NKikimrBlockStore::TUpdateVolumeConfig& record)
+{
+    const ui64 txId = record.GetTxId();
+    auto it = UpdateVolumeConfigRequests.find(txId);
+    if (it == UpdateVolumeConfigRequests.end()) {
+        LOG_WARN_S(
+            ctx,
+            NKikimrServices::NBS_VOLUME,
+            "UpdateVolumeConfig already answered, txId: " << txId);
+        return;
+    }
+    TUpdateVolumeConfigRequest& request = it->second;
+
     // Forward the event to all partitions
-    for (const auto& partition: msg->Record.GetPartitions()) {
+    for (const auto& partition: record.GetPartitions()) {
         ui64 partitionTabletId = partition.GetTabletId();
 
         LOG_INFO_S(
@@ -333,7 +357,7 @@ void TVolumeActor::HandleUpdateVolumeConfig(
 
         auto event =
             std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
-        event->Record.CopyFrom(msg->Record);
+        event->Record.CopyFrom(record);
         request.PendingEventId = SendPendingEventToPartition(
             ctx,
             partitionTabletId,

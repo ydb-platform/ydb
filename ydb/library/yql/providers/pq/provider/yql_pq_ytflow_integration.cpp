@@ -1,5 +1,5 @@
-#include "yql_pq_ytflow_integration.h"
 #include "yql_pq_settings.h"
+#include "yql_pq_ytflow_integration.h"
 
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 
@@ -12,7 +12,7 @@ using namespace NNodes;
 
 namespace {
 
-class TPqYtflowIntegration : public TEmptyYtflowIntegration {
+class TPqYtflowIntegration: public TEmptyYtflowIntegration {
 public:
     TPqYtflowIntegration(const TPqState::TPtr& state)
         : State_(state.Get())
@@ -35,12 +35,7 @@ public:
         auto readTopic = maybeReadTopic.Cast();
         const auto tokenName = "cluster:default_" + readTopic.DataSource().Cluster().StringValue();
 
-        return Build<TYtflowReadWrap>(ctx, read->Pos())
-            .Input(readTopic)
-            .Token<TCoSecureParam>()
-                .Name().Build(tokenName)
-                .Build()
-            .Done().Ptr();
+        return Build<TYtflowReadWrap>(ctx, read->Pos()).Input(readTopic).Token<TCoSecureParam>().Name().Build(tokenName) .Build() .Done().Ptr();
     }
 
     TMaybe<bool> CanWrite(const TExprNode& node, TExprContext& /*ctx*/) override {
@@ -58,12 +53,14 @@ public:
         auto writeTopic = maybeWriteTopic.Cast();
         const auto tokenName = "cluster:default_" + writeTopic.DataSink().Cluster().StringValue();
 
+        // clang-format off
         return Build<TYtflowWriteWrap>(ctx, write->Pos())
             .Input(writeTopic)
             .Token<TCoSecureParam>()
                 .Name().Build(tokenName)
                 .Build()
             .Done().Ptr();
+        // clang-format on
     }
 
     TExprNode::TPtr GetReadWorld(const TExprNode& read, TExprContext& /*ctx*/) override {
@@ -81,10 +78,7 @@ public:
     TExprNode::TPtr UpdateWriteWorld(const TExprNode::TPtr& write, const TExprNode::TPtr& world, TExprContext& ctx) override {
         auto maybeWriteTopic = TMaybeNode<TPqWriteTopic>(write);
         YQL_ENSURE(maybeWriteTopic);
-        return Build<TPqWriteTopic>(ctx, write->Pos())
-            .InitFrom(maybeWriteTopic.Cast())
-            .World(world)
-            .Done().Ptr();
+        return Build<TPqWriteTopic>(ctx, write->Pos()).InitFrom(maybeWriteTopic.Cast()).World(world).Done().Ptr();
     }
 
     TExprNode::TPtr GetWriteContent(const TExprNode& write, TExprContext& /*ctx*/) override {
@@ -93,22 +87,14 @@ public:
         return maybeWriteTopic.Cast().Input().Ptr();
     }
 
-    TExprNode::TPtr UpdateWriteContent(
-        const TExprNode::TPtr& write,
-        const TExprNode::TPtr& content,
-        TExprContext& ctx
-    ) override {
+    TExprNode::TPtr UpdateWriteContent(const TExprNode::TPtr& write, const TExprNode::TPtr& content, TExprContext& ctx) override {
         auto maybeWriteTopic = TMaybeNode<TPqWriteTopic>(write);
         YQL_ENSURE(maybeWriteTopic);
-        return Build<TPqWriteTopic>(ctx, write->Pos())
-            .InitFrom(maybeWriteTopic.Cast())
-            .Input(content)
-            .Done().Ptr();
+        return Build<TPqWriteTopic>(ctx, write->Pos()).InitFrom(maybeWriteTopic.Cast()).Input(content).Done().Ptr();
     }
 
-    void FillSourceSettings(
-        const TExprNode& source, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
-    ) override {
+    void FillSourceSettings(const TExprNode& source, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
+        ) override {
         auto maybeReadTopic = TMaybeNode<TPqReadTopic>(&source);
         YQL_ENSURE(maybeReadTopic);
 
@@ -141,9 +127,8 @@ public:
         settings.PackFrom(sourceSettings);
     }
 
-    void FillSinkSettings(
-        const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
-    ) override {
+    void FillSinkSettings(const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
+        ) override {
         auto maybeWriteTopic = TMaybeNode<TPqWriteTopic>(&sink);
         YQL_ENSURE(maybeWriteTopic);
 
@@ -169,11 +154,11 @@ private:
     TPqState* State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<IYtflowIntegration> CreatePqYtflowIntegration(const TPqState::TPtr& state) {
     YQL_ENSURE(state);
     return MakeHolder<TPqYtflowIntegration>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

@@ -12,6 +12,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#include <deque>
+
 namespace NKikimr::NOlap::NImport {
 
 class TImportActor: public NBackground::TSessionActor {
@@ -29,6 +31,9 @@ private:
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NImport::TSession> ImportSession;
     TActorId ImportActorId;
+    // Blobs left from the current batch. ColumnShard accepts one operation per TEvWrite.
+    std::deque<TString> PendingBlobs;
+    TString PendingPayloadSchema;
 
     TImportCounters Counters;
     TInstant ReadStartTime;
@@ -47,6 +52,7 @@ private:
     void HandleWakeup();
 
     void AbortImport(const TString& errorMessage);
+    void SendNextBlob();
 
     void PassAway() override;
 

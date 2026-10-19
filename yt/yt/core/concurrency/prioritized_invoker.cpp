@@ -4,7 +4,7 @@
 #include <yt/yt/core/actions/callback.h>
 #include <yt/yt/core/actions/invoker_detail.h>
 
-#include <library/cpp/yt/threading/spin_lock.h>
+#include <library/cpp/yt/system/spin_lock.h>
 
 namespace NYT::NConcurrency {
 
@@ -59,7 +59,7 @@ private:
         }
     };
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, SpinLock_);
     std::vector<TEntry> Heap_;
     i64 Counter_ = 0;
 

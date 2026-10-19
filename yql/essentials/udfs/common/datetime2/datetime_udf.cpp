@@ -2399,7 +2399,7 @@ TMaybe<TStorage> StartOfQuarter(TStorage storage, const IValueBuilder& valueBuil
 template <typename TStorage>
 TMaybe<TStorage> EndOfQuarter(TStorage storage, const IValueBuilder& valueBuilder) {
     storage.Month = ((storage.Month - 1) / 3 + 1) * 3;
-    storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
+    storage.Day = GetMonthLength(storage.Month, IsLeapYear(storage.Year));
     SetEndOfDay(storage);
     if (!storage.Validate(valueBuilder.GetDateBuilder())) {
         return {};
@@ -2419,7 +2419,7 @@ TMaybe<TStorage> StartOfMonth(TStorage storage, const IValueBuilder& valueBuilde
 
 template <typename TStorage>
 TMaybe<TStorage> EndOfMonth(TStorage storage, const IValueBuilder& valueBuilder) {
-    storage.Day = NMiniKQL::GetMonthLength(storage.Month, NMiniKQL::IsLeapYear(storage.Year));
+    storage.Day = GetMonthLength(storage.Month, IsLeapYear(storage.Year));
     SetEndOfDay(storage);
     if (!storage.Validate(valueBuilder.GetDateBuilder())) {
         return {};

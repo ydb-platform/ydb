@@ -387,6 +387,10 @@ IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& i
         if (!lambda->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(lambda->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
         if (!IsBoolLike(*lambda->GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), "DEFINE expression must be a predicate"));
             return IGraphTransformer::TStatus::Error;

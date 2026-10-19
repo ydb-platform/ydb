@@ -1,9 +1,10 @@
 #pragma once
 
 #include "aligned_page_pool.h"
+#include "frozen_page.h"
 
+#include <util/generic/yexception.h>
 #include <util/system/compiler.h>
-#include <util/system/error.h>
 #include <util/system/types.h>
 #include <util/system/yassert.h>
 #include <util/thread/lfstack.h>
@@ -12,16 +13,12 @@
 
 #include <atomic>
 #include <cstddef>
+#include <utility>
 
 namespace NKikimr {
 
 template <typename T, bool SysAlign>
-class TGlobalPools;
-
-template <typename T, bool SysAlign>
 class TGlobalPagePool {
-    friend class TGlobalPools<T, SysAlign>;
-
 public:
     TGlobalPagePool(T& provider, size_t pageSize)
         : Provider_(provider)
@@ -32,19 +29,41 @@ public:
     ~TGlobalPagePool() {
         void* addr = nullptr;
         while (Pages_.Dequeue(&addr)) {
-            FreePage(addr);
+            UnmapPage(addr);
         }
     }
 
     void* GetPage() {
-        void* page = nullptr;
-        if (Pages_.Dequeue(&page)) {
-            --Count_;
-            NYql::NUdf::SanitizerMakeRegionInaccessible(page, PageSize_);
+        if (void* page = GetCachedPage()) {
             return page;
         }
 
-        return nullptr;
+        return GetDecommittedPage();
+    }
+
+    void PushPage(void* addr) {
+        NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
+        if (Y_UNLIKELY(TAlignedPagePool::IsDefaultAllocatorUsed())) {
+            UnmapPage(addr);
+            return;
+        }
+        ++Count_;
+        Pages_.Enqueue(addr);
+    }
+
+    bool DiscardPage() {
+        void* page = GetCachedPage();
+        if (!page) {
+            return false;
+        }
+        auto frozen = TFrozenPage<T>::Freeze(Provider_, page, PageSize_);
+        if (!frozen) {
+            ++Count_;
+            Pages_.Enqueue(page);
+            ythrow std::move(frozen).error();
+        }
+        DecommittedPages_.Enqueue(std::move(*frozen));
+        return true;
     }
 
     ui64 GetPageCount() const {
@@ -60,27 +79,40 @@ public:
     }
 
 private:
-    size_t PushPage(void* addr) {
-        if (Y_UNLIKELY(TAlignedPagePool::IsDefaultAllocatorUsed())) {
-            FreePage(addr);
-            return GetPageSize();
+    void* GetCachedPage() {
+        void* page = nullptr;
+        if (Pages_.Dequeue(&page)) {
+            --Count_;
+            return page;
         }
-        NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
-        ++Count_;
-        Pages_.Enqueue(addr);
-        return 0;
+
+        return nullptr;
     }
 
-    void FreePage(void* addr) noexcept {
-        NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
-        auto res = Provider_.Munmap(addr, PageSize_);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
+    void* GetDecommittedPage() {
+        TFrozenPage<T> page;
+        if (!DecommittedPages_.Dequeue(&page)) {
+            return nullptr;
+        }
+        auto result = std::move(page).Unlock();
+        if (result) {
+            return result->Value();
+        }
+        auto [frozenPage, error] = std::move(result).error().Value();
+        DecommittedPages_.Enqueue(std::move(frozenPage));
+        ythrow std::move(error);
+    }
+
+    void UnmapPage(void* addr) noexcept {
+        auto result = Provider_.Munmap(addr, PageSize_, /*frozen=*/false);
+        Y_DEBUG_ABORT_UNLESS(result, "%s", result.error().what());
     }
 
     T& Provider_;
     const size_t PageSize_;
     std::atomic<ui64> Count_ = 0;
     TLockFreeStack<void*> Pages_;
+    TLockFreeStack<TFrozenPage<T>> DecommittedPages_;
 };
 
 } // namespace NKikimr

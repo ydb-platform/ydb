@@ -7,7 +7,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/composite
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/accessor/sub_columns/ut_common
-    ydb/library/arrow_kernels
+    ydb/library/formats/arrow/helpers
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
     ydb/core/formats/arrow
@@ -19,6 +19,7 @@ SRCS(
     ut_native_scalars.cpp
     ut_dictionary.cpp
     ut_sparsed.cpp
+    ut_key_ownership.cpp
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,5 +1,7 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
 ENV(YDB_USE_IN_MEMORY_PDISKS=false)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

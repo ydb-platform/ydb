@@ -307,20 +307,20 @@ class TestSize(Enum):
 
     MaxRequirements = {
         Small: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             TestRequirements.Ram: 32,
             # TestRequirements.Ram: 4,
             TestRequirements.RamDisk: 32,
         },
         Medium: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             # TestRequirements.Cpu: 8,
             TestRequirements.Ram: 32,
             # TestRequirements.Ram: 16,
             TestRequirements.RamDisk: 32,
         },
         Large: {
-            TestRequirements.Cpu: 4,
+            TestRequirements.Cpu: 6,
             TestRequirements.Ram: 32,
             TestRequirements.RamDisk: 32,
         },

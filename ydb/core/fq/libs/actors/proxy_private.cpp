@@ -1,15 +1,14 @@
 #include "proxy_private.h"
-#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/fq/libs/config/yq_issue.h>
 #include <ydb/core/fq/libs/events/events.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/core/fq/libs/config/yq_issue.h>
-#include <ydb/library/services/services.pb.h>
-
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>
@@ -22,20 +21,17 @@ namespace NFq {
 using namespace NActors;
 using namespace NMonitoring;
 
-class TYqlAnalyticsPrivateProxy : public NActors::TActorBootstrapped<TYqlAnalyticsPrivateProxy> {
+class TYqlAnalyticsPrivateProxy: public NActors::TActorBootstrapped<TYqlAnalyticsPrivateProxy> {
 public:
-    TYqlAnalyticsPrivateProxy(
-        const NConfig::TPrivateProxyConfig& privateProxyConfig,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        ::NMonitoring::TDynamicCounterPtr counters,
-        const ::NFq::TSigner::TPtr& signer)
+    TYqlAnalyticsPrivateProxy(const NConfig::TPrivateProxyConfig& privateProxyConfig, TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider, ::NMonitoring::TDynamicCounterPtr counters, const ::NFq::TSigner::TPtr& signer)
         : PrivateProxyConfig(privateProxyConfig)
         , Signer(signer)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
         , Counters(counters->GetSubgroup("subsystem", "private_api"))
-    { }
+    {
+    }
 
     static constexpr char ActorName[] = "YQ_PRIVATE_PROXY";
 
@@ -49,7 +45,7 @@ public:
     }
 
 private:
-    template<typename T>
+    template <typename T>
     NYql::TIssues ValidatePermissions(T& ev) {
         NYql::TIssues issues;
         if (!PrivateProxyConfig.GetEnablePermissions()) {
@@ -77,8 +73,7 @@ private:
         }
 
         Register(
-            CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+            CreatePingTaskRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvGetTaskRequest::TPtr& ev) {
@@ -93,9 +88,8 @@ private:
             return;
         }
 
-        Register(
-            CreateGetTaskRequestActor(ev->Sender, Signer, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+        Register(CreateGetTaskRequestActor(ev->Sender, Signer, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap,
+            SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvWriteTaskResultRequest::TPtr& ev) {
@@ -110,9 +104,8 @@ private:
             return;
         }
 
-        Register(
-            CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+        Register(CreateWriteTaskResultRequestActor(ev->Sender, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap,
+            SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvNodesHealthCheckRequest::TPtr& ev) {
@@ -128,8 +121,7 @@ private:
         }
 
         Register(
-            CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+            CreateNodesHealthCheckActor(ev->Sender, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap, SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
@@ -145,9 +137,8 @@ private:
         }
 
         auto sender = ev->Sender;
-        Register(
-            CreateCreateRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+        Register(CreateCreateRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap,
+            SelfId().PoolID());
     }
 
     void Handle(TEvents::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
@@ -163,9 +154,8 @@ private:
         }
 
         auto sender = ev->Sender;
-        Register(
-            CreateDeleteRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters),
-            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+        Register(CreateDeleteRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters), NActors::TMailboxType::HTSwap,
+            SelfId().PoolID());
     }
 
     STRICT_STFUNC(
@@ -197,13 +187,9 @@ TActorId MakeYqPrivateProxyId() {
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateYqlAnalyticsPrivateProxy(
-    const NConfig::TPrivateProxyConfig& privateProxyConfig,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TIntrusivePtr<IRandomProvider> randomProvider,
-    ::NMonitoring::TDynamicCounterPtr counters,
-    const ::NFq::TSigner::TPtr& signer) {
+IActor* CreateYqlAnalyticsPrivateProxy(const NConfig::TPrivateProxyConfig& privateProxyConfig, TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider, ::NMonitoring::TDynamicCounterPtr counters, const ::NFq::TSigner::TPtr& signer) {
     return new TYqlAnalyticsPrivateProxy(privateProxyConfig, timeProvider, randomProvider, counters, signer);
 }
 
-} // namespace NFq
+}   // namespace NFq

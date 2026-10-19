@@ -99,11 +99,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
     , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
-<<<<<<< HEAD
-=======
     , DormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000)
-    , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
     , EnableDeepScrubbing(false, false, true)
     , EnableFreshSyncDataThrottling(0, 0, 1)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
@@ -527,11 +523,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
         TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
-<<<<<<< HEAD
-=======
         TControlBoard::RegisterSharedControl(DormantTimeoutMinutes, icb->DSProxyControls.DormantTimeoutMinutes);
-        TControlBoard::RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy, icb->DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy);
->>>>>>> 906d13d9f76 (Implement DSProxy dormant state (#52222))
 
         TControlBoard::RegisterSharedControl(EnableFreshSyncDataThrottling, icb->VDiskControls.EnableFreshSyncDataThrottling);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceGeneration,

@@ -12,6 +12,11 @@ TEST_SRCS(
     test_rename_table.py
     test_compression.py
     test_encoding.py
+<<<<<<< HEAD
+=======
+    test_tiering.py
+    test_ttl_types.py
+>>>>>>> ce7e7a2db1b (Support column table TTL for DyNumber and extended date types (#55609))
 )
 
 SIZE(LARGE)

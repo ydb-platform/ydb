@@ -29,6 +29,7 @@ DEFAULTS = {
     "disk_type": "network-ssd-nonreplicated",
     "ssh_public_key": "~/.ssh/id_ed25519.pub",
     "ssh_identity": "~/.ssh/id_ed25519",
+    "ssh_public_keys": [],
     "jump_host": "gh-runners-gw",
     "ssh_user": "ubuntu",
     "preset": "",
@@ -119,6 +120,11 @@ def load_config(path):
             raise ConfigError(f"{key} must be an integer")
     if cfg["count"] < 1 or cfg["start"] < 0 or cfg["index_width"] < 0:
         raise ConfigError("count, start and index_width must be non-negative; count at least 1")
+    extra_keys = cfg["ssh_public_keys"]
+    if extra_keys is None:
+        cfg["ssh_public_keys"] = []
+    elif not isinstance(extra_keys, list) or any(not isinstance(item, str) or not item for item in extra_keys):
+        raise ConfigError("ssh_public_keys must be a list of paths")
     if cfg["disk_type"] == "network-ssd-nonreplicated" and cfg["disk_gb"] % NRD_CHUNK_GB != 0:
         raise ConfigError(
             f"disk_gb {cfg['disk_gb']} is not a multiple of {NRD_CHUNK_GB} "
@@ -146,16 +152,43 @@ def runner_names(cfg):
     return names
 
 
-def render_userdata(public_key):
-    if "\n" in public_key or not public_key.startswith("ssh-"):
+def check_public_key(line):
+    if "\n" in line or not line.startswith("ssh-") or len(line.split()) < 2:
         raise ConfigError("ssh public key must be a single ssh-* line")
+    return line
+
+
+def public_key_lines(cfg):
+    lines = []
+    seen = set()
+    for path in [cfg["ssh_public_key"], *cfg["ssh_public_keys"]]:
+        line = check_public_key(read_public_key(path))
+        if line not in seen:
+            seen.add(line)
+            lines.append(line)
+    return lines
+
+
+def key_label(line):
+    parts = line.split()
+    if len(parts) >= 3:
+        return f"{parts[0]} {parts[-1]}"
+    return parts[0]
+
+
+def render_userdata(public_keys):
+    if isinstance(public_keys, str):
+        public_keys = [public_keys]
+    if not public_keys:
+        raise ConfigError("at least one ssh public key is required")
+    rendered = "\n".join("      - " + json.dumps(check_public_key(key)) for key in public_keys)
     return f"""#cloud-config
 package_update: false
 package_upgrade: false
 users:
   - name: ubuntu
     ssh_authorized_keys:
-      - {public_key}
+{rendered}
   - name: runner
     groups: [sudo, adm, docker]
     shell: /bin/bash
@@ -177,7 +210,7 @@ runcmd:
 def read_public_key(path):
     text = Path(os.path.expanduser(path)).read_text().strip()
     line = next((item for item in text.splitlines() if item.strip() and not item.startswith("#")), "")
-    return line.strip()
+    return check_public_key(line.strip())
 
 
 def create_argv(cfg, name, userdata_path):
@@ -366,9 +399,30 @@ def describe(cfg, names):
         print(f"  {name}")
 
 
+def authorize_script(keys):
+    lines = [
+        "set -euo pipefail",
+        "install -d -m 700 -o ubuntu -g ubuntu /home/ubuntu/.ssh",
+        "touch /home/ubuntu/.ssh/authorized_keys",
+        "chown ubuntu:ubuntu /home/ubuntu/.ssh/authorized_keys",
+        "chmod 600 /home/ubuntu/.ssh/authorized_keys",
+        "auth=/home/ubuntu/.ssh/authorized_keys",
+    ]
+    for key in keys:
+        quoted = shlex.quote(check_public_key(key))
+        lines.append(f"grep -qxF {quoted} \"$auth\" || printf '%s\\n' {quoted} >> \"$auth\"")
+    return "\n".join(lines) + "\n"
+
+
+def authorize(cfg, name, ip, keys):
+    proc = run(ssh_argv(cfg, ip) + ["sudo", "bash", "-s"], input=authorize_script(keys))
+    if proc.returncode != 0:
+        raise SystemExit(f"failed to add ssh keys on {name}")
+
+
 def cmd_create(cfg, names, dry_run, timeout):
-    key = read_public_key(cfg["ssh_public_key"])
-    userdata = render_userdata(key)
+    keys = public_key_lines(cfg)
+    userdata = render_userdata(keys)
     describe(cfg, names)
     if dry_run:
         print("dry-run: VM is not created, runner is not registered")
@@ -392,6 +446,28 @@ def cmd_create(cfg, names, dry_run, timeout):
             print(f"{name}: registered", flush=True)
     finally:
         userdata_path.unlink(missing_ok=True)
+
+
+def cmd_authorize(cfg, names, dry_run, timeout):
+    keys = public_key_lines(cfg)
+    describe(cfg, names)
+    print("ssh keys for ubuntu:")
+    for key in keys:
+        print(f"  {key_label(key)}")
+    if dry_run:
+        print("dry-run: authorized_keys is not changed")
+        return
+    for name in names:
+        info = yc_instance(cfg, name)
+        if not info:
+            raise SystemExit(f"{name}: VM not found")
+        if info.get("status") != "RUNNING":
+            ip = wait_running(cfg, name, timeout)
+        else:
+            ip = instance_ip(info)
+        wait_prepared(cfg, ip, timeout)
+        authorize(cfg, name, ip, keys)
+        print(f"{name}: ssh keys updated", flush=True)
 
 
 def cmd_register(cfg, names, dry_run, timeout):
@@ -443,10 +519,41 @@ labels:
         assert "multiple of 93" in str(exc)
     else:
         raise AssertionError("expected disk alignment error")
-    userdata = render_userdata("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest key")
-    assert "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest key" in userdata
+    first = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAItest key"
+    second = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIother key"
+    userdata = render_userdata([first, second])
+    assert first in userdata and second in userdata
     assert "/var/lib/ydb-ci-host-prepared" in userdata
     assert "GITHUB_TOKEN" not in userdata
+    script = authorize_script([first, second])
+    assert script.count("grep -qxF") == 2
+    assert ">>" in script
+    assert ">" not in script.replace(">>", "")
+    keydir = Path(tempfile.mkdtemp(prefix="gh-runner-keys-"))
+    try:
+        primary = keydir / "primary.pub"
+        extra = keydir / "extra.pub"
+        primary.write_text(first + "\n")
+        extra.write_text(second + "\n")
+        keyed = load_config_text(
+            "name: tiny\nplatform: standard-v4a\ncores: 4\nmemory_gb: 8\ndisk_gb: 186\n"
+            "labels:\n  - tiny-worker\n"
+            f"ssh_public_key: {primary}\n"
+            "ssh_public_keys:\n"
+            f"  - {extra}\n"
+            f"  - {primary}\n"
+        )
+        assert public_key_lines(keyed) == [first, second]
+    finally:
+        primary.unlink(missing_ok=True)
+        extra.unlink(missing_ok=True)
+        keydir.rmdir()
+    try:
+        render_userdata(["not-a-key"])
+    except ConfigError:
+        pass
+    else:
+        raise AssertionError("expected a public key error")
     argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
     assert "--async" in argv
     assert "purpose=gh-runner" in argv
@@ -465,7 +572,7 @@ def load_config_text(text):
 
 def main(argv):
     parser = argparse.ArgumentParser(description="Create or re-register a GitHub Actions runner VM from a config file.")
-    parser.add_argument("command", choices=("create", "register", "self-test"))
+    parser.add_argument("command", choices=("create", "register", "authorize", "self-test"))
     parser.add_argument("config", nargs="?")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only", action="append", default=[], help="instance name from this config; repeatable")
@@ -483,6 +590,8 @@ def main(argv):
         raise SystemExit(f"config: {exc}") from exc
     if args.command == "create":
         cmd_create(cfg, names, args.dry_run, args.timeout)
+    elif args.command == "authorize":
+        cmd_authorize(cfg, names, args.dry_run, args.timeout)
     else:
         cmd_register(cfg, names, args.dry_run, args.timeout)
 

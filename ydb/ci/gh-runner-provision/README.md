@@ -21,6 +21,18 @@ python3 ydb/ci/gh-runner-provision/provision.py register path/to/runners.yaml
 
 Диск `network-ssd-nonreplicated` должен быть кратен 93 ГБ. Облако, подсеть, образ и SSH-пути можно не писать: они уже стоят по умолчанию на текущий CI-фолдер. Публичный адрес: `public_ip: true` и, если нужен конкретный, `public_address`.
 
+Сам ключ в репозиторий не входит. По умолчанию на пользователя `ubuntu` кладётся публичная половина `~/.ssh/id_ed25519.pub`, а команда ходит приватной `~/.ssh/id_ed25519`. Другая пара, которой ходит сам провижинер, задаётся полями `ssh_public_key` и `ssh_identity`. Дополнительные публичные ключи, которыми тоже можно зайти, — список путей `ssh_public_keys`. `create` кладёт основной ключ и дополнительные в cloud-init новой VM. На уже созданную VM `authorize` заходит ключом `ssh_identity` и дописывает недостающие строки в `authorized_keys`. Строки, которые уже там есть, не удаляются:
+
+```bash
+python3 ydb/ci/gh-runner-provision/provision.py authorize path/to/runners.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py authorize path/to/runners.yaml
+```
+
+```yaml
+ssh_public_keys:
+  - ~/.ssh/id_ed25519_ci.pub
+```
+
 ```yaml
 name: tiny-worker-2026-10
 start: 8

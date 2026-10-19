@@ -31,6 +31,7 @@ message TMemoryControllerConfig {
 
     // Budget against non-reclaimable AnonRss beyond the slack when it exceeds AllocatedMemory.
     // Free page-heap bytes remain reusable; other allocator overhead reduces consumer budgets.
+    // Use with tcmalloc, which supplies the reclaimable page-heap estimate.
     optional bool RssAwareBudget = 140 [default = false];
     optional uint64 RssBudgetSlackBytes = 141 [default = 536870912];
     // Release allocator caches to the OS in the same tick when AnonRss exceeds the soft limit.

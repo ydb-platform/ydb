@@ -466,6 +466,55 @@ Y_UNIT_TEST(RssAwareBudget_DoesNotRecutRetainedPages) {
     }
 }
 
+Y_UNIT_TEST(RssAwareBudget_RemainsStableAcrossAllocatorRelease) {
+    for (ui32 releasedPercent : {0u, 50u, 100u}) {
+        NKikimrConfig::TMemoryControllerConfig config;
+        config.SetHardLimitBytes(200_MB);
+        config.SetRssAwareBudget(true);
+        config.SetRssBudgetSlackBytes(0);
+        config.SetReleaseAllocatorCachesOnPressure(true);
+        config.SetMinAllocatorCachesReleaseBytes(0);
+        config.SetMaxAllocatorCachesReleaseBytes(10_MB);
+        TControllerFixture fixture(config);
+        auto& info = fixture.Provider->ProcessMemoryInfo;
+        info.AnonRss = 180_MB;
+        info.AllocatedMemory = 120_MB;
+        info.AllocatorCachesMemory = 60_MB;
+        info.AllocatorCachesReclaimable = 60_MB;
+        auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+        ui64 used = 80_MB;
+        std::optional<ui64> firstLimit;
+        for (ui32 tick = 0; tick != 5; ++tick) {
+            consumer->SetConsumption(used);
+            fixture.Tick();
+            const ui64 limit = fixture.Counter("Consumer/SharedCache/Limit");
+            const ui64 requested = fixture.Counter("Stats/AllocatorCachesReleaseRequested");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 40_MB);
+            UNIT_ASSERT_VALUES_EQUAL(requested, Min<ui64>(10_MB, *info.AnonRss - 150_MB));
+            if (firstLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(limit, *firstLimit);
+            } else {
+                UNIT_ASSERT_GT(limit, 40_MB);
+                UNIT_ASSERT_LT(limit, used);
+                firstLimit = limit;
+            }
+            if (used > limit) {
+                const ui64 freed = used - limit;
+                used = limit;
+                info.AllocatedMemory -= freed;
+                info.AllocatorCachesMemory += freed;
+                info.AllocatorCachesReclaimable += freed;
+            }
+            // Model the next measured sample, including partial or ineffective releases.
+            // A release request itself must never be treated as a measured RSS reduction.
+            const ui64 released = requested * releasedPercent / 100;
+            *info.AnonRss -= released;
+            info.AllocatorCachesMemory -= released;
+            info.AllocatorCachesReclaimable -= released;
+        }
+    }
+}
+
 Y_UNIT_TEST(RssAwareBudget_ReclaimablePagesDoNotHideAllocatedMemory) {
     NKikimrConfig::TMemoryControllerConfig config;
     config.SetHardLimitBytes(200_MB);
@@ -784,7 +833,8 @@ Y_UNIT_TEST(RssAwareBudget_ConfigHotReload) {
     };
 
     updateConfig(true);
-    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 28_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
 
     updateConfig(false);

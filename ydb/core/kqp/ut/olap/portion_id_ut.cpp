@@ -655,6 +655,96 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             UNIT_ASSERT_C(ast.find("'??") != std::string::npos, ast);
         }
     }
+
+    // Column-table sys views are loaded as OLAP, but their sources cannot produce
+    // _yql_portion_id / _yql_partition_id. Such queries must fail at compile time.
+    Y_UNIT_TEST(SystemColumnsOnSysView) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            const auto result = session
+                                    .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                    .GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TVector<TString> systemColumns = {"_yql_portion_id", "_yql_partition_id"};
+        auto expectRejected = [&](const TString& view, const TString& column) {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(TStringBuilder() << R"(
+                    PRAGMA kikimr.EnableSystemColumns = "true";
+                    SELECT )" << column << " FROM `" << view << R"(`
+                )")
+                          .GetValueSync();
+            TString issues;
+            if (it.IsSuccess()) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                UNIT_ASSERT_C(!streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+                issues = streamPart.GetIssues().ToString();
+            } else {
+                issues = it.GetIssues().ToString();
+            }
+            UNIT_ASSERT_C(issues.Contains("Column not found") || issues.Contains("Member not found"), issues);
+        };
+
+        const TVector<TString> views = {
+            "/Root/ColumnTable/.sys/primary_index_schema_stats",
+            "/Root/ColumnTable/.sys/primary_index_granule_stats",
+            "/Root/ColumnTable/.sys/primary_index_portion_stats",
+            "/Root/ColumnTable/.sys/primary_index_stats",
+        };
+        for (const auto& view : views) {
+            for (const auto& column : systemColumns) {
+                expectRejected(view, column);
+            }
+        }
+
+        {
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                PRAGMA kikimr.EnableSystemColumns = "true";
+                SELECT *
+                FROM `/Root/ColumnTable/.sys/primary_index_schema_stats`
+            )");
+            UNIT_ASSERT(!rows.empty());
+            UNIT_ASSERT(!rows.front().contains("_yql_portion_id"));
+            UNIT_ASSERT(!rows.front().contains("_yql_partition_id"));
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (1u, "one");
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                PRAGMA kikimr.EnableSystemColumns = "true";
+                SELECT _yql_portion_id AS PortionId
+                FROM `/Root/ColumnTable`
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT(rows.front().contains("PortionId"));
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

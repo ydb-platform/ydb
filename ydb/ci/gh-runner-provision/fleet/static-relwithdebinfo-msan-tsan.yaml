@@ -1,12 +1,5 @@
 shape: ../shapes/static-relwithdebinfo.yaml
 count: 6
-names:
-  - static-relwithdebinfo-d-15
-  - static-relwithdebinfo-d-16
-  - static-relwithdebinfo-d-17
-  - static-relwithdebinfo-d-18
-  - static-relwithdebinfo-d-19
-  - static-relwithdebinfo-d-20
 labels:
   - auto-provisioned
   - build-preset-relwithdebinfo

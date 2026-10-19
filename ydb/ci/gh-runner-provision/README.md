@@ -4,13 +4,13 @@
 
 ```bash
 python3 ydb/ci/gh-runner-provision/provision.py poll
-python3 ydb/ci/gh-runner-provision/provision.py labels ydb/ci/gh-runner-provision/fleet/tiny.yaml --dry-run
-python3 ydb/ci/gh-runner-provision/provision.py create ydb/ci/gh-runner-provision/fleet/tiny.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py create path/to/runners.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py labels path/to/runners.yaml --dry-run
 ```
 
-У статического пула `count` равен числу `names`. Пропавшее имя чинится на месте, новый номер не выдаётся. У tiny и analytic тоже перечислены конкретные имена: поллинг проверяет и количество, и что online именно они.
+У пула в `fleet/` нет имён машин. `poll` считает, сколько раннеров с этими лейблами сейчас online, и если кто-то offline, пишет его имя из ответа GitHub. `count` больше или меньше этого числа — пул не сошёлся.
 
-`labels` приводит custom labels раннера к списку из файла fleet через GitHub API. Сервис не останавливается, раннер может быть занят джобой. `self-hosted`, `Linux`, `X64` команда не трогает. `instance:<id>` оставляет. Перенести хост в другую группу — убрать его имя из одного файла fleet, добавить в другой и поправить оба `count`.
+`labels` приводит custom labels раннера к списку из файла через GitHub API. Сервис не останавливается, раннер может быть занят джобой. `self-hosted`, `Linux`, `X64` команда не трогает. `instance:<id>` оставляет. Файл fleet для этого не подходит: в нём нет имён. Имена задаются отдельным конфигом на `create`, `register` и `labels`.
 
 `register` заново снимает и записывает регистрацию раннера. Для смены лейблов он не нужен. Если раннер сейчас занят джобой, `register` ничего не делает.
 
@@ -45,8 +45,6 @@ preset: tiny-worker
 # fleet/tiny.yaml
 shape: ../shapes/tiny.yaml
 count: 6
-names:
-  - tiny-worker-2026-10-3
 labels:
   - tiny-worker
 ```

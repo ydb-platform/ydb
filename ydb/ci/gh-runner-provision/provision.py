@@ -114,13 +114,16 @@ def load_config(path):
         raise ConfigError(f"unknown keys: {', '.join(unknown)}")
     if "name" in data and "names" in data:
         raise ConfigError("set either name or names, not both")
-    if "name" not in data and "names" not in data:
-        raise ConfigError("set name or names")
     cfg = dict(DEFAULTS)
     cfg.update(data)
     cfg["_explicit"] = set(data)
     cfg["_pool"] = path.stem
     cfg["_fleet"] = fleet_keys is not None
+    if cfg["_fleet"]:
+        if "name" in data or "names" in data:
+            raise ConfigError("fleet file sets count and labels, not runner names")
+    elif "name" not in data and "names" not in data:
+        raise ConfigError("set name or names")
     for key in REQUIRED:
         if key not in data:
             raise ConfigError(f"missing {key}")
@@ -137,8 +140,6 @@ def load_config(path):
     if cfg["_fleet"]:
         if fleet_keys is None or "count" not in fleet_keys or "labels" not in fleet_keys:
             raise ConfigError("fleet file must set count and labels")
-        if cfg.get("names") and len(cfg["names"]) != cfg["count"]:
-            raise ConfigError(f"count is {cfg['count']} but names lists {len(cfg['names'])}")
     extra_keys = cfg["ssh_public_keys"]
     if extra_keys is None:
         cfg["ssh_public_keys"] = []
@@ -149,15 +150,18 @@ def load_config(path):
             f"disk_gb {cfg['disk_gb']} is not a multiple of {NRD_CHUNK_GB} "
             "(required for network-ssd-nonreplicated)"
         )
-    for name in runner_names(cfg):
-        if not NAME_RE.fullmatch(name):
-            raise ConfigError(f"bad instance name: {name}")
+    if not cfg["_fleet"]:
+        for name in runner_names(cfg):
+            if not NAME_RE.fullmatch(name):
+                raise ConfigError(f"bad instance name: {name}")
     return cfg
 
 
 def runner_names(cfg):
     if cfg.get("names"):
         return list(cfg["names"])
+    if "name" not in cfg:
+        raise ConfigError("set name or names")
     name = cfg["name"]
     count = int(cfg.get("count", 1))
     if count == 1 and "start" not in cfg.get("_explicit", set()):
@@ -414,37 +418,25 @@ def poll_pools(pools, runners):
     reports = []
     for pool in pools:
         found = grouped[tuple(sorted(pool["labels"]))]
-        online_names = [runner.get("name") for runner in found if runner.get("status") == "online"]
-        offline_names = [runner.get("name") for runner in found if runner.get("status") != "online"]
-        wanted = runner_names(pool)
+        online = [runner.get("name") for runner in found if runner.get("status") == "online"]
+        offline = [runner.get("name") for runner in found if runner.get("status") != "online"]
         reports.append({
             "pool": pool.get("_pool") or "",
             "count": int(pool["count"]),
-            "online": len(online_names),
-            "offline": offline_names,
-            "missing": [name for name in wanted if name not in online_names],
-            "extra": [name for name in online_names if name not in wanted],
+            "online": len(online),
+            "offline": offline,
         })
     return reports
 
 
 def poll_ok(report):
-    return (
-        report["online"] == report["count"]
-        and not report["missing"]
-        and not report["offline"]
-        and not report["extra"]
-    )
+    return report["online"] == report["count"] and not report["offline"]
 
 
 def format_poll(report):
     text = f"{report['pool']}: {report['online']}/{report['count']} online"
-    if report["missing"]:
-        text += "; missing " + ", ".join(report["missing"])
     if report["offline"]:
         text += "; offline " + ", ".join(report["offline"])
-    if report["extra"]:
-        text += "; extra " + ", ".join(report["extra"])
     return text
 
 
@@ -766,8 +758,8 @@ labels:
             "_pool": "tiny",
             "count": 2,
             "labels": ["tiny-worker"],
-            "names": ["tiny-a", "tiny-b"],
-            "_explicit": {"names"},
+            "_explicit": set(),
+            "_fleet": True,
         }],
         [
             {"name": "tiny-a", "status": "online", "labels": [
@@ -779,10 +771,10 @@ labels:
         ],
     )
     assert reports[0]["online"] == 1
-    assert reports[0]["missing"] == ["tiny-b"]
     assert reports[0]["offline"] == ["tiny-b"]
     assert not poll_ok(reports[0])
     pools = load_pools(HERE / "fleet")
+    assert all(not pool.get("names") for pool in pools)
     assert {pool["_pool"] for pool in pools} == {
         "analytic",
         "tiny",

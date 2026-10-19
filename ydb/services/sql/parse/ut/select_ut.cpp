@@ -195,6 +195,22 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(parsed.Combine == ECombine::Except);
     }
 
+    Y_UNIT_TEST(SubqueryInFromAndSelectList) {
+        const TParseResult scalar = Parse("SELECT id, (SELECT note FROM rights WHERE id = 1) FROM lefts WHERE id = 1");
+        UNIT_ASSERT(scalar.Select);
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Scalars.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Scalars[0].From.Name, "rights");
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Select->ScalarOf.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Select->ScalarOf[1], 0);
+
+        const TParseResult derived = Parse("SELECT note FROM (SELECT note FROM lefts WHERE id = 1) s");
+        UNIT_ASSERT(derived.Select);
+        UNIT_ASSERT(derived.FromSubquery);
+        UNIT_ASSERT(derived.Select->FromQuery);
+        UNIT_ASSERT_VALUES_EQUAL(derived.Select->From.Name, "s");
+        UNIT_ASSERT_VALUES_EQUAL(derived.FromSubquery->From.Name, "lefts");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

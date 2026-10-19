@@ -488,7 +488,11 @@ public:
     }
 
     // SelectStmt / select_no_parens / simple_select
-    TParseResult SelectStmt() {
+    TParseResult SelectStmt(bool nested = false) {
+        TVector<TSelectStmt> savedScalars = std::move(PendingScalars);
+        std::optional<TSelectStmt> savedFrom = std::move(PendingFrom);
+        PendingScalars.clear();
+        PendingFrom.reset();
         if (IsKeyword("with") || IsKeyword("values") || IsKeyword("table") || Current.Kind == ETokenKind::LeftParen) {
             return Unsupported(Current.Text);
         }
@@ -601,6 +605,10 @@ public:
             result.Select = std::move(select);
             result.Combine = combine;
             result.SelectRight = std::move(right.Select);
+            result.Scalars = std::move(PendingScalars);
+            result.FromSubquery = std::move(PendingFrom);
+            PendingScalars = std::move(savedScalars);
+            PendingFrom = std::move(savedFrom);
             return result;
         }
         if (IsKeyword("for")) {
@@ -614,12 +622,20 @@ public:
         } else if (IsKeyword("offset") || IsKeyword("fetch")) {
             return Unsupported(Current.Text);
         }
-        if (auto error = Finish()) {
-            return *error;
+        if (!nested) {
+            if (auto error = Finish()) {
+                PendingScalars = std::move(savedScalars);
+                PendingFrom = std::move(savedFrom);
+                return *error;
+            }
         }
 
         TParseResult result;
         result.Select = std::move(select);
+        result.Scalars = std::move(PendingScalars);
+        result.FromSubquery = std::move(PendingFrom);
+        PendingScalars = std::move(savedScalars);
+        PendingFrom = std::move(savedFrom);
         return result;
     }
 
@@ -1251,6 +1267,21 @@ private:
     }
 
     std::optional<TParseResult> SelectItem(TSelectStmt& select) {
+        if (Current.Kind == ETokenKind::LeftParen) {
+            Advance();
+            TParseResult inner = SelectStmt(true);
+            if (!inner.SqlState.empty()) {
+                return inner;
+            }
+            if (!inner.Select || Current.Kind != ETokenKind::RightParen) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            select.ScalarOf.push_back(static_cast<int>(PendingScalars.size()));
+            PendingScalars.push_back(std::move(*inner.Select));
+            select.Columns.push_back({});
+            return std::nullopt;
+        }
         if (Current.Kind != ETokenKind::Identifier) {
             return Unsupported(Current.Text);
         }
@@ -1287,6 +1318,7 @@ private:
             }
             Advance();
             select.Aggs.push_back(std::move(call));
+            select.ScalarOf.push_back(-1);
             select.Columns.push_back({name.Name, name.Quoted, {}});
             return std::nullopt;
         }
@@ -1301,6 +1333,7 @@ private:
             name.Quoted = second.Quoted;
             Advance();
         }
+        select.ScalarOf.push_back(-1);
         select.Columns.push_back(std::move(name));
         return std::nullopt;
     }
@@ -1331,7 +1364,27 @@ private:
             return Unsupported(Current.Text);
         }
         Advance();
-        if (auto error = QualifiedName(select.Schema, select.From)) {
+        if (Current.Kind == ETokenKind::LeftParen) {
+            Advance();
+            TParseResult inner = SelectStmt(true);
+            if (!inner.SqlState.empty()) {
+                return inner;
+            }
+            if (!inner.Select || Current.Kind != ETokenKind::RightParen) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (IsKeyword("as")) {
+                Advance();
+            }
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            select.From = Identifier();
+            select.FromQuery = true;
+            Advance();
+            PendingFrom = std::move(*inner.Select);
+        } else if (auto error = QualifiedName(select.Schema, select.From)) {
             return error;
         }
         if (IsKeyword("as")) {
@@ -1749,6 +1802,8 @@ private:
 
     TLexer Lexer;
     TToken Current;
+    TVector<TSelectStmt> PendingScalars;
+    std::optional<TSelectStmt> PendingFrom;
 };
 
 } // namespace

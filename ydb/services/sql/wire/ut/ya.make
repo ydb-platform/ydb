@@ -27,6 +27,7 @@ SRCS(
     listener_ut.cpp
     schemata_ut.cpp
     sequences_ut.cpp
+    subquery_ut.cpp
     select_ut.cpp
     set_ut.cpp
     session_ut.cpp

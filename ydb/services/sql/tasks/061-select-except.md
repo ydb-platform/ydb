@@ -1,7 +1,7 @@
 # EXCEPT
 
-status: pending
-commit:
+status: done
+commit: b7320e5acadf58904c4e845bb633e04938b488ef
 id: select-except
 depends: select-intersect
 

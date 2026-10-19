@@ -59,5 +59,6 @@ NActors::IActor* CreateDeleteActor(const NActors::TActorId& replyTo, TString dat
 NActors::IActor* CreateInsertSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TInsertStmt statement, ui32 internalErrorRetries);
 NActors::IActor* CreateJoinActor(const NActors::TActorId& replyTo, TString database, TSelectStmt statement, ui32 internalErrorRetries, ui64 lockTxId = 0);
 NActors::IActor* CreateSetOpActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt left, TSelectStmt right, ECombine combine, ui32 internalErrorRetries, ui64 lockTxId = 0);
+NActors::IActor* CreateSubqueryActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, TVector<TSelectStmt> scalars, std::optional<TSelectStmt> fromSubquery, ui32 internalErrorRetries, ui64 lockTxId = 0);
 
 } // namespace NKikimr::NSql

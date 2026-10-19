@@ -7,6 +7,7 @@ SRCS(
     insert_select.cpp
     join.cpp
     setop.cpp
+    subquery.cpp
     select.cpp
     update.cpp
 )

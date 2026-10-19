@@ -92,6 +92,8 @@ struct TSelectStmt {
     TVector<TIdentifier> Group;
     TVector<TComparison> Having;
     TVector<TOrderKey> Order;
+    TVector<int> ScalarOf;
+    bool FromQuery = false;
     std::optional<ui64> Limit;
 };
 
@@ -281,6 +283,8 @@ struct TParseResult {
     std::optional<TSelectStmt> Select;
     ECombine Combine = ECombine::None;
     std::optional<TSelectStmt> SelectRight;
+    TVector<TSelectStmt> Scalars;
+    std::optional<TSelectStmt> FromSubquery;
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;

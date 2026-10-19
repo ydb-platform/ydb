@@ -21,6 +21,18 @@ private:
         return true;
     }
 
+    virtual void DoAddNamePrefix(const TString& prefix) override {
+        for (auto&& i : Children) {
+            i->AddNamePrefix(prefix);
+        }
+    }
+
+    virtual void DoSetFinishLogPriority(const NActors::NLog::EPriority priority) override {
+        for (auto&& i : Children) {
+            i->SetFinishLogPriority(priority);
+        }
+    }
+
 public:
     using TBase::TBase;
 

@@ -203,9 +203,21 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
-        if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {
+        if (!tablesManagerLocal.InitFromDB(db, Self->Info(), &LoadDurations)) {
             return false;
         }
+    }
+    const std::pair<TString, TDuration> steps[] = {
+        { "tables", LoadDurations.Tables },
+        { "schema_presets", LoadDurations.SchemaPresets },
+        { "table_versions", LoadDurations.TableVersions },
+        { "schema_preset_versions", LoadDurations.SchemaPresetVersions },
+    };
+    for (const auto& [step, duration] : steps) {
+        YDB_LOG_INFO("",
+            {"event", "startup_stage_finished"},
+            {"stage", GetStageName() + "/" + step},
+            {"duration_us", duration.MicroSeconds()});
     }
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, tablesManagerLocal.GetTables().size());
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, tablesManagerLocal.GetSchemaPresets().size());

@@ -115,8 +115,13 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ScheduleBaseStatistics();
 
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
-    AFL_VERIFY(!!StartInstant);
-    Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
+    ui64 portionsCount = 0;
+    if (TablesManager.HasPrimaryIndex()) {
+        for (auto&& [_, granule] : TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetTables()) {
+            portionsCount += granule->GetPortions().size();
+        }
+    }
+    StartupTimeline.OnSwitchedToWork(portionsCount);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
@@ -125,8 +130,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
-    StartInstant = TMonotonic::Now();
-    Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
+    StartupTimeline.OnExecutorActivated();
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", TabletID()},
         {"selfId", SelfId()});

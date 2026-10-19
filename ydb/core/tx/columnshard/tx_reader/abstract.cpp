@@ -12,7 +12,37 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
             return NextReaderAfterLoad->Execute(txc, ctx);
         }
     }
-    IsStarted = true;
+    const TMonotonic attemptStart = TMonotonic::Now();
+    if (!IsStarted) {
+        IsStarted = true;
+        FirstAttemptInstant = attemptStart;
+    }
+    ++Attempts;
+    const bool finished = ExecuteAttempt(txc, ctx);
+    const TMonotonic attemptFinish = TMonotonic::Now();
+    ExecutionDuration += attemptFinish - attemptStart;
+    if (!finished) {
+        return false;
+    }
+    IsReady = true;
+    const TDuration duration = attemptFinish - FirstAttemptInstant;
+    YDB_LOG_COMP(FinishLogPriority, NKikimrServices::TX_COLUMNSHARD, "",
+        {"event", "startup_stage_finished"},
+        {"stage", StageName},
+        {"duration_us", duration.MicroSeconds()},
+        {"execution_us", ExecutionDuration.MicroSeconds()},
+        {"waiting_us", (duration - ExecutionDuration).MicroSeconds()},
+        {"attempts", Attempts});
+    NextReaderAfterLoad = BuildNextReaderAfterLoad();
+    if (!NextReaderAfterLoad) {
+        return true;
+    }
+    // the next reader runs after this stage has finished, so it is named as its sibling
+    NextReaderAfterLoad->AddNamePrefix(NamePrefix);
+    return NextReaderAfterLoad->Execute(txc, ctx);
+}
+
+bool ITxReader::ExecuteAttempt(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
     {
         TMemoryProfileGuard g("ITxReader/" + StageName + "/Precharge");
         NColumnShard::TLoadTimeSignals::TLoadTimer timer = PrechargeCounters.StartGuard();
@@ -34,9 +64,7 @@ bool ITxReader::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TAc
             return false;
         }
     }
-    IsReady = true;
-    NextReaderAfterLoad = BuildNextReaderAfterLoad();
-    return NextReaderAfterLoad ? NextReaderAfterLoad->Execute(txc, ctx) : true;
+    return true;
 }
 
 }   // namespace NKikimr

@@ -9,8 +9,13 @@ namespace NKikimr {
 class ITxReader {
 private:
     YDB_READONLY_DEF(TString, StageName);
+    TString NamePrefix;
     bool IsReady = false;
     bool IsStarted = false;
+    TMonotonic FirstAttemptInstant;
+    ui32 Attempts = 0;
+    TDuration ExecutionDuration;
+    NActors::NLog::EPriority FinishLogPriority = NActors::NLog::PRI_INFO;
     std::shared_ptr<ITxReader> NextReaderAfterLoad;
     NColumnShard::TLoadTimeSignals PrechargeCounters;
     NColumnShard::TLoadTimeSignals ReaderCounters;
@@ -21,11 +26,31 @@ private:
         return nullptr;
     }
 
+    bool ExecuteAttempt(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx);
+
+    virtual void DoAddNamePrefix(const TString& /*prefix*/) {
+    }
+
+    virtual void DoSetFinishLogPriority(const NActors::NLog::EPriority /*priority*/) {
+    }
+
 public:
     virtual ~ITxReader() = default;
 
     void AddNamePrefix(const TString& prefix) {
+        NamePrefix = prefix + NamePrefix;
         StageName = prefix + StageName;
+        DoAddNamePrefix(prefix);
+    }
+
+    void SetFinishLogPriority(const NActors::NLog::EPriority priority) {
+        FinishLogPriority = priority;
+        DoSetFinishLogPriority(priority);
+    }
+
+    // the name in the counters stays as constructed, so a suffix never multiplies them
+    void AddNameSuffix(const TString& suffix) {
+        StageName = StageName + suffix;
     }
 
     ITxReader(const TString& stageName)

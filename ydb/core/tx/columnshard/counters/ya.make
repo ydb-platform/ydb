@@ -18,6 +18,7 @@ SRCS(
     portion_index.cpp
     duplicate_filtering.cpp
     error_collector.cpp
+    startup_timeline.cpp
 )
 
 PEERDIR(

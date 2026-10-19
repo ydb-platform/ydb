@@ -12312,6 +12312,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Controller->InitialZone = initialZone;
             Probe->Report = report;
             DropInitialOwnerReport = dropInitialOwnerReport;
+            // Boot reports must be emitted, rather than throttled at the synthetic epoch.
+            Runtime.UpdateCurrentTime(TInstant::Seconds(10));
             Setup(Runtime, false, 1, [hostEnabled](TAppPrepare& app) {
                 app.FeatureFlags.SetEnableTabletMemoryHost(hostEnabled);
             });
@@ -12416,6 +12418,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestTabletMemoryFollowerPromotionWithdrawsShare) {
         constexpr ui32 Nodes = 2;
         TTestBasicRuntime runtime(Nodes, false);
+        runtime.UpdateCurrentTime(TInstant::Seconds(10));
         Setup(runtime, false, 1, [](TAppPrepare& app) {
             app.FeatureFlags.SetEnableTabletMemoryHost(true);
         });
@@ -12467,6 +12470,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
         UNIT_ASSERT(!promote.empty());
         promote.Stop().Unblock();
+        pipe.AllowFollower = false; // Wait for promotion, not another connection to the follower.
         bool isLeader = false;
         MakeSureTabletIsUp(runtime, tabletId, followerNode, &pipe, &isLeader);
         runtime.SimulateSleep(TDuration::Seconds(1));
@@ -12654,7 +12658,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // A restarted tablet is a new instance: nothing changed on the node, yet it must not stay Green
         env.Probe->LastZone.reset();
         const TActorId tablet = ResolveTablet(env.Runtime, env.TabletId);
+        TBlockEvents<TEvTablet::TEvReady> ready(env.Runtime);
         env.Runtime.Send(new IEventHandle(tablet, TActorId(), new TEvents::TEvPoisonPill()));
+        for (ui32 attempt = 0; attempt != 100 && ready.empty(); ++attempt) {
+            env.Runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(!ready.empty());
+        // Ignore feedback to the dying executor and wait for the new incarnation's readiness.
+        env.Probe->LastZone.reset();
+        ready.Stop().Unblock();
         MakeSureTabletIsUp(env.Runtime, env.TabletId, 0);
         env.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(env.Probe->LastZone);

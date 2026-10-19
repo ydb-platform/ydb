@@ -1,5 +1,7 @@
 #include <ydb/core/statistics/ut_common/ut_common.h>
 
+// Touched on the dashboard test branch (#54724) to pull this suite into the
+// incremental PR-check graph. Do not merge.
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
 

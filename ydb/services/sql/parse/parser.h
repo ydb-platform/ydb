@@ -45,6 +45,7 @@ enum class EJoinKind {
     Left,
     Right,
     Cross,
+    Full,
 };
 
 struct TJoin {

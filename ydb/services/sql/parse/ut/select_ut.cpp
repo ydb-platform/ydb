@@ -121,6 +121,13 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(comma.Select->Join->Name.Name, "rights");
     }
 
+    Y_UNIT_TEST(FullJoinKeepsBothTables) {
+        const TParseResult parsed = Parse("SELECT lefts.note, rights.extra FROM lefts FULL JOIN rights ON lefts.id = rights.id");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Select->Join);
+        UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Full);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);
@@ -133,9 +140,9 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(distinct.SqlState, "0A000");
         UNIT_ASSERT_VALUES_EQUAL(distinct.Message, "distinct");
 
-        const TParseResult join = Parse("SELECT a FROM t FULL JOIN u ON t.id = u.id");
+        const TParseResult join = Parse("SELECT a FROM t NATURAL JOIN u");
         UNIT_ASSERT_VALUES_EQUAL(join.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(join.Message, "full");
+        UNIT_ASSERT_VALUES_EQUAL(join.Message, "natural");
 
         const TParseResult grant = Parse("GRANT SELECT ON t TO u");
         UNIT_ASSERT_VALUES_EQUAL(grant.SqlState, "0A000");

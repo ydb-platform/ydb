@@ -569,7 +569,7 @@ private:
                         Succeed();
                         return;
                     }
-                    if (!Append(left, &right)) {
+                    if (!Append(&left, &right)) {
                         return;
                     }
                 }
@@ -590,7 +590,8 @@ private:
             }
             bucket[RightRows[i].Bytes[rightKey]].push_back(i);
         }
-        const bool keepLeft = Statement.Join->Kind == EJoinKind::Left || Statement.Join->Kind == EJoinKind::Right;
+        const bool keepLeft = Statement.Join->Kind == EJoinKind::Left || Statement.Join->Kind == EJoinKind::Right
+            || Statement.Join->Kind == EJoinKind::Full;
         for (const THeld& left : LeftRows) {
             const TVector<size_t>* hits = left.Nulls[leftKey] ? nullptr : MapFindPtr(bucket, left.Bytes[leftKey]);
             if (!hits || hits->empty()) {
@@ -601,7 +602,7 @@ private:
                     Succeed();
                     return;
                 }
-                if (!Append(left, nullptr)) {
+                if (!Append(&left, nullptr)) {
                     return;
                 }
                 continue;
@@ -611,7 +612,34 @@ private:
                     Succeed();
                     return;
                 }
-                if (!Append(left, &RightRows[index])) {
+                if (!Append(&left, &RightRows[index])) {
+                    return;
+                }
+            }
+        }
+        if (Statement.Join->Kind == EJoinKind::Full) {
+            TVector<bool> matched(RightRows.size(), false);
+            for (const THeld& left : LeftRows) {
+                if (left.Nulls[leftKey]) {
+                    continue;
+                }
+                const TVector<size_t>* hits = MapFindPtr(bucket, left.Bytes[leftKey]);
+                if (!hits) {
+                    continue;
+                }
+                for (size_t index : *hits) {
+                    matched[index] = true;
+                }
+            }
+            for (size_t index = 0; index < RightRows.size(); ++index) {
+                if (matched[index]) {
+                    continue;
+                }
+                if (Statement.Limit && Rows.size() >= *Statement.Limit) {
+                    Succeed();
+                    return;
+                }
+                if (!Append(nullptr, &RightRows[index])) {
                     return;
                 }
             }
@@ -619,7 +647,7 @@ private:
         Succeed();
     }
 
-    bool Append(const THeld& left, const THeld* right) {
+    bool Append(const THeld* left, const THeld* right) {
         TVector<TQueryCell> line;
         line.reserve(Output.size());
         for (const TOutput& column : Output) {
@@ -627,10 +655,10 @@ private:
                 Fail("42702", column.Source);
                 return false;
             }
-            const bool missing = column.Side == 1 && right == nullptr;
-            const THeld& row = column.Side == 0 ? left : (missing ? left : *right);
-            const bool null = missing || row.Nulls[column.Index];
-            const TStringBuf bytes = null ? TStringBuf() : TStringBuf(row.Bytes[column.Index]);
+            const bool missing = (column.Side == 0 && left == nullptr) || (column.Side == 1 && right == nullptr);
+            const THeld* row = column.Side == 0 ? left : right;
+            const bool null = missing || row->Nulls[column.Index];
+            const TStringBuf bytes = null ? TStringBuf() : TStringBuf(row->Bytes[column.Index]);
             const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
             if (!encoded.Ok) {
                 Fail(encoded.SqlState.empty() ? TString("0A000") : encoded.SqlState, encoded.Message.empty() ? TString("not supported") : encoded.Message);

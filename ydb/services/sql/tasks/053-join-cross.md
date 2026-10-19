@@ -1,7 +1,7 @@
 # CROSS JOIN
 
-status: pending
-commit:
+status: done
+commit: 18fb5d395d6aea7a1620732a901dcbbdfc195b00
 id: join-cross
 depends: join-inner
 

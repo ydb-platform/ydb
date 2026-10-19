@@ -140,8 +140,8 @@ namespace NKikimr::NStorage {
             pdiskConfig->ReadOnly = pdisk.GetReadOnly();
         }
 
-        // Path scheme: "SectorMap:unique_name[:3000]"
-        // where '3000' is device size of in GiB.
+        // Path scheme: "SectorMap:unique_name[:size_GiB[:disk_mode[:lz4|snappy|none]]]".
+        // Compression defaults to LZ4 and is fixed for the lifetime of the map.
         if (path.Contains(":")) {
             TVector<TString> splitted;
             size_t tokenCount = Split(path, ":", splitted);
@@ -165,7 +165,9 @@ namespace NKikimr::NStorage {
 
                 auto& maps = Cfg->SectorMaps;
                 if (auto it = maps.find(path); it == maps.end()) {
-                    maps[path] = new NPDisk::TSectorMap(size, diskMode);
+                    const auto compression = NPDisk::NSectorMap::TryGetCompressionFromPath(path);
+                    Y_ABORT_UNLESS(compression, "Invalid SectorMap compression in path: %s", path.c_str());
+                    maps[path] = new NPDisk::TSectorMap(size, diskMode, *compression);
                     maps[path]->ZeroInit(1000); // Format PDisk
                 }
 

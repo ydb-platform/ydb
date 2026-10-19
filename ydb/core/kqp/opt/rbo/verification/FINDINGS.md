@@ -6,90 +6,138 @@ are different evidence. The [archived finding inventory](history/pre-audit-refac
 retains the original observations and fix commits; do not read its milestone
 statuses as fresh results.
 
-## Main-source audit, 2026-10-19
+## Rebased corpus measurement (2026-10-19)
 
-Five production fixes are isolated on branches whose parent is fetched
-main `6ceb698dd99a525fc885121dfdbcad9deca11974`. These findings come from source
-inspection and focused native regressions, not a fresh TPCH/TPCDS solver census.
+The SMT branch is based on fetched main `6ceb698dd99a525fc885121dfdbcad9deca11974`.
+The complete formula census at `4e7f9c024ddf` and the fixed 50-query proof run
+at `0e7c1886047d` give the following comparison against the rebased baseline
+`2f53bf4498b0`:
+
+| Measure | Rebased baseline | After admission and construction changes |
+|---|---:|---:|
+| TPCH whole-query formulas | 15/22 | 15/22 |
+| TPCDS whole-query formulas | 30/99 | 48/99 |
+| Total formulas | 45/121 | 63/121 |
+| TPCH pinned bounded proofs | 10/16 | 10/16 |
+| TPCDS pinned bounded proofs | 14/34 | 22/34 |
+| Total pinned bounded proofs | 24/50 | 32/50 |
+
+The remaining census results are one UNKNOWN, 50 UNSUPPORTED and seven
+OPTIMIZER_FAILURE. The proof run has four UNKNOWN and 14 UNSUPPORTED, and
+preserves every baseline proof. Its UNKNOWN cases are TPCH q15 and TPCDS
+q43, q50 and q76; the construction UNKNOWN is TPCDS q17.
+
+All 22 TPCH queries and 92/99 TPCDS queries prepare. The seven TPCDS failures
+are q14, q24, q39, q44, q47, q57 and q70. The query-mode diagnostic confirms
+that all seven prepare as generic queries with `_KqpEnableSpilling=true`;
+both default data-query and default generic-query settings fail. The pinned
+corpus configuration was retained. This diagnostic is not a wrong-result finding.
+
+The policy gates still fail: the required 121 formulas and 50 proofs have not
+been restored. Unsupported cases include GroupingSets, StablePickle,
+compiled LIKE/text and Date wrappers, and additional window shapes. There
+were no counterexamples in the fixed proof run. `UNKNOWN` remains unproved;
+formula construction is not proof. The bounds remain two rows per table and
+two tasks, with 60 seconds of solver time per query.
+
+The eight new pinned proofs are TPCDS q15, q34, q46, q48, q68, q69, q73 and q97.
+All eight re-proved in the optional nonempty-output sweep. Seven have modeled
+successful nonempty executions on both boundaries; q34 is UNSAT on both at two
+rows per table. Its proof therefore does not exercise nonempty output at this
+bound. SAT is modeled reachability, not runtime replay or exhaustive branch
+coverage. Receipts and input/tool hashes are in
+`/tmp/rbo-main-audit-20261019/new-proof-nonempty-4e7f9c024dd`; peak RSS was 0.13 GiB.
+
+The first refreshed census used a 60-second construction ceiling and emitted
+60 formulas, but TPCDS q2 timed out on the same snapshots that previously
+completed in about 53 seconds. The final census uses 120 seconds for construction
+and rendering. q2 completed in 43.9 seconds, q4 in 80.3 seconds, and q64
+in 119.2 seconds; q64 remains close to the ceiling and timing-sensitive.
+Memory limits are unchanged. The proof run used the stricter
+60-second construction ceiling; the subsequent change affects only the benchmark
+construction allowance and its documentation, with verifier semantics and the
+proof policy unchanged. The source binding is recorded in
+`/tmp/rbo-main-audit-20261019/final-source-binding.json`.
+
+Reports, input/source hashes and available verdict artifacts are archived locally:
+
+- `/tmp/rbo-main-audit-20261019/census-4e7f9c024ddf-20261019T185443Z`
+- `/tmp/rbo-main-audit-20261019/proof-floor-0e7c1886047d-20261019T184213Z`
+- `/tmp/rbo-main-audit-20261019/census-0e7c1886047d-20261019T183441Z`
+
+These are dated measurements, not replacements for the checked-in coverage policy.
+
+## Main-source fixes and verifier validation
+
+Five production fixes are isolated on branches whose direct parent is fetched
+main `6ceb698dd99a525fc885121dfdbcad9deca11974`. Each is also applied on the SMT
+branch. These defects were confirmed by focused native regressions and source
+audits, separately from the bounded corpus proofs.
 
 | Branch / commit | Defect and validation on the standalone branch |
 |---|---|
 | `fix/required-key-presence-ranges` / `bd7f15e85e1` | `RangeFor(Exists/NotExists)` sent required keys through the optional/Pg-only range builder. Required `Exists` now covers every value, including NaN; `NotExists` is empty. Both `TOptimizeYqlExpr::RangeForExists*` tests passed, including unchanged optional/Pg behavior. |
 | `fix/string-capacity-overflow` / `5c953edbb8e` | Four string growth paths computed spare capacity with wrapping 32-bit addition. Capacity now saturates at `UINT32_MAX`; compile-time boundary checks cover the first overflowing size and the maximum. `TMiniKQLStringUtils::MakeStringWithPad` and `SubstringWithLargeOffset` passed. Multi-gigabyte allocation tests were excluded. |
 | `fix/string-padding-overflow` / `6fc6fde79ee` | `MakeStringNotFilled(size, pad)` could wrap its allocation size. The regression uses `size=1, pad=UINT32_MAX`, which takes the embedded-string path on the old code without a large allocation. Both `TMiniKQLStringUtils::MakeStringWithPad*` tests passed. |
-| `fix/unordered-window-rank` / `997021ffc1e` | Native `RANK` and `DENSE_RANK` without ORDER BY passed a null condition to `If`. They now keep rank 1 for all peers. Both unordered regressions failed on main while the ordered/row-number control passed; all three tests passed after the fix. Global and partitioned SQL comparisons were added and await server execution. |
-| `fix/window-sort-duplicate-keys` / `0b92e118b26` | A column shared by PARTITION BY and ORDER BY was emitted twice into WideSort, which rejects duplicate keys. Keeping the first occurrence preserves lexicographic order. Both native regressions failed on main and passed after the fix, covering rank/dense-rank/row-number, both directions, and a trailing distinct key. SQL comparisons were added and await server execution. |
+| `fix/unordered-window-rank` / `997021ffc1e` | Native `RANK` and `DENSE_RANK` without ORDER BY passed a null condition to `If`. They now keep rank 1 for all peers. Both unordered regressions failed on main while the ordered/row-number control passed; all three tests passed after the fix. Global and partitioned SQL comparisons passed on the combined SMT branch for row and column storage. |
+| `fix/window-sort-duplicate-keys` / `0b92e118b26` | A column shared by PARTITION BY and ORDER BY was emitted twice into WideSort, which rejects duplicate keys. Keeping the first occurrence preserves lexicographic order. Both native regressions failed on main and passed after the fix, covering rank/dense-rank/row-number, both directions, and a trailing distinct key. SQL comparisons passed on the combined SMT branch for row and column storage. |
 
-Every run used at most four build workers, one linker and one test worker,
-restricted to four CPUs, with an 8 GiB hard allocation limit per process and
-a 16 GiB sampled aggregate RSS cutoff. Peak aggregate RSS was 4.27 GiB for the
-range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
-`/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
-and `/tmp/rbo-string-padding-main-tests.log`. The two window targets peaked at
-9.30 GiB and 9.28 GiB. Their failing/passing evidence is in
-`/tmp/rbo-unordered-rank-main-{before,after}.log` and
-`/tmp/rbo-shared-window-sort-main-{before,after}.log`. These are native physical
-construction/type checks; SQL execution and the TPCH/TPCDS census remain pending.
+The current guarded runs use two CPUs and build workers, one linker, and one
+test worker. The guard enforces an 8 GiB allocation limit per process, a 64 GiB
+virtual-address limit, and a sampled 16 GiB aggregate RSS cutoff; it is not a
+kernel cgroup memory limit. Server test executables use the documented opt-in
+`RBO_LOW_MEMORY_LINK` setting. Earlier focused tests used at most four CPUs and
+workers under the same memory limits. Range/capacity/padding regressions peaked
+at 4.27/2.60/2.68 GiB; the isolated window regressions at 9.30/9.28 GiB.
 
-The rebased verifier's focused native target passed all **27 tests**. Normal
-Initial/Final proofs cover repeated result positions, stored-String copies,
-whole-partition Decimal SUM/AVG, and one shared logical read expanded into two
-final scans. Deliberate output, window-function, and join-key changes produce
-counterexamples. Correlated EXISTS and scalar COUNT captures are checked under
-the explicitly diagnostic logical-prefix scope, including changed caller
-bindings, passive projections, preserved annotations, and rejected type/scope
-mismatches. Passive Replicate ports in row-source and compute stages now retain
-one shared producer. Native tests prove both forms, including compacted live
-output indices after a port disappears; a changed join key yields a
-counterexample and an incorrect port index is rejected. Nested replication and
-work appended inside a port's producer stage remain outside native admission.
+Both `KqpRboYql::WindowFunctions` storage variants passed SQL execution on the
+combined branch, including the two new window regressions. That run passed 910
+checks and peaked at 15.50 GiB. Its local evidence is
+`/tmp/rbo-main-audit-20261019/window-sql-and-python-ca5768ddb64`.
 
-Native Sort and Merge export now records absolute NULL placement from the
-physical direction: first in ASC, last in DESC. Main's lowering passes only the
-direction to Sort/WideSort and DqCnMerge, while the old exporter copied the
-source flag unchanged. Both new regression tests failed before the repair;
-all 27 native tests passed afterward, with peak aggregate RSS of 10.36 GiB.
-The tests compare against the production optional-value comparator, prove
-Initial/Final pairs for both directions and source-flag values, and obtain
-counterexamples when the exported sort NULL placement is deliberately reversed.
-Logs: `/tmp/rbo-native-null-order-before.log` and
-`/tmp/rbo-native-null-order-after.log`. This is a verifier encoding repair,
-not a claim of a new SQL runtime defect.
+The latest verifier validation passed **884 Python tests and 32 native tests**,
+plus lint/import checks and the static-IN real-host integration test. Two real-host
+correlated COUNT tests still fail closed at unsupported `StablePickle`, after
+progressing beyond the earlier empty-aggregate-traits rejection. Their expected
+verdicts were not weakened. The historical COUNT test's counterexample expectation
+still needs reevaluation once the current null-safe join representation is modeled;
+main already contains `RestoreEmptyGroupCounts`. The old `cpp_ut` target also
+remains unmigrated (281 exporter and 14 limit-rule fixtures); the full recursive
+C++ gate is not green. Latest evidence and test traces are in
+`/tmp/rbo-main-audit-20261019/key-only-validation`, with peak RSS 15.36 GiB.
 
-The model admits multiple stage sinks only as complete, ordered column
-bijections of one local producer, with every port exported and connected once.
-Its tests preserve a shared LIMIT choice across ports and detect an incorrect
-hash key. All 867 verifier tests passed with pinned Z3; the hermetic native,
-schema, routing and new port tests passed all 116 checks. Peak aggregate RSS was
-0.11 GiB and 10.39 GiB respectively. Logs are
-`/tmp/rbo-stage-ports-python-full.log` and `/tmp/rbo-stage-ports-hermetic.log`.
+The rebased trusted path now admits variadic UnionAll, audited String/Utf8 static
+membership, and grouping-only aggregates with nonempty keys. Validation checks
+NULL groups, distributed partial/final deduplication, repeated union inputs,
+String/Utf8 byte semantics, and deliberately changed branches, literals and grouping
+keys that must produce counterexamples. Keyless/traitless aggregates and unbound
+DistinctAll aliases remain rejected.
 
-Initial capture now requests production type annotation when an operator or
-scalar lambda is untyped. Main's `FromExpr` conversion deliberately clears
-annotations when it assigns numeric column IDs; previously a simple computed
-projection was rejected with `Scalar expression has no type annotation`.
-Regressions exercise the real conversion and annotator, prove ordinary Filter
-and computed-Map Initial/Final pairs, and check that a null sink skips annotation.
-All 23 native tests passed with peak aggregate RSS of 10.38 GiB;
-`/tmp/rbo-native-types-before.log` retains the pre-fix failures and
-`/tmp/rbo-native-types-after.log` the passing run.
+Other restored native coverage includes initial type annotation after FromExpr,
+repeated result positions, stored-String copies, whole-partition Decimal SUM/AVG,
+shared logical reads, correlated capture bindings, passive Replicate ports and
+exact scalar cardinality guards. Replicate tests retain a shared LIMIT choice,
+reject incorrect ports, and detect changed join/hash keys. Reachable scalar-guard
+failure returns UNKNOWN through a mandatory totality check.
 
-Native scalar `Ensure(value, count <= Uint64(1), literal-message)` projections
-now carry a mandatory totality obligation. The native tests prove a safe guard,
-return `UNKNOWN` when a guard can fail, and reject different thresholds. They
-exercise the [documented model-domain gate](contracts/THEOREM.md), without
-assuming the guard succeeds or modeling general Ensure errors.
+Native Sort/Merge export was repaired to record physical NULL placement (first
+in ASC, last in DESC). Its two tests failed before the repair and passed afterward,
+compare with the production optional-value comparator, and detect reversed NULL
+placement. This is a verifier encoding repair, not a newly attributed SQL bug.
+Evidence is in `/tmp/rbo-native-null-order-before.log` and
+`/tmp/rbo-native-null-order-after.log`.
 
-All 861 verifier tests passed with pinned Z3 in the standalone run. The hermetic
-run passed the 853 pre-existing verifier tests, the native target, inspector,
-and supporting checks; after correcting the new test module's package imports,
-its eight tests and lint check also passed in the hermetic runner. Peak aggregate
-RSS for the combined build/test run was 10.54 GiB. Logs are
-`/tmp/rbo-cardinality-python-full.log`, `/tmp/rbo-cardinality-hermetic.log`, and
-`/tmp/rbo-cardinality-hermetic-focused.log`. This does not replace a fresh
-real-host corpus census or migration of the older `cpp_ut` fixtures.
+A single paired TPCDS q31 profile measured rendering at **26.25 s before / 24.60 s
+after**, and model construction plus rendering at **42.35 s / 41.05 s**. The
+133,415,564-byte SMT formula is byte-identical, SHA-256
+`b70019449669c6a308e9fc1ac955ec5246478622bc9faccb173525b631612671`.
+This is about 6% rendering and 3% combined improvement on that saved input, not
+a general solver-speed claim. Receipts and package/input hashes are in
+`/tmp/rbo-main-audit-20261019/renderer-comparison-17b00fd9359`.
+Large newly admitted constructions still need performance work; the deadline
+bounds their cost and returns UNKNOWN without claiming a proof.
 
-## Current runtime check
+## Historical runtime check (2026-09-05)
 
 On **2026-09-05**, the manual paired diagnostics at source `b000dfaba5f` observed:
 
@@ -133,7 +181,7 @@ coverage; their replacements still need to be restored. The surviving older
 | 1: unrelated `NOT flag` leaked negation into a later positive `EXISTS` (`95a2afad1d3`). | `KqpRboYql::ExpressionSubquery`, the `NOT bar.flag AND EXISTS` case, checks the expected row. |
 | 2–6: scalar multirow cardinality; lost subplan binding discovery; unlowered scalar projection; invalid empty optional branch; eager local cardinality error with an empty consumer (`e1e3419012c`, `52a1d7c4084`, `9e50d234264`). | `KqpRboYql::ExpressionSubquery` checks aggregate/singleton/computed projections, typed NULL, same-IU bindings, multirow errors, and empty-consumer success. [ScalarSubplanEvaluationTest](ut/test_subplans.py) separately checks model cardinality and demand. |
 | 7: CBO/input order suppressed an inherited nested-scalar error when the top-level consumer was empty (`cab0dd1e89c`; model repairs `125962c87df`, `1aaf281c07a`). | `KqpRboYql::ExpressionSubquery`, `nestedMultirowScalarWithEmptyConsumer`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `KeepsMarkedJoinOutsideCboWhileOptimizingBothSides` / `DoesNotConvertMarkedCrossJoinThroughFilterPushdown`; model `test_inherited_scalar_error_is_observed_without_a_consumer_input_row`. |
-| 8: correlation pull-up changed empty keyless `COUNT(*)` from zero to NULL. | `KqpRboYql::CorrelatedSubquery` checks projection, Filter consumption, and the originally grouped negative case. Historical correlated-rule fixture `InlineDirectCountAddsExactOptionalZeroRepair` and [integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealHostVerifiesCorrelatedScalarCountEmptyInput` guard the exact repair. |
+| 8: correlation pull-up changed empty keyless `COUNT(*)` from zero to NULL. | `KqpRboYql::CorrelatedSubquery` checks projection, Filter consumption, and the originally grouped negative case. Historical correlated-rule fixture `InlineDirectCountAddsExactOptionalZeroRepair` checked the repair. The [integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealHostFindsCorrelatedScalarCountEmptyInputBug` retains the historical detector; its current StablePickle admission failure and old verdict expectation are recorded above. |
 | 9: shared-IU equality was consumed as an invalid semi-join key, losing q56/q60 rows (`98176b0b48c`, `4f73b38aaaf`). | Paired String-IN diagnostic above; `KqpRboYql::SharedIUStringInPreservesFactJoinPredicate`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `PushesSharedIUPredicateToLeftOfLeftSemiJoin`. The two workload candidates shared this one root cause. |
 | 10–11: computed Map/`UNWRAP` crossed TopSort, Filter, or Join and evaluated discarded rows (`c2c66fb1d7b`, `564010e2e4e`). | [Runtime integration](integration_ut/optimizer_snapshot_pair_ut.cpp) `RealRuntimeStringUnwrapOrderLimitDemand` / `RealRuntimeStringUnwrapJoinDemand`; `KqpRboYql::PushAppendKeepsComputedExpressionAboveFilter` / `PushAppendKeepsComputedExpressionAboveJoin`; [limit rules](cpp_ut/limit_pushdown_rules_ut.cpp) `DelaysPureProjectionUntilAfterTopSort`. |
 
@@ -196,7 +244,10 @@ targets (the test owns its embedded instances):
 
 ```bash
 set -o pipefail
-./ya make --build relwithdebinfo -tA --test-tag ya:manual \
+python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
+  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  --test-threads=1 --dist-store-threads=1 --memory-limit=48GB \
+  -tA --test-tag ya:manual \
   ydb/core/kqp/opt/rbo/verification/runtime_ut \
   -F '*DecimalSumRuntimeDiagnostic*' 2>&1 | tail -n 100
 ```

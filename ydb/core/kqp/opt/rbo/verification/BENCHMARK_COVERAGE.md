@@ -28,6 +28,67 @@ retain all earlier corpus inventories, focused solver results, artifacts,
 commit references, and corrected/superseded checkpoints. They are historical
 evidence, not results of the current working tree.
 
+## Rebased corpus measurement (2026-10-19)
+
+The SMT branch is based on fetched main `6ceb698dd99a525fc885121dfdbcad9deca11974`.
+The complete formula census at `4e7f9c024ddf` and the fixed 50-query proof run
+at `0e7c1886047d` give the following comparison against the rebased baseline
+`2f53bf4498b0`:
+
+| Measure | Rebased baseline | After admission and construction changes |
+|---|---:|---:|
+| TPCH whole-query formulas | 15/22 | 15/22 |
+| TPCDS whole-query formulas | 30/99 | 48/99 |
+| Total formulas | 45/121 | 63/121 |
+| TPCH pinned bounded proofs | 10/16 | 10/16 |
+| TPCDS pinned bounded proofs | 14/34 | 22/34 |
+| Total pinned bounded proofs | 24/50 | 32/50 |
+
+The remaining census results are one UNKNOWN, 50 UNSUPPORTED and seven
+OPTIMIZER_FAILURE. The proof run has four UNKNOWN and 14 UNSUPPORTED, and
+preserves every baseline proof. Its UNKNOWN cases are TPCH q15 and TPCDS
+q43, q50 and q76; the construction UNKNOWN is TPCDS q17.
+
+All 22 TPCH queries and 92/99 TPCDS queries prepare. The seven TPCDS failures
+are q14, q24, q39, q44, q47, q57 and q70. The query-mode diagnostic confirms
+that all seven prepare as generic queries with `_KqpEnableSpilling=true`;
+both default data-query and default generic-query settings fail. The pinned
+corpus configuration was retained. This diagnostic is not a wrong-result finding.
+
+The policy gates still fail: the required 121 formulas and 50 proofs have not
+been restored. Unsupported cases include GroupingSets, StablePickle,
+compiled LIKE/text and Date wrappers, and additional window shapes. There
+were no counterexamples in the fixed proof run. `UNKNOWN` remains unproved;
+formula construction is not proof. The bounds remain two rows per table and
+two tasks, with 60 seconds of solver time per query.
+
+The eight new pinned proofs are TPCDS q15, q34, q46, q48, q68, q69, q73 and q97.
+All eight re-proved in the optional nonempty-output sweep. Seven have modeled
+successful nonempty executions on both boundaries; q34 is UNSAT on both at two
+rows per table. Its proof therefore does not exercise nonempty output at this
+bound. SAT is modeled reachability, not runtime replay or exhaustive branch
+coverage. Receipts and input/tool hashes are in
+`/tmp/rbo-main-audit-20261019/new-proof-nonempty-4e7f9c024dd`; peak RSS was 0.13 GiB.
+
+The first refreshed census used a 60-second construction ceiling and emitted
+60 formulas, but TPCDS q2 timed out on the same snapshots that previously
+completed in about 53 seconds. The final census uses 120 seconds for construction
+and rendering. q2 completed in 43.9 seconds, q4 in 80.3 seconds, and q64
+in 119.2 seconds; q64 remains close to the ceiling and timing-sensitive.
+Memory limits are unchanged. The proof run used the stricter
+60-second construction ceiling; the subsequent change affects only the benchmark
+construction allowance and its documentation, with verifier semantics and the
+proof policy unchanged. The source binding is recorded in
+`/tmp/rbo-main-audit-20261019/final-source-binding.json`.
+
+Reports, input/source hashes and available verdict artifacts are archived locally:
+
+- `/tmp/rbo-main-audit-20261019/census-4e7f9c024ddf-20261019T185443Z`
+- `/tmp/rbo-main-audit-20261019/proof-floor-0e7c1886047d-20261019T184213Z`
+- `/tmp/rbo-main-audit-20261019/census-0e7c1886047d-20261019T183441Z`
+
+These are dated measurements, not replacements for the checked-in coverage policy.
+
 ## Initial complete measurement (2026-09-06)
 
 A fresh formula-only census covered the complete corrected corpus: TPCH
@@ -128,21 +189,21 @@ executability or correctness of later lowering/runtime behavior.
 ```bash
 set -o pipefail
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
-  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  ./ya make --build relwithdebinfo -DRBO_LOW_MEMORY_LINK=yes --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*::TPCH' --test-env=RBO_COVERAGE_USE_SOLVER=0 \
   2>&1 | tail -n 100
 
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
-  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  ./ya make --build relwithdebinfo -DRBO_LOW_MEMORY_LINK=yes --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*::TPCDS' --test-env=RBO_COVERAGE_USE_SOLVER=0 \
   2>&1 | tail -n 100
 
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
-  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  ./ya make --build relwithdebinfo -DRBO_LOW_MEMORY_LINK=yes --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_ut \
   -F '*ProofFloor*' 2>&1 | tail -n 100
@@ -243,7 +304,7 @@ floor evaluation, and policy-report rendering. Its
 
 ```bash
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
-  ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
+  ./ya make --build relwithdebinfo -DRBO_LOW_MEMORY_LINK=yes --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
   ydb/core/kqp/opt/rbo/verification/benchmark_policy/ut 2>&1 | tail -n 100
 ```

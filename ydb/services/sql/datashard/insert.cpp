@@ -1,6 +1,7 @@
 #include "events.h"
 
 #include <ydb/services/sql/codec/codec.h>
+#include <ydb/services/sql/columnshard/events.h>
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -755,7 +756,8 @@ public:
         }
         const auto& entry = result[0];
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
-            Fail("0A000", "not supported");
+            Register(CreateColumnInsertActor(ReplyTo, Database, Statement, InternalErrorRetries, Defer));
+            PassAway();
             return;
         }
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {

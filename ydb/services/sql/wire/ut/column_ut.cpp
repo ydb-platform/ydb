@@ -223,4 +223,30 @@ Y_UNIT_TEST_SUITE(ColumnTable) {
         UNIT_ASSERT_VALUES_EQUAL(filtered.Rows[0][0].Text, "1");
         UNIT_ASSERT(filtered.AccessPath.Contains("ProgramRows 1"));
     }
+
+    Y_UNIT_TEST(InsertIsReadBack) {
+        TPortManager ports;
+        TServerSettings settings(ports.GetTcpPort());
+        TServer server(settings);
+        TClient client(settings);
+        client.InitRootScheme();
+        const TString database = "/" + settings.DomainName;
+        TSqlClient sql(server, database);
+
+        const auto created = sql.Exec("CREATE TABLE notes (id int8 PRIMARY KEY, qty int8) WITH (store = column)");
+        UNIT_ASSERT_C(created.Ok, created.SqlState + " " + created.Message);
+        const auto inserted = sql.Exec("INSERT INTO notes (id, qty) VALUES (1, 7)");
+        UNIT_ASSERT_C(inserted.Ok, inserted.SqlState + " " + inserted.Message);
+        UNIT_ASSERT_VALUES_EQUAL(inserted.CommandTag, "INSERT 0 1");
+        const auto selected = sql.Exec("SELECT qty FROM notes WHERE id = 1");
+        UNIT_ASSERT_C(selected.Ok, selected.SqlState + " " + selected.Message);
+        UNIT_ASSERT_VALUES_EQUAL(selected.Rows.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(selected.Rows[0][0].Text, "7");
+
+        const auto began = sql.Exec("BEGIN");
+        UNIT_ASSERT(began.Ok);
+        const auto blocked = sql.Exec("INSERT INTO notes (id, qty) VALUES (2, 8)");
+        UNIT_ASSERT(!blocked.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(blocked.SqlState, "0A000");
+    }
 }

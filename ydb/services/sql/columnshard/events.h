@@ -6,5 +6,6 @@
 namespace NKikimr::NSql {
 
 NActors::IActor* CreateColumnSelectActor(const NActors::TActorId& replyTo, TString database, TSelectStmt statement, ui32 internalErrorRetries, ui64 lockTxId);
+NActors::IActor* CreateColumnInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries, bool defer);
 
 }

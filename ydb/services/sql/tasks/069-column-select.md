@@ -1,7 +1,7 @@
 # SELECT по колоночной таблице
 
-status: pending
-commit:
+status: done
+commit: b7e051dac29d4a7adf2e137dd68ebabd06b607a1
 id: column-select
 depends: column-create
 

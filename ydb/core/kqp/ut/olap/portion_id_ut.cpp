@@ -745,6 +745,117 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             UNIT_ASSERT(rows.front().contains("PortionId"));
         }
     }
+
+    // PLAIN does not materialize _yql_portion_id. Column shard rejects such scans.
+    void CreatePlainColumnTable(NYdb::NTable::TTableClient& tableClient) {
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto result = session
+                                .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                .GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void ExpectPlainPortionIdRejected(NYdb::NTable::TTableClient& tableClient, const TString& query) {
+        auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+        TString issues;
+        if (it.IsSuccess()) {
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (streamPart.EOS()) {
+                    break;
+                }
+                if (!streamPart.IsSuccess()) {
+                    issues = streamPart.GetIssues().ToString();
+                    break;
+                }
+            }
+        } else {
+            issues = it.GetIssues().ToString();
+        }
+        UNIT_ASSERT_C(issues.Contains("PLAIN reader does not support _yql_portion_id"), issues);
+    }
+
+    Y_UNIT_TEST(PlainReaderVirtualColumnsOnePortion) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        auto tableClient = kikimr.GetTableClient();
+        CreatePlainColumnTable(tableClient);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (1u, "one"), (2u, "two"), (3u, "three");
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rows = ExecuteScanQuery(tableClient, R"(
+                SELECT Value
+                FROM `/Root/ColumnTable`
+                ORDER BY Value
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3);
+        }
+
+        ExpectPlainPortionIdRejected(tableClient, R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT Value, _yql_portion_id AS PortionId
+            FROM `/Root/ColumnTable`
+            ORDER BY Value
+        )");
+        ExpectPlainPortionIdRejected(tableClient, R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT _yql_portion_id AS PortionId
+            FROM `/Root/ColumnTable`
+        )");
+        ExpectPlainPortionIdRejected(tableClient, R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT COUNT(*) AS Cnt
+            FROM `/Root/ColumnTable`
+            WHERE _yql_portion_id = 1ul
+        )");
+    }
+
+    Y_UNIT_TEST(PlainReaderVirtualColumnsTwoPortions) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        auto tableClient = kikimr.GetTableClient();
+        CreatePlainColumnTable(tableClient);
+
+        auto queryClient = kikimr.GetQueryClient();
+        for (const char* query : {R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (1u, "one"), (2u, "two");
+                )",
+                 R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, Value) VALUES (3u, "three");
+                )"}) {
+            auto result = queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExpectPlainPortionIdRejected(tableClient, R"(
+            PRAGMA kikimr.EnableSystemColumns = "true";
+            SELECT _yql_portion_id AS PortionId
+            FROM `/Root/ColumnTable`
+        )");
+    }
 }
 
 }   // namespace NKikimr::NKqp

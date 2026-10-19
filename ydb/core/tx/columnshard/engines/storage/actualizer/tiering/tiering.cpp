@@ -18,20 +18,24 @@ bool NeedsTierChange(const TString& current, const TString& target, const TTieri
     if (current == target) {
         return false;
     }
+
     if (current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
         target == NTiering::NCommon::DeleteTierName) {
         return true;
     }
+
     using NColumnShard::NTiers::TExternalStorageId;
     const auto currentStorage = TExternalStorageId::FromString(current);
     if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
         return true;
     }
-    for (const auto& tier : tiering.GetOrderedTiers()) {
+
+    for (auto&& tier : tiering.GetOrderedTiers()) {
         if (tier.Get().GetExternalStorageId() == currentStorage) {
             return true;
         }
     }
+
     return false;
 }
 

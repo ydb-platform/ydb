@@ -189,8 +189,8 @@ Y_UNIT_TEST_SUITE(TTieringActualizerTests) {
     Y_UNIT_TEST(PrefixChangesDoNotMoveExistingPortions) {
         using NColumnShard::NTiers::TExternalStorageId;
         const std::vector<std::optional<TString>> prefixes = { std::nullopt, TString(), TString("old/data"), TString("new/data") };
-        for (const auto& oldPrefix : prefixes) {
-            for (const auto& newPrefix : prefixes) {
+        for (auto&& oldPrefix : prefixes) {
+            for (auto&& newPrefix : prefixes) {
                 TTestEnv env;
                 env.QueueTieredPortion(TExternalStorageId(Tier1, oldPrefix).ToString(), TDuration::Minutes(90));
                 TTiering tiering;

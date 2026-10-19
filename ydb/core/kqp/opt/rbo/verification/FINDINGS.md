@@ -8,7 +8,7 @@ statuses as fresh results.
 
 ## Main-source audit, 2026-10-19
 
-Three small production fixes are isolated on branches whose parent is fetched
+Five production fixes are isolated on branches whose parent is fetched
 main `6ceb698dd99a525fc885121dfdbcad9deca11974`. These findings come from source
 inspection and focused native regressions, not a fresh TPCH/TPCDS solver census.
 
@@ -17,13 +17,19 @@ inspection and focused native regressions, not a fresh TPCH/TPCDS solver census.
 | `fix/required-key-presence-ranges` / `bd7f15e85e1` | `RangeFor(Exists/NotExists)` sent required keys through the optional/Pg-only range builder. Required `Exists` now covers every value, including NaN; `NotExists` is empty. Both `TOptimizeYqlExpr::RangeForExists*` tests passed, including unchanged optional/Pg behavior. |
 | `fix/string-capacity-overflow` / `5c953edbb8e` | Four string growth paths computed spare capacity with wrapping 32-bit addition. Capacity now saturates at `UINT32_MAX`; compile-time boundary checks cover the first overflowing size and the maximum. `TMiniKQLStringUtils::MakeStringWithPad` and `SubstringWithLargeOffset` passed. Multi-gigabyte allocation tests were excluded. |
 | `fix/string-padding-overflow` / `6fc6fde79ee` | `MakeStringNotFilled(size, pad)` could wrap its allocation size. The regression uses `size=1, pad=UINT32_MAX`, which takes the embedded-string path on the old code without a large allocation. Both `TMiniKQLStringUtils::MakeStringWithPad*` tests passed. |
+| `fix/unordered-window-rank` / `997021ffc1e` | Native `RANK` and `DENSE_RANK` without ORDER BY passed a null condition to `If`. They now keep rank 1 for all peers. Both unordered regressions failed on main while the ordered/row-number control passed; all three tests passed after the fix. Global and partitioned SQL comparisons were added and await server execution. |
+| `fix/window-sort-duplicate-keys` / `0b92e118b26` | A column shared by PARTITION BY and ORDER BY was emitted twice into WideSort, which rejects duplicate keys. Keeping the first occurrence preserves lexicographic order. Both native regressions failed on main and passed after the fix, covering rank/dense-rank/row-number, both directions, and a trailing distinct key. SQL comparisons were added and await server execution. |
 
 Every run used at most four build workers, one linker and one test worker,
 restricted to four CPUs, with an 8 GiB hard allocation limit per process and
 a 16 GiB sampled aggregate RSS cutoff. Peak aggregate RSS was 4.27 GiB for the
 range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
 `/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
-and `/tmp/rbo-string-padding-main-tests.log`.
+and `/tmp/rbo-string-padding-main-tests.log`. The two window targets peaked at
+9.30 GiB and 9.28 GiB. Their failing/passing evidence is in
+`/tmp/rbo-unordered-rank-main-{before,after}.log` and
+`/tmp/rbo-shared-window-sort-main-{before,after}.log`. These are native physical
+construction/type checks; SQL execution and the TPCH/TPCDS census remain pending.
 
 The rebased verifier's focused native target passed all **25 tests**. Normal
 Initial/Final proofs cover repeated result positions, stored-String copies,

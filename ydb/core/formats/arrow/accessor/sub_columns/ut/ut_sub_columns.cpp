@@ -11,7 +11,7 @@
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
-#include <ydb/library/arrow_kernels/ut_common.h>
+#include <ydb/library/formats/arrow/helpers/array.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>

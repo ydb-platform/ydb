@@ -391,6 +391,15 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            // virtual group state reported to node wardens may change without explicit group content change (for
+            // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (base && overlay->second && base->second->GetReportedVirtualGroupState() !=
+                        overlay->second->GetReportedVirtualGroupState()) {
+                    state.GroupContentChanged.insert(overlay->first);
+                }
+            }
+
             // when bridged non-proxy groups get updated, we update parent group too
             THashSet<TGroupId> updates;
             for (TGroupId groupId : state.GroupContentChanged) {
@@ -628,6 +637,19 @@ namespace NKikimr::NBsController {
             }
             if (state.BlobDepotDeleteQueue.Changed()) {
                 MakeTableMerger<Schema::BlobDepotDeleteQueue>(&BlobDepotDeleteQueue, &state.BlobDepotDeleteQueue.Get(), this)(txc);
+            }
+
+            // while converting to bridged cluster, watch for groups that have to be converted or stop blocking conversion
+            if (StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
+                for (const auto& [base, overlay] : state.Groups.Diff()) {
+                    const TGroupInfo *prev = base ? base->second.Get() : nullptr;
+                    const TGroupInfo *cur = overlay->second.Get();
+                    if ((cur && cur->IsBridgeConversionCandidate()) ||
+                            (prev && prev->BlocksBridgeConversion() && !(cur && cur->BlocksBridgeConversion()))) {
+                        state.Callbacks.push_back([this] { CheckBridgeConversion(); });
+                        break;
+                    }
+                }
             }
 
             // apply overlay maps to their respective tables
@@ -1371,7 +1393,7 @@ namespace NKikimr::NBsController {
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
 
-            if (group.BridgeGroupInfo) {
+            if (group.BridgeGroupInfo && !group.IsInlinePile()) { // inline pile has its own VDisks
                 pb->SetIsProxyGroup(true);
             }
 
@@ -1487,11 +1509,8 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            if (groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
-                Y_ABORT_UNLESS(groupInfo.BlobDepotId);
-                group->SetBlobDepotId(*groupInfo.BlobDepotId);
-            } else if (groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
-                group->SetBlobDepotId(0);
+            if (const auto blobDepotId = groupInfo.GetReportedBlobDepotId()) {
+                group->SetBlobDepotId(*blobDepotId);
             }
 
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {

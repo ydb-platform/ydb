@@ -245,7 +245,7 @@ class SnapshotRowsTest(unittest.TestCase):
         self.assertEqual(len(queued), 2)
         self.assertEqual(sum(row["usage_value"] or 0 for row in queued), 2)
         self.assertEqual(sum(row["cores"] or 0 for row in queued), 128)
-        self.assertEqual(sum(row["ram_gib"] or 0 for row in queued), 576)
+        self.assertEqual(sum(row["ram_gib"] or 0 for row in queued), 512)
         by_name = {row["name"]: row for row in queued}
         self.assertEqual(by_name["q.1.11"]["run_url"], "https://github.com/ydb-platform/ydb/actions/runs/1/job/11")
         self.assertEqual(by_name["q.2.22"]["job_name"], "Build and test relwithdebinfo")
@@ -282,11 +282,11 @@ class SnapshotRowsTest(unittest.TestCase):
             "labels": ["self-hosted", "auto-provisioned", "build-preset-analytic-node"],
         }
         size = job_footprint(job, specs, default)
-        self.assertEqual(size, {"vcpu": 8.0, "ram_gb": 64.0, "nrd_ssd_gb": 186.0})
+        self.assertEqual(size, {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0})
         rows = queue_jobs([({"name": "Update Muted tests"}, job)], NOW, specs, default)
-        self.assertEqual(rows[0]["cores"], 8)
-        self.assertEqual(rows[0]["ram"], 64)
-        self.assertEqual(rows[0]["nrd"], 186)
+        self.assertEqual(rows[0]["cores"], 64)
+        self.assertEqual(rows[0]["ram"], 256)
+        self.assertEqual(rows[0]["nrd"], 2417)
 
     def test_enrich_fills_fork_pr_and_target_branch(self):
         run = {

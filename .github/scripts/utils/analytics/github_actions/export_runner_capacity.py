@@ -43,17 +43,18 @@ QUOTA_FIELDS = (
     ("compute.instances.count", "instances", False),
     ("compute.ssdNonReplicatedDisks.size", "nrd_gib", True),
 )
+_RELW_SIZE = {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0}
 DEFAULT_FITS = {
-    "relwithdebinfo": {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0},
-    "release-asan": {"vcpu": 64.0, "ram_gb": 320.0, "nrd_ssd_gb": 2418.0},
+    "relwithdebinfo": dict(_RELW_SIZE),
+    "release-asan": dict(_RELW_SIZE),
 }
 DEFAULT_LABEL_FOOTPRINTS = {
-    "build-preset-relwithdebinfo": {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0},
-    "build-preset-release": {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0},
-    "build-preset-release-asan": {"vcpu": 64.0, "ram_gb": 320.0, "nrd_ssd_gb": 2418.0},
-    "build-preset-release-msan": {"vcpu": 64.0, "ram_gb": 320.0, "nrd_ssd_gb": 2417.0},
-    "build-preset-release-tsan": {"vcpu": 64.0, "ram_gb": 320.0, "nrd_ssd_gb": 2417.0},
-    "build-preset-analytic-node": {"vcpu": 8.0, "ram_gb": 64.0, "nrd_ssd_gb": 186.0},
+    "build-preset-relwithdebinfo": dict(_RELW_SIZE),
+    "build-preset-release": dict(_RELW_SIZE),
+    "build-preset-release-asan": dict(_RELW_SIZE),
+    "build-preset-release-msan": dict(_RELW_SIZE),
+    "build-preset-release-tsan": dict(_RELW_SIZE),
+    "build-preset-analytic-node": dict(_RELW_SIZE),
 }
 DEFAULT_JOB_FOOTPRINT = {"vcpu": 96.0, "ram_gb": 320.0, "nrd_ssd_gb": 2417.0}
 JOB_RANK = {"in_progress": 2, "queued": 1}

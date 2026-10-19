@@ -7945,13 +7945,8 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring message TEvSchemeShard::TEvCancelTx: schemeshard in readonly",
-            {"schemeshard", TabletID()},
-        );
-        return;
-    }
-
+    // Read-only mode rejects new schema operations, but existing backups and
+    // restores must still be cancellable so exports and imports can finish.
     Execute(CreateTxOperationPropose(ev), ctx);
 }
 

@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/formats/arrow/program
     ydb/core/formats/arrow/serializer
     ydb/library/arrow_kernels
+    ydb/library/formats/arrow/helpers
     yql/essentials/public/udf/service/stub
     yql/essentials/sql/pg_dummy
 )

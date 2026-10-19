@@ -60,14 +60,17 @@ public:
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TPileStateUpdate> state;
                 uint64_t generation = 0;
+                bool conversionInProgress = false;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
                         state = StateFromProto(result);
                         generation = result.generation();
+                        conversionInProgress = result.conversion_in_progress();
                     }
                 }
-                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), std::move(generation)));
+                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
+                    conversionInProgress));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(
@@ -79,6 +82,15 @@ public:
             TRpcRequestSettings::Make(settings));
 
         return promise.GetFuture();
+    }
+
+    TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncConvertToBridge,
+            TRpcRequestSettings::Make(settings));
     }
 };
 
@@ -95,6 +107,10 @@ TAsyncStatus TBridgeClient::UpdateClusterState(const std::vector<TPileStateUpdat
 
 TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStateSettings& settings) {
     return Impl_->GetClusterState(settings);
+}
+
+TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& settings) {
+    return Impl_->ConvertToBridge(settings);
 }
 
 }

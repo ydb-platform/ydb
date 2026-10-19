@@ -453,4 +453,7 @@ message TFeatureFlags {
     // Enables configuring column-table TTL on DyNumber, Date32, Datetime64 and Timestamp64.
     // Existing TTL settings continue to execute when the flag is disabled.
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
+    optional bool EnableColumnShardSetNotNull = 367 [default = false];
+    // Allows client data writes and schema modifications.
+    optional bool EnableClientModifications = 368 [default = true];
 }

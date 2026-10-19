@@ -1381,10 +1381,28 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 24, 9, 1u, 0.001);
     }
 
+    void WaitForPDiskInitialization(TTestBasicRuntime& runtime, ui32 pdiskId) {
+        const auto pdisk = MakeBlobStoragePDiskID(runtime.GetNodeId(0), pdiskId);
+        runtime.WaitFor("PDisk service registration", [&] {
+            return bool(runtime.GetLocalServiceId(pdisk));
+        }, TDuration::Seconds(10));
+
+        // The stranding decorator holds simulated progress until this request
+        // completes. Unlike periodic metrics, metadata reads wait for startup.
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(pdisk, sender, new NPDisk::TEvReadMetadata()));
+        const auto response = runtime.GrabEdgeEventRethrow<NPDisk::TEvReadMetadataResult>(sender);
+        const auto outcome = response->Get()->Outcome;
+        UNIT_ASSERT_C(outcome == NPDisk::EPDiskMetadataOutcome::OK
+            || outcome == NPDisk::EPDiskMetadataOutcome::NO_METADATA,
+            "PDisk metadata read failed while waiting for initialization");
+    }
+
     void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
             TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
             std::optional<ui64> expectedSlotSize = std::nullopt,
-            TDuration simTimeout = TDuration::Seconds(10), bool waitForSettings = false) {
+            TDuration simTimeout = TDuration::Seconds(10), bool waitForSettings = true) {
+        WaitForPDiskInitialization(runtime, pdiskId);
         const int maxAttempts = 10;
         for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
             // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
@@ -1470,7 +1488,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TAppPrepare app;
         app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
         app.AddHive(0);
-        SetupPDiskSubsystem(&runtime, false);
+        SetupPDiskSubsystem(&runtime, true);
         app.InitIcb(runtime.GetNodeCount());
         RegisterSharedControl(app.Icb[0]->PDiskControls.UseFixedVDiskSlotSize,
             0, 0, 1, useFixedVDiskSlotSize);
@@ -1482,12 +1500,18 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TActorId realNodeWarden = runtime.Register(nodeWardenActor, 0);
         runtime.EnableScheduleForActor(realNodeWarden, true);
 
+        // Direct test sends must not overtake the queued bootstrap event.
+        TDispatchOptions bootstrap;
+        bootstrap.FinalEvents.emplace_back([realNodeWarden](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == TEvents::TSystem::Bootstrap
+                && ev.GetRecipientRewrite() == realNodeWarden;
+        });
+        runtime.DispatchEvents(bootstrap);
+
         // Communication scheme:
         //                                      .-> fakeNodeWarden -.
         // test -> realNodeWarden -> realPDsik -                     -> test
         //                                      `-> fakeWhiteboard -`
-        // Now give it some time to bootstrap
-        runtime.SimulateSleep(TDuration::Seconds(10));
         return realNodeWarden;
     }
 
@@ -2458,12 +2482,14 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             });
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
             &pdiskConfig, realNodeWarden);
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12, 2u);
 
         VERBOSE_COUT("- Test case 1b - change InferPDiskSlotCountSettings insignificantly");
         UpdateInferPDiskSlotCountSettings(runtime, realNodeWarden,
             100_GB, 18, false);
-        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
+            pdiskId, 12, 2u);
 
         observer.Remove();
 

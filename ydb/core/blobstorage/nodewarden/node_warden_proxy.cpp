@@ -48,6 +48,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         TIntrusivePtr<TBlobStorageGroupInfo>(info), group.NodeLayoutInfo, false, DsProxyNodeMon,
                         getCounters(info), TBlobStorageProxyParameters{
                             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                            .InFlightLatencyAggregator = DsProxyInFlightLatencyAggregator,
                             .Controls = TBlobStorageProxyControlWrappers{
                                 .EnablePutBatching = EnablePutBatching,
                                 .EnableVPatch = EnableVPatch,
@@ -71,6 +72,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),
                 group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), TBlobStorageProxyParameters{
                         .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+                        .InFlightLatencyAggregator = DsProxyInFlightLatencyAggregator,
                         .Controls = TBlobStorageProxyControlWrappers{
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
@@ -86,6 +88,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
         // create proxy without configuration
         proxy.reset(CreateBlobStorageGroupProxyUnconfigured(groupId, DsProxyNodeMon, TBlobStorageProxyParameters{
             .UseActorSystemTimeInBSQueue = Cfg->UseActorSystemTimeInBSQueue,
+            .InFlightLatencyAggregator = DsProxyInFlightLatencyAggregator,
             .Controls = TBlobStorageProxyControlWrappers{
                 .EnablePutBatching = EnablePutBatching,
                 .EnableVPatch = EnableVPatch,

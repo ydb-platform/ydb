@@ -983,7 +983,9 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     bridgePileName = it->second.Location.GetBridgePileName();
                 }
 
-                // pile name may be omitted when there is only one pile
+                // pile name may be omitted for the implicit pile (the only one of the cluster converted from
+                // non-bridged one); pile id is resolved against local config here as there is no storage config yet,
+                // the actor will correct it when it gets one
                 const auto index = NBridge::ResolvePileIndex(bridge, bridgePileName);
                 Y_VERIFY_S(index, "can't resolve bridge pile for this node BridgePileName# "
                     << bridgePileName.value_or("<none>"));
@@ -991,7 +993,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
                 const TActorId actorId = MakeDistconfBridgeConnectionCheckerActorId();
                 setup->LocalServices.emplace_back(actorId, TActorSetupCmd(
-                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId),
+                    CreateDistconfBridgeConnectionCheckerActor(selfBridgePileId, bridgePileName),
                     TMailboxType::ReadAsFilled,
                     interconnectPoolId));
                 icCommon->ConnectionCheckerActorIds.push_back(actorId);

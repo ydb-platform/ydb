@@ -72,7 +72,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                     group.NodeLayoutInfo, false, DsProxyNodeMon, getCounters(info), makeParameters(dormantTimeoutMinutes)),
                     TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                 group.InlinePileProxy = true;
-                return CreateBridgeProxyActor(info, innerProxyId);
+                return CreateInlinePileBridgeProxyActor(info, innerProxyId);
             } else if (info->IsBridged()) {
                 return CreateBridgeProxyActor(info);
             } else {

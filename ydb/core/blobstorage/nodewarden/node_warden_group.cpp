@@ -283,7 +283,7 @@ namespace NKikimr::NStorage {
                     Y_ABORT_UNLESS(!group.AgentProxy);
                     group.InlinePileProxy = true;
                     TActorSystem *as = TActivationContext::ActorSystem();
-                    group.ProxyId = Register(CreateBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
+                    group.ProxyId = Register(CreateInlinePileBridgeProxyActor(info, group.ProxyId), TMailboxType::ReadAsFilled,
                         AppData()->SystemPoolId);
                     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
                 }

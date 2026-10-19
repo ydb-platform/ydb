@@ -1,4 +1,4 @@
-#include "bridge_common.h"
+#include "bridge_config_yaml.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/base/hive.h>
@@ -82,12 +82,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
     Y_UNIT_TEST(RollingRestartIntoBridgeCapable) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -130,12 +125,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     // of the inline pile into it, and newly started proxies must be set up the same way.
     Y_UNIT_TEST(InlinePileProxy) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -212,12 +202,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     // itself with the inline pile view, as they have no forced generation
     void BatchedPutDuringConversion(ui32 numPuts) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -294,12 +279,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     // through node warden to the service of the group, which is the bridge proxy by then
     Y_UNIT_TEST(PutRestartedAfterConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -353,12 +333,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
     Y_UNIT_TEST(AbsentStaticNodeBlocksConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -395,12 +370,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     // crash when serving bridged group, it just can't serve such groups until restarted with BridgeConfig
     Y_UNIT_TEST(NodeWithoutBridgeConfigAfterConversion) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -595,12 +565,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
     // quiet cluster
     Y_UNIT_TEST(ConversionFinishRetried) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
 
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -643,12 +608,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
 
     Y_UNIT_TEST(ConvertStaticGroup) {
         TEnvironmentSetup env(MakeUnbridgedSettings());
-        env.CreatePool();
-        env.Sim(TDuration::Seconds(30));
-
-        const auto groups = env.GetGroups();
-        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
-        const ui32 groupId = groups.front();
+        const ui32 groupId = CreatePoolAndGetGroup(env);
         const ui32 staticGroupId = 0;
 
         TDataChecker checker(env);
@@ -694,6 +654,11 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         UNIT_ASSERT(after.HasClusterState());
         UNIT_ASSERT_VALUES_EQUAL(after.GetClusterState().PerPileStateSize(), 1);
         UNIT_ASSERT(!after.GetClusterStateDetails().GetBscConversionPending()); // BSC has already converted its groups
+        const auto& registry = after.GetClusterStateDetails().GetPileRegistry(); // the only pile is the implicit one
+        UNIT_ASSERT_VALUES_EQUAL(registry.PilesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(0).GetName(), "pile_1");
+        UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId),
+            TBridgePileId::FromPileIndex(0));
         UNIT_ASSERT_VALUES_EQUAL(after.GetBlobStorageConfig().GetServiceSet().GroupsSize(), 1);
         const auto& staticGroup = after.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(staticGroup.GetGroupID(), staticGroupId);
@@ -888,6 +853,58 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
     }
 
+    // YAML config of the converted cluster can't lose its bridge config, as nodes restarted with such config would run
+    // without one; the config of this test environment has no bridge config, nodes get it from their startup settings
+    Y_UNIT_TEST(BridgeConfigCantBeDropped) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker);
+
+        auto res = ReplaceMainConfig(env, [](YAML::Node& /*config*/) {});
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            res.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "list of bridge piles can't be changed");
+
+        // the config with the only pile of the cluster passes the check
+        res = ReplaceMainConfig(env, [](YAML::Node& config) {
+            YAML::Node pile;
+            pile["name"] = "pile_1";
+            config["bridge_config"]["piles"].push_back(pile);
+        });
+        UNIT_ASSERT_C(!res.GetErrorReason().Contains("bridge piles"), res.GetErrorReason());
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
+    // single ring group of state storage must stay in RingGroups form for bridged config, legacy Ring isn't allowed there
+    Y_UNIT_TEST(ReconfigStateStorageAfterConversion) {
+        TEnvironmentSetup env(MakeUnbridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = ConvertCluster(env, checker);
+
+        const auto before = QueryStorageConfig(env);
+        UNIT_ASSERT_VALUES_EQUAL(before.GetStateStorageConfig().RingGroupsSize(), 1);
+        const auto res = InvokeDistconf(env, [&](auto& record) {
+            auto *cmd = record.MutableReconfigStateStorage();
+            cmd->MutableStateStorageConfig()->CopyFrom(before.GetStateStorageConfig());
+            cmd->MutableStateStorageBoardConfig()->CopyFrom(before.GetStateStorageBoardConfig());
+            cmd->MutableSchemeBoardConfig()->CopyFrom(before.GetSchemeBoardConfig());
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(30));
+
+        const auto after = QueryStorageConfig(env);
+        UNIT_ASSERT_LT(before.GetGeneration(), after.GetGeneration());
+        for (const auto *pb : {&after.GetStateStorageConfig(), &after.GetStateStorageBoardConfig(),
+                &after.GetSchemeBoardConfig()}) {
+            UNIT_ASSERT(!pb->HasRing());
+            UNIT_ASSERT_VALUES_EQUAL(pb->RingGroupsSize(), 1);
+            UNIT_ASSERT(pb->GetRingGroups(0).HasBridgePileId());
+        }
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
     // group being decommitted is not converted, and BSC conversion is not finished until the decommission is over;
     // test environment has no SchemeCache, so decommission never goes beyond PENDING state, which is enough to block
     // the conversion: the group has both physical and virtual parts; then decommission is cancelled and the group
@@ -914,18 +931,9 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         }
         checker.CheckAll();
 
-        std::unordered_map<ui32, NKikimrBlobStorage::TGroupInfo> groupInfos; // latest group infos sent by BSC
-        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
-                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
-                for (const auto& group : record.GetServiceSet().GetGroups()) {
-                    auto& info = groupInfos[group.GetGroupID()];
-                    if (info.GetGroupGeneration() <= group.GetGroupGeneration()) {
-                        info.CopyFrom(group);
-                    }
-                }
-            }
-            return true;
+        TGroupInfoTracker groupInfos; // latest group infos sent by BSC
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return groupInfos.Filter(nodeId, ev);
         };
 
         auto checkDecommitStatus = [&](NKikimrBlobStorage::TGroupDecommitStatus::E expected) {
@@ -968,12 +976,10 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         // decommitted group is not converted, while the other one is, and conversion is still pending
         checkDecommitStatus(NKikimrBlobStorage::TGroupDecommitStatus::PENDING);
         UNIT_ASSERT(QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-        for (ui32 groupId : groups) {
-            UNIT_ASSERT(groupInfos.contains(groupId));
-        }
-        UNIT_ASSERT_C(!groupInfos[decommittedGroupId].HasBridgeGroupState(), groupInfos[decommittedGroupId].ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL_C(groupInfos[regularGroupId].GetBridgeProxyGroupId(), regularGroupId,
-            groupInfos[regularGroupId].ShortDebugString());
+        const auto& decommitted = groupInfos.Get(decommittedGroupId);
+        UNIT_ASSERT_C(!decommitted.HasBridgeGroupState(), decommitted.ShortDebugString());
+        const auto& regular = groupInfos.Get(regularGroupId);
+        UNIT_ASSERT_VALUES_EQUAL_C(regular.GetBridgeProxyGroupId(), regularGroupId, regular.ShortDebugString());
         for (ui32 groupId : groups) {
             checker.Write(groupId);
         }
@@ -989,7 +995,7 @@ Y_UNIT_TEST_SUITE(BridgeConversion) {
         env.Sim(TDuration::Minutes(1));
         checkDecommitStatus(NKikimrBlobStorage::TGroupDecommitStatus::NONE);
         UNIT_ASSERT(!QueryStorageConfig(env).GetClusterStateDetails().GetBscConversionPending());
-        const auto& info = groupInfos[decommittedGroupId];
+        const auto& info = groupInfos.Get(decommittedGroupId);
         UNIT_ASSERT_VALUES_EQUAL_C(info.GetBridgeProxyGroupId(), decommittedGroupId, info.ShortDebugString());
         UNIT_ASSERT_C(!info.HasBlobDepotId(), info.ShortDebugString());
         for (ui32 groupId : groups) {

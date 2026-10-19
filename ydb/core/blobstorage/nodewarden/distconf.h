@@ -11,6 +11,7 @@
 
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/util/backoff.h>
+#include <library/cpp/json/json_value.h>
 #include <util/generic/hash_multi_map.h>
 #include <ydb/core/mind/bscontroller/group_mapper.h>
 
@@ -237,7 +238,6 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TNodeWardenConfig> Cfg;
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
-        THashMap<TString, TBridgePileId> BridgePileNameMap;
 
         // currently active storage config
         TStorageConfigPtr StorageConfig;
@@ -433,9 +433,11 @@ namespace NKikimr::NStorage {
 
         void ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList);
 
-        TBridgePileId ResolveNodePileId(const TNodeLocation& location);
-        TBridgePileId ResolveNodePileIdForConfig(const NKikimrBlobStorage::TStorageConfig& config,
-            const TNodeLocation& location);
+        // pile registry of the provided config as this node sees it (see GetPileRegistry)
+        std::optional<NKikimrBridge::TPileRegistry> GetConfigPileRegistry(
+            const NKikimrBlobStorage::TStorageConfig& config) const;
+        // pile registry of the current storage config (or the base one, if there is no current yet)
+        std::optional<NKikimrBridge::TPileRegistry> GetCurrentPileRegistry() const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes
@@ -811,9 +813,31 @@ namespace NKikimr::NStorage {
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
 
+    // Pile registry of the bridged cluster: the one persisted in the config, or the one implied by node's BridgeConfig
+    // when there is none persisted; nullopt when the node is not bridge-capable (has no BridgeConfig).
+    std::optional<NKikimrBridge::TPileRegistry> GetPileRegistry(const NKikimrBlobStorage::TStorageConfig& config,
+        const NKikimrConfig::TBridgeConfig *bridgeConfig);
+
+    // Resolve pile of the node against pile registry (as GetPileRegistry provides it, or nullopt for the config that is
+    // not a bridged one): default pile (invalid pile id) when there is no registry, nullopt when the pile can't be
+    // resolved.
+    std::optional<TBridgePileId> ResolveNodePileId(const std::optional<NKikimrBridge::TPileRegistry>& registry,
+        const TNodeLocation& location);
+
+    // Bridge config nodes get from the main config merged with the storage one, where the main config has precedence;
+    // storageConfig is null when there is no dedicated storage config. Empty when neither of them has the section.
+    NKikimrConfig::TBridgeConfig GetMergedBridgeConfig(const NJson::TJsonValue& mainConfig,
+        const NJson::TJsonValue *storageConfig, bool allowUnknownFields);
+
+    // Assign pile ids to the piles of the bridge config provided with new cluster configuration and store the resulting
+    // pile registry in this configuration; localBridgeConfig is the one this node runs with.
+    std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
+        NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig);
+
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
     // and make every static group an inline pile of itself.
-    std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config);
+    std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config,
+        const NKikimrConfig::TBridgeConfig& bridgeConfig);
 
 } // NKikimr::NStorage
 

@@ -18,6 +18,18 @@ message TClusterState {
     fixed64 Guid = 5; // guid of this state change
 }
 
+// Persistent mapping of pile names to pile ids. Pile id is the slot of the pile in Piles: a pile keeps its slot while it
+// stays in BridgeConfig, wherever it is listed there. The slot of a pile dropped from BridgeConfig gets free and is taken
+// by the next pile added; free slots at the end are trimmed, so the list never gets longer than the maximum number of
+// piles configured at once.
+message TPileRegistry {
+    message TPile {
+        optional string Name = 1; // as written in BridgeConfig and node locations, may be empty; unset for a free slot
+    }
+    repeated TPile Piles = 1; // pile with BridgePileId = i + 1 is Piles[i], in sync with TClusterState.PerPileState
+    uint32 ImplicitPileId = 2; // pile of nodes without pile name and of groups without pile id; 0 if there is none
+}
+
 message TClusterStateDetails {
     message TUnsyncedHistory {
         TClusterState ClusterState = 1;
@@ -35,6 +47,10 @@ message TClusterStateDetails {
     // set when the cluster has just been converted from ordinary one and BSC has not yet converted its groups; no more
     // piles can be added while it is set
     bool BscConversionPending = 3;
+
+    // absent only in configs of clusters bridged before the registry was introduced; such registry is implied by
+    // BridgeConfig (piles in config order, the only pile being the implicit one) and gets persisted by the next update
+    TPileRegistry PileRegistry = 4;
 }
 
 message TGroupState {

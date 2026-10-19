@@ -438,4 +438,5 @@ message TConnectivityPayload {
     TStorageConfig StorageConfig = 1; // storage config of a sender
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
+    optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
 }

@@ -7,6 +7,7 @@ PEERDIR(
 SRCS(
     oidc_credentials_ut.cpp
     completion_ut.cpp
+    import_yt_ut.cpp
 )
 
 END()

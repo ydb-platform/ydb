@@ -82,6 +82,8 @@ private:
     template <typename TSettings>
     void FillS3Settings(TSettings& settings);
 
+    NImport::EImportSourceFormat SourceFormat = NImport::EImportSourceFormat::Ydb;
+    TString DestinationStore;
     TString AwsEndpoint;
     ES3Scheme AwsScheme = ES3Scheme::HTTPS;
     TString AwsBucket;

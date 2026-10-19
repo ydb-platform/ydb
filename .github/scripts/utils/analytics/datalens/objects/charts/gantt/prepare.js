@@ -164,8 +164,6 @@ function workflowStatusOf(statuses) {
     return 'success';
 }
 
-console.log('[prepare] start params', Editor.getParams());
-
 function parseRunRef(raw) {
     const text = String(raw || '').trim();
     let attempt = '';

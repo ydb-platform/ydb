@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 HERE = Path(__file__).resolve().parent
 OBJECTS = HERE / "objects"
@@ -15,9 +16,15 @@ OBJECT_DIRS = {
     "duration": OBJECTS / "charts" / "duration",
     "gantt": OBJECTS / "charts" / "gantt",
     "pdiff": OBJECTS / "charts" / "pdiff",
+    "capacity-tight": OBJECTS / "charts" / "capacity-tight",
+    "capacity-use": OBJECTS / "charts" / "capacity-use",
+    "capacity-pool": OBJECTS / "charts" / "capacity-pool",
+    "capacity-queue": OBJECTS / "charts" / "capacity-queue",
+    "capacity-demand": OBJECTS / "charts" / "capacity-demand",
     "duration-ds": OBJECTS / "datasets" / "duration",
     "gantt-ds": OBJECTS / "datasets" / "gantt",
     "pickers-ds": OBJECTS / "datasets" / "pickers",
+    "capacity-ds": OBJECTS / "datasets" / "capacity-ds",
 }
 
 
@@ -36,8 +43,146 @@ def object_names(manifest, names=None):
     return list(names)
 
 
-def object_dir(name):
-    return OBJECT_DIRS[name]
+def object_dir(name, manifest=None):
+    if name in OBJECT_DIRS:
+        return OBJECT_DIRS[name]
+    spec = (manifest or load_manifest())["objects"].get(name) or {}
+    kind = spec.get("kind")
+    if kind == "chart":
+        return OBJECTS / "charts" / name
+    if kind == "dataset":
+        return OBJECTS / "datasets" / name
+    if kind == "dashboard":
+        return OBJECTS / "dashboard"
+    raise KeyError(name)
+
+
+def save_manifest(manifest, path=None):
+    write_json(path or MANIFEST_PATH, manifest)
+
+
+def ydb_connection_id(dataset_name="duration-ds"):
+    dataset = read_json(object_dir(dataset_name) / "dataset.json")
+    for source in dataset.get("sources") or []:
+        if source.get("connection_id"):
+            return source["connection_id"]
+    raise SystemExit("%s has no connection_id" % dataset_name)
+
+
+def ydb_subselect_dataset(title, sql, connection_id, description=""):
+    """Minimal YDB subquery dataset. validateDataset fills raw_schema and result_schema."""
+    source_id = str(uuid.uuid4())
+    avatar_id = str(uuid.uuid4())
+    return {
+        "sources": [
+            {
+                "id": source_id,
+                "title": title,
+                "connection_id": connection_id,
+                "source_type": "YDB_SUBSELECT",
+                "managed_by": "user",
+                "valid": True,
+                "virtual": False,
+                "parameters": {"subsql": sql, "manual": True},
+                "raw_schema": [],
+                "index_info_set": None,
+            }
+        ],
+        "source_avatars": [
+            {
+                "id": avatar_id,
+                "source_id": source_id,
+                "title": title,
+                "is_root": True,
+                "managed_by": "user",
+                "valid": True,
+                "virtual": False,
+            }
+        ],
+        "avatar_relations": [],
+        "result_schema": [],
+        "result_schema_aux": {"inter_dependencies": {"deps": []}},
+        "obligatory_filters": [],
+        "rls": {},
+        "rls2": {},
+        "template_enabled": False,
+        "preview_enabled": True,
+        "load_preview_by_default": True,
+        "data_export_forbidden": False,
+        "description": description,
+    }
+
+
+def chart_create_entry(name, title, workbook_id, dataset_id):
+    entry = chart_entry(name, "")
+    entry.pop("entryId", None)
+    entry["workbookId"] = workbook_id
+    entry["name"] = title
+    if not entry.get("annotation"):
+        entry["annotation"] = {"description": title}
+    raw = (entry.get("data") or {}).get("meta") or ""
+    try:
+        parsed = json.loads(raw) if str(raw).strip() else {}
+    except ValueError:
+        parsed = {}
+    if not isinstance(parsed, dict):
+        parsed = {}
+    links = parsed.get("links") if isinstance(parsed.get("links"), dict) else {}
+    links["dataset"] = dataset_id
+    parsed["links"] = links
+    entry["data"]["meta"] = json.dumps(parsed, indent=4) + "\n"
+    return entry
+
+
+def chart_widget(widget_id, title, chart_id):
+    return {
+        "id": widget_id,
+        "data": {
+            "tabs": [
+                {
+                    "id": "t" + widget_id,
+                    "title": title,
+                    "params": {},
+                    "chartId": chart_id,
+                    "isDefault": True,
+                    "autoHeight": False,
+                    "enableActionParams": False,
+                }
+            ],
+            "hideTitle": False,
+        },
+        "type": "widget",
+        "namespace": "default",
+    }
+
+
+def dashboard_tab(tab_id, title, widgets):
+    items = []
+    layout = []
+    y = 0
+    for spec in widgets:
+        items.append(chart_widget(spec["widget_id"], spec["title"], spec["chart_id"]))
+        height = int(spec["height"])
+        layout.append({"h": height, "i": spec["widget_id"], "w": 36, "x": 0, "y": y})
+        y += height
+    return {
+        "id": tab_id,
+        "title": title,
+        "items": items,
+        "layout": layout,
+        "aliases": {"default": []},
+        "connections": [],
+    }
+
+
+def upsert_dashboard_tab(entry, tab):
+    data = entry.setdefault("data", {})
+    tabs = [item for item in (data.get("tabs") or []) if item.get("id") != tab["id"]]
+    tabs.append(tab)
+    data["tabs"] = tabs
+    settings = data.setdefault("settings", {})
+    settings["hideTabs"] = False
+    return entry
 
 
 def write_json(path, payload):
@@ -47,11 +192,19 @@ def write_json(path, payload):
         handle.write("\n")
 
 
+def normalize_text(text):
+    """Same trailing newline as write_text, so pull/diff do not false-positive."""
+    if text is None:
+        return ""
+    text = str(text)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return text
+
+
 def write_text(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not text.endswith("\n"):
-        text += "\n"
-    path.write_text(text, encoding="utf-8")
+    path.write_text(normalize_text(text), encoding="utf-8")
 
 
 def read_json(path):
@@ -215,15 +368,15 @@ def local_fingerprint(name, kind):
     if kind == "chart":
         local = read_chart(name)
         return {
-            "sources": local["sources"],
-            "prepare": local["prepare"],
+            "sources": normalize_text(local["sources"]),
+            "prepare": normalize_text(local["prepare"]),
             "params": (local["meta"].get("data") or {}).get("params") or "",
             "controls": (local["meta"].get("data") or {}).get("controls") or "",
         }
     if kind == "dataset":
         local = read_dataset(name)
         schema = [field.get("guid") or field.get("title") or field.get("name") for field in (local["dataset"].get("result_schema") or [])]
-        return {"sql": local["sql"], "result_schema": schema}
+        return {"sql": normalize_text(local["sql"]), "result_schema": schema}
     if kind == "dashboard":
         data = read_dashboard(name).get("data") or {}
         return {"tabs": data.get("tabs"), "settings": data.get("settings")}
@@ -234,15 +387,15 @@ def live_fingerprint(kind, payload):
     if kind == "chart":
         extracted = extract_chart(payload)
         return {
-            "sources": extracted["sources"],
-            "prepare": extracted["prepare"],
+            "sources": normalize_text(extracted["sources"]),
+            "prepare": normalize_text(extracted["prepare"]),
             "params": extracted["meta"]["data"]["params"],
             "controls": extracted["meta"]["data"]["controls"],
         }
     if kind == "dataset":
         dataset = payload.get("dataset") or payload
         schema = [field.get("guid") or field.get("title") or field.get("name") for field in (dataset.get("result_schema") or [])]
-        return {"sql": dataset_sql(payload), "result_schema": schema}
+        return {"sql": normalize_text(dataset_sql(payload)), "result_schema": schema}
     if kind == "dashboard":
         data = extract_dashboard(payload).get("data") or {}
         return {"tabs": data.get("tabs"), "settings": data.get("settings")}

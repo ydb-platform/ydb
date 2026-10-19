@@ -7,7 +7,8 @@ p90, and the Run selector treat `(run_id, run_attempt)` as separate runs.
 
 - Run column name is `ci_run_id` (Utf8). Not `run_id`. URL `?run_id=` binds only Gantt.
 - Select `run_attempt`.
-- `job_conclusion` comes from `github_job` + `name='job'`. No `COALESCE(..., 'in_progress')`.
+- `job_conclusion` comes from `github_job` + `name='job'`. Prefer `failure` then `cancelled` over lexical `MAX(conclusion)`. No `COALESCE(..., 'in_progress')`.
+- Keep `github_step` rows except `Post %`. Do not limit the dataset to `Checkout` / `Build and test`.
 
 ## Gantt and picker datasets
 
@@ -24,16 +25,19 @@ Do not put the icon first. Join `started_at` and `run_icon` on `(run_id, run_att
 
 - Gantt: `parseRunRef`, `keepOneAttempt`. Choose run as `run_label` (selector), then `gantt_run`, then URL `run_id`.
 - Hide GitHub wrapper step `Build and test` only when that job has `ya_phase` rows.
-- Duration points key: `ci_run_id|run_attempt|github_job_id`.
+- Duration and p-diff points key: `ci_run_id|run_attempt|github_job_id`. p-diff sources must select `run_attempt`.
 - Duration click action params: `gantt_run`, `gantt_attempt`, `pr_number`/`pr` from the point, empty `run_label`, `selected_id`. A short `{runId} · #{attempt}` is not a picker `run_label` and empties the PR selector. Do not dump every row field into dashboard params.
+- Percentile buckets and interval bounds use UTC. Split `__interval___relative_-4d___relative_+0d` on the second `__relative_`.
+- Apply Dates in `sources.js` before the row limit. Do not `console.log` Gantt params.
 
 ## Dashboard
 
 - Job status selector is dataset-backed. Default `success` and `failure`. Do not preselect `in_progress`.
 - Run selector (`selrun`) reads `run_label` from `pickers-ds`. Width 520px.
+- Keep the Capacity tab. Zone selector default is `ru-central1-d`.
 
 ## Publish
 
 - `getEditorChart` without `revId` is published.
-- Chart publish: `mode=save`, then `mode=publish` with the draft `revId`.
+- Chart and dashboard publish: `mode=save`, then `mode=publish` with the draft `revId` on the entry. Do not use `entry.id` as a revision.
 - Dataset update: `{datasetId, workbookId, data: {dataset}}`. A root `dataset` field is 400.

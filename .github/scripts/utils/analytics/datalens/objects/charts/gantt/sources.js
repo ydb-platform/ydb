@@ -13,7 +13,6 @@ function paramList(name) {
     return values.map(String).filter(function(value) { return value !== ''; });
 }
 
-const params = Editor.getParams();
 const workflows = paramList('workflow').concat(paramList('wf')).filter(function(value, index, list) {
     return list.indexOf(value) === index;
 });
@@ -54,11 +53,6 @@ const runId = selectorRef.runId || clickRef.runId || urlRef.runId;
 const runAttempt = selectorRef.attempt || clickAttempt || clickRef.attempt || urlRef.attempt;
 const maxRows = Math.max(100, parseInt(firstParam('max_rows', '3000'), 10) || 3000);
 const datasetId = Editor.getId('dataset');
-
-console.log('[sources] start');
-console.log('[sources] params', params);
-console.log('[sources] datasetId', datasetId);
-console.log('[sources] filters', {workflows: workflows, branches: branches, prNumber: prNumber, jobNames: jobNames, presets: presets, runId: runId, runAttempt: runAttempt, maxRows: maxRows});
 
 const statuses = paramList('job_conclusion');
 const where = [];
@@ -112,9 +106,6 @@ const source = buildSource({
     order_by: [{direction: 'DESC', column: 'start_ts'}],
     limit: maxRows,
 });
-
-console.log('[sources] where', where);
-console.log('[sources] built source keys', source && Object.keys(source));
 
 module.exports = {
     data: source,

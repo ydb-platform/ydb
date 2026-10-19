@@ -151,6 +151,7 @@ const source = buildSource({
     columns: [
         'event_date',
         'ci_run_id',
+        'run_attempt',
         'github_job_id',
         'pr_number',
         'workflow',

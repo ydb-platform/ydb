@@ -17,25 +17,40 @@ if str(HERE) not in sys.path:
 from checks import check_texts
 from rpc import (
     DataLensError,
+    create_dataset,
+    create_editor_chart,
+    dataset_from_validate,
+    dataset_id_from,
+    entry_id_from,
     get_dashboard,
     get_dataset,
     get_editor_chart,
     iam_token,
     publish_dashboard,
     publish_editor_chart,
+    refresh_dataset_fields,
     update_dataset,
 )
 from store import (
     HERE as STORE_HERE,
+    chart_create_entry,
     chart_entry,
     dashboard_entry,
+    dashboard_tab,
     live_fingerprint,
     load_manifest,
     local_fingerprint,
     object_dir,
     object_names,
+    read_dashboard,
     read_dataset,
+    save_manifest,
+    upsert_dashboard_tab,
+    write_dashboard,
+    write_json,
     write_live,
+    ydb_connection_id,
+    ydb_subselect_dataset,
 )
 
 REPO_MARKERS = (".github/config/ydb_qa_config.json", ".git")
@@ -74,7 +89,7 @@ def fetch_live(name, spec, token, manifest):
     org = manifest["org_id"]
     workbook = manifest["workbook_id"]
     kind = spec["kind"]
-    obj_id = spec["id"]
+    obj_id = _require_id(name, spec)
     if kind == "chart":
         return get_editor_chart(token, org, obj_id, workbook)
     if kind == "dataset":
@@ -144,6 +159,118 @@ def cmd_diff(args, manifest):
     return 1 if diffs else 0
 
 
+def _require_id(name, spec):
+    obj_id = spec.get("id")
+    if not obj_id:
+        raise SystemExit("%s has no id yet; create it with: dl.py create %s %s --apply" % (name, spec.get("kind"), name))
+    return obj_id
+
+
+def remember_object(manifest, name, kind, obj_id, title):
+    manifest["objects"][name] = {"kind": kind, "id": obj_id, "title": title}
+    save_manifest(manifest)
+
+
+def cmd_create(args, manifest):
+    kind = args.create_kind
+    if kind == "tab":
+        return cmd_create_tab(args, manifest)
+    name = args.name
+    if name in manifest["objects"] and manifest["objects"][name].get("id"):
+        raise SystemExit("%s already has id %s; edit objects/ and publish" % (name, manifest["objects"][name]["id"]))
+    title = args.title
+    if kind == "dataset":
+        sql_path = object_dir(name) / "query.sql"
+        if not sql_path.is_file():
+            raise SystemExit("missing %s" % sql_path)
+        sql = sql_path.read_text(encoding="utf-8")
+        dataset = ydb_subselect_dataset(title, sql, ydb_connection_id(), args.description or "")
+        print("dataset %s validateDataset -> createDataset %r" % (name, title))
+        if not args.apply:
+            print("dry-run; pass --apply to write to DataLens")
+            return 0
+        token = iam_token()
+        org = manifest["org_id"]
+        workbook = manifest["workbook_id"]
+        created = create_dataset(token, org, title, dataset, workbook)
+        obj_id = dataset_id_from(created)
+        if not obj_id:
+            raise SystemExit("createDataset returned no id; keys=%s" % ", ".join(created.keys() if isinstance(created, dict) else []))
+        current = get_dataset(token, org, obj_id, workbook)
+        current_ds = current.get("dataset") or dataset
+        refreshed = refresh_dataset_fields(token, org, current_ds, workbook, obj_id)
+        ready = dataset_from_validate(refreshed) or current_ds
+        if not ready.get("result_schema"):
+            raise SystemExit("dataset %s has no fields after refresh_source" % obj_id)
+        update_dataset(token, org, obj_id, workbook, ready)
+        remember_object(manifest, name, "dataset", obj_id, title)
+        write_live(name, "dataset", get_dataset(token, org, obj_id, workbook))
+        print("created dataset %s id=%s" % (name, obj_id))
+        return 0
+    if kind == "chart":
+        dataset_name = args.dataset
+        dataset_spec = manifest["objects"].get(dataset_name) or {}
+        dataset_id = dataset_spec.get("id")
+        if not dataset_id:
+            raise SystemExit("dataset %s has no id; create it first" % dataset_name)
+        entry = chart_create_entry(name, title, manifest["workbook_id"], dataset_id)
+        print("chart %s createEditorChart publish dataset=%s" % (name, dataset_id))
+        if not args.apply:
+            print("dry-run; pass --apply to write to DataLens")
+            return 0
+        token = iam_token()
+        created = create_editor_chart(token, manifest["org_id"], entry, mode="publish")
+        obj_id = entry_id_from(created)
+        if not obj_id:
+            raise SystemExit("createEditorChart returned no id; keys=%s" % ", ".join(created.keys() if isinstance(created, dict) else []))
+        remember_object(manifest, name, "chart", obj_id, title)
+        meta_path = object_dir(name) / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta.setdefault("data", {})["meta"] = entry["data"]["meta"]
+        write_json(meta_path, meta)
+        print("created chart %s id=%s" % (name, obj_id))
+        return 0
+    raise SystemExit("unknown create kind %s" % kind)
+
+
+def parse_tab_widget(raw):
+    parts = raw.split("|")
+    if len(parts) != 4:
+        raise SystemExit("widget must be widgetId|title|chartName|height, got %r" % raw)
+    widget_id, title, chart_name, height = parts
+    if not height.isdigit():
+        raise SystemExit("widget height must be an integer: %r" % raw)
+    return {"widget_id": widget_id, "title": title, "chart_name": chart_name, "height": int(height)}
+
+
+def cmd_create_tab(args, manifest):
+    widgets = []
+    for raw in args.widget:
+        spec = parse_tab_widget(raw)
+        chart = manifest["objects"].get(spec["chart_name"]) or {}
+        chart_id = chart.get("id")
+        if not chart_id:
+            raise SystemExit("chart %s has no id; create it first" % spec["chart_name"])
+        widgets.append({
+            "widget_id": spec["widget_id"],
+            "title": spec["title"],
+            "chart_id": chart_id,
+            "height": spec["height"],
+        })
+    entry = read_dashboard("dashboard")
+    tab = dashboard_tab(args.tab_id, args.title, widgets)
+    upsert_dashboard_tab(entry, tab)
+    print("dashboard tab %s title=%r widgets=%d hideTabs=false" % (args.tab_id, args.title, len(widgets)))
+    if not args.apply:
+        print("dry-run; pass --apply to write entry.json and publish the dashboard")
+        return 0
+    write_dashboard("dashboard", entry)
+    token = iam_token()
+    result = publish_dashboard(token, manifest["org_id"], dashboard_entry("dashboard", manifest["objects"]["dashboard"]["id"]))
+    print("published dashboard revId %s" % result["revId"])
+    return 0
+
+
 def cmd_publish(args, manifest):
     errors = check_texts()
     if errors:
@@ -157,7 +284,7 @@ def cmd_publish(args, manifest):
     for name in object_names(manifest, args.names):
         spec = manifest["objects"][name]
         kind = spec["kind"]
-        obj_id = spec["id"]
+        obj_id = _require_id(name, spec)
         if kind == "chart":
             entry = chart_entry(name, obj_id)
             print("chart %s save->publish entryId=%s" % (name, obj_id))
@@ -321,6 +448,28 @@ def build_parser():
     query.add_argument("--format", default="pretty", help="ydb sql --format (default pretty)")
     desc = sub.add_parser("describe", help="ydb scheme describe")
     desc.add_argument("path", nargs="?", help="table path, default analytics/ci_metrics")
+    create = sub.add_parser("create", help="create a dataset, editor chart, or dashboard tab")
+    create_sub = create.add_subparsers(dest="create_kind", required=True)
+    created_ds = create_sub.add_parser("dataset", help="validateDataset then createDataset")
+    created_ds.add_argument("name", help="manifest name; SQL is objects/datasets/<dir>/query.sql")
+    created_ds.add_argument("--title", required=True)
+    created_ds.add_argument("--description", default="")
+    created_ds.add_argument("--apply", action="store_true")
+    created_ch = create_sub.add_parser("chart", help="createEditorChart in publish mode")
+    created_ch.add_argument("name")
+    created_ch.add_argument("--title", required=True)
+    created_ch.add_argument("--dataset", required=True, help="manifest name of an existing dataset")
+    created_ch.add_argument("--apply", action="store_true")
+    created_tab = create_sub.add_parser("tab", help="append a dashboard tab and publish it")
+    created_tab.add_argument("--tab-id", required=True)
+    created_tab.add_argument("--title", required=True)
+    created_tab.add_argument(
+        "--widget",
+        action="append",
+        required=True,
+        help="widgetId|title|chartName|height (repeatable)",
+    )
+    created_tab.add_argument("--apply", action="store_true")
     return parser
 
 
@@ -342,6 +491,7 @@ def main(argv=None):
         "table-info": cmd_table_info,
         "query": cmd_query,
         "describe": cmd_describe,
+        "create": cmd_create,
     }
     try:
         result = handlers[args.command](args, manifest)

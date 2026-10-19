@@ -24,7 +24,9 @@ FROM `analytics/ci_metrics` AS t
 LEFT JOIN (
     SELECT
         github_job_id,
-        MAX(conclusion) AS job_conclusion
+        IF(MAX(CASE WHEN conclusion = 'failure' THEN 1 ELSE 0 END) = 1, 'failure',
+          IF(MAX(CASE WHEN conclusion = 'cancelled' THEN 1 ELSE 0 END) = 1, 'cancelled',
+            MAX(conclusion))) AS job_conclusion
     FROM `analytics/ci_metrics`
     WHERE kind = 'duration'
       AND source = 'github_job'
@@ -42,7 +44,7 @@ WHERE t.kind = 'duration'
     )
     AND (
         (t.source = 'github_job' AND t.name IN ('job', 'queue'))
-        OR (t.source = 'github_step' AND t.name IN ('Checkout', 'Build and test'))
+        OR (t.source = 'github_step' AND t.name NOT LIKE 'Post %')
         OR t.source = 'ya_phase'
     )
     AND t.date >= CurrentUtcDate() - Interval("P90D")

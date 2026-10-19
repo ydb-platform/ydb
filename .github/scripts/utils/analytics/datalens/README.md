@@ -28,6 +28,9 @@ python3 "$PY" check                # local invariants, no network
 python3 "$PY" diff                 # local vs live
 python3 "$PY" publish              # dry-run
 python3 "$PY" publish --apply gantt duration-ds
+python3 "$PY" create dataset capacity-ds --title "CI capacity" --apply
+python3 "$PY" create chart capacity-tight --title "Quota" --dataset capacity-ds --apply
+python3 "$PY" create tab --tab-id captab01 --title Capacity --widget "captight01|Quota|capacity-tight|14" --apply
 python3 "$PY" sql gantt-ds
 python3 "$PY" table-info
 python3 "$PY" query --preset run
@@ -36,7 +39,9 @@ python3 "$PY" describe analytics/ci_metrics
 
 `getEditorChart` without `revId` is the **published** revision. Publish is
 save, then publish with the draft `revId`. `updateDataset` wraps the body as
-`{datasetId, workbookId, data: {dataset}}`.
+`{datasetId, workbookId, data: {dataset}}`. New datasets and editor charts
+are `dl.py create` (`validateDataset` + `createDataset`, `createEditorChart`).
+Do not post those RPC bodies by hand.
 
 ## Agent instructions
 

@@ -1,0 +1,12 @@
+{
+  "type": "advanced-chart_node",
+  "annotation": {
+    "description": "Free Cloud quota, percent in use, queue overflow, and how many relwithdebinfo / release-asan hosts still fit."
+  },
+  "meta": {},
+  "data": {
+    "meta": "{\n    \"links\": {\n        \"dataset\": \"di5qgcbc4td0w\"\n    }\n}\n",
+    "params": "module.exports = {\n    cap_pc: ['hide'],\n};\n",
+    "controls": "module.exports = {\n    controls: [],\n};\n"
+  }
+}

@@ -30,7 +30,8 @@ Paths are relative to `.github/scripts/utils/analytics/datalens/`.
 2. Edit SQL or JS in `objects/`. Keep `(run_id, run_attempt)` as one run.
 3. `python3 dl.py check` then `python3 dl.py diff`.
 4. `python3 dl.py publish --apply <name>`. Charts: save, then publish with the draft `revId`. Datasets: `data.dataset`, not a root `dataset`.
-5. After publish, `python3 dl.py pull <name>` and confirm your marker is in the published object (`getEditorChart` without `revId` is published).
+5. A new dataset or editor chart: `python3 dl.py create dataset <name> --title "..." --apply`, then `python3 dl.py create chart <name> --title "..." --dataset <name> --apply`. A new dashboard tab: `python3 dl.py create tab --tab-id <id> --title "..." --widget widgetId|title|chartName|height --apply`. Do not post createDataset / createEditorChart bodies yourself.
+6. After publish, `python3 dl.py pull <name>` and confirm your marker is in the published object (`getEditorChart` without `revId` is published).
 
 To read `analytics/ci_metrics`: `python3 dl.py table-info`, then `query` / `describe`, or MCP `user-ydb-qa` `ydb_query`. Do not use `test_results/test_runs_column` as the only source for a fresh PR-check job.
 

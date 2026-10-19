@@ -40,6 +40,36 @@
       "kind": "dataset",
       "id": "nr9x5jtcy8xc6",
       "title": "PR / Run pickers"
+    },
+    "capacity-ds": {
+      "kind": "dataset",
+      "id": "di5qgcbc4td0w",
+      "title": "CI capacity"
+    },
+    "capacity-tight": {
+      "kind": "chart",
+      "id": "di5qp2d1kb64w",
+      "title": "Quota and fit"
+    },
+    "capacity-use": {
+      "kind": "chart",
+      "id": "gl8tsc0e1nnez",
+      "title": "Quota consumption"
+    },
+    "capacity-pool": {
+      "kind": "chart",
+      "id": "bg3ondk342pku",
+      "title": "Runners and queue"
+    },
+    "capacity-queue": {
+      "kind": "chart",
+      "id": "8d0ow1ovos8ar",
+      "title": "Queue p90"
+    },
+    "capacity-demand": {
+      "kind": "chart",
+      "id": "27uj1g6x76del",
+      "title": "Quota and queue demand"
     }
   }
 }

@@ -162,16 +162,16 @@ function pad2(n) {
 
 function weekStartKey(ms) {
     const date = new Date(ms);
-    const mondayOffset = (date.getDay() + 6) % 7;
-    date.setDate(date.getDate() - mondayOffset);
-    return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+    const mondayOffset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - mondayOffset);
+    return date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate());
 }
 
 function bucketKey(ms) {
     const date = new Date(ms);
-    const day = date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+    const day = date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate());
     if (p90Step === 'hour') {
-        return day + 'T' + pad2(date.getHours());
+        return day + 'T' + pad2(date.getUTCHours());
     }
     if (p90Step === 'week') {
         return weekStartKey(ms);
@@ -181,9 +181,9 @@ function bucketKey(ms) {
 
 function bucketStart(key) {
     if (key.length === 13) {
-        return new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00').getTime();
+        return new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00Z').getTime();
     }
-    return new Date(key.slice(0, 10) + 'T00:00:00').getTime();
+    return new Date(key.slice(0, 10) + 'T00:00:00Z').getTime();
 }
 
 function boundMs(token, endOfDay) {
@@ -925,12 +925,12 @@ module.exports = {
                 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                 function stamp(ms, withTime) {
                     const date = new Date(ms);
-                    const day = date.getDate() + ' ' + months[date.getMonth()];
+                    const day = date.getUTCDate() + ' ' + months[date.getUTCMonth()];
                     if (!withTime) {
                         return day;
                     }
-                    const hh = (date.getHours() < 10 ? '0' : '') + date.getHours();
-                    const mm = (date.getMinutes() < 10 ? '0' : '') + date.getMinutes();
+                    const hh = (date.getUTCHours() < 10 ? '0' : '') + date.getUTCHours();
+                    const mm = (date.getUTCMinutes() < 10 ? '0' : '') + date.getUTCMinutes();
                     return day + ' ' + hh + ':' + mm;
                 }
                 function bucketInterval(bucket) {
@@ -939,13 +939,13 @@ module.exports = {
                     let fromMs;
                     let toMs;
                     if (step === 'hour') {
-                        fromMs = new Date(rawKey.slice(0, 10) + 'T' + rawKey.slice(11) + ':00:00').getTime();
+                        fromMs = new Date(rawKey.slice(0, 10) + 'T' + rawKey.slice(11) + ':00:00Z').getTime();
                         toMs = fromMs + 3600 * 1000;
                     } else if (step === 'week') {
-                        fromMs = new Date(rawKey.slice(0, 10) + 'T00:00:00').getTime();
+                        fromMs = new Date(rawKey.slice(0, 10) + 'T00:00:00Z').getTime();
                         toMs = fromMs + 7 * 24 * 3600 * 1000;
                     } else {
-                        fromMs = new Date(rawKey.slice(0, 10) + 'T00:00:00').getTime();
+                        fromMs = new Date(rawKey.slice(0, 10) + 'T00:00:00Z').getTime();
                         toMs = fromMs + 24 * 3600 * 1000;
                     }
                     if (step === 'day') {

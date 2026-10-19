@@ -770,11 +770,291 @@
           ]
         },
         "connections": []
+      },
+      {
+        "id": "captab01",
+        "items": [
+          {
+            "id": "capqueue01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tcapqueue01",
+                  "title": "Queue p90, last hour",
+                  "params": {},
+                  "chartId": "8d0ow1ovos8ar",
+                  "isDefault": true,
+                  "autoHeight": false,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "captight01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tcaptight01",
+                  "title": "Free quota",
+                  "params": {},
+                  "chartId": "di5qp2d1kb64w",
+                  "isDefault": true,
+                  "autoHeight": false,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "capby01",
+            "data": {
+              "group": [
+                {
+                  "id": "selcapzone",
+                  "title": "Zone",
+                  "width": "280px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "cap_zone",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "ru-central1-d"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "ru-central1-d (default)",
+                        "value": "ru-central1-d"
+                      },
+                      {
+                        "title": "ru-central1-a",
+                        "value": "ru-central1-a"
+                      },
+                      {
+                        "title": "ru-central1-b",
+                        "value": "ru-central1-b"
+                      },
+                      {
+                        "title": "ru-central1-e",
+                        "value": "ru-central1-e"
+                      },
+                      {
+                        "title": "all zones",
+                        "value": "all"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "cap_zone": [
+                      "ru-central1-d"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selcappc",
+                  "title": "Postcommit jobs",
+                  "width": "320px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "cap_pc",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "hide"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "hide (default)",
+                        "value": "hide"
+                      },
+                      {
+                        "title": "show",
+                        "value": "show"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "cap_pc": [
+                      "hide"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                },
+                {
+                  "id": "selcapby",
+                  "title": "Split RAM by",
+                  "width": "280px",
+                  "source": {
+                    "required": false,
+                    "showHint": false,
+                    "fieldName": "cap_by",
+                    "showTitle": true,
+                    "elementType": "select",
+                    "defaultValue": [
+                      "workflow"
+                    ],
+                    "titlePlacement": "left",
+                    "multiselectable": false,
+                    "acceptableValues": [
+                      {
+                        "title": "workflow",
+                        "value": "workflow"
+                      },
+                      {
+                        "title": "target branch",
+                        "value": "branch"
+                      }
+                    ]
+                  },
+                  "defaults": {
+                    "cap_by": [
+                      "workflow"
+                    ]
+                  },
+                  "namespace": "default",
+                  "sourceType": "manual",
+                  "placementMode": "auto"
+                }
+              ],
+              "autoHeight": true,
+              "buttonApply": false,
+              "buttonReset": false,
+              "showGroupName": false,
+              "updateControlsOnChange": true
+            },
+            "type": "group_control",
+            "namespace": "default"
+          },
+          {
+            "id": "capuse01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tcapuse01",
+                  "title": "Who holds the RAM",
+                  "params": {},
+                  "chartId": "gl8tsc0e1nnez",
+                  "isDefault": true,
+                  "autoHeight": true,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "capdemand01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tcapdemand01",
+                  "title": "Quota in use and what the queue still asks",
+                  "params": {},
+                  "chartId": "27uj1g6x76del",
+                  "isDefault": true,
+                  "autoHeight": true,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          },
+          {
+            "id": "cappool01",
+            "data": {
+              "tabs": [
+                {
+                  "id": "tcappool01",
+                  "title": "Runners",
+                  "params": {},
+                  "chartId": "bg3ondk342pku",
+                  "isDefault": true,
+                  "autoHeight": true,
+                  "enableActionParams": false
+                }
+              ],
+              "hideTitle": false
+            },
+            "type": "widget",
+            "namespace": "default"
+          }
+        ],
+        "title": "Capacity",
+        "layout": [
+          {
+            "h": 4,
+            "i": "capby01",
+            "w": 36,
+            "x": 0,
+            "y": 0
+          },
+          {
+            "h": 6,
+            "i": "capqueue01",
+            "w": 36,
+            "x": 0,
+            "y": 4
+          },
+          {
+            "h": 14,
+            "i": "captight01",
+            "w": 36,
+            "x": 0,
+            "y": 10
+          },
+          {
+            "h": 22,
+            "i": "capuse01",
+            "w": 36,
+            "x": 0,
+            "y": 24
+          },
+          {
+            "h": 44,
+            "i": "capdemand01",
+            "w": 36,
+            "x": 0,
+            "y": 46
+          },
+          {
+            "h": 32,
+            "i": "cappool01",
+            "w": 36,
+            "x": 0,
+            "y": 90
+          }
+        ],
+        "aliases": {
+          "default": []
+        },
+        "connections": []
       }
     ],
     "counter": 19,
     "settings": {
-      "hideTabs": true,
+      "hideTabs": false,
       "expandTOC": false,
       "globalParams": {
         "pr": [
@@ -794,6 +1074,15 @@
         ],
         "branch": [
           "main"
+        ],
+        "cap_by": [
+          "workflow"
+        ],
+        "cap_pc": [
+          "hide"
+        ],
+        "cap_zone": [
+          "ru-central1-d"
         ],
         "metric": [
           "job"

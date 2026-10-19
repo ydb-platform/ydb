@@ -154,16 +154,16 @@ function pad2(n) {
 
 function weekStartKey(ms) {
     const date = new Date(ms);
-    const mondayOffset = (date.getDay() + 6) % 7;
-    date.setDate(date.getDate() - mondayOffset);
-    return date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+    const mondayOffset = (date.getUTCDay() + 6) % 7;
+    date.setUTCDate(date.getUTCDate() - mondayOffset);
+    return date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate());
 }
 
 function bucketKey(ms) {
     const date = new Date(ms);
-    const day = date.getFullYear() + '-' + pad2(date.getMonth() + 1) + '-' + pad2(date.getDate());
+    const day = date.getUTCFullYear() + '-' + pad2(date.getUTCMonth() + 1) + '-' + pad2(date.getUTCDate());
     if (p90Step === 'hour') {
-        return day + 'T' + pad2(date.getHours());
+        return day + 'T' + pad2(date.getUTCHours());
     }
     if (p90Step === 'week') {
         return weekStartKey(ms);
@@ -173,9 +173,9 @@ function bucketKey(ms) {
 
 function bucketStart(key) {
     if (key.length === 13) {
-        return new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00').getTime();
+        return new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00Z').getTime();
     }
-    return new Date(key.slice(0, 10) + 'T12:00:00').getTime();
+    return new Date(key.slice(0, 10) + 'T12:00:00Z').getTime();
 }
 
 function boundMs(token, endOfDay) {
@@ -283,7 +283,7 @@ if (selectedPhaseTry) {
         if (String(row.ya_try || '') !== selectedPhaseTry) {
             return;
         }
-        const key = String(row.run_id || '') + '|' + String(row.github_job_id || '');
+        const key = String(row.ci_run_id || row.run_id || '') + '|' + String(row.run_attempt || '') + '|' + String(row.github_job_id || '');
         if (!grouped[key]) {
             grouped[key] = Object.assign({}, row);
             grouped[key].duration_sec = 0;
@@ -322,7 +322,8 @@ rowsForPoints.forEach(function(row, index) {
         job: String(row.job_name || ''),
         branch: String(row.branch || ''),
         pr: String(row.pr_number || ''),
-        runId: String(row.run_id || ''),
+        runId: String(row.ci_run_id || row.run_id || ''),
+        attempt: String(row.run_attempt || ''),
         jobId: String(row.github_job_id || ''),
         url: String(row.run_url || ''),
         commit: String(row.commit || ''),
@@ -374,20 +375,20 @@ function bucketLabel(item) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     function dayPart(ms) {
         const date = new Date(ms);
-        return date.getDate() + ' ' + months[date.getMonth()];
+        return date.getUTCDate() + ' ' + months[date.getUTCMonth()];
     }
     function timePart(ms) {
         const date = new Date(ms);
-        return (date.getHours() < 10 ? '0' : '') + date.getHours() + ':00';
+        return (date.getUTCHours() < 10 ? '0' : '') + date.getUTCHours() + ':00';
     }
     let fromMs;
     let toMs;
     if (p90Step === 'hour') {
-        fromMs = new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00').getTime();
+        fromMs = new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00Z').getTime();
         toMs = fromMs + 3600 * 1000;
         return dayPart(fromMs) + ' ' + timePart(fromMs) + '-' + timePart(toMs);
     }
-    fromMs = new Date(key.slice(0, 10) + 'T00:00:00').getTime();
+    fromMs = new Date(key.slice(0, 10) + 'T00:00:00Z').getTime();
     toMs = fromMs + (p90Step === 'week' ? 7 : 1) * 24 * 3600 * 1000;
     return dayPart(fromMs) + '-' + dayPart(toMs);
 }

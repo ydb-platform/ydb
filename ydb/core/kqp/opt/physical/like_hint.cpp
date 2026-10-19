@@ -82,6 +82,14 @@ bool IsTypeExpr(const NYql::TExprNode* node) {
     });
 }
 
+// Nodes that may appear in a fully known Re2::Options value. If / Parameter / any other callable
+// is an unknown branch: one side can be Literal=true while the other only shows CaseSensitive.
+bool IsOptionsStructure(const NYql::TExprNode* node) {
+    return node->IsCallable({
+        "AsStruct", "AsTuple", "List", "Tuple", "Just", "Bool", "Uint64", "Int64", "Ui64", "Nothing", "Null", "Optional",
+    }) || IsTypeExpr(node);
+}
+
 bool IsAbsentOption(const NYql::TExprNode* node) {
     node = SkipJust(UnwrapQuote(node));
     return !node || node->IsCallable({"Nothing", "Null"});
@@ -139,6 +147,15 @@ void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan) {
             ScanOptions(*current->Child(2), scan);
         }
         return;
+    }
+    if (current->IsCallable() && !IsOptionsStructure(current) &&
+        !(current->IsCallable("Apply") && current->ChildrenSize() >= 1 && IsRe2Udf(current->Head(), "Re2.Options"))) {
+        const auto* head = current->ChildrenSize() >= 1 ? UnwrapQuote(&current->Head()) : nullptr;
+        const bool namedSetting = head && head->IsAtom() && IsRe2OptionName(head->Content());
+        if (!namedSetting) {
+            scan.Unsupported = true;
+            return;
+        }
     }
     if (current->IsCallable("Apply") && current->ChildrenSize() >= 1 && IsRe2Udf(current->Head(), "Re2.Options")) {
         for (ui32 index = 1; index < current->ChildrenSize(); ++index) {

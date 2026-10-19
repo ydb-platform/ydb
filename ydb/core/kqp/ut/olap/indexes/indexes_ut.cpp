@@ -4268,6 +4268,16 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     ORDER BY key;
                 )"),
                 "positional Literal option");
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    $safe = Re2::Options(true AS CaseSensitive);
+                    $unsafe = Re2::Options(true AS CaseSensitive, true AS Literal);
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, IF(false, $safe, $unsafe))(value)
+                    ORDER BY key;
+                )"),
+                "conditional Literal option");
 
             const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
             CompareYson(R"([[0u]])",

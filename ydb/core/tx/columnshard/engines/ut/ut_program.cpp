@@ -872,7 +872,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         TFixedNgramResolver columnResolver(indexInfo);
         columnResolver.NgramSize = 3;
 
-        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex) {
+        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex, const bool asFilter = true) {
             NKikimrSSA::TProgram programProto;
             {
                 auto* command = programProto.AddCommand();
@@ -894,9 +894,14 @@ Y_UNIT_TEST_SUITE(TestProgram) {
                 }
                 command->MutableAssign()->MutableColumn()->SetId(16);
             }
-            {
-                auto* command = programProto.AddCommand();
-                command->MutableProjection()->AddColumns()->SetId(16);
+            if (asFilter) {
+                auto* filter = programProto.AddCommand();
+                filter->MutableFilter()->MutablePredicate()->SetId(16);
+                auto* project = programProto.AddCommand();
+                project->MutableProjection()->AddColumns()->SetId(columnResolver.GetColumnIdVerified("string"));
+            } else {
+                auto* project = programProto.AddCommand();
+                project->MutableProjection()->AddColumns()->SetId(16);
             }
             TKernelsWrapper kernels;
             kernels.Add(NYql::TKernelRequestBuilder::EBinaryOp::StartsWith, true);
@@ -926,10 +931,14 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             return std::make_pair(column->Value(0), column->Value(1));
         };
 
+        const auto projected = apply(makeProgram("%aaa%bbb%", true, 0, false), true);
+        UNIT_ASSERT_C(!projected.first.Contains("CheckIndexData"), projected.first);
+        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(projected.second), (std::pair<ui8, ui8>(1, 0)));
+
         const auto withHints = apply(makeProgram("%aaa%bbb%", true, 0), true);
         UNIT_ASSERT_C(withHints.first.Contains("PATTERN_MATCH"), withHints.first);
         UNIT_ASSERT_C(withHints.first.Contains("aaa") && withHints.first.Contains("bbb"), withHints.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(withHints.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(withHints.second->num_rows(), 1);
         const auto checkerCount = [&](const TString& dot) {
             ui32 count = 0;
             for (size_t pos = 0; (pos = dot.find("CheckIndexData", pos)) != TString::npos; pos += 14) {
@@ -941,33 +950,33 @@ Y_UNIT_TEST_SUITE(TestProgram) {
 
         const auto flagOff = apply(makeProgram("%aaa%bbb%", true, 0), false);
         UNIT_ASSERT_C(!flagOff.first.Contains("PATTERN_MATCH"), flagOff.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(flagOff.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(flagOff.second->num_rows(), 1);
 
         const auto ignored = apply(makeProgram("%aaa%bbb%", true, 5), true);
         UNIT_ASSERT_C(!ignored.first.Contains("PATTERN_MATCH"), ignored.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(ignored.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(ignored.second->num_rows(), 1);
 
         const auto ilike = apply(makeProgram("%Err%Ошибка%", false, 0), true);
         UNIT_ASSERT_C(ilike.first.Contains("PATTERN_MATCH"), ilike.first);
         UNIT_ASSERT_C(ilike.first.Contains("Err"), ilike.first);
         UNIT_ASSERT_C(!ilike.first.Contains("Ошибка"), ilike.first);
         UNIT_ASSERT_VALUES_EQUAL(checkerCount(ilike.first), 1);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(ilike.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(ilike.second->num_rows(), 1);
 
         columnResolver.NgramSize.reset();
         const auto noIndex = apply(makeProgram("%aaa%bbb%", true, 0), true);
         UNIT_ASSERT_C(!noIndex.first.Contains("PATTERN_MATCH"), noIndex.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(noIndex.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(noIndex.second->num_rows(), 1);
 
         columnResolver.NgramSize = 3;
         const auto noField = apply(makeProgram("%aaa%bbb%", true, std::nullopt), true);
         UNIT_ASSERT_C(!noField.first.Contains("PATTERN_MATCH"), noField.first);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(noField.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(noField.second->num_rows(), 1);
 
         // EndsWith("b") does not match the stored suffix window, so only the "aaa" check is built.
         const auto shortSuffix = apply(makeProgram("%aaa%b", true, 0), true);
         UNIT_ASSERT_C(shortSuffix.first.Contains("PATTERN_MATCH"), shortSuffix.first);
         UNIT_ASSERT_VALUES_EQUAL(checkerCount(shortSuffix.first), 1);
-        UNIT_ASSERT_VALUES_EQUAL(uint8Pair(shortSuffix.second), (std::pair<ui8, ui8>(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(shortSuffix.second->num_rows(), 1);
     }
 }

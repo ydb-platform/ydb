@@ -1670,6 +1670,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
             ))(message);
         )", tableClient.GetParamsBuilder().Build());
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            $safe = Re2::Options(true AS CaseSensitive);
+            $unsafe = Re2::Options(true AS CaseSensitive, true AS Literal);
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, IF(false, $safe, $unsafe))(message);
+        )", tableClient.GetParamsBuilder().Build());
     }
 
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {

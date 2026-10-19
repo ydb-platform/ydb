@@ -71,7 +71,6 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
                 if (ngramSize) {
                     TPatternHintPolicy policy;
                     policy.MinContainsLength = ngramSize->Min;
-                    policy.MinEndsWithLength = ngramSize->Max;
                     auto hints = BuildLikeIndexHints(hint.GetLike().GetPattern(), hint.GetLike().GetEscape(), hint.GetCaseSensitive(),
                         hint.GetArgumentIndex(), policy);
                     if (!hints.empty()) {

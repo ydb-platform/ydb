@@ -43,35 +43,15 @@ TString JoinHints(const TStringBuf pattern, const bool caseSensitive, const TStr
 Y_UNIT_TEST_SUITE(PatternHints) {
     Y_UNIT_TEST(LiteralRuns) {
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%bbb%", true), "Contains:aaa:cs,Contains:bbb:cs");
-        UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bbb", true), "StartsWith:aaa:cs,EndsWith:bbb:cs");
+        // Suffixes are Contains. EndsWith does not match a larger ngram's stored suffix window.
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bbb", true), "StartsWith:aaa:cs,Contains:bbb:cs");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bbbbb", true), "StartsWith:aaa:cs,Contains:bbbbb:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bbb%", true), "StartsWith:aaa:cs,Contains:bbb:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa_bbb%", true), "Contains:aaa:cs,Contains:bbb:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa", true), "StartsWith:aaa:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%ab%cde%", true), "Contains:cde:cs");
         // A one-byte suffix does not match the stored suffix window, so it is not a probe.
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%b", true), "Contains:aaa:cs");
-        {
-            // A size-5 index can be selected beside a size-3 one. EndsWith("bbb") is unsafe for size 5.
-            TPatternHintPolicy mixed;
-            mixed.MinContainsLength = 3;
-            mixed.MinEndsWithLength = 5;
-            TString mixedHints;
-            for (const auto& hint : BuildLikeIndexHints("aaa%bbb", {}, true, 0, mixed)) {
-                if (!mixedHints.empty()) {
-                    mixedHints += ",";
-                }
-                mixedHints += HintText(hint);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(mixedHints, "StartsWith:aaa:cs,Contains:bbb:cs");
-            mixedHints.clear();
-            for (const auto& hint : BuildLikeIndexHints("aaa%bbbbb", {}, true, 0, mixed)) {
-                if (!mixedHints.empty()) {
-                    mixedHints += ",";
-                }
-                mixedHints += HintText(hint);
-            }
-            UNIT_ASSERT_VALUES_EQUAL(mixedHints, "StartsWith:aaa:cs,EndsWith:bbbbb:cs");
-        }
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%b", true), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("aaa%bb", true), "StartsWith:aaa:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%aaa%aaa%", true), "Contains:aaa:cs");
@@ -86,7 +66,7 @@ Y_UNIT_TEST_SUITE(PatternHints) {
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kkk%", false), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%sss%", false), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("xxxk%", false), "StartsWith:xxx:ci");
-        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kxxx", false), "EndsWith:xxx:ci");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kxxx", false), "Contains:xxx:ci");
         // The piece left of k is not anchored, and two bytes are below the contains minimum.
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%xxk", false), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%xxxk", false), "Contains:xxx:ci");

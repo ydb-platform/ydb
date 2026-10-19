@@ -22,9 +22,6 @@ struct TPatternIndexHint {
 struct TPatternHintPolicy {
     // A Contains shorter than the smallest bloom ngram size probes nothing. The caller sets this from the index.
     ui32 MinContainsLength = 3;
-    // EndsWith is emitted only when the suffix is at least this long. Set it to the largest compatible
-    // ngram size: a shorter suffix does not match that index's stored suffix window.
-    ui32 MinEndsWithLength = 3;
     // StartsWith of one byte matches the stored prefix window.
     ui32 MinAnchoredLength = 1;
     // Phase 1 does not interpret ESCAPE. A pattern that has one produces no hints.

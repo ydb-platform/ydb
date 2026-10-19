@@ -572,9 +572,24 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
     }
 }
 
-// The added checks are ANDed with the kernel. A deny becomes false, while a NULL input would have
-// made the kernel NULL. That is sound for a filter (NULL is dropped either way) and unsound under NOT.
-// KQP does not push NOT/OR around this kernel; same assumption as OptimizeConditionsForIndexes.
+// A deny becomes false. A NULL input would have made the kernel NULL. WHERE drops both, but a
+// projection, NOT, or Coalesce(_, true) would see a different value. Only a filter, or an AND chain
+// that itself only feeds a filter, may receive the checks.
+bool FeedsFilter(const TGraphNode* node) {
+    if (!node || node->GetOutputEdges().size() != 1) {
+        return false;
+    }
+    const TGraphNode* consumer = node->GetOutputEdges().begin()->second;
+    if (consumer->Is(EProcessorType::Filter)) {
+        return true;
+    }
+    if (!consumer->Is(EProcessorType::StreamLogic)) {
+        return false;
+    }
+    const auto logic = consumer->GetProcessorAs<TStreamLogicProcessor>();
+    return logic->GetOperation() == NKernels::EOperation::And && FeedsFilter(consumer);
+}
+
 TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -584,7 +599,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForPatternHints(TGraphNode* condNode
         return false;
     }
     const auto& hints = calc->GetKernelLogic()->GetIndexHints();
-    if (hints.empty() || condNode->GetOutputEdges().size() != 1) {
+    if (hints.empty() || !FeedsFilter(condNode)) {
         return false;
     }
     if (IndexesConstructed.contains(condNode->GetIdentifier())) {

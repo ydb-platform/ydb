@@ -154,19 +154,17 @@ enum EEventIds: ui32 {
 
 static_assert(EEventIds::EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-template <typename TResponse, typename TEvState, enum EEventIds EvId>
+template <typename TResponse, typename TEvState, EEventIds EvId>
 struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvState, EvId>, EvId> {
     explicit TEvStreamResponse(TResponse response, TEvState state)
         : State(std::move(state))
-        ,
-    Response(std::move(response))
-        {}
+        , Response(std::move(response))
+    {
+    }
 
     TEvState State;
-        TResponse Response;
+    TResponse Response;
 };
-
-// clang-format off
 
 class TQuerySessionPoolServiceActor: public NActors::TActorBootstrapped<TQuerySessionPoolServiceActor> {
     using TBase = NActors::TActorBootstrapped<TQuerySessionPoolServiceActor>;
@@ -232,7 +230,7 @@ public:
 
 private:
     // Beware: destroys future value
-    template <typename TResponse, enum EEventIds EvId, typename TStatePtr>
+    template <typename TResponse, EEventIds EvId, typename TStatePtr>
     struct TEvQueryResponse: NActors::TEventLocal<TEvQueryResponse<TResponse, EvId, TStatePtr>, EvId> {
         explicit TEvQueryResponse(const NThreading::TFuture<TResponse>& responseFuture, TStatePtr state)
             : State(std::move(state))
@@ -364,7 +362,8 @@ private:
     void Handle(TEvReleaseSession::TPtr ev) {
         auto& sessionInfo = ev->Get()->SessionInfo;
         auto dbIt = DatabaseStates.find(sessionInfo.Database);
-        Y_VALIDATE(dbIt != DatabaseStates.end(), "Releasing session " << sessionInfo.SessionId << " from unknown database " << sessionInfo.Database);
+        Y_VALIDATE(
+            dbIt != DatabaseStates.end(), "Releasing session " << sessionInfo.SessionId << " from unknown database " << sessionInfo.Database);
         auto& databaseState = dbIt->second;
         databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
         auto it = databaseState.BusySessions.find(sessionInfo.SessionId);
@@ -600,11 +599,9 @@ private:
         Schedule(DatabaseStatesCleanupPeriod, new TEvDatabaseStatesCleanup());
     }
 
-    private:
+private:
     std::unordered_map<TString, TDatabaseSessionState> DatabaseStates;
 };
-
-// clang-format on
 
 void TSessionInfoDeleter::operator()(TSessionInfo* sessionInfo) {
     ActorSystem->Send(QuerySessionPoolServiceActorId(), new TQuerySessionPoolServiceActor::TEvReleaseSession(std::move(*sessionInfo)));

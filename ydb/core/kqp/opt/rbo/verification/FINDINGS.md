@@ -25,6 +25,15 @@ range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
 `/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
 and `/tmp/rbo-string-padding-main-tests.log`.
 
+The rebased verifier's focused native target also passed all 12 tests at
+`9a9a7e6f25b`, with peak aggregate RSS 10.37 GiB. Normal Initial/Final checks
+cover repeated result positions, stored-String copies and whole-partition
+Decimal SUM/AVG; deliberate output/window changes produce counterexamples.
+Correlated EXISTS is checked under the explicitly diagnostic logical-prefix
+scope, including a changed caller binding and preserved typed conjuncts.
+The raw log is `/tmp/rbo-native-focused-main.log`. This does not replace a
+fresh real-host corpus census or migration of the older `cpp_ut` fixtures.
+
 ## Current runtime check
 
 On **2026-09-05**, the manual paired diagnostics at source `b000dfaba5f` observed:

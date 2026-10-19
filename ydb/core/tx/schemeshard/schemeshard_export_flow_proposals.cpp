@@ -106,6 +106,7 @@ static const NKikimrSchemeOp::TBackupTask* FindBackupSchemeSnapshot(TSchemeShard
 
 bool FillExportTableSchemePaths(
     TSchemeShard* ss,
+    const TPathId& domainPathId,
     const TString& sourcePathName,
     TExportTableSchemeContext& context,
     TString& error)
@@ -120,7 +121,12 @@ bool FillExportTableSchemePaths(
 
     const TString sourcePath = CanonizePath(sourcePathName);
     std::pair<TString, TString> paths;
-    const TString database = CanonizePath(ss->RootPathElements);
+    const auto domainPath = TPath::Init(domainPathId, ss);
+    if (!domainPath.IsResolved() || domainPath.IsDeleted()) {
+        error = "Export database path is not available";
+        return false;
+    }
+    const TString database = domainPath.PathString();
     if (!TrySplitPathByDb(sourcePath, database, paths, error)) {
         return false;
     }

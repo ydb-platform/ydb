@@ -3744,6 +3744,63 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_C(!sql.Contains("CREATE TABLE `Table`"), sql);
     }
 
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlUsesLocalSubdomainRelativePath, IsColumn) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        ui64 txId = 100;
+        const TString database = "/MyRoot/USER_0";
+        TestCreateSubDomain(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "USER_0"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        if (IsColumn) {
+            TestCreateColumnTable(Runtime(), ++txId, database, R"(
+                Name: "Table"
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Name: "key" Type: "Uint32" NotNull: true }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: "key"
+                }
+            )");
+        } else {
+            TestCreateTable(Runtime(), ++txId, database, R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+        }
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, database, Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/USER_0/Table"
+                    destination_prefix: "local"
+                }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, database, Ydb::StatusIds::SUCCESS);
+
+        CheckSqlBackup("/local", {});
+        const auto sql = GetS3FileContent("/local/create_table.sql");
+        UNIT_ASSERT_STRING_CONTAINS(sql, "CREATE TABLE `Table`");
+        UNIT_ASSERT_C(!sql.Contains("USER_0"), sql);
+        UNIT_ASSERT_C(!sql.Contains("/MyRoot"), sql);
+    }
+
     Y_UNIT_TEST(ColumnTableBackupAsSqlUsesDatabaseRelativePath) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);

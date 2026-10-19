@@ -17,6 +17,7 @@ TString ComputeIndexItemSuffix(
 
 bool FillExportTableSchemePaths(
     TSchemeShard* ss,
+    const TPathId& domainPathId,
     const TString& sourcePathName,
     TExportTableSchemeContext& context,
     TString& error

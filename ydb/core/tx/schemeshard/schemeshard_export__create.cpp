@@ -605,7 +605,7 @@ private:
             ? PrepareExportTableSchemeContext(Self, item.SourcePathName, *backupTask, exportItemPath, context, error)
             : PrepareExportTableSchemeContext(Self, sourcePath, exportItemPath, context, error);
 
-        if (!prepared || !FillExportTableSchemePaths(Self, item.SourcePathName, context, error)) {
+        if (!prepared || !FillExportTableSchemePaths(Self, exportInfo.DomainPathId, item.SourcePathName, context, error)) {
             return false;
         }
 

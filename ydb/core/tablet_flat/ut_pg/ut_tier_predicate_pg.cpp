@@ -42,8 +42,8 @@ namespace {
             policy.Unit = unit;
             policy.Rules.push_back(TTierRule{ .TierId = 1, .Before = TTierRelativeBound{ TDuration::Days(1) } });
 
-            TTierPredicate predicate(policy, *Scheme);
-            predicate.Bind(Now);
+            TTierPredicate predicate(policy);
+            predicate.Bind(Now, *Scheme);
 
             auto value = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
             UNIT_ASSERT_C(!value.Error, *value.Error);
@@ -86,11 +86,11 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         TPgCase pg(TEXTOID);
         TTieringPolicy policy;
         policy.ColumnTag = ValueTag;
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(policy, *pg.Scheme), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(policy).Bind(Now, *pg.Scheme), yexception);
 
         // Integer columns require a unit
         TPgCase int8(INT8OID);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(policy, *int8.Scheme), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(policy).Bind(Now, *int8.Scheme), yexception);
     }
 
 }

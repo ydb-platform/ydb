@@ -132,19 +132,9 @@ namespace {
 
 } // namespace
 
-    TTierPredicate::TTierPredicate(const TTieringPolicy& policy, const TRowScheme& scheme)
+    TTierPredicate::TTierPredicate(const TTieringPolicy& policy)
         : Policy(policy)
-        , Type([&] {
-            const auto* info = scheme.ColInfo(policy.ColumnTag);
-            Y_ENSURE(info, "Tiering column " << policy.ColumnTag << " is not found");
-            return info->TypeInfo;
-        }())
-        , Pos(scheme.ColInfo(policy.ColumnTag)->Pos)
     {
-        Y_ENSURE(IsSupportedType(Type), "Unsupported tiering column type " << Type.GetTypeId());
-        Y_ENSURE(!IsUnitRequired(Type) || IsKnownUnit(Policy.Unit),
-            "Tiering column of type " << Type.GetTypeId() << " requires a unit");
-
         // Rules go from the coldest tier to the warmest, so relative offsets must strictly decrease
         TMaybe<TDuration> prevOffset;
         for (const auto& rule : Policy.Rules) {
@@ -158,7 +148,20 @@ namespace {
         }
     }
 
-    void TTierPredicate::Bind(TInstant now) {
+    void TTierPredicate::Bind(TInstant now, const TRowScheme& scheme) {
+        Bound = false;
+
+        // Column position may change between schemes (e.g. after a column is dropped),
+        // so it is resolved on every bind
+        const auto* info = scheme.ColInfo(Policy.ColumnTag);
+        Y_ENSURE(info, "Tiering column " << Policy.ColumnTag << " is not found");
+        Y_ENSURE(IsSupportedType(info->TypeInfo), "Unsupported tiering column type " << info->TypeInfo.GetTypeId());
+        Y_ENSURE(!IsUnitRequired(info->TypeInfo) || IsKnownUnit(Policy.Unit),
+            "Tiering column of type " << info->TypeInfo.GetTypeId() << " requires a unit");
+
+        Type = info->TypeInfo;
+        Pos = info->Pos;
+
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
         Thresholds.clear();

@@ -64,8 +64,8 @@ namespace {
     template <typename T>
     bool SingleRuleMatches(NScheme::TTypeId type, EUnit unit, TDuration offset, T value, TInstant now = Now) {
         auto lay = MakeLayout(type);
-        TTierPredicate predicate(MakePolicy({{offset, 1}}, unit), *lay);
-        predicate.Bind(now);
+        TTierPredicate predicate(MakePolicy({{offset, 1}}, unit));
+        predicate.Bind(now, *lay);
         return EvaluateValue(*lay, predicate, value) == Tier(1);
     }
 
@@ -318,8 +318,8 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
     Y_UNIT_TEST(RulesOrder) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
         // Coldest first: P3D -> tier 2, then P1D -> tier 1
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(3), 2}, {TDuration::Days(1), 1}}), *lay);
-        predicate.Bind(Now);
+        TTierPredicate predicate(MakePolicy({{TDuration::Days(3), 2}, {TDuration::Days(1), 1}}));
+        predicate.Bind(Now, *lay);
 
         auto age = [&](TDuration age) {
             return EvaluateValue(*lay, predicate, (Now - age).MicroSeconds());
@@ -332,8 +332,8 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
     Y_UNIT_TEST(EmptyPolicy) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
-        TTierPredicate predicate(MakePolicy({}), *lay);
-        predicate.Bind(Now);
+        TTierPredicate predicate(MakePolicy({}));
+        predicate.Bind(Now, *lay);
 
         UNIT_ASSERT(EvaluateValue(*lay, predicate, ui64(0)) == Tier(0));
     }
@@ -342,8 +342,8 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
         const TRowScheme& scheme = *lay;
         const TPos pos = scheme.ColInfo(ValueTag)->Pos;
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}), scheme);
-        predicate.Bind(Now);
+        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}));
+        predicate.Bind(Now, scheme);
 
         const TCell old = TCell::Make(ui64(0));
         UNIT_ASSERT(predicate.Evaluate(MakeRow(scheme, old)) == Tier(1));
@@ -385,22 +385,61 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
     Y_UNIT_TEST(Rebind) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
-        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}), *lay);
+        TTierPredicate predicate(MakePolicy({{TDuration::Days(1), 1}}));
         const ui64 value = (Now - TDuration::Hours(12)).MicroSeconds();
 
-        predicate.Bind(Now);
+        predicate.Bind(Now, *lay);
         UNIT_ASSERT(EvaluateValue(*lay, predicate, value) == Tier(0));
 
-        predicate.Bind(Now + TDuration::Days(1));
+        predicate.Bind(Now + TDuration::Days(1), *lay);
         UNIT_ASSERT(EvaluateValue(*lay, predicate, value) == Tier(1));
+    }
+
+    Y_UNIT_TEST(SchemeChange) {
+        constexpr TTag DroppedTag = 2;
+        constexpr TTag TieringTag = 3;
+
+        TLayoutCook before;
+        before
+            .Col(0, KeyTag, NScheme::NTypeIds::Uint64)
+            .Col(0, DroppedTag, NScheme::NTypeIds::Uint64)
+            .Col(0, TieringTag, NScheme::NTypeIds::Timestamp)
+            .Key({ KeyTag });
+
+        // The tiering column shifts to a lower position once column 2 is dropped
+        TLayoutCook after;
+        after
+            .Col(0, KeyTag, NScheme::NTypeIds::Uint64)
+            .Col(0, TieringTag, NScheme::NTypeIds::Timestamp)
+            .Key({ KeyTag });
+
+        auto makeRow = [&](const TRowScheme& scheme, ui64 value) {
+            TRowState row(scheme.Tags().size());
+            row.Touch(ERowOp::Upsert);
+            row.Set(scheme.ColInfo(TieringTag)->Pos, ECellOp::Set, TCell::Make(value));
+            return row;
+        };
+
+        auto policy = MakePolicy({{TDuration::Days(1), 1}});
+        policy.ColumnTag = TieringTag;
+        TTierPredicate predicate(policy);
+
+        predicate.Bind(Now, *before);
+        UNIT_ASSERT_VALUES_EQUAL(predicate.GetColumnPos(), 2u);
+        UNIT_ASSERT(predicate.Evaluate(makeRow(*before, 0)) == Tier(1));
+
+        predicate.Bind(Now, *after);
+        UNIT_ASSERT_VALUES_EQUAL(predicate.GetColumnPos(), 1u);
+        UNIT_ASSERT(predicate.Evaluate(makeRow(*after, 0)) == Tier(1));
+        UNIT_ASSERT(predicate.Evaluate(makeRow(*after, Now.MicroSeconds())) == Tier(0));
     }
 
     Y_UNIT_TEST(PolicyChanges) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
 
         auto decide = [&](const TTieringPolicy& policy, TDuration age) {
-            TTierPredicate predicate(policy, *lay);
-            predicate.Bind(Now);
+            TTierPredicate predicate(policy);
+            predicate.Bind(Now, *lay);
             return EvaluateValue(*lay, predicate, (Now - age).MicroSeconds());
         };
 
@@ -433,20 +472,26 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
 
         auto unknownColumn = MakePolicy({{TDuration::Days(1), 1}});
         unknownColumn.ColumnTag = 100;
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(unknownColumn, *lay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(unknownColumn).Bind(Now, *lay), yexception);
 
         auto stringLay = MakeLayout(NScheme::NTypeIds::String);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}}), *stringLay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}})).Bind(Now, *stringLay), yexception);
 
         auto uintLay = MakeLayout(NScheme::NTypeIds::Uint64);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}}), *uintLay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}})).Bind(Now, *uintLay), yexception);
 
         // Rules must go from the coldest tier to the warmest
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}}), *lay), yexception);
-        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(1), 2}}), *lay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(1), 2}})), yexception);
 
-        TTierPredicate unbound(MakePolicy({{TDuration::Days(1), 1}}), *lay);
+        TTierPredicate unbound(MakePolicy({{TDuration::Days(1), 1}}));
         UNIT_ASSERT_EXCEPTION(EvaluateValue(*lay, unbound, ui64(0)), yexception);
+
+        // A failed bind leaves the predicate unbound
+        TTierPredicate rebound(MakePolicy({{TDuration::Days(1), 1}}));
+        rebound.Bind(Now, *lay);
+        UNIT_ASSERT_EXCEPTION(rebound.Bind(Now, *stringLay), yexception);
+        UNIT_ASSERT_EXCEPTION(EvaluateValue(*lay, rebound, ui64(0)), yexception);
     }
 
 }

@@ -73,21 +73,24 @@ namespace NTable {
     /**
      * Evaluates the desired tier of a row according to a tiering policy.
      *
-     * Bind() converts thresholds into the column's native representation once,
-     * so Evaluate() is a single comparison per rule without allocations.
+     * Bind() resolves the column in the given scheme and converts thresholds into
+     * the column's native representation once, so Evaluate() is a single
+     * comparison per rule without allocations. Rows passed to Evaluate() must
+     * follow the layout of the scheme from the last Bind() call.
      * Comparison semantics match row table TTL (value <= now - offset).
      */
     class TTierPredicate {
     public:
         static constexpr ui32 DefaultTierId = 0;
 
-        TTierPredicate(const TTieringPolicy& policy, const TRowScheme& scheme);
+        explicit TTierPredicate(const TTieringPolicy& policy);
 
-        void Bind(TInstant now);
+        void Bind(TInstant now, const TRowScheme& scheme);
 
         TTierDecision Evaluate(const TRowState& row) const;
 
         TPos GetColumnPos() const {
+            Y_ENSURE(Bound);
             return Pos;
         }
 
@@ -106,8 +109,8 @@ namespace NTable {
 
     private:
         const TTieringPolicy Policy;
-        const NScheme::TTypeInfo Type;
-        const TPos Pos;
+        NScheme::TTypeInfo Type;
+        TPos Pos = Max<TPos>();
         TVector<TThreshold> Thresholds;
         bool Bound = false;
     };

@@ -66,7 +66,7 @@ not only successful-row comparisons.
 | Logical operators and joins | [concrete bag reference](ut/test_logical_reference.py), [operator and mutation tests](ut/test_verify.py) |
 | StageGraph and routing | [concrete two-task reference](ut/test_stagegraph_reference.py), [passive ports and shared choices](ut/test_stage_ports.py), [compaction tests](ut/test_stage_compaction.py) |
 | NULL/scalars/Decimals/subplans/windows | [semantic unit tests](ut) and cross-language exporter mutations |
-| Sort/Limit/result languages | [sort tests](ut/test_sort.py), [limit tests](ut/test_limit.py) |
+| Sort/Limit/result languages | [sort tests](ut/test_sort.py), [limit tests](ut/test_limit.py), [native Sort/Merge NULL-order comparator and mutation checks](native_cpp_ut/native_snapshot_ut.cpp) |
 | SMT ownership/rendering/solver protocol | [SMT tests](ut/test_smt.py), [verdict tests](ut/test_verify.py) |
 | Reach and operational regressions | [coverage policy](benchmark_ut/coverage_policy.json), [benchmark runbook](BENCHMARK_COVERAGE.md) |
 

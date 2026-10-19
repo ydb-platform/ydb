@@ -7,6 +7,7 @@
 #include <ydb/core/scheme_types/scheme_decimal_type.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -16,6 +17,7 @@
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 #include <util/folder/tempdir.h>
@@ -530,6 +532,73 @@ void CheckNativeInitialScalarTypes(bool predicate) {
     UNIT_ASSERT_VALUES_EQUAL(Verify(sink.Results.front().Json, sink.Results.back().Json), "VERIFIED_BOUNDED");
 }
 
+void CheckNativeSortNullPlacement(bool merge) {
+    for (bool ascending : {false, true}) {
+        // This is the optional-value comparator used by WideSort and DQ Merge.
+        const bool nullsFirst = NMiniKQL::CompareValues(NUdf::EDataSlot::Int32,
+            ascending, true, NUdf::TUnboxedValuePod(), NUdf::TUnboxedValuePod(i32(1))) < 0;
+        UNIT_ASSERT_VALUES_EQUAL(nullsFirst, ascending);
+        for (bool sourceNullsFirst : {false, true}) {
+            TFixture fixture;
+            auto read = fixture.Read();
+            read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+            fixture.SetType(*read, {
+                {fixture.Key, fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)},
+                {fixture.Group, fixture.Expr.MakeType<TOptionalExprType>(
+                    fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String))}});
+            const TSortIUs keys{{fixture.Group, {ascending, sourceNullsFirst}}};
+            auto sort = MakeIntrusive<TOpSort>(read, TPositionHandle(), keys);
+            sort->Type = read->Type;
+            TIntrusivePtr<IOperator> input = sort;
+            if (merge) {
+                input = MakeIntrusive<TOpLimit>(sort, TPositionHandle(),
+                    MakeConstant("Uint64", "2", TPositionHandle(), &fixture.Expr), EOpPhase::Undefined);
+                input->Type = read->Type;
+            }
+            TOpRoot root(input, TPositionHandle(), {{fixture.Group, "value"}, {fixture.Key, "key"}});
+            const auto before = fixture.Export(root);
+            auto initial = Parse(before);
+            size_t sorts = 0;
+            for (const auto& node : initial["plan"]["nodes"].GetArraySafe()) {
+                if (node["op"].GetStringSafe() == "sort") {
+                    ++sorts;
+                    UNIT_ASSERT_VALUES_EQUAL(node["order"][0]["nulls_first"].GetBooleanSafe(), nullsFirst);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(sorts, 1);
+            fixture.StageSerial(root);
+            if (merge) {
+                auto& graph = root.PlanProps.StageGraph;
+                const auto producer = *sort->Props.StageId;
+                const auto consumer = graph.AddStage();
+                input->Props.StageId = consumer;
+                graph.Connect(producer, consumer, MakeIntrusive<TMergeConnection>(keys, graph.GetOutputIndex(producer)));
+            }
+            const auto after = fixture.Export(root);
+            auto final = Parse(after);
+            if (merge) {
+                size_t merges = 0;
+                for (const auto& edge : final["stage_graph"]["edges"].GetArraySafe()) {
+                    if (edge["kind"].GetStringSafe() == "merge") {
+                        ++merges;
+                        UNIT_ASSERT_VALUES_EQUAL(edge["order"][0]["nulls_first"].GetBooleanSafe(), nullsFirst);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(merges, 1);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            if (!merge) {
+                for (auto& node : final["plan"]["nodes"].GetArraySafe()) {
+                    if (node["op"].GetStringSafe() == "sort") {
+                        node["order"][0]["nulls_first"] = !ascending;
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, NJson::WriteJson(final, false)), "COUNTEREXAMPLE");
+            }
+        }
+    }
+}
+
 TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
     TFixture fixture;
     auto read = fixture.Read();
@@ -546,6 +615,14 @@ TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
+    Y_UNIT_TEST(NativeSortUsesPhysicalNullPlacement) {
+        CheckNativeSortNullPlacement(false);
+    }
+
+    Y_UNIT_TEST(NativeMergeUsesPhysicalNullPlacement) {
+        CheckNativeSortNullPlacement(true);
+    }
+
     Y_UNIT_TEST(InitialBoundaryMaterializesNativeFilterTypes) {
         CheckNativeInitialScalarTypes(true);
     }

@@ -119,7 +119,10 @@ template <class TOp>
 TVector<TSnapshotSortElement> SnapshotSortElements(const TOp& op) {
     TVector<TSnapshotSortElement> result;
     for (const auto& [column, order] : op.GetSortElements().Items()) {
-        result.push_back({SnapshotIU(column), order.Ascending, order.NullsFirst});
+        // Native Sort/WideSort lower only the direction. Their complete key
+        // order puts NULL first in ASC and last in DESC; the source flag is
+        // not passed to either physical primitive.
+        result.push_back({SnapshotIU(column), order.Ascending, order.Ascending});
     }
     return result;
 }
@@ -267,7 +270,8 @@ IOperator* SnapshotUnionInput(const TOpUnionAll& op, size_t index) {
 TVector<TSnapshotSortElement> SnapshotMergeOrder(const TMergeConnection& connection) {
     TVector<TSnapshotSortElement> result;
     for (const auto& [id, order] : connection.Order.Items()) {
-        result.push_back({SnapshotIU(id), order.Ascending, order.NullsFirst});
+        // DqCnMerge likewise receives the direction, not the source NULL flag.
+        result.push_back({SnapshotIU(id), order.Ascending, order.Ascending});
     }
     return result;
 }

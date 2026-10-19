@@ -31,7 +31,7 @@ and `/tmp/rbo-string-padding-main-tests.log`. The two window targets peaked at
 `/tmp/rbo-shared-window-sort-main-{before,after}.log`. These are native physical
 construction/type checks; SQL execution and the TPCH/TPCDS census remain pending.
 
-The rebased verifier's focused native target passed all **25 tests**. Normal
+The rebased verifier's focused native target passed all **27 tests**. Normal
 Initial/Final proofs cover repeated result positions, stored-String copies,
 whole-partition Decimal SUM/AVG, and one shared logical read expanded into two
 final scans. Deliberate output, window-function, and join-key changes produce
@@ -43,6 +43,18 @@ one shared producer. Native tests prove both forms, including compacted live
 output indices after a port disappears; a changed join key yields a
 counterexample and an incorrect port index is rejected. Nested replication and
 work appended inside a port's producer stage remain outside native admission.
+
+Native Sort and Merge export now records absolute NULL placement from the
+physical direction: first in ASC, last in DESC. Main's lowering passes only the
+direction to Sort/WideSort and DqCnMerge, while the old exporter copied the
+source flag unchanged. Both new regression tests failed before the repair;
+all 27 native tests passed afterward, with peak aggregate RSS of 10.36 GiB.
+The tests compare against the production optional-value comparator, prove
+Initial/Final pairs for both directions and source-flag values, and obtain
+counterexamples when the exported sort NULL placement is deliberately reversed.
+Logs: `/tmp/rbo-native-null-order-before.log` and
+`/tmp/rbo-native-null-order-after.log`. This is a verifier encoding repair,
+not a claim of a new SQL runtime defect.
 
 The model admits multiple stage sinks only as complete, ordered column
 bijections of one local producer, with every port exported and connected once.

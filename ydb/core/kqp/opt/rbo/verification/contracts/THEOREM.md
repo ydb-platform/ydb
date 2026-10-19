@@ -23,6 +23,15 @@ projection of direct columns. It preserves multiplicity, order, and errors when
 applied inside each source task. Calculations and predicates inside row-storage
 source stages remain excluded.
 
+Native Sort and Merge ordering is exported from their reviewed physical
+lowering: ascending keys put NULL first and descending keys put it last.
+Sort/WideSort and DqCnMerge receive the direction alone, so the source
+`TSortOrder::NullsFirst` flag does not change their emitted comparison. Native
+fixtures check this against the production optional-value comparator and
+require a counterexample after reversing the exported NULL placement. If the
+lowering starts honoring a separate NULL-order flag, this export rule must be
+reviewed with it.
+
 A stage may also end in passive output ports of one shared local producer.
 Every port is a complete, ordered column bijection with no computation or error
 marker; each must be exported and connected exactly once. The producer is

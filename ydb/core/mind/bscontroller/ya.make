@@ -73,7 +73,7 @@ SRCS(
     sys_view.cpp
     sys_view.h
     table_merger.h
-    types.cpp
+    types.cpp  # gn: group_mapper
     types.h
     update_group_latencies.cpp
     update_last_seen_ready.cpp

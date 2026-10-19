@@ -104,7 +104,7 @@ namespace NKikimr {
             auto index = ReadShardedTable(server, kIndexTable);
             Cerr << "Index:" << Endl;
             Cerr << index << Endl;
-            return std::move(index);
+            return index;
         }
 
         void CreateMainTable(Tests::TServer::TPtr server, TActorId sender, const char* keyType = "Uint64") {

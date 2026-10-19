@@ -39,7 +39,14 @@ unittest_executable("ut") {
   test_depends_unbuilt = [ "//ydb/public/tools/ydb_recipe" ]
 
   link_select = [
+    "YqlServicePolicy=stub",
     "allocator=tcmalloc",
+    "minikql_codegen=no_llvm",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "wasm=wasm_default",
     "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=no_llvm",
   ]
 }

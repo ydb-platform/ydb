@@ -12,7 +12,7 @@ library("pq_helpers") {
     # "//library/cpp/threading/future",
     "//ydb/library/actors/testlib",
     "//ydb/library/testlib/common",
-    # "//ydb/library/yql/providers/pq/gateway/clients/message_stream",
+    "//ydb/library/yql/providers/pq/gateway/clients/message_stream",
   ]
 
   sources = [ "mock_pq_gateway.cpp" ]

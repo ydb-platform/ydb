@@ -15,6 +15,7 @@ library("helpers") {
   deps = [
     # "//library/cpp/testing/unittest",
     # "//ydb/core/formats/arrow",
+    "//ydb/core/grpc_services",  # peerdir only
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/grpc_services/local_rpc",
     # "//ydb/core/kqp/common/simple",

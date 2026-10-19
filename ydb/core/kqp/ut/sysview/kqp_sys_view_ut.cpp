@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         const size_t sessionsCount = 50;
         std::vector<NYdb::NQuery::TSession> sessionsSet;
         for(ui32 i = 0; i < sessionsCount; i++) {
-            sessionsSet.emplace_back(std::move(client.GetSession().GetValueSync().GetSession()));
+            sessionsSet.emplace_back(client.GetSession().GetValueSync().GetSession());
         }
 
         Cerr << kikimr.GetTestServer().GetRuntime()->GetNodeId() << Endl;
@@ -919,7 +919,7 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         const size_t sessionsCount = 5;
         std::vector<NYdb::NQuery::TSession> sessionsSet;
         for(ui32 i = 0; i < sessionsCount; i++) {
-            sessionsSet.emplace_back(std::move(client.GetSession().GetValueSync().GetSession()));
+            sessionsSet.emplace_back(client.GetSession().GetValueSync().GetSession());
         }
 
         // Wait a bit for sessions to be registered

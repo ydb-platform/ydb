@@ -23,14 +23,14 @@ library("common") {
     # "//ydb/core/kqp/query_data",
     # "//ydb/core/node_whiteboard",
     # "//ydb/library/aclib",
-    # "//ydb/library/yql/providers/common/http_gateway/ut_helpers",
+    "//ydb/library/yql/providers/common/http_gateway/ut_helpers",
     # "//ydb/library/yql/utils/actor_log",
     # "//ydb/services/metadata",
     # "//ydb/services/workload_manager",
-    # "//ydb/services/workload_manager/actors",
-    # "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
-    # "//ydb/services/workload_manager/service",
-    # "//ydb/services/workload_manager/tables",
+    "//ydb/services/workload_manager/actors",
+    "//ydb/services/workload_manager/metadata_subscription/resource_pool_classifier",
+    "//ydb/services/workload_manager/service",
+    "//ydb/services/workload_manager/tables",
   ]
 
   sources = [ "workload_service_ut_common.cpp" ]

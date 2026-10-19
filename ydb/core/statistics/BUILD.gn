@@ -33,6 +33,7 @@ library("ut_common") {
 
   deps = [
     # "//ydb/core/base",
+    "//ydb/core/grpc_services",  # peerdir only
     # "//ydb/core/grpc_services/base",
     # "//ydb/core/grpc_services/local_rpc",
     "//ydb/core/statistics/service:service_id",

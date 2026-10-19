@@ -9,9 +9,7 @@ library("api") {
 
   sources = [
     "bytecode.cpp",
-    "compartment.cpp",
     "data_transfer.cpp",
-    "function.cpp",
     "memory_pool.cpp",
     "type_builder.cpp",
   ]
@@ -27,4 +25,15 @@ library("api") {
   ]
 
   link_slot_self = true
+}
+
+library("wasm_default") {
+  deps = [
+    ":api",
+    "//library/cpp/yt/assert",
+  ]
+
+  sources = [ "stubs.cpp" ]
+
+  link_slot_provides = [ "wasm" ]
 }

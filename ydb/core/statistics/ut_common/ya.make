@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/statistics
     ydb/core/statistics/common
     yql/essentials/minikql/computation
+    ydb/core/grpc_services  # TGrpcRequestCall<...>::CreateRpcActor of DoLocalRpc
 )
 
 YQL_LAST_ABI_VERSION()

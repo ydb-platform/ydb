@@ -70,6 +70,7 @@ unittest_executable("ut") {
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/public/sdk/cpp/src/client/types",
     "//ydb/public/sdk/cpp/src/client/types/credentials",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/types/exceptions",
     "//ydb/public/sdk/cpp/src/client/types/status",
     "//ydb/public/sdk/cpp/src/client/value",

@@ -34,6 +34,7 @@ unittest_executable("scheme") {
     "//ydb/public/sdk/cpp/src/client/scheme",
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/services/workload_manager/ut/common",
     "//yql/essentials/parser/pg_wrapper",  # peerdir only
     "//yql/essentials/sql/pg",  # peerdir only

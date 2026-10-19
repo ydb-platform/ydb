@@ -15,7 +15,7 @@ library("common") {
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/library/accessor",
     "//ydb/library/formats/arrow/simple_builder",
-    # "//ydb/library/testlib/common",
+    "//ydb/library/testlib/common",
     # "//ydb/library/yql/providers/s3/actors_factory",
     # "//ydb/public/lib/scheme_types",
     "//ydb/public/lib/yson_value",

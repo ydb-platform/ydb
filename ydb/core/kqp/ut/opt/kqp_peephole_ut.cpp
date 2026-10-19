@@ -1,14 +1,10 @@
+#include <ydb/core/kqp/opt/peephole/kqp_opt_peephole_rules.h>
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
-namespace NKikimr::NKqp::NOpt {
-NYql::NNodes::TExprBase KqpEliminateWideMapPackUnpack(
-    const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
-    NYql::TTypeAnnotationContext& typesCtx);
-}
 
 namespace NKikimr::NKqp {
 

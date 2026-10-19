@@ -112,7 +112,7 @@ std::optional<NJson::TJsonValue> FindReqJsonCompleted(TStringBuf logs, TStringBu
     return std::nullopt;
 }
 
-double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
+[[maybe_unused]] double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nIterations) {
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -129,7 +129,7 @@ double TimeQuery(NKikimr::NKqp::TKikimrRunner& kikimr, TString query, int nItera
     return elapsed_time / nIterations;
 }
 
-double TimeQuery(TString schema, TString query, int nIterations) {
+[[maybe_unused]] double TimeQuery(TString schema, TString query, int nIterations) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
     TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
@@ -7776,8 +7776,8 @@ FROM (
         hub->GetInput()->Props.StageId = producerStage;
         leftPtr->Props.StageId = rightPtr->Props.StageId = producerStage;
         mergePtr->Props.StageId = unionStage;
-        graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0));
-        graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1));
+        graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0u));
+        graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1u));
         ComputePlanLiveness(*root);
         UNIT_ASSERT(GetLiveOut(leftPtr) == (TUnorderedIUs{a, b}));
         UNIT_ASSERT(GetLiveOut(rightPtr) == (TUnorderedIUs{rightA, rightC}));

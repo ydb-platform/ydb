@@ -1,6 +1,6 @@
 unittest_executable("ut") {
   public_deps = [
-    "//ydb/public/lib/ydb_cli/commands",
+    "//ydb/public/lib/ydb_cli/commands/command_base",
     "//ydb/public/lib/ydb_cli/common",
     "//ydb/public/lib/ydb_cli/topic",
     "//ydb/public/sdk/cpp/src/client/topic",
@@ -19,6 +19,7 @@ unittest_executable("ut") {
     "//ydb/library/aclib",
     "//ydb/public/api/protos",
     "//ydb/public/lib/experimental",  # peerdir only
+    "//ydb/public/lib/ydb_cli/commands",
     "//ydb/public/lib/yson_value",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/driver",
     "//ydb/public/sdk/cpp/src/client/persqueue_public",

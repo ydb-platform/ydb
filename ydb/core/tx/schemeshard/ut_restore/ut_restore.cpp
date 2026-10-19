@@ -5604,7 +5604,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void CancelShouldSucceed(TDelayFunc delayFunc, bool enableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         std::vector<std::string> auditLines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         TTestEnv env(runtime, TTestEnvOptions());
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -6176,7 +6176,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST_FLAG(AuditCompletedImport, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         std::vector<std::string> auditLines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
@@ -6271,7 +6271,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST_FLAG(AuditCancelledImport, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         std::vector<std::string> auditLines;
-        runtime.AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
+        runtime.AuditLogBackends = CreateTestAuditLogBackends(auditLines);
 
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);

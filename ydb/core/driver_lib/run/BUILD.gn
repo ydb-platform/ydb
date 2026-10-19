@@ -11,7 +11,7 @@ library("_self") {
     "//ydb/core/formats",
     "//ydb/core/fq/libs/config/protos",
     # "//ydb/core/fq/libs/shared_resources/interface",
-    # "//ydb/core/http_proxy",
+    "//ydb/core/http_proxy",
     "//ydb/core/kqp/common",
     "//ydb/core/memory_controller",
     "//ydb/core/mind",

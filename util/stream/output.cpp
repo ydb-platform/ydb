@@ -133,6 +133,11 @@ void Out<std::filesystem::path>(IOutputStream& o, const std::filesystem::path& p
 }
 
 template <>
+void Out<std::nullopt_t>(IOutputStream& o, const std::nullopt_t&) {
+    o << TStringBuf("null");
+}
+
+template <>
 void Out<TStringBuf>(IOutputStream& o, const TStringBuf& p) {
     o.Write(p.data(), p.length());
 }

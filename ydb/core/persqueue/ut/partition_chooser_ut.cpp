@@ -2,6 +2,8 @@
 
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 #include <ydb/core/persqueue/writer/partition_chooser_impl.h>
+#include <ydb/core/persqueue/writer/partition_chooser_impl__old_chooser_actor.h>
+#include <ydb/core/persqueue/writer/partition_chooser_impl__sm_chooser_actor.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 

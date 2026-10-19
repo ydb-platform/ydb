@@ -15,6 +15,7 @@ SRCS(
 PEERDIR(
     ydb/apps/version
     ydb/core/load_test/ddisk
+    ydb/core/load_test/blobstorage  # CreatePDisk*LoadTest of device_test_tool_pdisk_test.h
     ydb/library/pdisk_io
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg

@@ -53,7 +53,7 @@ void RequestQuota(auto& runtime, auto& quoterId, auto& edgeActorId) {
 THolder<TEvPQ::TEvApproveWriteQuota> WaitForQuotaApproved(TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(1)) {
     auto event = runtime.GrabEdgeEvent<TEvPQ::TEvApproveWriteQuota>(timeout);
     UNIT_ASSERT(event);
-    return std::move(event);
+    return event;
 }
 
 void ConsumeQuota(auto& runtime, auto& quoterId, auto& edgeActorId, size_t bytes, size_t messages) {

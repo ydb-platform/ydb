@@ -518,7 +518,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         bool droppedOneResult = false;
 
         kikimr.GetTestServer().GetRuntime()->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (auto *evRead = ev->CastAsLocal<TEvDataShard::TEvReadResult>()) {
+            if (ev->CastAsLocal<TEvDataShard::TEvReadResult>()) {
                 if (droppedOneResult) {
                     // Drop one of two results, so only one cancel would be sent to the DataShard
                     return TTestActorRuntime::EEventAction::PROCESS;
@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(KqpKv) {
                 droppedOneResult = true;
                 return TTestActorRuntime::EEventAction::DROP;
             }
-            if (auto *evReadCancel = ev->CastAsLocal<TEvDataShard::TEvReadCancel>()) {
+            if (ev->CastAsLocal<TEvDataShard::TEvReadCancel>()) {
                 cancelCount++;
             }
             return TTestActorRuntime::EEventAction::PROCESS;

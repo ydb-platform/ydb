@@ -70,6 +70,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/monitoring
     ydb/services/ydb
     ydb/services/keyvalue
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 YQL_LAST_ABI_VERSION()

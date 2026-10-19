@@ -19,6 +19,7 @@ library("commands") {
     # "//ydb/public/lib/operation_id",
     # "//ydb/public/lib/udf/manifest",
     # "//ydb/public/lib/ydb_cli/commands",
+    # "//ydb/public/lib/ydb_cli/commands/command_base",
     # "//ydb/public/lib/ydb_cli/common",
     # "//ydb/public/lib/ydb_cli/dump",  # peerdir only
     # "//ydb/public/lib/ydb_cli/dump/util",

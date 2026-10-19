@@ -13,7 +13,7 @@ library("common") {
 
   deps = [
     "//ydb/core/persqueue",  # peerdir only
-    # "//ydb/core/persqueue/public/schema",
+    "//ydb/core/persqueue/public/schema",
     "//ydb/core/protos",
   ]
 

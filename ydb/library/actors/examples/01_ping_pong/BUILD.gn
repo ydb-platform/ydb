@@ -6,5 +6,15 @@ linked_executable("example_01_ping_pong") {
 
   sources = [ "main.cpp" ]
 
-  link_select = [ "allocator=lfalloc" ]
+  link_select = [
+    "YqlServicePolicy=stub",
+    "allocator=lfalloc",
+    "minikql_codegen=no_llvm",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "wasm=wasm_default",
+    "yql_pg_runtime=pg_dummy",
+    "yql_pg_sql_translator=pg_dummy",
+    "yt_codegen=no_llvm",
+  ]
 }

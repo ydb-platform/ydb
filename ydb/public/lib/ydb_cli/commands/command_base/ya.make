@@ -2,6 +2,7 @@ LIBRARY(ydb_cli_command_base)
 
 SRCS(
     ../ydb_command.cpp
+    ../ydb_command.h
 )
 
 PEERDIR(

@@ -19,21 +19,6 @@ TWebAssemblyMemoryPool::TWebAssemblyMemoryPool(IWebAssemblyCompartment* compartm
     : Compartment_(compartment)
 { }
 
-// Y_WEAK is a no-op on Windows (COFF); omitting the stub avoids duplicate
-// symbols with the strong override in library/wasm/engine.
-// In the GN build (shared libraries) the engine is a link slot provider and
-// the stubs would win over it at run time: they are left out there.
-#if defined(__GNUC__) && !defined(GN_SLOT_SELF_wasm)
-Y_WEAK TWebAssemblyMemoryPool::~TWebAssemblyMemoryPool()
-{
-    try {
-        Clear();
-    } catch (...) {
-        // FreeBytes may throw; never throw from dtor.
-    }
-}
-#endif
-
 TWebAssemblyMemoryPool::TWebAssemblyMemoryPool(TWebAssemblyMemoryPool&& other) noexcept
     : Compartment_(std::exchange(other.Compartment_, nullptr))
     , Size_(std::exchange(other.Size_, 0))

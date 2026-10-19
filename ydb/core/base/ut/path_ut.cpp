@@ -72,6 +72,8 @@ Y_UNIT_TEST_SUITE(Path) {
         }
     }
 
+#ifndef TSTRING_IS_STD_STRING
+    // copy-on-write of TString: there is none when it is std::string
     Y_UNIT_TEST(CanonizedStringIsSame1) {
         if (!TStringUseCow) {
             return; // the result is a copy without copy-on-write
@@ -89,6 +91,7 @@ Y_UNIT_TEST_SUITE(Path) {
         const TString& result = DoCanonizePathFast(in);
         UNIT_ASSERT_VALUES_EQUAL((void*)in.data(), (void*)result.data());
     }
+#endif
 
 #ifdef UT_PERF_TEST
     Y_UNIT_TEST(CanonizeOldPerf) {

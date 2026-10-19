@@ -73,7 +73,7 @@ namespace NTests {
 
         THolder<TTopicWorkloadWriterProducer> TFixture::CreateProducer() {
             auto producer = MakeHolder<TTopicWorkloadWriterProducer>(
-                std::move(CreateParams()),
+                CreateParams(),
                 StatsCollector,
                 "my-test-producer",
                 1,

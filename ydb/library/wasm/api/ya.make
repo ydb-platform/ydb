@@ -2,10 +2,9 @@ LIBRARY()
 
 SRCS(
     bytecode.cpp
-    compartment.cpp
     data_transfer.cpp
-    function.cpp
     memory_pool.cpp
+    stubs.cpp  # gn: default provider wasm
     type_builder.cpp
     compartment.h  # gn: slot wasm self
     data_transfer.h  # gn: slot wasm self

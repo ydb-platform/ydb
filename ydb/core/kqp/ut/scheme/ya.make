@@ -35,6 +35,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/topic
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 YQL_LAST_ABI_VERSION()

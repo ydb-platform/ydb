@@ -1,7 +1,5 @@
 library("dbg_output") {
-  public_deps = [
-    # "//library/cpp/colorizer",
-  ]
+  public_deps = [ "//library/cpp/colorizer" ]
 
   sources = [
     "dump.cpp",

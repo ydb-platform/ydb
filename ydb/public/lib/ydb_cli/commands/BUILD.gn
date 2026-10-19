@@ -10,6 +10,7 @@ library("commands") {
     "//library/cpp/unified_agent_client",
     "//ydb/library/workload/abstract",
     # "//ydb/public/lib/json_value",
+    "//ydb/public/lib/ydb_cli/commands/command_base",
     "//ydb/public/lib/ydb_cli/common",
     "//ydb/public/lib/ydb_cli/topic",
     "//ydb/public/sdk/cpp/src/client/discovery",
@@ -57,7 +58,6 @@ library("commands") {
     "//ydb/public/api/protos",
     # "//ydb/public/api/protos/annotations",  # peerdir only
     "//ydb/public/lib/stat_visualization",
-    "//ydb/public/lib/ydb_cli/commands/command_base",  # peerdir only
     "//ydb/public/lib/ydb_cli/commands/interactive",
     "//ydb/public/lib/ydb_cli/commands/sdk_core_access",
     "//ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json",

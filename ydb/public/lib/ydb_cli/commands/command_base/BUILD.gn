@@ -1,9 +1,10 @@
 library("command_base") {
-  deps = [
+  public_deps = [
+    # "//library/cpp/logger",
     # "//ydb/public/lib/ydb_cli/commands",
     "//ydb/public/lib/ydb_cli/common",
-    "//ydb/public/sdk/cpp/src/client/draft",  # peerdir only
-    "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only
+    "//ydb/public/sdk/cpp/src/client/draft",
+    "//ydb/public/sdk/cpp/src/client/driver",
   ]
 
   sources = [ "//ydb/public/lib/ydb_cli/commands/ydb_command.cpp" ]

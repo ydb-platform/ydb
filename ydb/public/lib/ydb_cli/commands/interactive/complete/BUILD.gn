@@ -8,7 +8,7 @@ library("complete") {
 
   deps = [
     # "//ydb/library/yverify_stream",
-    # "//ydb/public/lib/ydb_cli/commands",
+    # "//ydb/public/lib/ydb_cli/commands/command_base",
     # "//ydb/public/sdk/cpp/src/client/table",
     "//yql/essentials/sql/v1/ide/completion",
     # "//yql/essentials/sql/v1/ide/completion/name/cache/local",

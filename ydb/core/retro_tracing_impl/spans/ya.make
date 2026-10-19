@@ -13,5 +13,6 @@ PEERDIR(
 )
 
 PROVIDES(retro_spans)
+# gn: default provider
 
 END()

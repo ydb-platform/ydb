@@ -1,5 +1,5 @@
 group("blamka") {
-  deps = [
-    # "//library/cpp/digest/argonish/internal/rotations",  # peerdir only
+  public_deps = [
+    # "//library/cpp/digest/argonish/internal/rotations",
   ]
 }

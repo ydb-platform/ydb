@@ -52,6 +52,7 @@ unittest_executable("datastreams") {
     "//ydb/public/sdk/cpp/src/client/result",
     "//ydb/public/sdk/cpp/src/client/topic",
     "//ydb/public/sdk/cpp/src/client/types",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/services/metadata/abstract",
     "//ydb/services/scheme_secret",
     "//ydb/services/workload_manager/ut/common",

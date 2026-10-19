@@ -30,7 +30,7 @@ PEERDIR(
     ydb/core/load_test/nbs
     ydb/core/mind
     ydb/core/mind/bscontroller
-    ydb/core/mind/hive
+    ydb/core/mind/hive  # gn: public dep
     ydb/core/retro_tracing_impl/distributed_collector
     ydb/core/sys_view/service
     ydb/core/tx/scheme_board

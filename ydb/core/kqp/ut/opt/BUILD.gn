@@ -4,6 +4,7 @@ unittest_executable("opt") {
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/kqp",  # peerdir only
+    "//ydb/core/kqp/opt/peephole",
     "//ydb/core/kqp/provider",
     "//ydb/core/kqp/runtime",
     "//ydb/core/kqp/ut/common",

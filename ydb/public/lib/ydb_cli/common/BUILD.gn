@@ -18,7 +18,7 @@ library("common") {
     "//ydb/library/plan2svg",
     "//ydb/public/api/protos",
     "//ydb/public/lib/json_value",
-    # "//ydb/public/lib/ydb_cli/commands",
+    # "//ydb/public/lib/ydb_cli/commands/command_base",
     "//ydb/public/sdk/cpp/src/client/coordination",
     "//ydb/public/sdk/cpp/src/client/draft",
     "//ydb/public/sdk/cpp/src/client/driver",
@@ -50,6 +50,7 @@ library("common") {
     "//library/cpp/string_utils/url",
     "//ydb/library/arrow_parquet",
     # "//ydb/library/yverify_stream",
+    # "//ydb/public/lib/ydb_cli/commands",
     "//ydb/public/lib/ydb_cli/dump/util",
     # "//ydb/public/lib/yson_value",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/proto",

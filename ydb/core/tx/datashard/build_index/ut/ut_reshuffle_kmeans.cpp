@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         auto posting = ReadShardedTable(server, kPostingTable);
         Cerr << "Posting:" << Endl;
         Cerr << posting << Endl;
-        return std::move(posting);
+        return posting;
     }
 
     // Returns the LastKeyAck from the DONE response (collected after all IN_PROGRESS messages are drained).

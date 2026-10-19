@@ -12,7 +12,7 @@ library("combinatory") {
     # "//library/cpp/monlib/dynamic_counters",
     # "//ydb/core/base",
     # "//ydb/core/formats/arrow",
-    # "//ydb/core/kqp/ut/olap/helpers",
+    "//ydb/core/kqp/ut/olap/helpers",
     "//ydb/core/protos",
     # "//ydb/core/testlib",
     # "//ydb/core/tx/columnshard/engines/reader/common_reader/iterator",

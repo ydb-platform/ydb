@@ -13,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib
     ydb/core/protos
+    ydb/core/grpc_services  # TGrpcRequestCall<...>::CreateRpcActor of DoLocalRpc
 )
 
 YQL_LAST_ABI_VERSION()

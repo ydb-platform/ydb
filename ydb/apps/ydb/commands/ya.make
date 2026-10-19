@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/resource
     ydb/public/sdk/cpp/src/client/iam
     ydb/public/lib/ydb_cli/commands
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 END()

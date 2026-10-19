@@ -8,6 +8,7 @@ unittest_executable("ut") {
     "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/load_test/blobstorage",  # peerdir only
     "//ydb/core/load_test/ddisk",  # peerdir only
     "//ydb/library/pdisk_io",
     "//ydb/tools/stress_tool/proto",
@@ -28,10 +29,12 @@ unittest_executable("ut") {
   include_dirs = [ "//ydb/tools/stress_tool/lib" ]
 
   link_select = [
-    "YqlServicePolicy=stub",
+    "YqlServicePolicy=exception_policy",
     "allocator=tcmalloc",
     "minikql_codegen=llvm16",
     "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",

@@ -37,6 +37,7 @@ unittest_executable("service") {
     "//ydb/public/sdk/cpp/src/client/query",
     "//ydb/public/sdk/cpp/src/client/scheme",
     "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/types/exceptions",
     "//ydb/public/sdk/cpp/src/client/types/operation",
     "//ydb/services/workload_manager",

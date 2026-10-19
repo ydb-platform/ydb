@@ -76,6 +76,16 @@ TRIVIAL_MACROS = MODULE_MACROS | {
     "DEFAULT",   # TODO: temporary ignore (its variable stays unset in IF conditions)
     "EXPORTS_SCRIPT", "LINKER_SCRIPT",   # TODO: temporary ignore (ydbd: dynamic exports, debug stripping)
     "GLOBAL_SRCS",   # SRCS with every file GLOBAL
+    "HEADERS",   # the dirs of the module's exported headers (ya's export only): nothing to build
+    "EXTRALIBS",   # -> `libs` of the hand-written <target>_private_config
+}
+
+# SRC_<kind>(file flags...): a source compiled with flags GN gives every
+# source anyway -- no LTO here, ISAs of //build/gn/config:cpu_baseline -- a
+# plain SRC
+PLAIN_SRC_MACROS = {
+    "SRC_C_NO_LTO", "SRC_CPP_NO_LTO",
+    "SRC_C_SSE2", "SRC_C_SSE3", "SRC_C_SSSE3", "SRC_C_SSE4", "SRC_C_SSE41", "SRC_C_SSE42",
 }
 # PROTO_LIBRARY macros that are pure noise in GN (python/metadata/tags are
 # irrelevant) -> drop, do not block; but GRPC() -> generate_grpc_services
@@ -163,7 +173,7 @@ TEST_RUN_MACROS = {
 }
 
 HEADER_EXTS = (".h", ".hpp", ".hh", ".hxx", ".inc", ".ipp", ".cuh")
-SOURCE_EXTS = (".cpp", ".cc", ".cxx", ".c")
+SOURCE_EXTS = (".cpp", ".cc", ".cxx", ".c", ".S")
 # translated to C++ by library() / contrib_library() themselves, see
 # //build/gn/source_kinds.gni: listed in `sources` as ya.make lists them
 TRANSLATED_EXTS = (".rl6", ".y", ".ypp")
@@ -392,6 +402,7 @@ class Module:
         self.anti_cycle_facade = False  # `# gn: anti-cycle facade`, see ANTI_CYCLE_FACADE
         self.move_into_parent = False   # `# gn: move into parent`, see MOVE_INTO_PARENT
         self.default_provider = False   # `# gn: default provider`, see DEFAULT_PROVIDER
+        self.part_provides = defaultdict(list)  # part -> the link slot it is the default provider of, see DEFAULT_PROVIDER
         self.plugins = []            # PEERDIR dirs marked `# gn: plugin`
         self.public_peerdirs = []    # PEERDIR dirs marked `# gn: public dep`
         self.test_for = None         # the module of UNITTEST_FOR(<dir>)
@@ -754,6 +765,8 @@ def _gn_directive_tokens(code, comment):
         if not code.strip():
             return ""   # a trailing directive needs an entry on its line
         return " @gn-slot:" + ":".join(words[1:])
+    if len(words) == 3 and " ".join(words[:2]) == DEFAULT_PROVIDER and code.strip():
+        return " @gn-default-provider:" + words[2]
     if len(words) >= 2 and words[1] == "headers":
         token = "@gn-headers:%s:%s" % (words[0], ",".join(words[2:]))
     elif words[0] == "peerdir":
@@ -910,6 +923,8 @@ def parse_yamake(path, directory, root):
             name = "LIBRARY"
             mod.yql_udf = True
             mod.yql_abi = "current"
+        elif name in PLAIN_SRC_MACROS:
+            name = "SRC"
         args = _take_gn_directives(mod, name, args)
         if name == "SET" and args and args[0] in _IGNORED_SET_VARS:
             if (args[0] == "PROTOC_TRANSITIVE_HEADERS"
@@ -1099,6 +1114,15 @@ def _take_gn_directives(mod, macro, args):
             mod.move_into_parent = True
         elif a == "@gn-default-provider":
             mod.default_provider = True
+        elif a.startswith("@gn-default-provider:"):
+            slot = a[len("@gn-default-provider:"):]
+            if last is None or macro not in ("SRCS", "SRC"):
+                mod.macros.append("GN<%s %s not on a source in SRCS>" % (DEFAULT_PROVIDER, slot))
+            else:
+                part = default_provider_part(slot)
+                mod.src_parts[last] = part
+                if slot not in mod.part_provides[part]:
+                    mod.part_provides[part].append(slot)
         elif a.startswith("@gn-into:"):
             value = a[len("@gn-into:"):]
             d, _, sub = value.partition(":")
@@ -2251,7 +2275,25 @@ PUBLIC_DEP = "public dep"
 # interface of the link slot and no provider of it (see link_selects). ya links
 # none there: the static link drops the code calling it; a GN library is linked
 # whole. For the stubs whose functions abort.
+#
+# On a source of SRCS, `# gn: default provider <slot>`: the source is the
+# default provider of the slot on its own -- the default definitions ya keeps
+# in the interface module itself (Y_WEAK):
+#
+#   SRCS(
+#       stubs.cpp               # gn: default provider wasm
+#   )
+#
+# such sources go to the part library("<slot>_default") with
+# link_slot_provides; the module's main target (the interface) does not
+# depend on it, a program selects it or another provider (see link_selects),
+# and a PEERDIR on the module is no choice of it.
 DEFAULT_PROVIDER = "default provider"
+
+
+def default_provider_part(slot):
+    """The part of the sources marked `# gn: default provider <slot>`."""
+    return slot + "_default"
 
 # `# gn: slot <slot> self` on a header in SRCS, see GN_DIRECTIVES: the module
 # calls the functions of its link slot itself
@@ -2303,6 +2345,9 @@ def link_slot_defaults(mods, report):
                 report.slot_defaults_bad.append((d, "no PROVIDES() of a link slot"))
             for slot in m.provides:
                 out[slot].add(os.path.basename(d))
+        for part, part_slots in sorted(m.part_provides.items()):
+            for slot in part_slots:
+                out[slot].add(part)
     for slot, values in sorted(out.items()):
         if len(values) > 1:
             report.slot_defaults_bad.append((slot, "several: " + ", ".join(sorted(values))))
@@ -2384,7 +2429,8 @@ def peerdir_reverse(mods, resolver, absorbed=True):
     return rev
 
 
-def link_selects(mods, resolver, slots, interfaces, defaults, allocators, dirs, mains, report):
+def link_selects(mods, resolver, slots, interfaces, defaults, allocators, dirs, mains, report,
+                 derived_rev=None):
     """{program or test dir: ["<slot>=<value>", ...]}: the providers of the link
     slots its PEERDIR closure has -- as ya picks them: PROVIDES() only checks
     one is there. The closure has the test framework's main of a test and the
@@ -2395,7 +2441,10 @@ def link_selects(mods, resolver, slots, interfaces, defaults, allocators, dirs, 
     its slot interfaces too). A slot whose interface is there and no provider
     gets its DEFAULT_PROVIDER (report.link_select_defaulted), or none
     (report.link_select_missing: link_slot_check fails if the GN deps link
-    the interface)."""
+    the interface). The interfaces are looked up in the derived deps of the
+    generated targets too (`derived_rev`: {dir: dirs depending on it}): an
+    #include brings a GN dep no PEERDIR has, and link_slot_check checks the GN
+    deps; a provider is never picked through them."""
     def reach(rev, keys):
         out = {}
         for key, provs in keys.items():
@@ -2409,11 +2458,21 @@ def link_selects(mods, resolver, slots, interfaces, defaults, allocators, dirs, 
         return out
     ya_rev, gn_rev = peerdir_reverse(mods, resolver, absorbed=False), peerdir_reverse(mods, resolver)
     ya_reach, gn_reach = reach(ya_rev, slots), reach(gn_rev, slots)
-    ya_ifaces, gn_ifaces = reach(ya_rev, interfaces), reach(gn_rev, interfaces)
-    out = {}
-    for d in dirs:
-        roots = {d} | set(implicit_peerdirs(mods[d], allocators, mains))
+    if derived_rev:
+        gn_dep_rev = defaultdict(set, {k: set(v) for k, v in gn_rev.items()})
+        for k, v in derived_rev.items():
+            gn_dep_rev[k] |= v
+    else:
+        gn_dep_rev = gn_rev
+    ya_ifaces, gn_ifaces = reach(ya_rev, interfaces), reach(gn_dep_rev, interfaces)
+    # the modules of the parts that provide a slot (`# gn: default provider <slot>`)
+    part_dirs = defaultdict(set)
+    for md, m in mods.items():
+        for part, part_slots in m.part_provides.items():
+            for slot in part_slots:
+                part_dirs[(slot, part)].add(md)
 
+    def select(d, roots, iface_roots):
         def found(reached):
             res = defaultdict(set)
             for (slot, value), who in reached.items():
@@ -2421,20 +2480,43 @@ def link_selects(mods, resolver, slots, interfaces, defaults, allocators, dirs, 
                     res[slot].add(value)
             return res
         ya_found, gn_found = found(ya_reach), found(gn_reach)
-        sel = []
+        sel, conflicts, defaulted, missing = [], [], [], []
         for slot in sorted(set(ya_found) | set(gn_found)):
             values = ya_found.get(slot) or gn_found[slot]
             if len(values) == 1:
                 sel.append("%s=%s" % (slot, next(iter(values))))
             else:
-                report.link_select_conflicts.append((d, slot, sorted(values)))
+                conflicts.append((d, slot, sorted(values)))
         for slot in sorted(set(interfaces) - set(ya_found) - set(gn_found)):
-            if roots & (ya_ifaces[slot] | gn_ifaces[slot]):
+            if iface_roots & (ya_ifaces[slot] | gn_ifaces[slot]):
                 if slot in defaults:
                     sel.append("%s=%s" % (slot, defaults[slot]))
-                    report.link_select_defaulted.append((d, slot, defaults[slot]))
+                    defaulted.append((d, slot, defaults[slot]))
                 else:
-                    report.link_select_missing.append((d, slot))
+                    missing.append((d, slot))
+        return sel, conflicts, defaulted, missing
+
+    out = {}
+    for d in dirs:
+        roots = {d} | set(implicit_peerdirs(mods[d], allocators, mains))
+        # a selected provider links what it depends on: the slot interfaces
+        # there need providers too -- up to a fixpoint. Its providers are
+        # looked for in the program's own closure only: a provider's PEERDIR
+        # on another slot's provider is a `# link slot` choice GN does not
+        # link (ya, linking no such provider at all, has none of it either)
+        iface_roots = set(roots)
+        while True:
+            sel, conflicts, defaulted, missing = select(d, roots, iface_roots)
+            providers = set()
+            for entry in sel:
+                slot, _, value = entry.partition("=")
+                providers |= slots.get((slot, value), set()) | part_dirs.get((slot, value), set())
+            if providers <= iface_roots:
+                break
+            iface_roots |= providers
+        report.link_select_conflicts.extend(conflicts)
+        report.link_select_defaulted.extend(defaulted)
+        report.link_select_missing.extend(missing)
         out[d] = sorted(sel)
     return out
 
@@ -2461,9 +2543,13 @@ def link_slot_providers(root, mods):
         if m.kind in KIND_MACROS and not is_test(m):
             for slot in m.provides:
                 out[(slot, os.path.basename(d))].add(d)
+    # a part providing a slot (`# gn: <part> provides <slot>`) is no PEERDIR's
+    # choice: a PEERDIR on its module means the module's main target; only a
+    # default provider or a link_select picks the part
+    part_providers = {"//%s:%s" % (d, part) for d, m in mods.items() for part in m.part_provides}
     for key, labels in _link_slot_index(root)[0].items():
-        out[key].update(l[2:].split(":")[0] for l in labels)
-    return out
+        out[key].update(l[2:].split(":")[0] for l in labels if l not in part_providers)
+    return {k: v for k, v in out.items() if v}
 
 
 _PROGRAM_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.+-]*$")
@@ -2493,7 +2579,12 @@ def gen_spec(mod, resolver, graph, report, external):
         part.name = part.part = name
         part.kind = "LIBRARY"
         part.resources = []
+        part.slot_provides = sorted(set(mod.part_provides.get(name, ())))
         parts[name] = part
+    if mod.part_provides:
+        # the slots its parts provide are theirs, not the main target's
+        spec.slot_provides = sorted(set(spec.slot_provides) - {
+            slot for slots in mod.part_provides.values() for slot in slots})
     spec.parts = [parts[n] for n in sorted(parts)]
     for slot, hs in mod.slot_headers.items():   # one per target, see _check_gn_parts
         paths = sorted(module_path(mod, resolver.root, h) for h in hs)
@@ -2690,9 +2781,13 @@ def gen_spec(mod, resolver, graph, report, external):
     # headers declare)
     # -- except a header-only interface of a link slot: its providers are
     # built on top of the module, the includers of its headers depend on it
+    # -- nor a provider of a link slot (`# gn: <part> provides <slot>`): the
+    # executable selects it or another provider, see link_selects
     code_parts = set(mod.src_parts.values()) | {p for p in mod.foreign_srcs.values() if p}
     for part in spec.parts:
         if part.slot_interface and part.part not in code_parts:
+            continue
+        if part.part in mod.part_provides:
             continue
         spec.deps.add(module_part_label(target_dir, part.part))
         spec.explicit.add(module_part_label(target_dir, part.part))
@@ -4486,8 +4581,14 @@ def main():
     # the providers of the link slots a program or a test links (ya's PEERDIR closure)
     exes = sorted(d for d, s in specs_by_dir.items() if s.kind == "PROGRAM" or s.kind in GEN_TEST_TEMPLATES)
     interfaces, defaults = link_slot_interfaces(root, mods), link_slot_defaults(mods, report)
+    derived_rev = defaultdict(set)
+    for d, s in specs_by_dir.items():
+        for t in [s] + s.parts:
+            for label in t.deps:
+                if label.startswith("//"):
+                    derived_rev[label[2:].partition(":")[0]].add(d)
     for d, sel in link_selects(mods, resolver, slots, interfaces, defaults, allocators, exes,
-                               mains, report).items():
+                               mains, report, derived_rev).items():
         specs_by_dir[d].link_select = sel
 
     specs = list(specs_by_dir.values())

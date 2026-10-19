@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/library/testlib/common
     ydb/public/sdk/cpp/src/client/draft
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 YQL_LAST_ABI_VERSION()

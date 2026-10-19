@@ -6,8 +6,8 @@ library("common") {
     # "//library/cpp/json",
     "//ydb/core/base",
     "//ydb/core/kqp/ut/common",
-    # "//ydb/core/kqp/ut/indexes/common",
-    # "//ydb/library/json_index",
+    "//ydb/core/kqp/ut/indexes/common",
+    "//ydb/library/json_index",
   ]
 
   sources = [

@@ -4,7 +4,7 @@ config("interactive_private_config") {
 
 library("interactive") {
   public_deps = [
-    # "//ydb/public/lib/ydb_cli/commands",
+    # "//ydb/public/lib/ydb_cli/commands/command_base",
     "//ydb/public/lib/ydb_cli/commands/interactive/common",
     "//ydb/public/lib/ydb_cli/common",
   ]
@@ -12,6 +12,7 @@ library("interactive") {
   deps = [
     # "//library/cpp/resource",
     # "//ydb/library/yverify_stream",
+    # "//ydb/public/lib/ydb_cli/commands",
     # "//ydb/public/lib/ydb_cli/commands/interactive/complete",  # peerdir only
     # "//ydb/public/lib/ydb_cli/commands/interactive/highlight",  # peerdir only
     "//ydb/public/lib/ydb_cli/commands/interactive/session",

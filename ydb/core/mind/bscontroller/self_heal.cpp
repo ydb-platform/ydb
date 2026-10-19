@@ -1418,11 +1418,6 @@ namespace NKikimr::NBsController {
 } // NKikimr::NBsController
 
 template<>
-void Out<std::nullopt_t>(IOutputStream& out, const std::nullopt_t&) {
-    out << "null";
-}
-
-template<>
 void Out<std::optional<NKikimrBlobStorage::EVDiskStatus>>(IOutputStream& out, const std::optional<NKikimrBlobStorage::EVDiskStatus>& s) {
     if (s) {
         out << *s;

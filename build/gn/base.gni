@@ -368,12 +368,6 @@ template("library") {
             }
             if (!defined(invoker.link_slot_self) || !invoker.link_slot_self) {
                 defines += [ "GN_SLOT_INTERFACE_" + invoker.link_slot_interface ]
-            } else {
-                # the library calls the slot's functions itself; its own
-                # default definitions (Y_WEAK stubs, kept for ya's static link)
-                # would win over the provider's in a shared library -- the
-                # code leaves them out under GN_SLOT_SELF_<slot>
-                defines += [ "GN_SLOT_SELF_" + invoker.link_slot_interface ]
             }
             if (!defined(public_deps)) {
                 public_deps = []

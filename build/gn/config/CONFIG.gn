@@ -98,7 +98,10 @@ if (time_trace) {
   _default_configs += [ "//build/gn/config:time_trace" ]
 }
 
-_default_deps = [ "//util" ]
+_default_deps = [
+  "//util",
+  "//contrib/libs/cxxsupp/libcxx",
+]
 
 foreach(_target_type, [
   "static_library",

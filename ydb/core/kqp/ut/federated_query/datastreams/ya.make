@@ -54,6 +54,7 @@ PEERDIR(
     yql/essentials/sql/pg
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/yson2
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 ENV(YDB_FEATURE_FLAGS="enable_topic_deferred_publish")

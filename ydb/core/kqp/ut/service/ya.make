@@ -27,6 +27,7 @@ PEERDIR(
     ydb/public/lib/ut_helpers
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/types/operation
+    ydb/public/sdk/cpp/src/client/types/credentials/login  # CreateLoginCredentialsProviderFactory
 )
 
 YQL_LAST_ABI_VERSION()

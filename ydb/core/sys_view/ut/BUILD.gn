@@ -26,6 +26,7 @@ unittest_executable("ut") {
     "//ydb/public/sdk/cpp/src/client/scheme",
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/types/credentials/login",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/value",
     "//yql/essentials/sql/v1/lexer",
     "//yql/essentials/sql/v1/lexer/antlr4",

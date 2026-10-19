@@ -3,7 +3,7 @@ library("common") {
 
   public_deps = [
     "//ydb/core/kqp/ut/common",
-    # "//ydb/library/yql/providers/generic/connector/libcpp:ut_helpers",
+    "//ydb/library/yql/providers/generic/connector/libcpp:ut_helpers",
     # "//ydb/library/yql/providers/s3/actors_factory",
     "//ydb/public/sdk/cpp/src/client/operation",
     # "//ydb/public/sdk/cpp/src/client/query",
@@ -11,11 +11,11 @@ library("common") {
 
   deps = [
     # "//library/cpp/testing/unittest",
-    # "//ydb/core/fq/libs/credentials",
+    "//ydb/core/fq/libs/credentials",
     "//ydb/core/kqp/rm_service",
     # "//ydb/library/yql/providers/common/token_accessor/client",
-    # "//ydb/library/yql/providers/pq/gateway/dummy",
-    # "//ydb/library/yql/providers/pq/transform",
+    "//ydb/library/yql/providers/pq/gateway/dummy",
+    "//ydb/library/yql/providers/pq/transform",
     # "//ydb/public/sdk/cpp/src/client/types/credentials",
     # "//yql/essentials/utils/log",
   ]

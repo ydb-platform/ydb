@@ -537,7 +537,13 @@ public:
                 Advance();
             }
         }
-        if (IsKeyword("having") || IsKeyword("window")) {
+        if (IsKeyword("having")) {
+            Advance();
+            if (auto error = WhereClause(select.Having)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("window")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("order")) {

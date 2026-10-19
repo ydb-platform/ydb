@@ -1,7 +1,7 @@
 # GROUP BY
 
-status: pending
-commit:
+status: done
+commit: 41ffd7dd87c4b8808cee4a292ff543a0bb65138f
 id: select-group
 depends: select-where-limit
 

@@ -256,6 +256,12 @@ private:
         TColumn Column;
     };
 
+    struct THavingFilter {
+        size_t Slot = 0;
+        ECompareOp Op = ECompareOp::Eq;
+        TString Literal;
+    };
+
     struct TAggState {
         ui64 Count = 0;
         bool SumNull = true;
@@ -714,7 +720,99 @@ private:
             projected.push_back(slot.Column);
         }
         Output = std::move(projected);
-        return !Output.empty();
+        return !Output.empty() && BindHaving();
+    }
+
+    bool BindHaving() {
+        HavingFilters.clear();
+        for (const TComparison& comparison : Statement.Having) {
+            size_t slot = ResultSlots.size();
+            for (size_t i = 0; i < ResultSlots.size(); ++i) {
+                if (ResultSlots[i].Column.Name == comparison.Column.Name) {
+                    slot = i;
+                    break;
+                }
+            }
+            if (slot == ResultSlots.size()) {
+                Fail("42703", comparison.Column.Name);
+                return false;
+            }
+            TCell cell;
+            if (!DecodeLiteral(ResultSlots[slot].Column, comparison.Value, cell)) {
+                return false;
+            }
+            THavingFilter filter;
+            filter.Slot = slot;
+            filter.Op = comparison.Op;
+            filter.Literal = BoundBytes.back();
+            HavingFilters.push_back(std::move(filter));
+        }
+        return true;
+    }
+
+    bool PassHaving(const TGroupState& state) const {
+        for (const THavingFilter& filter : HavingFilters) {
+            const TResultSlot& slot = ResultSlots[filter.Slot];
+            bool null = false;
+            TString bytes;
+            NScheme::TTypeInfo type = slot.Column.Type;
+            if (!slot.Aggregate) {
+                null = state.KeyNulls[slot.Index];
+                bytes = state.Keys[slot.Index];
+            } else {
+                const TAggState& agg = state.Aggs[slot.Index];
+                const TAggCall& call = Statement.Aggs[slot.Index];
+                if (call.Func == EAggFunc::Count) {
+                    const i64 count = static_cast<i64>(agg.Count);
+                    bytes.assign(reinterpret_cast<const char*>(&count), sizeof(count));
+                } else if (call.Func == EAggFunc::Sum) {
+                    null = agg.SumNull;
+                    bytes.assign(reinterpret_cast<const char*>(&agg.Sum), sizeof(agg.Sum));
+                } else {
+                    null = !agg.HasExtreme;
+                    bytes = call.Func == EAggFunc::Min ? agg.ExtremeMin : agg.ExtremeMax;
+                }
+            }
+            if (null) {
+                return false;
+            }
+            const TCell left(bytes.data(), bytes.size());
+            const TCell right(filter.Literal.data(), filter.Literal.size());
+            const int compared = CompareTypedCells(left, right, NScheme::TTypeInfoOrder(type));
+            switch (filter.Op) {
+                case ECompareOp::Eq:
+                    if (compared != 0) {
+                        return false;
+                    }
+                    break;
+                case ECompareOp::NotEq:
+                    if (compared == 0) {
+                        return false;
+                    }
+                    break;
+                case ECompareOp::Lt:
+                    if (compared >= 0) {
+                        return false;
+                    }
+                    break;
+                case ECompareOp::Gt:
+                    if (compared <= 0) {
+                        return false;
+                    }
+                    break;
+                case ECompareOp::Le:
+                    if (compared > 0) {
+                        return false;
+                    }
+                    break;
+                case ECompareOp::Ge:
+                    if (compared < 0) {
+                        return false;
+                    }
+                    break;
+            }
+        }
+        return true;
     }
 
     i64 ReadInt(const TCell& cell, NScheme::TTypeInfo type) const {
@@ -847,6 +945,9 @@ private:
         Rows.clear();
         for (const auto& [key, state] : Groups) {
             Y_UNUSED(key);
+            if (!PassHaving(state)) {
+                continue;
+            }
             TVector<TQueryCell> line;
             line.reserve(ResultSlots.size());
             for (const TResultSlot& slot : ResultSlots) {
@@ -902,6 +1003,10 @@ private:
         }
         Table = entry.TableId;
 
+        if (!Statement.Having.empty() && Statement.Aggs.empty() && Statement.Group.empty()) {
+            Fail("0A000", "not supported");
+            return;
+        }
         if (!Statement.Aggs.empty() || !Statement.Group.empty()) {
             if (Statement.Star || !Statement.Order.empty()) {
                 Fail("0A000", "not supported");
@@ -1865,6 +1970,7 @@ private:
     TVector<size_t> GroupSources;
     TVector<size_t> AggSources;
     TVector<TResultSlot> ResultSlots;
+    TVector<THavingFilter> HavingFilters;
     absl::flat_hash_map<TString, TGroupState> Groups;
     bool PkOrdered = false;
     bool ReverseRead = false;

@@ -154,6 +154,14 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(avg.Message, "avg");
     }
 
+    Y_UNIT_TEST(HavingKeepsTheComparison) {
+        const TParseResult parsed = Parse("SELECT kind, sum(amount) FROM sales GROUP BY kind HAVING sum > 10");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Having.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Having[0].Column.Name, "sum");
+        UNIT_ASSERT(parsed.Select->Having[0].Op == ECompareOp::Gt);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

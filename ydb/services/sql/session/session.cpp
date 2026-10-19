@@ -301,7 +301,8 @@ private:
         if (parsed.Select) {
             const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
             if ((catalog || parsed.Select->Join)
-                && (!parsed.Select->Order.empty() || !parsed.Select->Aggs.empty() || !parsed.Select->Group.empty()))
+                && (!parsed.Select->Order.empty() || !parsed.Select->Aggs.empty() || !parsed.Select->Group.empty()
+                    || !parsed.Select->Having.empty()))
             {
                 Fail("0A000", "not supported");
                 return;

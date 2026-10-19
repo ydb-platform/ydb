@@ -88,6 +88,7 @@ struct TSelectStmt {
     TVector<TComparison> Where;
     TVector<TAggCall> Aggs;
     TVector<TIdentifier> Group;
+    TVector<TComparison> Having;
     TVector<TOrderKey> Order;
     std::optional<ui64> Limit;
 };

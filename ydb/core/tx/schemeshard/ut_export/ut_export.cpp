@@ -4554,8 +4554,10 @@ partitioning_settings {
                 IndexDescription { Name: "index" KeyColumnNames: ["value"] }
             )");
             Env().TestWaitNotification(Runtime(), txId);
-            UpdateRow(Runtime(), "Table", 1, "valueA");
-            UpdateRow(Runtime(), "Table", 2, "valueB");
+            const auto sourceShard = DescribePath(Runtime(), "/MyRoot/Table", true)
+                .GetPathDescription().GetTablePartitions(0).GetDatashardId();
+            UpdateRow(Runtime(), "Table", 1, "valueA", sourceShard);
+            UpdateRow(Runtime(), "Table", 2, "valueB", sourceShard);
         }
         const ui64 snapshotCount = IsColumn ? 1 : 2;
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);

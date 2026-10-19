@@ -34,6 +34,54 @@ Y_UNIT_TEST_SUITE(RevokeYdbPermission) {
         }
     }
 
+    Y_UNIT_TEST(ConnectKeepsCustomInheritance) {
+        using namespace NACLib;
+        const TString subject = "user@builtin";
+
+        for (ui32 inheritance : TVector<ui32>{
+            InheritObject,
+            InheritContainer,
+            InheritOnly,
+            InheritObject | InheritOnly,
+            InheritContainer | InheritOnly,
+            DefaultInheritanceType | InheritOnly,
+        }) {
+            TACL expected;
+            expected.AddAccess(EAccessType::Allow, ConnectDatabase, subject, inheritance);
+
+            TACL acl(expected);
+            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, InheritNone);
+            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, DefaultInheritanceType);
+
+            TDiffACL diff;
+            RevokeYdbPermission(diff, "ydb.database.connect", subject);
+            acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+
+            UNIT_ASSERT_VALUES_EQUAL_C(acl.ToString(), expected.ToString(), inheritance);
+        }
+    }
+
+    Y_UNIT_TEST(ConnectKeepsCompositePermissions) {
+        using namespace NACLib;
+        const TString subject = "user@builtin";
+
+        for (ui32 access : TVector<ui32>{ConnectDatabase | SelectRow, GenericUse, GenericFull}) {
+            TACL expected;
+            expected.AddAccess(EAccessType::Allow, access, subject, InheritNone);
+            expected.AddAccess(EAccessType::Allow, access, subject, DefaultInheritanceType);
+
+            TACL acl(expected);
+            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, InheritNone);
+            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, DefaultInheritanceType);
+
+            TDiffACL diff;
+            RevokeYdbPermission(diff, "ydb.database.connect", subject);
+            acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+
+            UNIT_ASSERT_VALUES_EQUAL_C(acl.ToString(), expected.ToString(), access);
+        }
+    }
+
     Y_UNIT_TEST(OtherPermissionsKeepInheritanceFilter) {
         using namespace NACLib;
         const TString subject = "user@builtin";

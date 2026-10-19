@@ -306,7 +306,7 @@ def github_token(repo, kind):
     return token
 
 
-def runner_busy(repo, name):
+def list_runners(repo):
     proc = run(
         ["gh", "api", "--paginate", f"repos/{repo}/actions/runners?per_page=100"],
         stdout=subprocess.PIPE,
@@ -314,6 +314,7 @@ def runner_busy(repo, name):
     )
     if proc.returncode != 0:
         raise SystemExit(proc.stderr.strip() or "failed to list runners")
+    runners = []
     decoder = json.JSONDecoder()
     index = 0
     raw = proc.stdout
@@ -323,10 +324,62 @@ def runner_busy(repo, name):
         if index >= len(raw):
             break
         value, index = decoder.raw_decode(raw, index)
-        for runner in value.get("runners") or []:
-            if runner.get("name") == name:
-                return bool(runner.get("busy")), runner.get("status")
+        runners.extend(value.get("runners") or [])
+    return runners
+
+
+def runner_busy(repo, name):
+    for runner in list_runners(repo):
+        if runner.get("name") == name:
+            return bool(runner.get("busy")), runner.get("status")
     return None, None
+
+
+def label_name(label):
+    if isinstance(label, dict):
+        return str(label.get("name") or "")
+    return str(label)
+
+
+def label_plan(current, desired):
+    """Custom labels to PUT, plus which names would be added and removed.
+
+    GitHub-assigned labels (type read-only, or self-hosted/Linux/X64 and the
+    other platform labels) stay as they are. instance:<id> is kept too: the
+    register script adds it and the config does not list it.
+    """
+    custom = []
+    preserved = []
+    for label in current:
+        name = label_name(label)
+        if not name:
+            continue
+        readonly = isinstance(label, dict) and label.get("type") == "read-only"
+        assigned = name in {"self-hosted", "Linux", "Windows", "macOS", "X64", "X86", "ARM", "ARM64"}
+        if readonly or assigned:
+            continue
+        if name.startswith("instance:"):
+            preserved.append(name)
+        else:
+            custom.append(name)
+    added = [name for name in desired if name not in custom]
+    removed = [name for name in custom if name not in desired]
+    final = []
+    for name in list(desired) + preserved:
+        if name not in final:
+            final.append(name)
+    return final, added, removed
+
+
+def set_runner_labels(repo, runner_id, labels):
+    proc = run(
+        ["gh", "api", "--method", "PUT", f"repos/{repo}/actions/runners/{runner_id}/labels", "--input", "-"],
+        input=json.dumps({"labels": labels}),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(proc.stderr.strip() or f"failed to set labels on runner {runner_id}")
 
 
 def registration_script(cfg, name):
@@ -470,6 +523,36 @@ def cmd_authorize(cfg, names, dry_run, timeout):
         print(f"{name}: ssh keys updated", flush=True)
 
 
+def cmd_labels(cfg, names, dry_run):
+    by_name = {}
+    duplicates = []
+    for runner in list_runners(cfg["repo"]):
+        name = runner.get("name")
+        if name in by_name:
+            duplicates.append(name)
+        by_name[name] = runner
+    if duplicates:
+        raise SystemExit(f"duplicate runner names: {', '.join(sorted(set(duplicates)))}")
+    describe(cfg, names)
+    for name in names:
+        runner = by_name.get(name)
+        if not runner:
+            raise SystemExit(f"{name}: runner not found on GitHub")
+        final, added, removed = label_plan(runner.get("labels") or [], cfg["labels"])
+        if not added and not removed:
+            print(f"{name}: labels already match", flush=True)
+            continue
+        print(
+            f"{name}: add {', '.join(added) if added else '-'} "
+            f"remove {', '.join(removed) if removed else '-'}",
+            flush=True,
+        )
+        if dry_run:
+            continue
+        set_runner_labels(cfg["repo"], runner["id"], final)
+        print(f"{name}: labels updated", flush=True)
+
+
 def cmd_register(cfg, names, dry_run, timeout):
     describe(cfg, names)
     if dry_run:
@@ -554,6 +637,25 @@ labels:
         pass
     else:
         raise AssertionError("expected a public key error")
+    current = [
+        {"name": "self-hosted", "type": "read-only"},
+        {"name": "Linux", "type": "read-only"},
+        {"name": "X64", "type": "read-only"},
+        {"name": "auto-provisioned", "type": "custom"},
+        {"name": "build-preset-relwithdebinfo", "type": "custom"},
+        {"name": "build-preset-release-asan", "type": "custom"},
+        {"name": "instance:abc", "type": "custom"},
+    ]
+    desired = ["auto-provisioned", "postcommit", "build-preset-relwithdebinfo", "build-preset-release-asan"]
+    final, added, removed = label_plan(current, desired)
+    assert added == ["postcommit"]
+    assert removed == []
+    assert "instance:abc" in final
+    assert "self-hosted" not in final
+    same, added, removed = label_plan(current + [{"name": "postcommit", "type": "custom"}], desired)
+    assert added == [] and removed == [] and same == final
+    extra, added, removed = label_plan(current + [{"name": "old-label", "type": "custom"}], desired)
+    assert removed == ["old-label"] and "old-label" not in extra
     argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
     assert "--async" in argv
     assert "purpose=gh-runner" in argv
@@ -572,7 +674,7 @@ def load_config_text(text):
 
 def main(argv):
     parser = argparse.ArgumentParser(description="Create or re-register a GitHub Actions runner VM from a config file.")
-    parser.add_argument("command", choices=("create", "register", "authorize", "self-test"))
+    parser.add_argument("command", choices=("create", "register", "labels", "authorize", "self-test"))
     parser.add_argument("config", nargs="?")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only", action="append", default=[], help="instance name from this config; repeatable")
@@ -592,6 +694,8 @@ def main(argv):
         cmd_create(cfg, names, args.dry_run, args.timeout)
     elif args.command == "authorize":
         cmd_authorize(cfg, names, args.dry_run, args.timeout)
+    elif args.command == "labels":
+        cmd_labels(cfg, names, args.dry_run)
     else:
         cmd_register(cfg, names, args.dry_run, args.timeout)
 

@@ -13,9 +13,16 @@ python3 ydb/ci/gh-runner-provision/provision.py register path/to/runners.yaml
 
 Один файл — один размер VM и один набор лейблов. `platform` — поле в этом файле. Имя файла его не кодирует.
 
-`name` плюс `start` и `count` нарезает новые имена (`tiny-worker-2026-10-8`). `names` — готовый список уже существующих хостов. Статики так и устроены: `build-preset-relwithdebinfo` есть у всех, имя файла начинается с `static-relwithdebinfo`, дальше идёт то, чем группа отличается. Перенести хост в другую группу — убрать его из одного файла, добавить в другой и выполнить `register` на обоих.
+`name` плюс `start` и `count` нарезает новые имена (`tiny-worker-2026-10-8`). `names` — готовый список уже существующих хостов. Статики так и устроены: `build-preset-relwithdebinfo` есть у всех, имя файла начинается с `static-relwithdebinfo`, дальше идёт то, чем группа отличается. Перенести хост в другую группу — убрать его из одного файла, добавить в другой и выполнить `labels` на обоих.
 
-`register` останавливает сервис, снимает регистрацию и записывает лейблы из конфига заново. Если раннер сейчас занят джобой, команда ничего не делает.
+`labels` приводит custom labels раннера к списку из файла через GitHub API. Сервис не останавливается, раннер может быть занят джобой. `self-hosted`, `Linux`, `X64` команда не трогает. `instance:<id>` оставляет.
+
+```bash
+python3 ydb/ci/gh-runner-provision/provision.py labels path/to/runners.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py labels path/to/runners.yaml
+```
+
+`register` заново снимает и записывает регистрацию раннера. Для смены лейблов он не нужен. Если раннер сейчас занят джобой, `register` ничего не делает.
 
 Лейбл `ghrun` не ставить на долгоживущие машины: автоскейлер удаляет простаивающие раннеры с этим лейблом. `instance:<id>` добавляется сам. `self-hosted`, `Linux`, `X64` добавляет сам GitHub Actions runner. В unit ставится `Restart=always`.
 

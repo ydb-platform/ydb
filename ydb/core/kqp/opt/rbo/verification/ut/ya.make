@@ -19,6 +19,7 @@ TEST_SRCS(
     test_scalar.py
     test_sql_in.py
     test_stage_compaction.py
+    test_stage_ports.py
     test_stagegraph_reference.py
     test_string_order.py
     test_string_proof.py

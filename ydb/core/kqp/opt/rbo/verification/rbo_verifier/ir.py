@@ -3170,9 +3170,31 @@ def _validate_stage_graph(
             owner[node_id] = stage.id
 
         sinks = [node_id for node_id, parents in same_stage_parents.items() if parents == 0]
-        if len(sinks) != 1:
-            _fail(stage_path, "must have exactly one local output sink")
-        sink = sinks[0]
+        # A native Replicate is one shared producer with passive rename ports.
+        # Admit only complete, ordered column bijections, so no new evaluation,
+        # row selection, error, or independent choice occurs on a branch.
+        port_input = None
+        if sinks:
+            ports = [plan_nodes[node_id] for node_id in sinks]
+            if all(isinstance(port, Project) and port.ordered and port.columns for port in ports):
+                candidate = ports[0].input
+                source_columns = set(schemas[candidate])
+                if candidate in members and all(
+                    port.input == candidate
+                    and len(port.columns) == len(source_columns)
+                    and {column.expression.column for column in port.columns
+                         if column.expression.kind == "column"} == source_columns
+                    and all(column.expression.kind == "column"
+                            and not column.error_on_null and not column.require_total
+                            and column.require_at_most_one is None for column in port.columns)
+                    for port in ports
+                ):
+                    port_input = candidate
+        if len(sinks) != 1 and port_input is None:
+            _fail(stage_path, "must have exactly one local output sink or passive ports of one shared producer")
+        if port_input is not None and len(sinks) > 1:
+            if len(stage.outputs) != len(sinks) or {output.node for output in stage.outputs} != set(sinks):
+                _fail(f"{stage_path}.outputs", "every passive port must have exactly one output")
 
         expected_inputs = tuple(slot[2] for slot in stage_input_slots(snapshot.plan, stage))
         if stage.inputs != expected_inputs:
@@ -3186,8 +3208,8 @@ def _validate_stage_graph(
         for output in stage.outputs:
             if output.node not in seen:
                 _fail(f"{stage_path}.outputs", f"node {output.node!r} is not a stage member")
-            if output.node != sink:
-                _fail(f"{stage_path}.outputs", "every output must map the local stage sink")
+            if output.node not in sinks:
+                _fail(f"{stage_path}.outputs", "every output must map a local stage sink")
             outputs[(stage.id, output.index)] = output.node
 
         scans = [plan_nodes[node_id] for node_id in stage.nodes if isinstance(plan_nodes[node_id], Scan)]
@@ -3212,9 +3234,13 @@ def _validate_stage_graph(
                     and all(column.expression.kind == "column"
                             for column in projection.columns)
                 )
-                if not passive_result:
+                passive_ports = (
+                    port_input == scans[0].id
+                    and set(stage.nodes) == {scans[0].id, *sinks}
+                )
+                if not passive_result and not passive_ports:
                     _fail(stage_path, "a row-storage source stage must contain only its scan "
-                          "and an optional passive result projection")
+                          "and passive result or shared-producer projections")
         if (
             scans
             and (scans[0].predicate is not None or scans[0].pushed_limit is not None)

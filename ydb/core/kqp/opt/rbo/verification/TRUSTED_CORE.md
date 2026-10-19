@@ -62,9 +62,9 @@ not only successful-row comparisons.
 
 | Slice | Primary evidence |
 |---|---|
-| Capture/catalog/typed export | [cpp_ut](cpp_ut), [real-host integration](integration_ut) |
+| Capture/catalog/typed export | [native fixtures](native_cpp_ut), [legacy fixtures awaiting migration](cpp_ut), [real-host integration](integration_ut) |
 | Logical operators and joins | [concrete bag reference](ut/test_logical_reference.py), [operator and mutation tests](ut/test_verify.py) |
-| StageGraph and routing | [concrete two-task reference](ut/test_stagegraph_reference.py), [compaction tests](ut/test_stage_compaction.py) |
+| StageGraph and routing | [concrete two-task reference](ut/test_stagegraph_reference.py), [passive ports and shared choices](ut/test_stage_ports.py), [compaction tests](ut/test_stage_compaction.py) |
 | NULL/scalars/Decimals/subplans/windows | [semantic unit tests](ut) and cross-language exporter mutations |
 | Sort/Limit/result languages | [sort tests](ut/test_sort.py), [limit tests](ut/test_limit.py) |
 | SMT ownership/rendering/solver protocol | [SMT tests](ut/test_smt.py), [verdict tests](ut/test_verify.py) |

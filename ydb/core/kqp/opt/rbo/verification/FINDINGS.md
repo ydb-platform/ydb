@@ -25,15 +25,26 @@ range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
 `/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
 and `/tmp/rbo-string-padding-main-tests.log`.
 
-The rebased verifier's focused native target passed all **23 tests**. Normal
+The rebased verifier's focused native target passed all **25 tests**. Normal
 Initial/Final proofs cover repeated result positions, stored-String copies,
 whole-partition Decimal SUM/AVG, and one shared logical read expanded into two
 final scans. Deliberate output, window-function, and join-key changes produce
 counterexamples. Correlated EXISTS and scalar COUNT captures are checked under
 the explicitly diagnostic logical-prefix scope, including changed caller
 bindings, passive projections, preserved annotations, and rejected type/scope
-mismatches. Replicate ports surviving into a StageGraph remain unsupported
-pending a separate multi-output routing audit.
+mismatches. Passive Replicate ports in row-source and compute stages now retain
+one shared producer. Native tests prove both forms, including compacted live
+output indices after a port disappears; a changed join key yields a
+counterexample and an incorrect port index is rejected. Nested replication and
+work appended inside a port's producer stage remain outside native admission.
+
+The model admits multiple stage sinks only as complete, ordered column
+bijections of one local producer, with every port exported and connected once.
+Its tests preserve a shared LIMIT choice across ports and detect an incorrect
+hash key. All 867 verifier tests passed with pinned Z3; the hermetic native,
+schema, routing and new port tests passed all 116 checks. Peak aggregate RSS was
+0.11 GiB and 10.39 GiB respectively. Logs are
+`/tmp/rbo-stage-ports-python-full.log` and `/tmp/rbo-stage-ports-hermetic.log`.
 
 Initial capture now requests production type annotation when an operator or
 scalar lambda is untyped. Main's `FromExpr` conversion deliberately clears

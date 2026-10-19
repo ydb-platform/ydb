@@ -23,6 +23,15 @@ projection of direct columns. It preserves multiplicity, order, and errors when
 applied inside each source task. Calculations and predicates inside row-storage
 source stages remain excluded.
 
+A stage may also end in passive output ports of one shared local producer.
+Every port is a complete, ordered column bijection with no computation or error
+marker; each must be exported and connected exactly once. The producer is
+evaluated once per task, preserving its shared choices and errors across ports.
+Row-source stages admit these ports directly after the scan. Native export
+checks the reachable port set and the physical output indices, including
+compaction after a port disappears. Nested native replication and work appended
+to ports inside their producer stage remain excluded.
+
 If the pinned solver returns `UNSAT`, `VERIFIED_BOUNDED` means:
 
 > For every database represented by the declared row bound and catalog

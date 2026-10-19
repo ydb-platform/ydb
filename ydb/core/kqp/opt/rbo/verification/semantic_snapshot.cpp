@@ -11483,9 +11483,6 @@ private:
             }
 
             case EOperator::Replicate: {
-                if (StageGraphPresent) {
-                    Unsupported("Native Replicate stage outputs require a separate routing audit");
-                }
                 if (children.size() != 1) {
                     Unsupported("Native Replicate must have exactly one shared producer");
                 }
@@ -12655,9 +12652,48 @@ private:
 
         StageNodes.resize(StageCount);
         StageSinks.resize(StageCount, nullptr);
+        StagePortHubs.resize(StageCount, nullptr);
         StageInputNodes.resize(StageCount);
         LogicalInputNodes.resize(StageCount);
         StageOutputNodes.resize(StageCount);
+    }
+
+    void IndexStagePorts(ui32 stageId, const THashMap<const IOperator*, size_t>& sameStageParents) {
+        const TReplicate* hub = nullptr;
+        THashSet<const IOperator*> ports;
+        for (auto* op : StageNodes[stageId]) {
+            if (op->GetKind() != EOperator::Replicate) {
+                continue;
+            }
+            const auto& port = static_cast<const TOpReplicate&>(*op);
+            const auto& candidate = port.GetReplicate();
+            if ((hub && hub != &candidate) ||
+                candidate.GetInput()->GetKind() == EOperator::Replicate ||
+                OperatorStage(*candidate.GetInput()) != stageId ||
+                sameStageParents.at(op) != 0)
+            {
+                Unsupported("Native Replicate stage ports must be passive sinks of one same-stage producer");
+            }
+            hub = &candidate;
+            ports.insert(op);
+        }
+        if (!hub) {
+            return;
+        }
+        if (ports.size() != hub->GetOutputs().size()) {
+            Unsupported("Native Replicate reachable ports disagree with stage membership");
+        }
+        for (const auto* port : hub->GetOutputs()) {
+            if (!ports.contains(port)) {
+                Unsupported("Native Replicate contains a port outside its exported stage");
+            }
+        }
+        for (auto* op : StageNodes[stageId]) {
+            if (sameStageParents.at(op) == 0 && !ports.contains(op)) {
+                Unsupported("Native Replicate stage has an unrelated logical sink");
+            }
+        }
+        StagePortHubs[stageId] = hub;
     }
 
     void IndexStageNodes() {
@@ -12714,6 +12750,8 @@ private:
             if (StageNodes[stageId].empty()) {
                 Unsupported("StageGraph contains a stage with no operator node membership");
             }
+            IndexStagePorts(stageId, sameStageParents);
+            const auto* portHub = StagePortHubs[stageId];
             const bool sourceStage = Graph.SourceStages.contains(stageId);
             if ((sourceStage && sourceCounts[stageId] != 1) ||
                 (!sourceStage && sourceCounts[stageId] != 0))
@@ -12723,6 +12761,8 @@ private:
             if (sourceStage &&
                 Graph.SourceStages.at(stageId).StorageType == NYql::EStorageType::RowStorage &&
                 StageNodes[stageId].size() != 1 &&
+                !(portHub && portHub->GetInput()->GetKind() == EOperator::Source &&
+                  StageNodes[stageId].size() == 1 + portHub->GetOutputs().size()) &&
                 !(stageId == OperatorStage(*Root.GetInput()) &&
                   StageNodes[stageId].size() == 2 && StageNodes[stageId].back() == &Root))
             {
@@ -12732,6 +12772,11 @@ private:
                 Unsupported("StageGraph source stage unexpectedly has stage inputs");
             }
 
+            if (portHub) {
+                // Outputs are the individually audited passive ports below.
+                StageSinks[stageId] = portHub->GetInput().Get();
+                continue;
+            }
             for (auto* op : StageNodes[stageId]) {
                 const auto* parentCount = sameStageParents.FindPtr(op);
                 if (parentCount && *parentCount == 0) {
@@ -12855,7 +12900,14 @@ private:
         const auto& connection = *boundary.Connection;
         const ui32 outputIndex = connection.GetOutputIndex();
         const TString& producerNodeId = NodeId(*boundary.ProducerNode);
-        if (StageSinks[pair.first] != boundary.ProducerNode) {
+        if (const auto* hub = StagePortHubs[pair.first]) {
+            if (boundary.ProducerNode->GetKind() != EOperator::Replicate ||
+                &static_cast<const TOpReplicate&>(*boundary.ProducerNode).GetReplicate() != hub ||
+                GetReplicateOutputIndex(*boundary.ProducerNode) != outputIndex)
+            {
+                Unsupported("Native Replicate connection output index disagrees with its port");
+            }
+        } else if (StageSinks[pair.first] != boundary.ProducerNode) {
             Unsupported("StageGraph producer output does not map the stage's logical sink");
         }
         auto [output, inserted] = StageOutputNodes[pair.first].emplace(
@@ -13059,7 +13111,13 @@ private:
                 continue;
             }
 
-            if (outputs.empty() || recorded == Graph.StageOutputIndices.end() ||
+            if (const auto* hub = StagePortHubs[stageId]) {
+                // AssignStages addresses Replicate's compacted live port order;
+                // it does not allocate generic StageOutputIndices for that stage.
+                if (recorded != Graph.StageOutputIndices.end() || outputs.size() != hub->GetOutputs().size()) {
+                    Unsupported("Native Replicate stage output-index state is inconsistent");
+                }
+            } else if (outputs.empty() || recorded == Graph.StageOutputIndices.end() ||
                 recorded->second != outputs.size() - 1)
             {
                 Unsupported("StageGraph producer output-index state is incomplete");
@@ -13174,6 +13232,7 @@ private:
     ui32 RootStageId = 0;
     TVector<TVector<IOperator*>> StageNodes;
     TVector<IOperator*> StageSinks;
+    TVector<const TReplicate*> StagePortHubs;
     TVector<ui32> TopologicalStages;
     TVector<TVector<TString>> StageInputNodes;
     TVector<TVector<TString>> LogicalInputNodes;

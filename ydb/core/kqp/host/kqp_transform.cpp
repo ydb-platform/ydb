@@ -25,6 +25,9 @@ void TKqlTransformContext::Reset() {
     PhysicalQuery = nullptr;
     ExplainTransformerInput = nullptr;
     DataQueryBlocks = Nothing();
+    CacheOutput.Clear();
+    // TODO(anely-d): PlanJson.reset() — AddPlans requires an empty slot; this holds today only because the
+    // context is recreated for every compilation.
 }
 
 IGraphTransformer::TStatus TLogExprTransformer::operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output,

@@ -510,6 +510,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
     auto optimizedPlan = RBO.Optimize(Roots, rboCtx);
     traceOutput.Flush();
     AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+    TransformCtx->CacheOutput = std::move(KqpCtx.CacheOutput);
 
     TNodeOnNodeOwnedMap replacements;
     for (const auto& container : containers) {

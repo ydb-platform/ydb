@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kqp/common/compile_cache/types.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/kqp/opt/cbo/kqp_statistics.h>
@@ -49,6 +50,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
+    NKikimr::NKqp::TOptimizerInput OptimizerInput;
+    NKikimr::NKqp::TOptimizerCacheOutput CacheOutput;
     NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
     NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
     

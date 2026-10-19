@@ -1,6 +1,11 @@
 items:
 - name: Getting started
   href: getting-started.md
+- name: SDK best practices
+  href: sdk-principles/index.md
+  include:
+    mode: link
+    path: sdk-principles/toc_p.yaml
 - name: Streaming queries
   href: streaming-query/index.md
   include:

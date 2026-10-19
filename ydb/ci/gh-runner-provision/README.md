@@ -6,6 +6,7 @@
 
 ```bash
 python3 ydb/ci/gh-runner-provision/provision.py create ydb/ci/gh-runner-provision/examples/tiny-worker.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py create ydb/ci/gh-runner-provision/examples/static-relwithdebinfo.yaml --dry-run
 python3 ydb/ci/gh-runner-provision/provision.py create path/to/runners.yaml
 python3 ydb/ci/gh-runner-provision/provision.py register path/to/runners.yaml
 ```

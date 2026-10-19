@@ -1,0 +1,15 @@
+# 64 vCPU / 256 GB. disk_gb must be a multiple of 93 (2418 = 26 * 93).
+# No ghrun label: the autoscaler deletes idle runners that carry it.
+# Names: static-relwithdebinfo-d-40. Add public_ip: true for a public address.
+name: static-relwithdebinfo-d
+start: 40
+count: 1
+platform: standard-v4a
+cores: 64
+memory_gb: 256
+disk_gb: 2418
+preset: relwithdebinfo
+labels:
+  - auto-provisioned
+  - build-preset-relwithdebinfo
+  - build-preset-release

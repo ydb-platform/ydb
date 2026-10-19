@@ -5,6 +5,7 @@ This section of {{ ydb-short-name }} documentation covers everything you need to
 Main resources:
 
 - [{#T}](getting-started.md)
+- [{#T}](sdk-principles/index.md)
 - [{#T}](example-app/index.md)
 - [{#T}](sqlc-ydb.md)
 - [{#T}](yql-tutorial/index.md)

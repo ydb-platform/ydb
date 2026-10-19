@@ -62,6 +62,14 @@ namespace NKikimr::NSharedCache {
             return RegularTier->GetSize() + TryKeepInMemoryTier->GetSize();
         }
 
+        ui64 GetTierLimit(ui32 tier) const {
+            return CacheTiers[tier].GetLimit();
+        }
+
+        ui64 GetTierSize(ui32 tier) const {
+            return CacheTiers[tier].GetSize();
+        }
+
         ui64 GetEvictOpsCounter() const {
             return RegularTier->GetEvictOpsCounter() + TryKeepInMemoryTier->GetEvictOpsCounter();
         }

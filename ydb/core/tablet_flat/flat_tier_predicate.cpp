@@ -114,20 +114,15 @@ namespace {
         }
     }
 
-    // Value used by row table TTL for serialized (DyNumber, Pg integer) columns
-    ui64 InstantValue(TInstant instant, EUnit unit) {
-        switch (unit) {
-            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-                return instant.Seconds();
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-                return instant.MilliSeconds();
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-                return instant.MicroSeconds();
-            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-                return instant.NanoSeconds();
-            default:
-                Y_ENSURE(false, "Unexpected unit " << static_cast<ui32>(unit));
+    // Threshold as a decimal number in the given unit, as row table TTL does for
+    // serialized (DyNumber, Pg integer) columns: seconds and milliseconds are
+    // rounded down, nanoseconds are exact microseconds * 1000
+    TString MicrosToUnitString(i64 thresholdUs, EUnit unit) {
+        if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
+            // Appending zeros avoids overflow of thresholdUs * 1000
+            return thresholdUs == 0 ? TString("0") : ToString(thresholdUs) + "000";
         }
+        return ToString(MicrosToUnitFloor(thresholdUs, unit));
     }
 
 } // namespace
@@ -177,20 +172,53 @@ namespace {
         Bound = true;
     }
 
+    TVector<ui32> TTierPredicate::GetUnrepresentableTierIds() const {
+        Y_ENSURE(Bound);
+
+        TVector<ui32> result;
+        for (size_t i = 0; i < Policy.Rules.size(); ++i) {
+            if (Thresholds[i].Kind == TThreshold::EKind::Unrepresentable) {
+                result.push_back(Policy.Rules[i].TierId);
+            }
+        }
+        return result;
+    }
+
     TTierPredicate::TThreshold TTierPredicate::MakeThreshold(i64 thresholdUs) const {
+        using EKind = TThreshold::EKind;
+
         TThreshold result;
 
         auto setUnsigned = [&](i64 value) {
             // Unsigned columns cannot hold values below zero, nothing matches
             if (value >= 0) {
-                result.Valid = true;
+                result.Kind = EKind::Value;
                 result.Unsigned = static_cast<ui64>(value);
+            } else {
+                result.Kind = EKind::NeverMatch;
             }
         };
 
         auto setSigned = [&](i64 value) {
-            result.Valid = true;
+            result.Kind = EKind::Value;
             result.Signed = value;
+        };
+
+        auto setSerialized = [&](TMaybe<TString> serialized) {
+            Y_DEBUG_ABORT_UNLESS(serialized, "Cannot convert tiering threshold for column type %d",
+                static_cast<int>(Type.GetTypeId()));
+            if (serialized) {
+                result.Kind = EKind::Value;
+                result.Serialized = std::move(*serialized);
+            }
+        };
+
+        auto toPg = [&](const TString& text) -> TMaybe<TString> {
+            auto converted = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
+            if (converted.Error) {
+                return Nothing();
+            }
+            return std::move(converted.Str);
         };
 
         switch (Type.GetTypeId()) {
@@ -217,51 +245,62 @@ namespace {
                 if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
                     // TTL compares whole microseconds: value / 1000 <= threshold
                     if (thresholdUs >= 0) {
-                        result.Valid = true;
+                        result.Kind = EKind::Value;
                         const ui64 us = static_cast<ui64>(thresholdUs);
                         result.Unsigned = us > (Max<ui64>() - 999) / 1000 ? Max<ui64>() : us * 1000 + 999;
+                    } else {
+                        result.Kind = EKind::NeverMatch;
                     }
                 } else {
                     setUnsigned(MicrosToUnitFloor(thresholdUs, Policy.Unit));
                 }
                 break;
-            case NScheme::NTypeIds::DyNumber: {
-                // Serialized thresholds are not defined before the epoch
-                if (thresholdUs < 0) {
-                    break;
-                }
-                const auto instant = TInstant::MicroSeconds(thresholdUs);
-                if (auto serialized = NDyNumber::ParseDyNumberString(ToString(InstantValue(instant, Policy.Unit)))) {
-                    result.Valid = true;
-                    result.Serialized = std::move(*serialized);
-                }
+            case NScheme::NTypeIds::DyNumber:
+                // DyNumber has arbitrary precision, so any threshold is representable
+                setSerialized(NDyNumber::ParseDyNumberString(MicrosToUnitString(thresholdUs, Policy.Unit)));
                 break;
-            }
-            case NScheme::NTypeIds::Pg: {
-                if (thresholdUs < 0) {
-                    break;
-                }
-                const auto instant = TInstant::MicroSeconds(thresholdUs);
-                TString text;
+            case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
                     case EPgKind::Date:
                     case EPgKind::Timestamp:
-                        text = instant.ToString();
+                        // TInstant cannot express moments before the epoch
+                        if (thresholdUs >= 0) {
+                            setSerialized(toPg(TInstant::MicroSeconds(thresholdUs).ToString()));
+                        }
                         break;
                     case EPgKind::Int4:
-                    case EPgKind::Int8:
-                        text = ToString(InstantValue(instant, Policy.Unit));
+                    case EPgKind::Int8: {
+                        // A threshold outside of the integer range is not an error:
+                        // all values are either below or above it
+                        const i64 typeMax = GetPgKind(Type) == EPgKind::Int4 ? Max<i32>() : Max<i64>();
+                        const i64 typeMin = GetPgKind(Type) == EPgKind::Int4 ? Min<i32>() : Min<i64>();
+                        i64 value;
+                        if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
+                            if (thresholdUs > typeMax / 1000) {
+                                result.Kind = EKind::AlwaysMatch;
+                                break;
+                            }
+                            if (thresholdUs < typeMin / 1000) {
+                                result.Kind = EKind::NeverMatch;
+                                break;
+                            }
+                            value = thresholdUs * 1000;
+                        } else {
+                            value = MicrosToUnitFloor(thresholdUs, Policy.Unit);
+                        }
+                        if (value > typeMax) {
+                            result.Kind = EKind::AlwaysMatch;
+                        } else if (value < typeMin) {
+                            result.Kind = EKind::NeverMatch;
+                        } else {
+                            setSerialized(toPg(ToString(value)));
+                        }
                         break;
+                    }
                     case EPgKind::Unsupported:
                         Y_ENSURE(false, "Unreachable");
                 }
-                auto converted = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
-                if (!converted.Error) {
-                    result.Valid = true;
-                    result.Serialized = std::move(converted.Str);
-                }
                 break;
-            }
             default:
                 Y_ENSURE(false, "Unreachable");
         }
@@ -270,8 +309,14 @@ namespace {
     }
 
     bool TTierPredicate::Matches(const TCell& cell, const TThreshold& threshold) const {
-        if (!threshold.Valid) {
-            return false;
+        switch (threshold.Kind) {
+            case TThreshold::EKind::Value:
+                break;
+            case TThreshold::EKind::AlwaysMatch:
+                return true;
+            case TThreshold::EKind::NeverMatch:
+            case TThreshold::EKind::Unrepresentable:
+                return false;
         }
 
         switch (Type.GetTypeId()) {

@@ -36,14 +36,22 @@ namespace {
             Scheme = TRowScheme::Make(cols, NUtil::TAsIs());
         }
 
-        bool Matches(const TString& text, EUnit unit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO) const {
+        TTierPredicate MakePredicate(EUnit unit, TInstant now, TDuration offset) const {
             TTieringPolicy policy;
             policy.ColumnTag = ValueTag;
             policy.Unit = unit;
-            policy.Rules.push_back(TTierRule{ .TierId = 1, .Before = TTierRelativeBound{ TDuration::Days(1) } });
+            policy.Rules.push_back(TTierRule{ .TierId = 1, .Before = TTierRelativeBound{ offset } });
 
             TTierPredicate predicate(policy);
-            predicate.Bind(Now, *Scheme);
+            predicate.Bind(now, *Scheme);
+            return predicate;
+        }
+
+        bool Matches(const TString& text, EUnit unit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO,
+                TInstant now = Now, TDuration offset = TDuration::Days(1)) const
+        {
+            const auto predicate = MakePredicate(unit, now, offset);
+            UNIT_ASSERT(predicate.GetUnrepresentableTierIds().empty());
 
             auto value = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
             UNIT_ASSERT_C(!value.Error, *value.Error);
@@ -79,7 +87,54 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
             TPgCase pg(pgTypeId);
             UNIT_ASSERT(pg.Matches(ToString(seconds), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS));
             UNIT_ASSERT(!pg.Matches(ToString(seconds + 1), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS));
+
+            // Negative values are older than a positive threshold
+            UNIT_ASSERT(pg.Matches("-1", NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS));
+            UNIT_ASSERT(pg.Matches(ToString(-i64(seconds)), NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS));
         }
+    }
+
+    Y_UNIT_TEST(IntegerThresholdOutOfRange) {
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+        const auto millis = NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS;
+        const auto nanos = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
+
+        // The current time in milliseconds does not fit into int4, so every value is older
+        TPgCase int4(INT4OID);
+        UNIT_ASSERT(int4.Matches(ToString(Max<i32>()), millis));
+        UNIT_ASSERT(int4.Matches("0", millis));
+        UNIT_ASSERT(int4.Matches(ToString(Min<i32>()), millis));
+        UNIT_ASSERT(int4.Matches(ToString(Max<i32>()), nanos));
+
+        // In seconds int4 overflows after 2038
+        const TInstant after2038 = TInstant::Seconds(Max<i32>()) + TDuration::Days(10);
+        UNIT_ASSERT(int4.Matches(ToString(Max<i32>()), seconds, after2038));
+
+        // Nanoseconds overflow neither int8 nor the threshold computation
+        TPgCase int8(INT8OID);
+        const i64 thresholdNs = (Now - TDuration::Days(1)).MicroSeconds() * 1000;
+        UNIT_ASSERT(int8.Matches(ToString(thresholdNs), nanos));
+        UNIT_ASSERT(!int8.Matches(ToString(thresholdNs + 1), nanos));
+    }
+
+    Y_UNIT_TEST(IntegerThresholdBeforeEpoch) {
+        // now - offset is 10 days (864000 seconds) before the epoch
+        const TInstant now = TInstant::Days(10);
+        const TDuration offset = TDuration::Days(20);
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+
+        TPgCase int8(INT8OID);
+        UNIT_ASSERT(int8.Matches("-864001", seconds, now, offset));
+        UNIT_ASSERT(int8.Matches("-864000", seconds, now, offset));
+        UNIT_ASSERT(!int8.Matches("-863999", seconds, now, offset));
+    }
+
+    Y_UNIT_TEST(DateThresholdBeforeEpoch) {
+        // Pg date thresholds before the epoch are not supported yet, it must be reported
+        TPgCase pg(DATEOID);
+        const auto predicate = pg.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO,
+            TInstant::Days(10), TDuration::Days(20));
+        UNIT_ASSERT_VALUES_EQUAL(predicate.GetUnrepresentableTierIds(), TVector<ui32>{1});
     }
 
     Y_UNIT_TEST(Unsupported) {

@@ -31,7 +31,8 @@ namespace NTable {
 
     /**
      * Tiering policy over a single column. Rules are ordered from the coldest
-     * tier to the warmest one, the first matching rule wins.
+     * tier to the warmest one (strictly descending offsets, enforced by
+     * TTierPredicate), the first matching rule wins.
      */
     struct TTieringPolicy {
         TTag ColumnTag = Max<TTag>();
@@ -94,11 +95,30 @@ namespace NTable {
             return Pos;
         }
 
+        /**
+         * Tier ids of rules whose threshold could not be converted into the
+         * column type on the last Bind(). Such rules never match, so callers
+         * should report them instead of silently skipping tiering.
+         *
+         * Thresholds before the epoch are not supported for Pg date/timestamp
+         * columns and are reported here.
+         */
+        TVector<ui32> GetUnrepresentableTierIds() const;
+
     private:
         struct TThreshold {
-            // false when the threshold is not representable for the column type,
-            // a rule with such threshold never matches
-            bool Valid = false;
+            enum class EKind {
+                // Compare the value with the threshold
+                Value,
+                // Every value of the column type is below the threshold
+                AlwaysMatch,
+                // Every value of the column type is above the threshold
+                NeverMatch,
+                // Conversion failed, the rule never matches
+                Unrepresentable,
+            };
+
+            EKind Kind = EKind::Unrepresentable;
             i64 Signed = 0;
             ui64 Unsigned = 0;
             TString Serialized;

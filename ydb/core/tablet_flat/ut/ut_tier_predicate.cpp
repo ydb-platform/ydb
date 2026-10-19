@@ -66,6 +66,7 @@ namespace {
         auto lay = MakeLayout(type);
         TTierPredicate predicate(MakePolicy({{offset, 1}}, unit));
         predicate.Bind(now, *lay);
+        UNIT_ASSERT(predicate.GetUnrepresentableTierIds().empty());
         return EvaluateValue(*lay, predicate, value) == Tier(1);
     }
 
@@ -141,7 +142,7 @@ namespace {
         }
     }
 
-    TString DyNumber(ui64 value) {
+    TString DyNumber(i64 value) {
         auto result = NDyNumber::ParseDyNumberString(ToString(value));
         Y_ENSURE(result);
         return *result;
@@ -210,6 +211,12 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
             NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS, offset, ui64(0), now));
         UNIT_ASSERT(!SingleRuleMatches(NScheme::NTypeIds::DyNumber,
             NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS, offset, DyNumber(0), now));
+
+        // DyNumber is signed, so values before the threshold match
+        UNIT_ASSERT(SingleRuleMatches(NScheme::NTypeIds::DyNumber,
+            NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS, offset, DyNumber(-864000), now));
+        UNIT_ASSERT(!SingleRuleMatches(NScheme::NTypeIds::DyNumber,
+            NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS, offset, DyNumber(-863999), now));
     }
 
     Y_UNIT_TEST(UnsignedUnits) {
@@ -256,6 +263,10 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
             UNIT_ASSERT_C(SingleRuleMatches(type, unit, offset, DyNumber(value - 1)), unit);
             UNIT_ASSERT_C(SingleRuleMatches(type, unit, offset, DyNumber(value)), unit);
             UNIT_ASSERT_C(!SingleRuleMatches(type, unit, offset, DyNumber(value + 1)), unit);
+
+            // Negative values are older than a positive threshold
+            UNIT_ASSERT_C(SingleRuleMatches(type, unit, offset, DyNumber(-1)), unit);
+            UNIT_ASSERT_C(SingleRuleMatches(type, unit, offset, DyNumber(-i64(value))), unit);
         }
     }
 
@@ -300,6 +311,26 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
             checkUnsigned(NScheme::NTypeIds::Uint64, unit);
             if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS) {
                 checkUnsigned(NScheme::NTypeIds::Uint32, unit);
+            } else {
+                // The current time in finer units does not fit into Uint32, check the edges of its range
+                for (ui32 value : {ui32(0), ui32(1), Max<ui32>() - 1, Max<ui32>()}) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(
+                        SingleRuleMatches(NScheme::NTypeIds::Uint32, unit, offset, value),
+                        TtlExpiredUi64(NScheme::NTypeIds::Uint32, unit, value, wallClock),
+                        "unit# " << int(unit) << " value# " << value);
+                }
+            }
+        }
+
+        // Saturation of the nanoseconds threshold (now is around year 2554)
+        {
+            const auto unit = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
+            const TInstant farFuture = TInstant::MicroSeconds((Max<ui64>() - 999) / 1000 + 1) + offset;
+            for (ui64 value : {ui64(0), Max<ui64>() - 1, Max<ui64>()}) {
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    SingleRuleMatches(NScheme::NTypeIds::Uint64, unit, offset, value, farFuture),
+                    TtlExpiredUi64(NScheme::NTypeIds::Uint64, unit, value, farFuture - offset),
+                    "value# " << value);
             }
         }
 

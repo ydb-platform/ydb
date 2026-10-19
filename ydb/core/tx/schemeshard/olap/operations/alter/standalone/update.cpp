@@ -7,8 +7,6 @@ namespace NKikimr::NSchemeShard::NOlap::NAlter {
 NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpdateInitializationContext& context) {
     const auto& originalTable = context.GetOriginalEntityAsVerified<TStandaloneTable>();
     if (const auto& alterData = originalTable.GetTableInfoVerified().AlterData) {
-        // The operation was already accepted, possibly by an older version. Restore its
-        // persisted target instead of validating the request against current DDL rules.
         UpdateSchema = alterData->AlterBody->HasAlterSchema();
         UpdateTTL = alterData->AlterBody->HasAlterTtlSettings();
         TargetStandalone = std::make_shared<TStandaloneTable>(originalTable.GetPathId(), alterData);

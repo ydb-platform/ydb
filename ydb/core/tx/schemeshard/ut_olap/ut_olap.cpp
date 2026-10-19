@@ -663,10 +663,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    // An ALTER that adds a PG column, accepted by a version that still allowed PG types in column tables, can be
-    // in flight when SchemeShard restarts on a newer version. The operation must resume even when new DDL rules
-    // reject the persisted AlterBody. The row the previous version persisted for the ALTER is planted into the local
-    // database before the ColumnShard sees any proposal.
     Y_UNIT_TEST_FLAG(InFlightPgColumnAlterSurvivesReboot, EnableTablePgTypes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
@@ -676,7 +672,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
         const ui64 localPathId = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathId();
 
-        // Keep the ALTER in ConfigureParts: the ColumnShard receives no proposal.
         TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime);
         const ui64 alterTxId = ++txId;
         AsyncAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
@@ -704,7 +699,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         NKikimrSchemeOp::TColumnTableDescription description;
         UNIT_ASSERT(description.ParseFromString(row.GetOptional().GetStruct(1).GetOptional().GetBytes()));
 
-        // The row as the previous version persisted it for `ADD COLUMN value pgint4`.
         const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "");
         UNIT_ASSERT_VALUES_EQUAL(alterBody.GetAlterSchema().AddColumnsSize(), 1);
         auto* added = alterBody.MutableAlterSchema()->MutableAddColumns(0);
@@ -738,7 +732,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
             )
         )", localPathId, escape(alterBody).c_str(), escape(description).c_str()));
 
-        // Proposals of the previous SchemeShard generation are dropped; the restarted one proposes the PG column again.
         auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
             const auto& record = ev->Get()->Record;
             return record.GetTxId() == alterTxId && record.GetSeqNo().GetGeneration() > staleGeneration;
@@ -778,7 +771,6 @@ Y_UNIT_TEST_SUITE(TOlap) {
         };
         checkSchema();
 
-        // Recovery of an accepted ALTER must not allow new PG columns.
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             AlterSchema { AddColumns { Name: "new_value" Type: "pgint4" } }

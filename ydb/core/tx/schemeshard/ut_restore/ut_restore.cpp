@@ -76,7 +76,9 @@ namespace {
     void CheckExportedTableFiles(TTestBasicRuntime& runtime, TS3Mock& s3Mock) {
         const bool tableBackupAsSql = runtime.GetAppData().FeatureFlags.GetEnableTableBackupAsSql();
         const auto& data = s3Mock.GetData();
-        UNIT_ASSERT_VALUES_EQUAL(data.size(), tableBackupAsSql ? 10u : 8u);
+        UNIT_ASSERT_VALUES_EQUAL(data.size(), tableBackupAsSql ? 12u : 10u);
+        UNIT_ASSERT(data.contains("/data_complete.json"));
+        UNIT_ASSERT(data.contains("/export_complete.json"));
         UNIT_ASSERT_VALUES_EQUAL(data.contains("/create_table.sql"), tableBackupAsSql);
         UNIT_ASSERT_VALUES_EQUAL(data.contains("/create_table.sql.sha256"), tableBackupAsSql);
     }
@@ -616,6 +618,25 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDirectPartImport);
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
+    }
+
+    Y_UNIT_TEST_TWIN(ClientDataWritesDisabled, directParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin"};
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directParts);
+
+        const auto data = GenerateTestData("", 3);
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data});
+
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
     }
 
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {

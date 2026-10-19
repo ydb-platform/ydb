@@ -1,9 +1,7 @@
 #include "common.h"
 
-#include <library/cpp/testing/unittest/registar.h>
-
 #include <fmt/format.h>
-
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
 
@@ -18,22 +16,22 @@ constexpr TStringBuf REJECT_ERROR = "Resource pool reject was disabled due to ze
 TString RejectClassifierDdl(TStringBuf classifierName, TStringBuf hasPath) {
     return TStringBuilder() << R"(
         CREATE RESOURCE POOL reject WITH (concurrent_query_limit = 0);
-        CREATE RESOURCE POOL CLASSIFIER )" << classifierName << R"( WITH (
+        CREATE RESOURCE POOL CLASSIFIER )"
+                            << classifierName << R"( WITH (
             resource_pool = 'reject',
-            has_path = ')" << hasPath << R"('
+            has_path = ')" << hasPath
+                            << R"('
         );
     )";
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 // HAS_PATH end-to-end coverage for the object kinds whose fixture requirements
 // (real local PQ, mock connector, mock PQ gateway, http gateway) are only met
 // by TStreamingTestFixture. Cheaper kinds (regular tables, sysview, secondary
 // index, view underlying) live in ydb/services/workload_manager/ut.
 Y_UNIT_TEST_SUITE(HasPathDatastreams) {
-
     // KindTopic — direct read of a local topic (no EDS in the chain).
     // The topic path lands in tx.Tables (B walk).
     Y_UNIT_TEST_F(DirectTopicMatches, TStreamingTestFixture) {
@@ -45,8 +43,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         constexpr TStringBuf topicName = "test_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_direct_topic", "/Root/test_topic"));
+        ExecSchemeQuery(RejectClassifierDdl("hp_direct_topic", "/Root/test_topic"));
 
         WaitForClassifierPropagation();
 
@@ -67,8 +64,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         featureFlags.SetEnableTopicsSqlIoOperations(true);
         featureFlags.SetEnableHasPredicatesInResourcePoolClassifiers(true);
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_cdc", "/Root/t_cdc/cf"));
+        ExecSchemeQuery(RejectClassifierDdl("hp_cdc", "/Root/t_cdc/cf"));
 
         WaitForClassifierPropagation();
 
@@ -83,7 +79,6 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
                 FORMAT = 'JSON'
             );
         )");
-
 
         ExecQuery(R"(
             SELECT * FROM `/Root/t_cdc/cf` WITH (
@@ -103,8 +98,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
         constexpr TStringBuf topicName = "eds_topic";
         CreateTopic(std::string(topicName), std::nullopt, /*local*/ true);
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_eds_local", "/Root/eds"));
+        ExecSchemeQuery(RejectClassifierDdl("hp_eds_local", "/Root/eds"));
 
         WaitForClassifierPropagation();
 
@@ -117,15 +111,13 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
             );
         )", "endpoint"_a = GetKikimrRunner()->GetEndpoint()));
 
-
         ExecQuery(fmt::format(R"(
             SELECT * FROM eds.`{topic}` WITH (
                 STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", "topic"_a = topicName),
-            NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
     }
 
     // KindTopic — via EDS. Gate by the remote topic name (bare name that only
@@ -139,8 +131,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
 
         // CanonizePath prepends a leading slash to the bare TopicPath emitted
         // by TDqPqTopicSource, so the regex is anchored on `/<topic>`.
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_remote_name", "/remote_by_name_topic"));
+        ExecSchemeQuery(RejectClassifierDdl("hp_remote_name", "/remote_by_name_topic"));
 
         WaitForClassifierPropagation();
 
@@ -153,15 +144,13 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
             );
         )", "endpoint"_a = GetKikimrRunner()->GetEndpoint()));
 
-
         ExecQuery(fmt::format(R"(
             SELECT * FROM eds.`{topic}` WITH (
                 STREAMING = "TRUE",
                 FORMAT = "json_each_row",
                 SCHEMA = (key String NOT NULL, value String NOT NULL)
             ) LIMIT 1;
-        )", "topic"_a = topicName),
-            NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
+        )", "topic"_a = topicName), NYdb::EStatus::PRECONDITION_FAILED, std::string(REJECT_ERROR));
     }
 
     // KindExternalTable — External Table on top of an ObjectStorage EDS.
@@ -169,8 +158,7 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     Y_UNIT_TEST_F(ExternalTableMatches, TStreamingTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableHasPredicatesInResourcePoolClassifiers(true);
 
-        ExecSchemeQuery(RejectClassifierDdl(
-            "hp_et", "/Root/et_s3"));
+        ExecSchemeQuery(RejectClassifierDdl("hp_et", "/Root/et_s3"));
 
         WaitForClassifierPropagation();
 
@@ -197,4 +185,4 @@ Y_UNIT_TEST_SUITE(HasPathDatastreams) {
     }
 }
 
-}  // namespace NKikimr::NKqp::NFederatedQueryTest
+}   // namespace NKikimr::NKqp::NFederatedQueryTest

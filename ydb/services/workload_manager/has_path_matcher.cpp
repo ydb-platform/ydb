@@ -5,17 +5,14 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
 #include <google/protobuf/any.pb.h>
-
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
 namespace {
 
-bool MatchesPqTopicSource(const NResourcePool::TRegexPredicate& predicate,
-                          const NKqpProto::TKqpExternalSource& source) {
+bool MatchesPqTopicSource(const NResourcePool::TRegexPredicate& predicate, const NKqpProto::TKqpExternalSource& source) {
     if (!source.GetSettings().Is<NYql::NPq::NProto::TDqPqTopicSource>()) {
         return false;
     }
@@ -26,8 +23,7 @@ bool MatchesPqTopicSource(const NResourcePool::TRegexPredicate& predicate,
     return predicate.Match(CanonizePath(pqSource.GetTopicPath()));
 }
 
-bool MatchesPqTopicSink(const NResourcePool::TRegexPredicate& predicate,
-                        const NKqpProto::TKqpExternalSink& sink) {
+bool MatchesPqTopicSink(const NResourcePool::TRegexPredicate& predicate, const NKqpProto::TKqpExternalSink& sink) {
     if (!sink.GetSettings().Is<NYql::NPq::NProto::TDqPqTopicSink>()) {
         return false;
     }
@@ -38,12 +34,10 @@ bool MatchesPqTopicSink(const NResourcePool::TRegexPredicate& predicate,
     return predicate.Match(CanonizePath(pqSink.GetTopicPath()));
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
-
-bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate,
-                 const TVector<TString>& queryTables,
-                 const NKqpProto::TKqpPhyQuery& phyQuery) {
+bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate, const TVector<TString>& queryTables,
+    const NKqpProto::TKqpPhyQuery& phyQuery) {
     if (!predicate) {
         return true;
     }
@@ -95,4 +89,4 @@ bool MatchesPath(const std::optional<NResourcePool::TRegexPredicate>& predicate,
     return false;
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

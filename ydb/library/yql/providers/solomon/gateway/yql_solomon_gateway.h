@@ -9,4 +9,4 @@ class TSolomonGatewayConfig;
 // Not thread safe
 ISolomonGateway::TPtr CreateSolomonGateway(const TSolomonGatewayConfig& config);
 
-} // namespace NYql
+}   // namespace NYql

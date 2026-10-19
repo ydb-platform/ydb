@@ -6,23 +6,22 @@
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 
+#include <util/generic/ptr.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/ast/yql_pos_handle.h>
 #include <yql/essentials/core/yql_data_provider.h>
-
-#include <util/generic/ptr.h>
 
 namespace NKikimr::NMiniKQL {
 
 class IFunctionRegistry;
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL
 
 namespace NYql {
 
 struct TPqConfiguration;
 
-struct TPqState : public TThrRefBase {
+struct TPqState: public TThrRefBase {
     using TPtr = TIntrusivePtr<TPqState>;
 
     struct TTopicMeta {
@@ -37,6 +36,7 @@ public:
     explicit TPqState(const TString& sessionId, bool strictConfigValidation = false);
 
     const TTopicMeta* FindTopicMeta(const TString& cluster, const TString& topicPath) const;
+
     const TTopicMeta* FindTopicMeta(const NNodes::TPqTopic& topic) const {
         return FindTopicMeta(topic.Cluster().StringValue(), topic.Path().StringValue());
     }
@@ -78,19 +78,12 @@ public:
     std::vector<ui64> NodeIds;
 };
 
-TDataProviderInitializer GetPqDataProviderInitializer(
-    IPqGateway::TPtr gateway,
-    bool supportRtmrMode = false,
-    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr,
-    const NPq::NProto::StreamingDisposition& disposition = {},
-    const std::vector<std::pair<TString, TString>>& taskSensorLabels = {},
-    const std::vector<ui64>& nodeIds = {},
-    bool useActorSystemThreadsInTopicClient = true,
-    bool useYtflowEngine = false,
-    bool addTransparentPrefixToTransparentSystemColumns = true
-);
+TDataProviderInitializer GetPqDataProviderInitializer(IPqGateway::TPtr gateway, bool supportRtmrMode = false,
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr, const NPq::NProto::StreamingDisposition& disposition = {},
+    const std::vector<std::pair<TString, TString>>& taskSensorLabels = {}, const std::vector<ui64>& nodeIds = {},
+    bool useActorSystemThreadsInTopicClient = true, bool useYtflowEngine = false, bool addTransparentPrefixToTransparentSystemColumns = true);
 
 TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
 TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
 
-} // namespace NYql
+}   // namespace NYql

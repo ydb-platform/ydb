@@ -102,6 +102,7 @@ public:
     class TTxUpdateNodeDisconnectTimestamp;
     class TTxUpdateShred;
     class TTxCheckUnsynced;
+    class TTxConvertToBridge;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -922,6 +923,7 @@ public:
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
+        bool FillInOwnGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params) const;
         bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool useExpectedSlotCount) const;
         bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
@@ -951,8 +953,52 @@ public:
             return !BlobDepotId && DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::NONE;
         }
 
+        // is this group a pile of its own (a group converted from non-bridged one); such group has both its own VDisks
+        // and BridgeGroupInfo referencing itself
+        bool IsInlinePile() const {
+            return BridgeProxyGroupId == ID;
+        }
+
+        // is this group a pile of some other bridge proxy group, and hence not visible on its own
+        bool IsBridgePileOnly() const {
+            return BridgePileId && !IsInlinePile();
+        }
+
         bool IsDecommitted() const {
             return DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE;
+        }
+
+        // is this a physical group which is not bridged yet; such group is turned into inline pile when ordinary
+        // cluster is being converted into bridged one
+        bool IsBridgeConversionCandidate() const {
+            return !VDisksInGroup.empty() && !VirtualGroupState && !BlobDepotId && !DDisk && !BridgeGroupInfo &&
+                !BridgeProxyGroupId && !BridgePileId;
+        }
+
+        // BlobDepotId as reported to node wardens: actual tablet id for working virtual group, zero for virtual group which
+        // BlobDepot has failed to be created for, and nothing otherwise
+        std::optional<ui64> GetReportedBlobDepotId() const {
+            if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                Y_ABORT_UNLESS(BlobDepotId);
+                return *BlobDepotId;
+            } else if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
+                return 0;
+            } else {
+                return std::nullopt;
+            }
+        }
+
+        // the part of group information reported to node wardens which is changed by virtual group machinery; group
+        // generation has to be bumped whenever it changes, otherwise nodes would get different infos of the same generation
+        auto GetReportedVirtualGroupState() const {
+            return std::make_tuple(GetReportedBlobDepotId(), DecommitStatus);
+        }
+
+        // is this an unbridged group having both physical and virtual parts (it is being decommitted or recommissioned);
+        // such group can't be bridged, and conversion to bridged cluster is not finished until it loses one of the parts;
+        // already bridged group may be decommitted as a whole, it doesn't block anything
+        bool BlocksBridgeConversion() const {
+            return !VDisksInGroup.empty() && (VirtualGroupState || BlobDepotId) && !BridgeGroupInfo;
         }
 
         using TGroupFinder = std::function<const TGroupInfo*(TGroupId)>;
@@ -960,8 +1006,12 @@ public:
         bool IsLayoutCorrect(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
                 for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
-                    const TGroupInfo *group = finder(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    if (!group || !group->IsLayoutCorrect(finder)) {
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    if (groupId == ID) { // inline pile
+                        if (!LayoutCorrect) {
+                            return false;
+                        }
+                    } else if (const TGroupInfo *group = finder(groupId); !group || !group->IsLayoutCorrect(finder)) {
                         return false;
                     }
                 }
@@ -1658,6 +1708,7 @@ private:
             EvUpdateHostRecords,
             EvUpdateShredState,
             EvCheckSyncerDisconnectedNodes,
+            EvRetryBridgeConversion,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -2145,6 +2196,15 @@ private:
 
     void CheckUnsyncedBridgePiles();
 
+    bool ConvertingToBridge = false;
+    bool RecheckBridgeConversion = false;
+    bool BridgeConversionRetryScheduled = false;
+    TBackoffTimer BridgeConversionRetryBackoff{100, 30000};
+
+    void CheckBridgeConversion();
+    void OnBridgeConversionStepDone(bool failed);
+    void HandleRetryBridgeConversion();
+
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);
 
@@ -2393,6 +2453,7 @@ public:
 
         ShredState.Initialize();
         CheckSyncerDisconnectedNodes();
+        CheckBridgeConversion();
     }
 
     void UpdatePDisksCounters() {

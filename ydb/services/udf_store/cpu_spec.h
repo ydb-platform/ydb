@@ -6,4 +6,4 @@ namespace NKikimr::NUdfStore {
 
 TString DetectLocalCpuSpec(const TString& overrideSpec = {});
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

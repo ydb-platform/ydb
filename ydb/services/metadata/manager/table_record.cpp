@@ -1,9 +1,9 @@
 #include "table_record.h"
 #include "ydb_value_operator.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
@@ -16,7 +16,7 @@ Ydb::Table::ExecuteDataQueryRequest CreateDataQueryRequestWithDefaults(bool keep
     return result;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 bool TTableRecord::CompareColumns(const TTableRecord& item, const std::vector<TString>& columnIds) const {
     for (auto&& i : columnIds) {
@@ -81,7 +81,7 @@ Ydb::ResultSet TTableRecord::BuildRecordSet() const {
     for (auto&& i : Values) {
         Ydb::Column column;
         column.set_name(i.first);
-//        column.set_type(i.second.type());
+        //        column.set_type(i.second.type());
         *result.add_columns() = column;
         *row.add_items() = i.second;
     }
@@ -320,4 +320,4 @@ std::vector<TTableRecord> TTableRecords::GetTableRecords() const {
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInternal

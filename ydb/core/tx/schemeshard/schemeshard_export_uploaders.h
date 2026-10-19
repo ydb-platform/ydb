@@ -21,6 +21,10 @@ namespace Ydb::Export {
 
 namespace NKikimr::NSchemeShard {
 
+// Waits for TEvWakeup before uploading, so the caller can commit its transaction first.
+NActors::IActor* CreateExportCompletionUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& destinationPrefix);
+
 template <typename TSettings>
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const TSettings& settings, const TString& databaseRoot, const TString& metadata,

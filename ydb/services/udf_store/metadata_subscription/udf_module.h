@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
 #include <ydb/core/base/appdata.h>
 
+#include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/abstract/decoder.h>
 #include <ydb/services/metadata/manager/object.h>
 #include <ydb/services/metadata/manager/preparation_controller.h>
@@ -28,21 +28,21 @@ public:
     // A module is identified by its name: for a WASM UDF that is the manifest's
     // module_name, i.e. the name YQL queries call it by, and for a library it is
     // the library name. md5 is only a checksum of the uploaded body.
-    static inline const TString NameColName = "name"; // Utf8 (PK)
-    static inline const TString UidColName = "uid"; // Utf8
-    static inline const TString Md5ColName = "md5"; // Utf8
-    static inline const TString SizeColName = "size"; // Uint64
-    static inline const TString TypeColName = "type"; // Utf8 (EUdfType)
-    static inline const TString ManifestColName = "manifest"; // Json
-    static inline const TString VersionColName = "version"; // Uint64
-    static inline const TString ChunkCountColName = "chunk_count"; // Uint64
+    static inline const TString NameColName = "name";   // Utf8 (PK)
+    static inline const TString UidColName = "uid";   // Utf8
+    static inline const TString Md5ColName = "md5";   // Utf8
+    static inline const TString SizeColName = "size";   // Uint64
+    static inline const TString TypeColName = "type";   // Utf8 (EUdfType)
+    static inline const TString ManifestColName = "manifest";   // Json
+    static inline const TString VersionColName = "version";   // Uint64
+    static inline const TString ChunkCountColName = "chunk_count";   // Uint64
     // Kept temporarily for the existing .sys/udf_modules contract. Compilation
     // state is no longer written here; authoritative state lives in artifacts.
-    static inline const TString CompileStatusColName = "compile_status"; // Utf8
-    static inline const TString CompileErrorColName = "compile_error"; // Utf8
-    static inline const TString CreatedAtColName = "created_at"; // Timestamp
-    static inline const TString CompileStartedAtColName = "compile_started_at"; // Timestamp
-    static inline const TString CompileFinishedAtColName = "compile_finished_at"; // Timestamp
+    static inline const TString CompileStatusColName = "compile_status";   // Utf8
+    static inline const TString CompileErrorColName = "compile_error";   // Utf8
+    static inline const TString CreatedAtColName = "created_at";   // Timestamp
+    static inline const TString CompileStartedAtColName = "compile_started_at";   // Timestamp
+    static inline const TString CompileFinishedAtColName = "compile_finished_at";   // Timestamp
 
 private:
     YDB_ACCESSOR_DEF(TString, Uid);
@@ -54,6 +54,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, Version);
     YDB_ACCESSOR_DEF(ui64, ChunkCount);
     YDB_ACCESSOR_DEF(TInstant, CreatedAt);
+
 public:
     static NMetadata::IClassBehaviour::TPtr GetBehaviour();
     static TVector<NKikimrSchemeOp::TColumnDescription> GetColumnDescription();
@@ -61,6 +62,7 @@ public:
 
     class TDecoder: public NMetadata::NInternal::TDecoderBase {
         using TBase = NMetadata::NInternal::TDecoderBase;
+
     private:
         YDB_ACCESSOR(i32, UidIdx, -1);
         YDB_ACCESSOR(i32, Md5Idx, -1);
@@ -91,9 +93,10 @@ public:
     bool operator<(const TUdfModule& other) const {
         return Name < other.Name;
     }
+
     bool operator==(const TUdfModule& other) const {
         return Name == other.Name;
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

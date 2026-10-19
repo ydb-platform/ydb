@@ -24,4 +24,4 @@ TACLModifierConstructor TACLModifierConstructor::GetReadOnlyModifier(const TStri
     return result;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

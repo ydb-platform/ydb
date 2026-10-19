@@ -665,6 +665,56 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
 }
 
+TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag)
+    : GroupID(other.GroupID)
+    , GroupGeneration(other.GroupGeneration)
+    , Type(other.Type)
+    , GroupSizeInUnits(other.GroupSizeInUnits)
+    , BlobDepotId(other.BlobDepotId)
+    , DecommitStatus(other.DecommitStatus)
+    , Group(other.Group)
+    , Topology(other.Topology)
+    , Dynamic(other.Dynamic)
+    , EncryptionMode(other.EncryptionMode)
+    , LifeCyclePhase(other.LifeCyclePhase)
+    , GroupKeyNonce(other.GroupKeyNonce)
+    , Key(other.Key)
+    , AcceptedScope(other.AcceptedScope)
+    , StoragePoolName(other.StoragePoolName)
+    , DeviceType(other.DeviceType)
+    , BridgeProxyGroupId(other.BridgeProxyGroupId)
+    , BridgePileId(other.BridgePileId)
+{
+    // keep BridgeProxyGroupId, so the DS proxy treats this group as an ordinary pile one accessible only through the
+    // bridge proxy. Keep BridgeGroupState in the protobuf as well: queues retain this protobuf and may send it back
+    // through a VDisk to NodeWarden, which needs it to recognize the inline pile.
+}
+
+TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::MakeInlinePileView() const {
+    Y_ABORT_UNLESS(IsInlinePile());
+    return TIntrusivePtr<TBlobStorageGroupInfo>(new TBlobStorageGroupInfo(*this, TInlinePileViewTag()));
+}
+
+bool TBlobStorageGroupInfo::DecommitBlocksWrites() const {
+    switch (DecommitStatus) {
+        case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+        case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+            return false;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+        case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+            return true;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+            return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
+
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+            Y_ABORT();
+            return true;
+    }
+}
+
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
 {}
 
@@ -809,7 +859,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
-    Y_ABORT_UNLESS(!IsBridged());
+    Y_ABORT_UNLESS(!IsBridged() || IsInlinePile());
     return Topology->GetQuorumChecker();
 }
 

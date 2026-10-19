@@ -414,4 +414,47 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         UNIT_ASSERT(value && !value->is_valid);
         UNIT_ASSERT(value->type->Equals(arrow::utf8()));
     }
+
+    Y_UNIT_TEST(HasNoNullsWithValidDictionaryAndPositions) {
+        auto dictionary = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(1), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == false);
+    }
+
+    Y_UNIT_TEST(HasNullsFromPositions) {
+        auto dictionary = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(1), 1);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddNull(1);
+        auto positions = positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(HasNullsFromLegacySingleNullDictionary) {
+        auto dictionary = TThreadSimpleArraysCache::GetNull(arrow::uint8(), 1);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls() == true);
+    }
+
+    Y_UNIT_TEST(NullDictionaryEntryWithoutNullPositionsIsUnknown) {
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> dictionaryBuilder;
+        dictionaryBuilder.AddValue(0, 1);
+        dictionaryBuilder.AddNull(1);
+        auto dictionary = dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        auto positions = TThreadSimpleArraysCache::GetConst(arrow::uint8(), std::make_shared<arrow::UInt8Scalar>(0), 2);
+        UNIT_ASSERT(!std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls());
+    }
+
+    // We cannot guarantee that null entry is referenced by any position without scanning the positions, so default to unknown.
+    Y_UNIT_TEST(ReferencedNullDictionaryEntryIsUnknown) {
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> dictionaryBuilder;
+        dictionaryBuilder.AddValue(0, 1);
+        dictionaryBuilder.AddNull(1);
+        auto dictionary = dictionaryBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        TTrivialArray::TPlainBuilder<arrow::UInt8Type> positionsBuilder;
+        positionsBuilder.AddValue(0, 0);
+        positionsBuilder.AddValue(1, 1);
+        auto positions = positionsBuilder.Finish(2)->GetChunkedArray()->chunk(0);
+        UNIT_ASSERT(!std::make_shared<TDictionaryArray>(dictionary, positions)->HasNulls());
+    }
 };

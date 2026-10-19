@@ -77,6 +77,7 @@ class TSchemeShard;
 struct TForceShardSplitSettings {
     ui64 ForceShardSplitDataSize;
     bool DisableForceShardSplit;
+    bool MergeBySizeEnabled;
 };
 
 struct TSplitSettings {
@@ -91,6 +92,7 @@ struct TSplitSettings {
     TControlWrapper ForceShardSplitDataSize;
     TControlWrapper DisableForceShardSplit;
     TControlWrapper EnableSplitMergeFairScheduling;
+    TControlWrapper MergeBySizeEnabled;
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -104,6 +106,7 @@ struct TSplitSettings {
         , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
         , DisableForceShardSplit(0, 0, 1)
         , EnableSplitMergeFairScheduling(0, 0, 1)
+        , MergeBySizeEnabled(1, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -120,13 +123,15 @@ struct TSplitSettings {
         TControlBoard::RegisterSharedControl(ForceShardSplitDataSize,          icb->SchemeShardControls.ForceShardSplitDataSize);
         TControlBoard::RegisterSharedControl(DisableForceShardSplit,           icb->SchemeShardControls.DisableForceShardSplit);
 
-        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,    icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        TControlBoard::RegisterSharedControl(EnableSplitMergeFairScheduling,   icb->SchemeShardControls.EnableSplitMergeFairScheduling);
+        TControlBoard::RegisterSharedControl(MergeBySizeEnabled,               icb->SchemeShardControls.MergeBySizeEnabled);
     }
 
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
             .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+            .MergeBySizeEnabled = ui64(MergeBySizeEnabled) != 0,
         };
     }
 };
@@ -1416,6 +1421,10 @@ public:
     }
 
     bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Global switch: merge by size can be disabled cluster-wide via ICB
+        if (!params.MergeBySizeEnabled) {
+            return false;
+        }
         // Auto merge is only enabled when auto split is also enabled
         if (!IsSplitBySizeEnabled(params)) {
             return false;

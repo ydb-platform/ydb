@@ -1,6 +1,7 @@
 #include "kqp_streaming_aggregation.h"
 
 #include <ydb/core/kqp/runtime/common/kqp_compute_context.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/helpers/future_callback.h>
@@ -10,20 +11,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
+#include <contrib/libs/fmt/include/fmt/format.h>
+#include <library/cpp/threading/future/future.h>
+#include <util/generic/maybe.h>
+#include <util/generic/string.h>
+#include <util/string/escape.h>
+#include <util/string/subst.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-
-#include <library/cpp/threading/future/future.h>
-
-#include <contrib/libs/fmt/include/fmt/format.h>
-
-#include <util/generic/maybe.h>
-#include <util/generic/string.h>
-#include <util/string/escape.h>
-#include <util/string/subst.h>
 
 #include <list>
 #include <optional>
@@ -42,12 +40,12 @@ TString QuoteStreamingAggregationIdentifier(const TStringBuf& name) {
     return TStringBuilder() << '`' << escaped << '`';
 }
 
-} // namespace NPrivate
+}   // namespace NPrivate
 
 namespace {
 
 template <typename TDerived, bool SerializableState = false>
-class TStreamingAggregationFlowWrapperBase : public TStatefulFlowComputationNode<TDerived, SerializableState> {
+class TStreamingAggregationFlowWrapperBase: public TStatefulFlowComputationNode<TDerived, SerializableState> {
     using TBaseComputation = TStatefulFlowComputationNode<TDerived, SerializableState>;
 
 protected:
@@ -61,24 +59,11 @@ protected:
     using TSet = std::unordered_set<TValue, std::hash<TValue>, std::equal_to<TValue>, TMKQLAllocator<TValue>>;
 
 public:
-    TStreamingAggregationFlowWrapperBase(
-        TComputationMutables& mutables,
-        const EValueRepresentation kind,
-        IComputationNode* const flow,
-        IComputationExternalNode* const itemArg,
-        IComputationExternalNode* const stateArg,
-        IComputationExternalNode* const keyArg,
-        IComputationNode* const outKey,
-        IComputationNode* const outInit,
-        IComputationNode* const outUpdate,
-        IComputationNode* const outFinish,
-        TType* const keyType,
-        IComputationExternalNode* const savedStateArg,
-        IComputationNode* const outSave,
-        IComputationNode* const outLoad,
-        TType* const savedStateType,
-        IComputationExternalNode* const mergeArg = nullptr,
-        IComputationNode* const outMerge = nullptr)
+    TStreamingAggregationFlowWrapperBase(TComputationMutables& mutables, const EValueRepresentation kind, IComputationNode* const flow,
+        IComputationExternalNode* const itemArg, IComputationExternalNode* const stateArg, IComputationExternalNode* const keyArg,
+        IComputationNode* const outKey, IComputationNode* const outInit, IComputationNode* const outUpdate, IComputationNode* const outFinish,
+        TType* const keyType, IComputationExternalNode* const savedStateArg, IComputationNode* const outSave, IComputationNode* const outLoad,
+        TType* const savedStateType, IComputationExternalNode* const mergeArg = nullptr, IComputationNode* const outMerge = nullptr)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Boxed)
         , Flow(flow)
         , ItemArg(itemArg)
@@ -98,7 +83,8 @@ public:
         , StatePacker(mutables)
         , MergeArg(mergeArg)
         , OutMerge(outMerge)
-    {}
+    {
+    }
 
 private:
     bool IsSuitableForCache() const final {
@@ -147,11 +133,12 @@ protected:
     IComputationNode* const OutMerge;
 };
 
-class TInMemoryStreamingAggregationFlowWrapper final : public TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper, true> {
+class TInMemoryStreamingAggregationFlowWrapper final
+    : public TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper, true> {
     using TThis = TInMemoryStreamingAggregationFlowWrapper;
     using TBase = TStreamingAggregationFlowWrapperBase<TThis, true>;
 
-    class TState final : public TComputationValue<TState> {
+    class TState final: public TComputationValue<TState> {
         static constexpr ui32 STATE_VERSION = 1;
 
     public:
@@ -160,7 +147,8 @@ class TInMemoryStreamingAggregationFlowWrapper final : public TStreamingAggregat
             , Self(self)
             , Ctx(ctx)
             , Map(0, self.KeyTypeHelper.GetValueHash(), self.KeyTypeHelper.GetValueEqual())
-        {}
+        {
+        }
 
         ~TState() final {
             ClearState();
@@ -263,19 +251,20 @@ public:
 };
 
 template <typename TDerived, bool SerializableState = false>
-class TTableStreamingAggregationFlowWrapperBase : public TStreamingAggregationFlowWrapperBase<TDerived, SerializableState> {
+class TTableStreamingAggregationFlowWrapperBase: public TStreamingAggregationFlowWrapperBase<TDerived, SerializableState> {
     using TBase = TStreamingAggregationFlowWrapperBase<TDerived, SerializableState>;
 
 protected:
     template <typename TResult>
-    struct TEvStateQueryResult : public NActors::TEventLocal<TEvStateQueryResult<TResult>, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
+    struct TEvStateQueryResult: public NActors::TEventLocal<TEvStateQueryResult<TResult>, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
         using TValue = std::conditional_t<std::is_void_v<TResult>, std::monostate, TResult>;
 
         TEvStateQueryResult(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues, TValue result)
             : Status(status)
             , Issues(std::move(issues))
             , Result(std::move(result))
-        {}
+        {
+        }
 
         const Ydb::StatusIds::StatusCode Status;
         const NYql::TIssues Issues;
@@ -283,13 +272,14 @@ protected:
     };
 
     template <typename TQueryActor, typename TResultType>
-    class TStateQueryActorBase : public TQueryBase, public TQueryRetryActorMixin<TQueryActor, TEvStateQueryResult<TResultType>> {
+    class TStateQueryActorBase: public TQueryBase, public TQueryRetryActorMixin<TQueryActor, TEvStateQueryResult<TResultType>> {
     public:
         using TResult = TResultType;
         using TResponseEvent = TEvStateQueryResult<TResult>;
 
         TStateQueryActorBase(const TString& operationName, TString database, TMaybe<TString> userToken, TString tablePath)
-            : TQueryBase(NKikimrServices::KQP_COMPUTE, {}, std::move(database), /* isSystemUser */ false, /* isStreamingMode */ false, std::move(userToken))
+            : TQueryBase(NKikimrServices::KQP_COMPUTE, {}, std::move(database), /* isSystemUser */ false, /* isStreamingMode */ false,
+                  std::move(userToken))
             , TablePath(std::move(tablePath))
         {
             SetOperationInfo(operationName, /* traceId */ "");
@@ -306,27 +296,15 @@ protected:
     };
 
 public:
-    TTableStreamingAggregationFlowWrapperBase(
-        const TKqpComputeContextBase& computeCtx,
-        TComputationMutables& mutables,
-        const EValueRepresentation kind,
-        IComputationNode* const flow,
-        IComputationExternalNode* const itemArg,
-        IComputationExternalNode* const stateArg,
-        IComputationExternalNode* const keyArg,
-        IComputationNode* const outKey,
-        IComputationNode* const outInit,
-        IComputationNode* const outUpdate,
-        IComputationNode* const outFinish,
-        TType* const keyType,
-        IComputationExternalNode* const savedStateArg,
-        IComputationNode* const outSave,
-        IComputationNode* const outLoad,
-        TType* const savedStateType,
-        TString stateTablePath,
-        IComputationExternalNode* const mergeArg = nullptr,
+    TTableStreamingAggregationFlowWrapperBase(const TKqpComputeContextBase& computeCtx, TComputationMutables& mutables,
+        const EValueRepresentation kind, IComputationNode* const flow, IComputationExternalNode* const itemArg,
+        IComputationExternalNode* const stateArg, IComputationExternalNode* const keyArg, IComputationNode* const outKey,
+        IComputationNode* const outInit, IComputationNode* const outUpdate, IComputationNode* const outFinish, TType* const keyType,
+        IComputationExternalNode* const savedStateArg, IComputationNode* const outSave, IComputationNode* const outLoad,
+        TType* const savedStateType, TString stateTablePath, IComputationExternalNode* const mergeArg = nullptr,
         IComputationNode* const outMerge = nullptr)
-        : TBase(mutables, kind, flow, itemArg, stateArg, keyArg, outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType, mergeArg, outMerge)
+        : TBase(mutables, kind, flow, itemArg, stateArg, keyArg, outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad,
+              savedStateType, mergeArg, outMerge)
         , ComputeCtx(computeCtx)
         , StateTablePath(NPrivate::QuoteStreamingAggregationIdentifier(stateTablePath))
     {
@@ -345,7 +323,8 @@ protected:
         using TResponseEvent = typename TQueryActor::TResponseEvent;
 
         Y_VALIDATE(NActors::TlsActivationContext, "KqpStreamingAggregation table backend requires actor TLS context");
-        Y_VALIDATE(ComputeCtx.GetWakeupCallback(), "KqpStreamingAggregation table backend requires a wakeup callback in the KQP compute context");
+        Y_VALIDATE(
+            ComputeCtx.GetWakeupCallback(), "KqpStreamingAggregation table backend requires a wakeup callback in the KQP compute context");
         auto* const actorSystem = NActors::TlsActivationContext->ActorSystem();
 
         auto promise = NThreading::NewPromise<typename TQueryActor::TResult>();
@@ -358,23 +337,23 @@ protected:
             [promise = std::move(promise), tablePath = StateTablePath](typename TResponseEvent::TPtr& ev) mutable {
                 auto& response = *ev->Get();
                 if (response.Status != Ydb::StatusIds::SUCCESS) {
-                    promise.SetException(TStringBuilder() << "Streaming aggregation " << TQueryActor::OPERATION_NAME
-                        << " failed for table " << tablePath << ", status=" << static_cast<int>(response.Status)
-                        << ": " << response.Issues.ToString());
+                    promise.SetException(TStringBuilder()
+                                         << "Streaming aggregation " << TQueryActor::OPERATION_NAME << " failed for table " << tablePath
+                                         << ", status=" << static_cast<int>(response.Status) << ": " << response.Issues.ToString());
                 } else if constexpr (std::is_void_v<typename TQueryActor::TResult>) {
                     promise.SetValue();
                 } else {
                     promise.SetValue(std::move(response.Result));
                 }
-            }
-        ));
+            }));
 
         TMaybe<TString> userToken;
         if (const auto& token = ComputeCtx.GetUserToken()) {
             userToken = token->GetSerializedToken();
         }
 
-        actorSystem->Register(TQueryActor::MakeRetry(replyActor, ComputeCtx.GetDatabase(), std::move(userToken), StateTablePath, std::forward<TArgs>(args)...));
+        actorSystem->Register(
+            TQueryActor::MakeRetry(replyActor, ComputeCtx.GetDatabase(), std::move(userToken), StateTablePath, std::forward<TArgs>(args)...));
         return future;
     }
 
@@ -382,7 +361,7 @@ protected:
     const TString StateTablePath;
 };
 
-class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggregationFlowWrapperBase<TTableStreamingAggregationFlowWrapper> {
+class TTableStreamingAggregationFlowWrapper final: public TTableStreamingAggregationFlowWrapperBase<TTableStreamingAggregationFlowWrapper> {
     using TBase = TTableStreamingAggregationFlowWrapperBase<TTableStreamingAggregationFlowWrapper>;
 
     // State helpers
@@ -401,7 +380,8 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
     public:
         explicit TStreamingStateLruCache(const TTableStreamingAggregationFlowWrapper& self)
             : Map(0, self.KeyTypeHelper.GetValueHash(), self.KeyTypeHelper.GetValueEqual())
-        {}
+        {
+        }
 
         NUdf::TUnboxedValue* Get(const NUdf::TUnboxedValuePod& key) {
             if (const auto it = Map.find(key); it != Map.end()) {
@@ -412,7 +392,7 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
         }
 
         std::optional<TEntry> Insert(NUdf::TUnboxedValue key, NUdf::TUnboxedValue state) {
-            Usage.emplace_back(TEntry{std::move(key), std::move(state)});
+            Usage.emplace_back(TEntry{ std::move(key), std::move(state) });
             const auto last = std::prev(Usage.end());
             Y_VALIDATE(Map.emplace(last->Key, last).second, "Duplicated key");
 
@@ -434,14 +414,15 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
 
     // Persistent state table interaction
 
-    class TSelectStateActor final : public TStateQueryActorBase<TSelectStateActor, std::optional<std::string>> {
+    class TSelectStateActor final: public TStateQueryActorBase<TSelectStateActor, std::optional<std::string>> {
     public:
         static constexpr TStringBuf OPERATION_NAME = "SELECT";
 
         TSelectStateActor(const TString& database, const TMaybe<TString>& userToken, const TString& tablePath, const TString& key)
             : TStateQueryActorBase(__func__, database, userToken, tablePath)
             , Key(key)
-        {}
+        {
+        }
 
     private:
         void OnRunQuery() final {
@@ -451,10 +432,7 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
             )sql", TablePath);
 
             NYdb::TParamsBuilder params;
-            params
-                .AddParam("$key")
-                    .String(Key)
-                    .Build();
+            params.AddParam("$key").String(Key).Build();
 
             RunDataQuery(sql, &params);
         }
@@ -474,15 +452,17 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
         const TString Key;
     };
 
-    class TUpsertStateActor final : public TStateQueryActorBase<TUpsertStateActor, void> {
+    class TUpsertStateActor final: public TStateQueryActorBase<TUpsertStateActor, void> {
     public:
         static constexpr TStringBuf OPERATION_NAME = "UPSERT";
 
-        TUpsertStateActor(const TString& database, const TMaybe<TString>& userToken, const TString& tablePath, const TString& key, const TString& state)
+        TUpsertStateActor(
+            const TString& database, const TMaybe<TString>& userToken, const TString& tablePath, const TString& key, const TString& state)
             : TStateQueryActorBase(__func__, database, userToken, tablePath)
             , Key(key)
             , State(state)
-        {}
+        {
+        }
 
     private:
         void OnRunQuery() final {
@@ -493,13 +473,7 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
             )sql", TablePath);
 
             NYdb::TParamsBuilder params;
-            params
-                .AddParam("$key")
-                    .String(Key)
-                    .Build()
-                .AddParam("$state")
-                    .String(State)
-                    .Build();
+            params.AddParam("$key").String(Key).Build() .AddParam("$state").String(State).Build();
 
             RunDataQuery(sql, &params);
         }
@@ -516,11 +490,11 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
 
     // Inmemory state
 
-    class TState final : public TComputationValue<TState> {
+    class TState final: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
 
     public:
-        enum class EStep : ui8 {
+        enum class EStep: ui8 {
             Fetch = 0,
             AwaitSelect,
             AwaitUpsert,
@@ -529,7 +503,8 @@ class TTableStreamingAggregationFlowWrapper final : public TTableStreamingAggreg
         TState(TMemoryUsageInfo* const memInfo, const TTableStreamingAggregationFlowWrapper& self)
             : TBase(memInfo)
             , Cache(self)
-        {}
+        {
+        }
 
         void Clear() {
             PendingItem = NUdf::TUnboxedValue();
@@ -650,12 +625,13 @@ private:
     }
 };
 
-class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreamingAggregationFlowWrapperBase<TOutputTableStreamingAggregationFlowWrapper, true> {
+class TOutputTableStreamingAggregationFlowWrapper final
+    : public TTableStreamingAggregationFlowWrapperBase<TOutputTableStreamingAggregationFlowWrapper, true> {
     using TThis = TOutputTableStreamingAggregationFlowWrapper;
     using TBase = TTableStreamingAggregationFlowWrapperBase<TThis, true>;
     using TCheckpointId = std::pair<ui64, ui64>;
 
-    class TReadRowActor final : public TStateQueryActorBase<TReadRowActor, Ydb::ResultSet> {
+    class TReadRowActor final: public TStateQueryActorBase<TReadRowActor, Ydb::ResultSet> {
     public:
         static constexpr TStringBuf OPERATION_NAME = "SELECT";
 
@@ -663,7 +639,8 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
             : TStateQueryActorBase("StreamingAggregationReadRow", std::move(database), std::move(userToken), std::move(tablePath))
             , Sql(std::move(sql))
             , Keys(std::move(keys))
-        {}
+        {
+        }
 
     private:
         void OnRunQuery() final {
@@ -684,7 +661,7 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
         const TVector<NYdb::TValue> Keys;
     };
 
-    class TState final : public TComputationValue<TState> {
+    class TState final: public TComputationValue<TState> {
         static constexpr ui32 STATE_VERSION = 2;
 
     public:
@@ -707,7 +684,8 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
             explicit TCheckpointStorage(const TThis& self)
                 : Map(0, self.KeyTypeHelper.GetValueHash(), self.KeyTypeHelper.GetValueEqual())
                 , PendingMap(0, self.KeyTypeHelper.GetValueHash(), self.KeyTypeHelper.GetValueEqual())
-            {}
+            {
+            }
 
             TEntryMap Map;
             TEntryMap PendingMap;
@@ -719,7 +697,8 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
             , Storage(self)
             , Self(self)
             , Ctx(ctx)
-        {}
+        {
+        }
 
         ~TState() final {
             ClearState();
@@ -792,7 +771,8 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
             }
 
             const auto& committed = Self.CheckpointContext->LastCommittedCheckpoint;
-            return EmitState == EEmitState::WaitingForCommit && committed && Storage.SnapshotCheckpoint && *Storage.SnapshotCheckpoint <= CheckpointId(*committed);
+            return EmitState == EEmitState::WaitingForCommit && committed && Storage.SnapshotCheckpoint &&
+                   *Storage.SnapshotCheckpoint <= CheckpointId(*committed);
         }
 
         NUdf::TUnboxedValue Save() const final {
@@ -875,7 +855,8 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
                 TEntry entry;
                 entry.Checkpointed = in.ReadUnboxedValue(statePacker, Ctx);
                 MKQL_ENSURE(!Storage.Map.contains(key), "Pending output table lookup already has aggregation state");
-                MKQL_ENSURE(Storage.PendingMap.emplace(key, std::move(entry)).second, "Duplicate pending key in output table aggregation checkpoint");
+                MKQL_ENSURE(
+                    Storage.PendingMap.emplace(key, std::move(entry)).second, "Duplicate pending key in output table aggregation checkpoint");
                 key.Ref();
             }
 
@@ -919,35 +900,23 @@ class TOutputTableStreamingAggregationFlowWrapper final : public TTableStreaming
     };
 
 public:
-    TOutputTableStreamingAggregationFlowWrapper(
-        const TKqpComputeContextBase& computeCtx,
-        TComputationMutables& mutables,
-        const EValueRepresentation kind,
-        IComputationNode* const flow,
-        IComputationExternalNode* const itemArg,
-        IComputationExternalNode* const stateArg,
-        IComputationExternalNode* const keyArg,
-        IComputationNode* const outKey,
-        IComputationNode* const outInit,
-        IComputationNode* const outUpdate,
-        IComputationNode* const outFinish,
-        TType* const keyType,
-        IComputationExternalNode* const savedStateArg,
-        IComputationNode* const outSave,
-        IComputationNode* const outLoad,
-        TType* const savedStateType,
-        IComputationExternalNode* const mergeArg,
-        IComputationNode* const outMerge,
-        const TTupleLiteral& binding)
-        : TBase(computeCtx, mutables, kind, flow, itemArg, stateArg, keyArg, outKey, outInit, outUpdate, outFinish, keyType,
-                savedStateArg, outSave, outLoad, savedStateType, TString(AS_VALUE(TDataLiteral, binding.GetValue(0))->AsValue().AsStringRef()), mergeArg, outMerge)
+    TOutputTableStreamingAggregationFlowWrapper(const TKqpComputeContextBase& computeCtx, TComputationMutables& mutables,
+        const EValueRepresentation kind, IComputationNode* const flow, IComputationExternalNode* const itemArg,
+        IComputationExternalNode* const stateArg, IComputationExternalNode* const keyArg, IComputationNode* const outKey,
+        IComputationNode* const outInit, IComputationNode* const outUpdate, IComputationNode* const outFinish, TType* const keyType,
+        IComputationExternalNode* const savedStateArg, IComputationNode* const outSave, IComputationNode* const outLoad,
+        TType* const savedStateType, IComputationExternalNode* const mergeArg, IComputationNode* const outMerge, const TTupleLiteral& binding)
+        : TBase(computeCtx, mutables, kind, flow, itemArg, stateArg, keyArg, outKey, outInit, outUpdate, outFinish, keyType, savedStateArg,
+              outSave, outLoad, savedStateType, TString(AS_VALUE(TDataLiteral, binding.GetValue(0))->AsValue().AsStringRef()), mergeArg,
+              outMerge)
         , CheckpointContext(computeCtx.GetCheckpointContext())
     {
         Y_VALIDATE(CheckpointContext, "Output table aggregation requires a checkpoint context");
 
         const auto tableColumn = [columns = AS_VALUE(TStructLiteral, binding.GetValue(1))](const TStringBuf& name) {
             const auto index = columns->GetType()->GetMemberIndex(name);
-            return NPrivate::QuoteStreamingAggregationIdentifier(TString(AS_VALUE(TDataLiteral, columns->GetValue(index))->AsValue().AsStringRef()));
+            return NPrivate::QuoteStreamingAggregationIdentifier(
+                TString(AS_VALUE(TDataLiteral, columns->GetValue(index))->AsValue().AsStringRef()));
         };
 
         const auto* const keys = AS_TYPE(TStructType, KeyType);
@@ -1008,14 +977,13 @@ public:
             state.ReadFuture = ReadRow(NUdf::TUnboxedValue(state.PendingOrder.front()->first));
         }
 
-        return state.InputFinished && state.PendingOrder.empty() && state.Storage.Map.empty()
-            ? NUdf::TUnboxedValuePod::MakeFinish()
-            : NUdf::TUnboxedValuePod::MakeYield();
+        return state.InputFinished && state.PendingOrder.empty() && state.Storage.Map.empty() ? NUdf::TUnboxedValuePod::MakeFinish()
+                                                                                              : NUdf::TUnboxedValuePod::MakeYield();
     }
 
 private:
     static TCheckpointId CheckpointId(const NYql::NDqProto::TCheckpoint& checkpoint) {
-        return {checkpoint.GetGeneration(), checkpoint.GetId()};
+        return { checkpoint.GetGeneration(), checkpoint.GetId() };
     }
 
     static const Ydb::Type& WithoutOptional(const Ydb::Type& type) {
@@ -1068,7 +1036,7 @@ private:
                 if (inserted) {
                     pending->first.Ref();
                     state.PendingOrder.push_back(&*pending);
-                    entry.Live = OutInit->GetValue(ctx); // TODO: do not run init if not necessary
+                    entry.Live = OutInit->GetValue(ctx);   // TODO: do not run init if not necessary
                 } else {
                     StateArg->SetValue(ctx, !entry.Live.IsInvalid() ? NUdf::TUnboxedValue(entry.Live) : LoadState(entry, ctx));
                     entry.Live = OutUpdate->GetValue(ctx);
@@ -1088,15 +1056,18 @@ private:
             const auto* saved = AS_TYPE(TStructType, SavedStateType);
             const auto count = saved->GetMembersCount();
             const auto& resultRow = result.rows(0);
-            MKQL_ENSURE(result.columns_size() == static_cast<int>(count ? count : 1) && resultRow.items_size() == result.columns_size(), "Unexpected output state table row shape");
+            MKQL_ENSURE(result.columns_size() == static_cast<int>(count ? count : 1) && resultRow.items_size() == result.columns_size(),
+                "Unexpected output state table row shape");
 
             NUdf::TUnboxedValue* fields = nullptr;
             auto previous = ctx.HolderFactory.CreateDirectArrayHolder(count, fields);
             for (ui32 i = 0; i < count; ++i) {
-                MKQL_ENSURE(NYdb::TypesEqual(NYdb::TType(WithoutOptional(result.columns(i).type())), SavedTypes[i]), "Unexpected output state table column type: " << result.columns(i).name());
+                MKQL_ENSURE(NYdb::TypesEqual(NYdb::TType(WithoutOptional(result.columns(i).type())), SavedTypes[i]),
+                    "Unexpected output state table column type: " << result.columns(i).name());
                 const auto* type = saved->GetMemberType(i);
                 const auto& value = resultRow.items(i);
-                MKQL_ENSURE(type->IsOptional() || type->IsPg() || value.value_case() != Ydb::Value::kNullFlagValue, "Output state table contains NULL for required aggregation state: " << saved->GetMemberName(i));
+                MKQL_ENSURE(type->IsOptional() || type->IsPg() || value.value_case() != Ydb::Value::kNullFlagValue,
+                    "Output state table contains NULL for required aggregation state: " << saved->GetMemberName(i));
                 fields[i] = ImportValueFromProto(saved->GetMemberType(i), value, ctx.TypeEnv, ctx.HolderFactory);
             }
 
@@ -1107,7 +1078,7 @@ private:
         }
 
         const NUdf::TUnboxedValue key(pending->first);
-        const auto [it, inserted] = state.Storage.Map.emplace(key, TState::TEntry{.Live = std::move(newState)});
+        const auto [it, inserted] = state.Storage.Map.emplace(key, TState::TEntry{ .Live = std::move(newState) });
         Y_VALIDATE(inserted, "Duplicate output table aggregation state");
         it->first.Ref();
 
@@ -1150,10 +1121,10 @@ private:
     TVector<NYdb::TType> SavedTypes;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-IComputationNode* WrapKqpStreamingAggregation(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    const TKqpComputeContextBase& computeCtx)
+IComputationNode* WrapKqpStreamingAggregation(
+    TCallable& callable, const TComputationNodeFactoryContext& ctx, const TKqpComputeContextBase& computeCtx)
 {
     MKQL_ENSURE(callable.GetInputsCount() >= 12, "KqpStreamingAggregation expected at least 12 args, got " << callable.GetInputsCount());
 
@@ -1182,25 +1153,21 @@ IComputationNode* WrapKqpStreamingAggregation(TCallable& callable, const TComput
         const auto outMerge = LocateNode(ctx.NodeLocator, callable, 13);
         const auto* binding = AS_VALUE(TTupleLiteral, stateTable);
         MKQL_ENSURE(binding->GetValuesCount() == 2, "Expected output state table path and column mapping");
-        return new TOutputTableStreamingAggregationFlowWrapper(
-            computeCtx, ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg, stateArg, keyArg,
-            outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType,
-            mergeArg, outMerge, *binding);
+        return new TOutputTableStreamingAggregationFlowWrapper(computeCtx, ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg,
+            stateArg, keyArg, outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType, mergeArg,
+            outMerge, *binding);
     }
 
     const auto& stateTablePathLiteral = AS_VALUE(TDataLiteral, stateTable);
     TString stateTablePath(stateTablePathLiteral->AsValue().AsStringRef());
 
     if (!stateTablePath) {
-        return new TInMemoryStreamingAggregationFlowWrapper(
-            ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg, stateArg, keyArg,
+        return new TInMemoryStreamingAggregationFlowWrapper(ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg, stateArg, keyArg,
             outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType);
     }
 
-    return new TTableStreamingAggregationFlowWrapper(
-        computeCtx, ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg, stateArg, keyArg,
-        outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType,
-        std::move(stateTablePath));
+    return new TTableStreamingAggregationFlowWrapper(computeCtx, ctx.Mutables, GetValueRepresentation(returnType), flow, itemArg, stateArg,
+        keyArg, outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType, std::move(stateTablePath));
 }
 
-} // namespace NKikimr::NMiniKQL
+}   // namespace NKikimr::NMiniKQL

@@ -1,6 +1,7 @@
 #include "schemeshard__operation.h"
 
 #include "schemeshard__dispatch_op.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
@@ -113,6 +114,20 @@ bool TSchemeShard::ProcessOperationParts(
     if (parts.size() > 1) {
         // allow altering impl index tables as part of consistent operation
         context.IsAllowedPrivateTables = true;
+
+        // Suboperations with RequiresSinglePartTransaction have undo-unsafe
+        // Propose: on a failed propose in a multi-part transaction the already
+        // accepted parts could not be reverted. Forbid them here, at ignite time.
+        for (const auto& part : parts) {
+            Y_VERIFY_S(!DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }),
+                "IgniteOperation, single-part direct-write suboperation in a multi-part transaction"
+                    << ", subop: " << part->Name()
+                    << ", subopType: " << NKikimrSchemeOp::EOperationType_Name(part->GetModifyScheme().GetOperationType())
+                    << ", total subops count: " << parts.size()
+                    << ", txId: " << txId
+                    << ", schemeshard: " << selfId
+            );
+        }
     }
 
     for (auto& part : parts) {
@@ -167,19 +182,28 @@ bool TSchemeShard::ProcessOperationParts(
             auto firstGetDbLocation = context.GetFirstGetDbLocation();
             TString locationInfo = FormatSourceLocationInfo(firstGetDbLocation);
 
-            Y_VERIFY_S(context.IsUndoChangesSafe(),
-                "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
-                    << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
-                    << ", accepted subops count: " << operation->Parts.size()
-                    << ", total subops count: " << parts.size()
-                    << ", txId: " << txId
-                    << ", failed subop: " << operation->GetTxId()
-                    << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
-                    << ", fail reason: " << response->Record.GetReason()
-                    << ", first GetDB called at: " << locationInfo
-                    << ", modifyScheme tx: " << SecureDebugString(record)
-                    << ", schemeshard:  " << selfId
-            );
+            // A single-part direct-write suboperation failing its own propose
+            // is a documented exception: the transaction aborts with zero
+            // accepted parts and the direct writes are rolled back by the txc.
+            const bool singlePartDirectWrite =
+                parts.size() == 1
+                && DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; });
+
+            if (!singlePartDirectWrite) {
+                Y_VERIFY_S(context.IsUndoChangesSafe(),
+                    "IgniteOperation, operation is aborting, changes made by subop proposes should be reverted"
+                        << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                        << ", accepted subops count: " << operation->Parts.size()
+                        << ", total subops count: " << parts.size()
+                        << ", txId: " << txId
+                        << ", failed subop: " << operation->GetTxId()
+                        << ", failed subop status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                        << ", fail reason: " << response->Record.GetReason()
+                        << ", first GetDB called at: " << locationInfo
+                        << ", modifyScheme tx: " << SecureDebugString(record)
+                        << ", schemeshard:  " << selfId
+                );
+            }
 
             AbortOperationPropose(txId, context);
 
@@ -187,7 +211,10 @@ bool TSchemeShard::ProcessOperationParts(
         }
 
         // Check suboperations for undo safety. Log first unsafe suboperation in the schema transaction.
-        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()) {
+        // Single-part direct-write suboperations are a documented exception, do not warn about them.
+        if (prevProposeUndoSafe && !context.IsUndoChangesSafe()
+            && !DispatchOp(part->GetModifyScheme(), [](auto traits) { return traits.RequiresSinglePartTransaction; }))
+        {
             prevProposeUndoSafe = false;
 
             auto firstGetDbLocation = context.GetFirstGetDbLocation();

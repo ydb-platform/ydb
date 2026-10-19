@@ -178,6 +178,65 @@ private:
         Succeed("SET", {}, {}, guc->Name, guc->Value);
     }
 
+    void RunExplain(const TParseResult& parsed) {
+        const bool catalog = parsed.Select && parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
+        const bool wide = parsed.Cte || parsed.FromSubquery || !parsed.Scalars.empty() || parsed.Combine != ECombine::None
+            || (parsed.Select && parsed.Select->Join) || catalog;
+        if (parsed.Select && parsed.Select->Lock != ERowLock::None && wide) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (parsed.Select && parsed.Select->Offset && wide) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (parsed.Select && !parsed.Select->Windows.empty() && wide) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (parsed.Select && (catalog || parsed.Select->Join)
+            && (!parsed.Select->Order.empty() || !parsed.Select->Aggs.empty() || !parsed.Select->Group.empty()
+                || !parsed.Select->Having.empty() || parsed.Select->Distinct))
+        {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (Tx == ETx::Open && (IsDdl(parsed) || (parsed.Insert && parsed.Insert->Source))) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        if (parsed.Select && !wide) {
+            Register(CreateExplainActor(SelfId(), Database, *parsed.Select, Tx == ETx::Open ? TxId : 0));
+            return;
+        }
+        TString line;
+        if (parsed.Select) {
+            line = "Select";
+        } else if (parsed.Insert) {
+            line = "Insert";
+        } else if (parsed.Update) {
+            line = "Update";
+        } else if (parsed.Delete) {
+            line = "Delete";
+        } else if (parsed.CreateTable) {
+            line = "CreateTable";
+        } else if (parsed.AlterTable) {
+            line = "AlterTable";
+        } else if (parsed.Drop) {
+            line = "Drop";
+        } else if (parsed.CreateIndex) {
+            line = "CreateIndex";
+        } else if (parsed.CreateSchema) {
+            line = "CreateSchema";
+        } else if (parsed.CreateSequence || parsed.AlterSequence) {
+            line = "Sequence";
+        } else {
+            Fail("0A000", "not supported");
+            return;
+        }
+        Succeed("EXPLAIN", {{"QUERY PLAN", 25, -1}}, {{{false, std::move(line)}}});
+    }
+
     void RunShow(const TShowStmt& show) {
         const TGuc* guc = MapFindPtr(Gucs, Lower(show.Name));
         if (!guc) {
@@ -269,6 +328,10 @@ private:
         }
         if (parsed.Show) {
             RunShow(*parsed.Show);
+            return;
+        }
+        if (parsed.Explain) {
+            RunExplain(parsed);
             return;
         }
         if (Tx == ETx::Open && (IsDdl(parsed) || (parsed.Insert && parsed.Insert->Source))) {

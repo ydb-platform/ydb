@@ -330,6 +330,7 @@ struct TParseResult {
     std::optional<TDeleteStmt> Delete;
     std::optional<TSetStmt> Set;
     std::optional<TShowStmt> Show;
+    bool Explain = false;
     TString SqlState;
     TString Message;
 };

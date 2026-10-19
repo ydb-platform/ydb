@@ -1,7 +1,7 @@
 # DELETE колоночной таблицы
 
-status: pending
-commit:
+status: done
+commit: 480294b2545e3723e5a442cc6bcce39a0bbd9426
 id: column-delete
 depends: column-update
 

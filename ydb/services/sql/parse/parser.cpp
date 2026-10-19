@@ -62,7 +62,23 @@ public:
         if (IsKeyword("show")) {
             return ShowStmt();
         }
+        if (IsKeyword("explain")) {
+            return ExplainStmt();
+        }
         return Unsupported(Current.Text);
+    }
+
+    TParseResult ExplainStmt() {
+        Advance();
+        if (IsKeyword("analyze") || IsKeyword("analyse") || Current.Kind == ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        TParseResult inner = Stmt();
+        if (inner.SqlState) {
+            return inner;
+        }
+        inner.Explain = true;
+        return inner;
     }
 
     TParseResult SetStmt() {

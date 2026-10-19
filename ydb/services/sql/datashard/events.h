@@ -51,6 +51,7 @@ struct TEvQueryResult : public NActors::TEventLocal<TEvQueryResult, EvQueryResul
 };
 
 NActors::IActor* CreateSelectActor(const NActors::TActorId& replyTo, TString database, TString text, TSelectStmt statement, ui32 internalErrorRetries, std::optional<std::pair<ui64, ui64>> snapshot = std::nullopt, ui64 lockTxId = 0);
+NActors::IActor* CreateExplainActor(const NActors::TActorId& replyTo, TString database, TSelectStmt statement, ui64 lockTxId = 0);
 NActors::IActor* CreateInsertActor(const NActors::TActorId& replyTo, TString database, TInsertStmt statement, ui32 internalErrorRetries, bool defer = false);
 NActors::IActor* CreateCommitActor(const NActors::TActorId& replyTo, ui64 txId, TVector<TDeferredWrite> writes, TVector<NKikimrDataEvents::TLock> locks, ui32 internalErrorRetries);
 NActors::IActor* CreateRollbackActor(const NActors::TActorId& replyTo, ui64 txId, TVector<NKikimrDataEvents::TLock> locks);

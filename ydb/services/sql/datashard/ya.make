@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     commit.cpp
     delete.cpp
+    explain.cpp
     insert.cpp
     insert_select.cpp
     join.cpp

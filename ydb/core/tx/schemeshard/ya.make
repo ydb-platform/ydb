@@ -325,7 +325,6 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_schemeshard_07.cpp
-    schemeshard_billing_helpers.cpp
     schemeshard_cdc_stream_common.cpp
     schemeshard_cdc_stream_scan.cpp
     schemeshard_continuous_backup_cleaner.cpp
@@ -383,6 +382,12 @@ JOIN_SRCS(
     all_schemeshard_11.cpp
     schemeshard_xxport__helpers.cpp
     user_attributes.cpp
+)
+
+# Not joined: ut_ru_calculator takes only the RU calculator from this library. Joined with other sources, it
+# would pull in what they need from libraries that this test does not link, and the test would not link.
+SRCS(
+    schemeshard_billing_helpers.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(schemeshard_subop_state_types.h)

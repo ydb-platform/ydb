@@ -145,8 +145,16 @@ namespace {
         Y_ENSURE(!IsUnitRequired(Type) || IsKnownUnit(Policy.Unit),
             "Tiering column of type " << Type.GetTypeId() << " requires a unit");
 
+        // Rules go from the coldest tier to the warmest, so relative offsets must strictly decrease
+        TMaybe<TDuration> prevOffset;
         for (const auto& rule : Policy.Rules) {
             Y_ENSURE(rule.TierId != Max<ui32>(), "Invalid tier id");
+
+            const auto& bound = std::get<TTierRelativeBound>(rule.Before);
+            Y_ENSURE(!prevOffset || bound.Offset < *prevOffset,
+                "Tiering rules must be ordered from the coldest tier to the warmest: offset "
+                << bound.Offset << " for tier " << rule.TierId << " follows offset " << *prevOffset);
+            prevOffset = bound.Offset;
         }
     }
 

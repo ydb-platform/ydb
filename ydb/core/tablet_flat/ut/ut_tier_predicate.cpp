@@ -441,6 +441,10 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         auto uintLay = MakeLayout(NScheme::NTypeIds::Uint64);
         UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}}), *uintLay), yexception);
 
+        // Rules must go from the coldest tier to the warmest
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(3), 2}}), *lay), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakePolicy({{TDuration::Days(1), 1}, {TDuration::Days(1), 2}}), *lay), yexception);
+
         TTierPredicate unbound(MakePolicy({{TDuration::Days(1), 1}}), *lay);
         UNIT_ASSERT_EXCEPTION(EvaluateValue(*lay, unbound, ui64(0)), yexception);
     }

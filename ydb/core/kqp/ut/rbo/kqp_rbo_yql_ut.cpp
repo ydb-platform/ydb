@@ -6654,6 +6654,22 @@ FROM (
                 WINDOW w AS (ORDER BY `__kqp_win_peer_0_`)
                 ORDER BY `__kqp_win_pos_1_`;
             )"},
+            {"rank with shared partition and order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, Rank() OVER w AS rank, DenseRank() OVER w AS dense_rank
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY b DESC)
+                ORDER BY a;
+            )"},
+            {"rank with shared partition and order key followed by another key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, Rank() OVER w AS rank, DenseRank() OVER w AS dense_rank
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b ORDER BY b DESC, c DESC)
+                ORDER BY a;
+            )"},
             {"two global windows in one select", R"(
                 PRAGMA YqlSelect = "force";
 

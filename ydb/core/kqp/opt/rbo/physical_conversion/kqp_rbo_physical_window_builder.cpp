@@ -342,8 +342,14 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildSumCastTarget(TInfoUnitId column) c
 
 TVector<TExprNode::TPtr> TPhysicalWindowBuilder::BuildSortKeys() const {
     TVector<TExprNode::TPtr> keys;
+    THashSet<ui32> seen;
 
     auto add = [&](ui32 index, bool ascending) {
+        // A partition key can also occur in ORDER BY. Later occurrences have
+        // no effect on lexicographic order, and WideSort requires unique keys.
+        if (!seen.insert(index).second) {
+            return;
+        }
         // clang-format off
         keys.push_back(Ctx.Builder(Pos)
             .List()

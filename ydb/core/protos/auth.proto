@@ -88,8 +88,12 @@ message TTVMConfig {
 <<<<<<< HEAD
 =======
     optional string PublicKeysHost = 7 [default = "tvm-api.yandex.net"];
+<<<<<<< HEAD
     repeated uint32 AdditionalSelfTvmIds = 8;
 >>>>>>> 63dcfd73524 (YDBBACKPORT-1261: add additional self tvm ids (#55914))
+=======
+    repeated uint32 AdditionalServiceTvmIds = 8;
+>>>>>>> 5c62a131d96 (change naming auth.proto (#56135))
 }
 
 message TStaffApiTvmSettings {

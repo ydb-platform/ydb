@@ -295,12 +295,6 @@ protected:
     TMaybe<TDeferredAtom> ParseObjectPathIgnoreAt(const TRule_object_ref& node, TObjectOperatorContext& context, bool useTablePrefix);
     TMaybe<TDeferredAtom> ParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context);
     TMaybe<TDeferredAtom> ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context);
-    bool BuildStreamingQueryNestedSetting(TNodePtr value, TObjectFeatureNodePtr& settings);
-    bool BuildStreamingQuerySettingValue(TStringBuf name, TNodePtr value, TPosition pos, TObjectFeatureNode& features);
-    bool ParseStreamingQuerySetting(const TRule_streaming_query_setting& node, TStreamingQuerySettings& settings);
-    bool ParseStreamingQuerySettings(const TRule_streaming_query_settings& node, TStreamingQuerySettings& settings);
-    bool ParseStreamingQueryDefinition(const TRule_streaming_query_definition& node, TStreamingQuerySettings& settings);
-    bool ParseAlterStreamingQueryAction(const TRule_alter_streaming_query_action& node, TStreamingQuerySettings& settings);
 
     bool ValidateExternalTable(const TCreateTableParameters& params);
     bool ValidateSubqueryOrViewBody(const TBlocks& blocks);

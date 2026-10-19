@@ -519,7 +519,25 @@ public:
                 return *error;
             }
         }
-        if (IsKeyword("group") || IsKeyword("having") || IsKeyword("window")) {
+        if (IsKeyword("group")) {
+            Advance();
+            if (!IsKeyword("by")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            for (;;) {
+                TIdentifier column;
+                if (auto error = ColumnRef(column)) {
+                    return *error;
+                }
+                select.Group.push_back(std::move(column));
+                if (Current.Kind != ETokenKind::Comma) {
+                    break;
+                }
+                Advance();
+            }
+        }
+        if (IsKeyword("having") || IsKeyword("window")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("order")) {
@@ -1162,18 +1180,70 @@ private:
             Advance();
             return std::nullopt;
         }
-        TIdentifier column;
-        if (auto error = ColumnRef(column)) {
-            return error;
-        }
-        select.Columns.push_back(std::move(column));
-        while (Current.Kind == ETokenKind::Comma) {
-            Advance();
-            if (auto error = ColumnRef(column)) {
+        for (;;) {
+            if (auto error = SelectItem(select)) {
                 return error;
             }
-            select.Columns.push_back(std::move(column));
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
         }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> SelectItem(TSelectStmt& select) {
+        if (Current.Kind != ETokenKind::Identifier) {
+            return Unsupported(Current.Text);
+        }
+        TIdentifier name = Identifier();
+        Advance();
+        if (Current.Kind == ETokenKind::LeftParen) {
+            EAggFunc func;
+            if (name.Name == "count") {
+                func = EAggFunc::Count;
+            } else if (name.Name == "sum") {
+                func = EAggFunc::Sum;
+            } else if (name.Name == "min") {
+                func = EAggFunc::Min;
+            } else if (name.Name == "max") {
+                func = EAggFunc::Max;
+            } else {
+                return Unsupported(name.Name);
+            }
+            Advance();
+            TAggCall call;
+            call.Func = func;
+            call.Target = select.Columns.size();
+            if (Current.Kind == ETokenKind::Star) {
+                if (func != EAggFunc::Count) {
+                    return Unsupported(Current.Text);
+                }
+                call.Star = true;
+                Advance();
+            } else if (auto error = ColumnRef(call.Argument)) {
+                return error;
+            }
+            if (Current.Kind != ETokenKind::RightParen) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            select.Aggs.push_back(std::move(call));
+            select.Columns.push_back({name.Name, name.Quoted, {}});
+            return std::nullopt;
+        }
+        if (Current.Kind == ETokenKind::Dot) {
+            Advance();
+            if (Current.Kind != ETokenKind::Identifier) {
+                return Unsupported(Current.Text);
+            }
+            const TIdentifier second = Identifier();
+            name.Qualifier = name.Name;
+            name.Name = second.Name;
+            name.Quoted = second.Quoted;
+            Advance();
+        }
+        select.Columns.push_back(std::move(name));
         return std::nullopt;
     }
 

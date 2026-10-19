@@ -138,6 +138,22 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(!parsed.Select->Order[1].NullsFirst);
     }
 
+    Y_UNIT_TEST(GroupByKeepsCountAndSum) {
+        const TParseResult parsed = Parse("SELECT kind, count(*), sum(amount) FROM sales GROUP BY kind");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Group.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Aggs.size(), 2u);
+        UNIT_ASSERT(parsed.Select->Aggs[0].Func == EAggFunc::Count);
+        UNIT_ASSERT(parsed.Select->Aggs[0].Star);
+        UNIT_ASSERT(parsed.Select->Aggs[1].Func == EAggFunc::Sum);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Aggs[1].Argument.Name, "amount");
+
+        const TParseResult avg = Parse("SELECT avg(amount) FROM sales");
+        UNIT_ASSERT(!avg.Select);
+        UNIT_ASSERT_VALUES_EQUAL(avg.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(avg.Message, "avg");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

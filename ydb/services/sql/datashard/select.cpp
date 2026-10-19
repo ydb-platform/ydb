@@ -18,6 +18,7 @@
 #include <util/system/mutex.h>
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <optional>
 
@@ -156,8 +157,11 @@ private:
         if (Replied) {
             return;
         }
+        if (Aggregating && !Materialize()) {
+            return;
+        }
         Replied = true;
-        if (!SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
+        if (!Aggregating && !SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
             TVector<size_t> order(Rows.size());
             for (size_t i = 0; i < order.size(); ++i) {
                 order[i] = i;
@@ -244,6 +248,27 @@ private:
     struct TSortBytes {
         TVector<TString> Bytes;
         TVector<bool> Nulls;
+    };
+
+    struct TResultSlot {
+        bool Aggregate = false;
+        size_t Index = 0;
+        TColumn Column;
+    };
+
+    struct TAggState {
+        ui64 Count = 0;
+        bool SumNull = true;
+        i64 Sum = 0;
+        bool HasExtreme = false;
+        TString ExtremeMin;
+        TString ExtremeMax;
+    };
+
+    struct TGroupState {
+        TVector<TString> Keys;
+        TVector<bool> KeyNulls;
+        TVector<TAggState> Aggs;
     };
 
     void Unlink() {
@@ -529,6 +554,337 @@ private:
         return true;
     }
 
+    bool AddPhysical(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIdentifier& name, size_t& index) {
+        if (!name.Qualifier.empty() && name.Qualifier != Statement.From.Name && name.Qualifier != Statement.Alias) {
+            Fail("42703", name.Qualifier);
+            return false;
+        }
+        const auto* info = FindColumn(entry, name.Name);
+        if (!info) {
+            Fail("42703", name.Name);
+            return false;
+        }
+        for (size_t i = 0; i < Output.size(); ++i) {
+            if (Output[i].Name == info->Name) {
+                index = i;
+                return true;
+            }
+        }
+        TColumn column;
+        if (!PrepareColumn(*info, column)) {
+            Fail("0A000", "not supported");
+            return false;
+        }
+        index = Output.size();
+        Output.push_back(std::move(column));
+        return true;
+    }
+
+    bool CollectAggregateInputs(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        Output.clear();
+        GroupSources.clear();
+        AggSources.clear();
+        for (const TIdentifier& name : Statement.Group) {
+            size_t index = 0;
+            if (!AddPhysical(entry, name, index)) {
+                return false;
+            }
+            GroupSources.push_back(index);
+        }
+        for (const TAggCall& call : Statement.Aggs) {
+            if (call.Star) {
+                AggSources.push_back(ReadColumns.size());
+                continue;
+            }
+            if (call.Func == EAggFunc::Sum) {
+                const auto* info = FindColumn(entry, call.Argument.Name);
+                if (!info) {
+                    Fail("42703", call.Argument.Name);
+                    return false;
+                }
+                const auto type = info->PType.GetTypeId();
+                if (type != NScheme::NTypeIds::Int8 && type != NScheme::NTypeIds::Int16 && type != NScheme::NTypeIds::Int32
+                    && type != NScheme::NTypeIds::Int64 && type != NScheme::NTypeIds::Uint8 && type != NScheme::NTypeIds::Uint16
+                    && type != NScheme::NTypeIds::Uint32)
+                {
+                    Fail("0A000", "not supported");
+                    return false;
+                }
+            }
+            size_t index = 0;
+            if (!AddPhysical(entry, call.Argument, index)) {
+                return false;
+            }
+            AggSources.push_back(index);
+        }
+        if (Output.empty()) {
+            for (const auto& [id, column] : entry.Columns) {
+                Y_UNUSED(id);
+                if (column.KeyOrder == 0) {
+                    TColumn prepared;
+                    if (!PrepareColumn(column, prepared)) {
+                        Fail("0A000", "not supported");
+                        return false;
+                    }
+                    Output.push_back(std::move(prepared));
+                    break;
+                }
+            }
+        }
+        Aggregating = !Output.empty();
+        return Aggregating;
+    }
+
+    bool FinishAggregate() {
+        TVector<bool> grouped(Statement.Columns.size(), false);
+        for (size_t group = 0; group < Statement.Group.size(); ++group) {
+            size_t readIndex = ReadColumns.size();
+            for (size_t i = 0; i < ReadColumns.size(); ++i) {
+                if (ReadColumns[i].Name == Statement.Group[group].Name) {
+                    readIndex = i;
+                    break;
+                }
+            }
+            if (readIndex == ReadColumns.size()) {
+                Fail("42703", Statement.Group[group].Name);
+                return false;
+            }
+            GroupSources[group] = readIndex;
+        }
+        for (size_t agg = 0; agg < Statement.Aggs.size(); ++agg) {
+            if (Statement.Aggs[agg].Star) {
+                continue;
+            }
+            size_t readIndex = ReadColumns.size();
+            for (size_t i = 0; i < ReadColumns.size(); ++i) {
+                if (ReadColumns[i].Name == Statement.Aggs[agg].Argument.Name) {
+                    readIndex = i;
+                    break;
+                }
+            }
+            if (readIndex == ReadColumns.size()) {
+                Fail("42703", Statement.Aggs[agg].Argument.Name);
+                return false;
+            }
+            AggSources[agg] = readIndex;
+        }
+        TVector<TColumn> projected;
+        ResultSlots.clear();
+        for (size_t target = 0; target < Statement.Columns.size(); ++target) {
+            const TAggCall* call = nullptr;
+            size_t aggAt = 0;
+            for (size_t i = 0; i < Statement.Aggs.size(); ++i) {
+                if (Statement.Aggs[i].Target == target) {
+                    call = &Statement.Aggs[i];
+                    aggAt = i;
+                    break;
+                }
+            }
+            TResultSlot slot;
+            if (call) {
+                slot.Aggregate = true;
+                slot.Index = aggAt;
+                slot.Column.Name = Statement.Columns[target].Name;
+                if (call->Func == EAggFunc::Count) {
+                    slot.Column.Type = NScheme::TTypeInfo(NScheme::NTypeIds::Int64);
+                    slot.Column.TypeOid = 20;
+                    slot.Column.TypeSize = 8;
+                } else {
+                    slot.Column = ReadColumns[AggSources[aggAt]];
+                    slot.Column.Name = Statement.Columns[target].Name;
+                }
+            } else {
+                size_t groupAt = Statement.Group.size();
+                for (size_t i = 0; i < Statement.Group.size(); ++i) {
+                    if (Statement.Group[i].Name == Statement.Columns[target].Name) {
+                        groupAt = i;
+                        break;
+                    }
+                }
+                if (groupAt == Statement.Group.size()) {
+                    Fail("42803", Statement.Columns[target].Name);
+                    return false;
+                }
+                grouped[target] = true;
+                slot.Index = groupAt;
+                slot.Column = ReadColumns[GroupSources[groupAt]];
+                slot.Column.Name = Statement.Columns[target].Name;
+            }
+            ResultSlots.push_back(slot);
+            projected.push_back(slot.Column);
+        }
+        Output = std::move(projected);
+        return !Output.empty();
+    }
+
+    i64 ReadInt(const TCell& cell, NScheme::TTypeInfo type) const {
+        switch (type.GetTypeId()) {
+            case NScheme::NTypeIds::Int8: {
+                i8 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Int16: {
+                i16 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Int32: {
+                i32 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Int64: {
+                i64 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Uint8: {
+                ui8 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Uint16: {
+                ui16 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            case NScheme::NTypeIds::Uint32: {
+                ui32 value;
+                memcpy(&value, cell.Data(), sizeof(value));
+                return value;
+            }
+            default:
+                return 0;
+        }
+    }
+
+    TString GroupKey(const TConstArrayRef<TCell>& cells) const {
+        TString key;
+        for (size_t index : GroupSources) {
+            const TCell& cell = cells[index];
+            key.push_back(cell.IsNull() ? '\0' : '\1');
+            if (!cell.IsNull()) {
+                const ui32 size = cell.Size();
+                key.append(reinterpret_cast<const char*>(&size), sizeof(size));
+                key.append(cell.Data(), size);
+            }
+        }
+        return key;
+    }
+
+    bool Absorb(const TConstArrayRef<TCell>& cells) {
+        const TString key = GroupKey(cells);
+        if (!MapFindPtr(Groups, key)) {
+            TGroupState state;
+            state.Aggs.resize(Statement.Aggs.size());
+            for (size_t index : GroupSources) {
+                const TCell& cell = cells[index];
+                state.KeyNulls.push_back(cell.IsNull());
+                state.Keys.push_back(cell.IsNull() ? TString() : TString(cell.AsBuf()));
+            }
+            Groups.emplace(key, std::move(state));
+        }
+        TGroupState& state = Groups[key];
+        for (size_t i = 0; i < Statement.Aggs.size(); ++i) {
+            const TAggCall& call = Statement.Aggs[i];
+            TAggState& agg = state.Aggs[i];
+            if (call.Star) {
+                ++agg.Count;
+                continue;
+            }
+            const TCell& cell = cells[AggSources[i]];
+            if (cell.IsNull()) {
+                continue;
+            }
+            ++agg.Count;
+            if (call.Func == EAggFunc::Sum) {
+                const i64 value = ReadInt(cell, ReadColumns[AggSources[i]].Type);
+                if (!agg.SumNull && ((value > 0 && agg.Sum > std::numeric_limits<i64>::max() - value) || (value < 0 && agg.Sum < std::numeric_limits<i64>::min() - value))) {
+                    Fail("22003", "numeric value out of range");
+                    return false;
+                }
+                agg.Sum = agg.SumNull ? value : agg.Sum + value;
+                agg.SumNull = false;
+            } else if (call.Func == EAggFunc::Min || call.Func == EAggFunc::Max) {
+                const TString bytes(cell.AsBuf());
+                if (!agg.HasExtreme) {
+                    agg.ExtremeMin = bytes;
+                    agg.ExtremeMax = bytes;
+                    agg.HasExtreme = true;
+                } else {
+                    const TCell current(call.Func == EAggFunc::Min ? agg.ExtremeMin.data() : agg.ExtremeMax.data(),
+                        call.Func == EAggFunc::Min ? agg.ExtremeMin.size() : agg.ExtremeMax.size());
+                    const int compared = CompareTypedCells(cell, current, NScheme::TTypeInfoOrder(ReadColumns[AggSources[i]].Type));
+                    if (call.Func == EAggFunc::Min && compared < 0) {
+                        agg.ExtremeMin = bytes;
+                    }
+                    if (call.Func == EAggFunc::Max && compared > 0) {
+                        agg.ExtremeMax = bytes;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+
+    bool EncodeRaw(const TColumn& column, bool null, TStringBuf bytes, TQueryCell& cell) {
+        const TCodecValue encoded = EncodeCell(column.Type.GetTypeId(), null, bytes, EWireFormat::Text, column.Precision, column.Scale);
+        if (!encoded.Ok) {
+            Fail(encoded.SqlState.empty() ? TString("0A000") : encoded.SqlState, encoded.Message.empty() ? TString("not supported") : encoded.Message);
+            return false;
+        }
+        cell = {encoded.Null, encoded.Bytes};
+        return true;
+    }
+
+    bool Materialize() {
+        if (Statement.Group.empty() && Groups.empty()) {
+            TGroupState state;
+            state.Aggs.resize(Statement.Aggs.size());
+            Groups.emplace("", std::move(state));
+        }
+        Rows.clear();
+        for (const auto& [key, state] : Groups) {
+            Y_UNUSED(key);
+            TVector<TQueryCell> line;
+            line.reserve(ResultSlots.size());
+            for (const TResultSlot& slot : ResultSlots) {
+                TQueryCell cell;
+                if (!slot.Aggregate) {
+                    if (!EncodeRaw(slot.Column, state.KeyNulls[slot.Index], state.Keys[slot.Index], cell)) {
+                        return false;
+                    }
+                } else {
+                    const TAggState& agg = state.Aggs[slot.Index];
+                    const TAggCall& call = Statement.Aggs[slot.Index];
+                    if (call.Func == EAggFunc::Count) {
+                        TString bytes;
+                        const i64 count = static_cast<i64>(agg.Count);
+                        bytes.assign(reinterpret_cast<const char*>(&count), sizeof(count));
+                        if (!EncodeRaw(slot.Column, false, bytes, cell)) {
+                            return false;
+                        }
+                    } else if (call.Func == EAggFunc::Sum) {
+                        TString bytes;
+                        bytes.assign(reinterpret_cast<const char*>(&agg.Sum), sizeof(agg.Sum));
+                        if (!EncodeRaw(slot.Column, agg.SumNull, bytes, cell)) {
+                            return false;
+                        }
+                    } else {
+                        const TString& extreme = call.Func == EAggFunc::Min ? agg.ExtremeMin : agg.ExtremeMax;
+                        if (!EncodeRaw(slot.Column, !agg.HasExtreme, extreme, cell)) {
+                            return false;
+                        }
+                    }
+                }
+                line.push_back(std::move(cell));
+            }
+            Rows.push_back(std::move(line));
+        }
+        return true;
+    }
+
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto* request = ev->Get()->Request.Get();
         if (!request || request->ResultSet.size() != 1 || request->ResultSet[0].Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
@@ -546,7 +902,15 @@ private:
         }
         Table = entry.TableId;
 
-        if (Statement.Star) {
+        if (!Statement.Aggs.empty() || !Statement.Group.empty()) {
+            if (Statement.Star || !Statement.Order.empty()) {
+                Fail("0A000", "not supported");
+                return;
+            }
+            if (!CollectAggregateInputs(entry)) {
+                return;
+            }
+        } else if (Statement.Star) {
             TVector<const TSysTables::TTableColumnInfo*> ordered;
             for (const auto& [id, column] : entry.Columns) {
                 Y_UNUSED(id);
@@ -590,9 +954,14 @@ private:
             Fail("0A000", "not supported");
             return;
         }
+        if (Aggregating && !FinishAggregate()) {
+            return;
+        }
         MainTable = Table;
         MainReadColumns = ReadColumns;
-        if (!CollectIndexes(entry)) {
+        if (Aggregating) {
+            Indexes.clear();
+        } else if (!CollectIndexes(entry)) {
             return;
         }
         if (!KeyPredicate && Indexes.empty()) {
@@ -856,6 +1225,12 @@ private:
                 return false;
             }
             if (!ReadingIndex && !Matches(cells)) {
+                continue;
+            }
+            if (Aggregating) {
+                if (!Absorb(cells)) {
+                    return false;
+                }
                 continue;
             }
             TVector<TQueryCell> line;
@@ -1487,8 +1862,13 @@ private:
     TVector<TVector<TQueryCell>> Rows;
     TVector<TSortSlot> SortSlots;
     TVector<TSortBytes> SortKeys;
+    TVector<size_t> GroupSources;
+    TVector<size_t> AggSources;
+    TVector<TResultSlot> ResultSlots;
+    absl::flat_hash_map<TString, TGroupState> Groups;
     bool PkOrdered = false;
     bool ReverseRead = false;
+    bool Aggregating = false;
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<ui64> WakeTablets;
     ui64 ReadId = 0;

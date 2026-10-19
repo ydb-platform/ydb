@@ -1,7 +1,7 @@
 # ORDER BY
 
-status: pending
-commit:
+status: done
+commit: c669c1840f26e8c92df69eb44706338991de3cfc
 id: select-order
 depends: select-where-limit
 

@@ -64,6 +64,20 @@ struct TOrderKey {
     bool NullsFirst = false;
 };
 
+enum class EAggFunc {
+    Count,
+    Sum,
+    Min,
+    Max,
+};
+
+struct TAggCall {
+    EAggFunc Func = EAggFunc::Count;
+    bool Star = false;
+    TIdentifier Argument;
+    size_t Target = 0;
+};
+
 struct TSelectStmt {
     bool Star = false;
     TVector<TIdentifier> Columns;
@@ -72,6 +86,8 @@ struct TSelectStmt {
     TString Alias;
     std::optional<TJoin> Join;
     TVector<TComparison> Where;
+    TVector<TAggCall> Aggs;
+    TVector<TIdentifier> Group;
     TVector<TOrderKey> Order;
     std::optional<ui64> Limit;
 };

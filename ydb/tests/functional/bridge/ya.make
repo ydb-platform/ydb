@@ -7,6 +7,7 @@ TEST_SRCS(
     test_discovery.py
     test_three_piles.py
     test_sdk_cleanup.py
+    test_sdk_reconnect.py
 )
 
 SPLIT_FACTOR(24)

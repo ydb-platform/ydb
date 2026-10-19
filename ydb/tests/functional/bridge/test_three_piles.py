@@ -42,10 +42,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
 
     def teardown_method(self):
         try:
-            for pool in self.pools.values():
-                pool.stop()
-            for driver in self.drivers.values():
-                self.stop_driver(driver)
+            for name in list(self.drivers):
+                self.stop_pile_clients(name)
         finally:
             super().teardown_method()
 
@@ -135,7 +133,20 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.states[name] = PRIMARY
         self.wait_states()
 
+    def stop_pile_clients(self, name):
+        pool = self.pools.pop(name, None)
+        driver = self.drivers.pop(name, None)
+        try:
+            if pool is not None:
+                pool.stop()
+        finally:
+            if driver is not None:
+                self.stop_driver(driver)
+
     def stop_pile(self, name):
+        # Stop keepalives before taking the endpoint down. A pinned driver cannot
+        # reconnect once its only connection has been removed from the SDK cache.
+        self.stop_pile_clients(name)
         with ThreadPoolExecutor(max_workers=len(self.pile_nodes[name])) as executor:
             list(executor.map(lambda node: node.stop(), self.pile_nodes[name]))
         assert all(not node.is_alive() for node in self.pile_nodes[name])
@@ -146,15 +157,6 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
 
     def execute(self, query, scheme=False):
         name = self.primary
-        if name not in self.drivers:
-            node = self.pile_nodes[name][0]
-            # Keep requests on this pile instead of discovering nodes that a later
-            # transition disconnects. Discovery itself is covered separately.
-            driver = ydb.Driver(ydb.DriverConfig(
-                endpoint=f"grpc://{node.endpoint}", database="/Root", disable_discovery=True,
-            ))
-            self.drivers[name] = driver
-            self.pools[name] = ydb.SessionPool(driver, size=1)
         settings = ydb.BaseRequestSettings().with_timeout(10)
 
         def operation(session):
@@ -164,12 +166,27 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
                 query, commit_tx=True, settings=settings,
             )
 
-        return self.eventually(
-            lambda: self.pools[name].retry_operation_sync(
-                operation, retry_settings=ydb.RetrySettings(max_retries=0, get_session_client_timeout=5),
-            ),
-            f"table operation through {name}",
-        )
+        def attempt():
+            if name not in self.drivers:
+                node = self.pile_nodes[name][0]
+                # Keep requests on this pile instead of discovering nodes that a later
+                # transition disconnects. Discovery itself is covered separately.
+                driver = ydb.Driver(ydb.DriverConfig(
+                    endpoint=f"grpc://{node.endpoint}", database="/Root", disable_discovery=True,
+                ))
+                self.drivers[name] = driver
+                self.pools[name] = ydb.SessionPool(driver, size=1)
+            try:
+                return self.pools[name].retry_operation_sync(
+                    operation, retry_settings=ydb.RetrySettings(max_retries=0, get_session_client_timeout=5),
+                )
+            except (grpc.RpcError, ydb.ConnectionError, ydb.Unavailable, ydb.SessionPoolEmpty):
+                # Session acquisition can hide a lost connection behind
+                # SessionPoolEmpty. Retry with a new driver pinned to the same node.
+                self.stop_pile_clients(name)
+                raise
+
+        return self.eventually(attempt, f"table operation through {name}")
 
     def create_data(self):
         self.execute(

@@ -46,7 +46,9 @@ using namespace NVerificationCoverage;
 constexpr const char* TestCluster = "local_ut";
 constexpr ui64 DefaultTimeoutMs = 10'000;
 constexpr ui64 ProofFloorTimeoutMs = 60'000;
-constexpr ui64 ConstructionTimeoutMs = 60'000;
+// Audited q2/q31 construction is close to one minute on limited workers.
+// Leave headroom while still bounding the much larger admitted joins.
+constexpr ui64 ConstructionTimeoutMs = 120'000;
 constexpr const char* CoverageReportFormat =
     "ydb-rbo-benchmark-coverage";
 constexpr ui64 CoverageReportVersion = 5;

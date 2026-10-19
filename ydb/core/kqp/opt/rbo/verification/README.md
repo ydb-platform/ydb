@@ -89,7 +89,7 @@ skips solver cases unless `RBO_Z3` names a compatible executable.
 ```bash
 PYTHONPATH=ydb/core/kqp/opt/rbo/verification \
 python3 -m rbo_verifier initial.json final.json \
-  --rows 2 --timeout-ms 10000 --construction-timeout-ms 60000 --solver /path/to/z3 \
+  --rows 2 --timeout-ms 10000 --construction-timeout-ms 120000 --solver /path/to/z3 \
   --emit-smt obligation.smt2
 ```
 
@@ -97,7 +97,7 @@ python3 -m rbo_verifier initial.json final.json \
 and canonical rendering requested by `--emit-smt`. It requires POSIX interval
 timers on the main thread and never replaces an existing timer. Expiry returns
 `UNKNOWN` with `phase: construction`, before writing a formula or starting a
-solver. The benchmark uses a fixed 60-second construction deadline in addition
+solver. The benchmark uses a fixed 120-second construction deadline in addition
 to its solver budget and records it in each corpus report. This resource limit
 does not change the required query lists or proof bounds.
 

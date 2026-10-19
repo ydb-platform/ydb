@@ -45,9 +45,10 @@ fi
 
 if [ -f .runner ]; then
   if [ -f .service ]; then
-    systemctl stop "$(cat .service)" || true
+    ./svc.sh uninstall
   fi
-  sudo -u "$RUNNER_USERNAME" ./config.sh remove --unattended --token "$REMOVE_TOKEN"
+  # remove does not accept --unattended. stdin is the rest of this script, so close it.
+  sudo -u "$RUNNER_USERNAME" ./config.sh remove --token "$REMOVE_TOKEN" </dev/null
 fi
 
 sudo -u "$RUNNER_USERNAME" ./config.sh --unattended --disableupdate --replace \

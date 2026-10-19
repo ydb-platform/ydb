@@ -35,7 +35,7 @@ void TFetchedResult::BuildResultPages(const TPortionDataAccessor& accessor, cons
         SetPages(accessor.BuildReadPages(memoryLimit, entityIds));
     } else {
         // The result is not paginated because dict values are already deserialized in memory
-        SetPages({TPortionDataAccessor::TReadPage(0, Batch->GetRecordsCount(), 0)});
+        SetPages({ TPortionDataAccessor::TReadPage(0, Batch->GetRecordsCount(), 0) });
     }
 }
 

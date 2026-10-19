@@ -222,13 +222,14 @@ NYql::TKikimrConfiguration::TPtr MakeConfiguration() {
 TIntrusivePtr<IKqpHost> MakeHost(
     Tests::TServer& server,
     NYql::IModuleResolver::TPtr moduleResolver,
-    std::shared_ptr<IRBOSemanticSnapshotSink> sink)
+    std::shared_ptr<IRBOSemanticSnapshotSink> sink,
+    NYql::TKikimrConfiguration::TPtr configuration = {})
 {
     return CreateKqpHost(
         MakeGateway(server),
         TestCluster,
         "/Root",
-        MakeConfiguration(),
+        configuration ? std::move(configuration) : MakeConfiguration(),
         std::move(moduleResolver),
         std::nullopt,
         nullptr,
@@ -1875,6 +1876,57 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "contrib/tools/z3/z3");
         UNIT_ASSERT_VALUES_UNEQUAL(*config.Solver, "/ambient/z3");
         UNIT_ASSERT_VALUES_EQUAL(config.TimeoutMs, ProofFloorTimeoutMs);
+    }
+
+    Y_UNIT_TEST(SharedTpcdsPreparationModes) {
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
+        auto kikimr = MakeRunner();
+        CreateTables(kikimr, Tpcds);
+        NJson::TJsonValue rows(NJson::JSON_ARRAY);
+        TVector<TString> failures;
+        for (const ui32 queryId : {14u, 24u, 39u, 44u, 47u, 57u, 70u}) {
+            const TString query = Query(Tpcds, queryId);
+            NJson::TJsonValue row(NJson::JSON_MAP);
+            row["query_id"] = queryId;
+            for (const ui32 scenario : {0u, 1u, 2u}) {
+                const bool generic = scenario != 0;
+                auto configuration = MakeConfiguration();
+                if (scenario == 2) {
+                    configuration->_KqpEnableSpilling = true;
+                }
+                auto sink = std::make_shared<TRecordingSink>();
+                auto host = MakeHost(kikimr.GetTestServer(), moduleResolver, sink, std::move(configuration));
+                IKqpHost::TPrepareSettings settings;
+                settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+                const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+                    host, query, settings, generic
+                ] {
+                    if (!generic) {
+                        return host->SyncPrepareDataQuery(query, settings);
+                    }
+                    auto preparing = host->PrepareGenericQuery(query, settings);
+                    while (!preparing->HasResult()) {
+                        preparing->Continue().GetValueSync();
+                    }
+                    return preparing->GetResult();
+                });
+                const TString mode = scenario == 0 ? "data_query_default"
+                    : scenario == 1 ? "generic_query_default" : "generic_query_spilling";
+                row[mode]["success"] = prepared.Success();
+                row[mode]["reason"] = prepared.Issues().ToString();
+                row[mode]["capture_count"] = sink->Take().size();
+                if (scenario == 2 && !prepared.Success()) {
+                    failures.push_back(TStringBuilder() << "TPCDS q" << queryId
+                        << " generic preparation with spilling: " << prepared.Issues().ToString());
+                }
+            }
+            rows.AppendValue(std::move(row));
+        }
+        // Keep preparation evidence separate from bounded-equivalence reports.
+        TFileOutput((GetOutputPath() / "shared_tpcds_query_modes.json").GetPath())
+            .Write(NJson::WriteJson(rows, true, true));
+        UNIT_ASSERT_C(failures.empty(), JoinSeq("; ", failures));
     }
 
     Y_UNIT_TEST(TPCH) {

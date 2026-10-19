@@ -162,6 +162,14 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(parsed.Select->Having[0].Op == ECompareOp::Gt);
     }
 
+    Y_UNIT_TEST(DistinctOnKeepsTheColumns) {
+        const TParseResult parsed = Parse("SELECT DISTINCT ON (note) id FROM items");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Select->Distinct);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->DistinctOn.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->DistinctOn[0].Name, "note");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);
@@ -170,9 +178,9 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
     }
 
     Y_UNIT_TEST(DistinctJoinAndOtherStatementsAreUnsupported) {
-        const TParseResult distinct = Parse("SELECT DISTINCT a FROM t");
-        UNIT_ASSERT_VALUES_EQUAL(distinct.SqlState, "0A000");
-        UNIT_ASSERT_VALUES_EQUAL(distinct.Message, "distinct");
+        const TParseResult window = Parse("SELECT a FROM t WINDOW w AS ()");
+        UNIT_ASSERT_VALUES_EQUAL(window.SqlState, "0A000");
+        UNIT_ASSERT_VALUES_EQUAL(window.Message, "window");
 
         const TParseResult join = Parse("SELECT a FROM t NATURAL JOIN u");
         UNIT_ASSERT_VALUES_EQUAL(join.SqlState, "0A000");

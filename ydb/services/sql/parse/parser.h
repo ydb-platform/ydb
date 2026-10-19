@@ -80,6 +80,8 @@ struct TAggCall {
 
 struct TSelectStmt {
     bool Star = false;
+    bool Distinct = false;
+    TVector<TIdentifier> DistinctOn;
     TVector<TIdentifier> Columns;
     std::optional<TIdentifier> Schema;
     TIdentifier From;

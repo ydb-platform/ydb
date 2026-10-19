@@ -501,7 +501,30 @@ public:
         if (IsKeyword("all")) {
             Advance();
         } else if (IsKeyword("distinct")) {
-            return Unsupported(Current.Text);
+            Advance();
+            select.Distinct = true;
+            if (IsKeyword("on")) {
+                Advance();
+                if (Current.Kind != ETokenKind::LeftParen) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+                for (;;) {
+                    TIdentifier column;
+                    if (auto error = ColumnRef(column)) {
+                        return *error;
+                    }
+                    select.DistinctOn.push_back(std::move(column));
+                    if (Current.Kind != ETokenKind::Comma) {
+                        break;
+                    }
+                    Advance();
+                }
+                if (Current.Kind != ETokenKind::RightParen) {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+            }
         }
 
         if (auto error = TargetList(select)) {

@@ -13,6 +13,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/mapfindptr.h>
 #include <util/system/guard.h>
 #include <util/system/mutex.h>
@@ -178,6 +179,9 @@ private:
         }
         if (ReverseRead && !ReadingIndex) {
             AccessPath = "Reverse";
+        }
+        if ((Statement.Distinct || !Statement.DistinctOn.empty()) && !Dedup()) {
+            return;
         }
         if (Statement.Limit && Rows.size() > *Statement.Limit) {
             Rows.resize(*Statement.Limit);
@@ -557,6 +561,58 @@ private:
             }
         }
         ReverseRead = PkOrdered && !SortSlots.empty() && SortSlots[0].Desc;
+        return true;
+    }
+
+    bool BindDistinct() {
+        DistinctIndexes.clear();
+        if (!Statement.Distinct && Statement.DistinctOn.empty()) {
+            return true;
+        }
+        if (Statement.DistinctOn.empty()) {
+            DistinctIndexes.reserve(Output.size());
+            for (size_t i = 0; i < Output.size(); ++i) {
+                DistinctIndexes.push_back(i);
+            }
+            return true;
+        }
+        for (const TIdentifier& name : Statement.DistinctOn) {
+            size_t index = Output.size();
+            for (size_t i = 0; i < Output.size(); ++i) {
+                if (Output[i].Name == name.Name) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index == Output.size()) {
+                Fail("42703", name.Name);
+                return false;
+            }
+            DistinctIndexes.push_back(index);
+        }
+        return true;
+    }
+
+    bool Dedup() {
+        if (DistinctIndexes.empty()) {
+            return true;
+        }
+        THashSet<TString> seen;
+        TVector<TVector<TQueryCell>> unique;
+        unique.reserve(Rows.size());
+        for (const auto& row : Rows) {
+            TString key;
+            for (size_t index : DistinctIndexes) {
+                key.push_back(row[index].Null ? '\0' : '\1');
+                key.append(row[index].Text);
+                key.push_back('\0');
+            }
+            if (!seen.insert(key).second) {
+                continue;
+            }
+            unique.push_back(row);
+        }
+        Rows = std::move(unique);
         return true;
     }
 
@@ -1060,6 +1116,9 @@ private:
             return;
         }
         if (Aggregating && !FinishAggregate()) {
+            return;
+        }
+        if (!BindDistinct()) {
             return;
         }
         MainTable = Table;
@@ -1972,6 +2031,7 @@ private:
     TVector<TResultSlot> ResultSlots;
     TVector<THavingFilter> HavingFilters;
     absl::flat_hash_map<TString, TGroupState> Groups;
+    TVector<size_t> DistinctIndexes;
     bool PkOrdered = false;
     bool ReverseRead = false;
     bool Aggregating = false;

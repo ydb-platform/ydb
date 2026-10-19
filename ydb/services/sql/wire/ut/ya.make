@@ -12,6 +12,7 @@ SRCS(
     constraints_ut.cpp
     create_table_ut.cpp
     delete_ut.cpp
+    distinct_ut.cpp
     returning_ut.cpp
     tx_ut.cpp
     update_ut.cpp

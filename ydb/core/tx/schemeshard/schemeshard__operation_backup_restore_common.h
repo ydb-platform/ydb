@@ -726,14 +726,12 @@ public:
             }
             const auto pathId = path.Base()->PathId;
             const bool isRowTable = path->IsTable();
-            const bool isRestore = isRowTable ? context.SS->Tables.at(pathId)->IsRestore
-                : context.SS->ColumnTables.at(pathId)->IsRestore;
             const size_t shards = isRowTable ? context.SS->Tables.at(pathId)->GetPartitions().size()
                 : context.SS->ColumnTables.at(pathId)->GetPartitions().size();
-            // Import creates the destination from this plan. IsRestore keeps its
+            // Row imports create partitions from this plan. IsRestore keeps their
             // layout fixed until restore completes, including across restarts.
             const size_t expectedShards = isRowTable ? Max<size_t>(1, ytImport.GetPlan().PartsSize()) : 1;
-            if (!isRestore || shards != expectedShards) {
+            if ((isRowTable && !context.SS->Tables.at(pathId)->IsRestore) || shards != expectedShards) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a restore table matching the source plan");
                 return result;
             }

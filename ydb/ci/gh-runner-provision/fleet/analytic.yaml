@@ -1,0 +1,9 @@
+shape: ../shapes/analytic.yaml
+count: 3
+names:
+  - analytic-node-2026-10-1
+  - analytic-node-2026-10-2
+  - analytic-node-2026-10-3
+labels:
+  - auto-provisioned
+  - build-preset-analytic-node

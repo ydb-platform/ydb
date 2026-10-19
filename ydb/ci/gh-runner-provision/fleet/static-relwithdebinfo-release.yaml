@@ -1,6 +1,5 @@
-# 64 vCPU / 256 GB. One file is one label set. names are the hosts that have it.
-# register reapplies these labels. create is only for a host that does not exist yet.
-# No ghrun label: the autoscaler deletes idle runners that carry it.
+shape: ../shapes/static-relwithdebinfo.yaml
+count: 15
 names:
   - static-relwithdebinfo-d
   - static-relwithdebinfo-d-01
@@ -17,11 +16,6 @@ names:
   - static-relwithdebinfo-d-12
   - static-relwithdebinfo-d-13
   - static-relwithdebinfo-d-14
-platform: standard-v4a
-cores: 64
-memory_gb: 256
-disk_gb: 2418
-preset: relwithdebinfo
 labels:
   - auto-provisioned
   - build-preset-relwithdebinfo

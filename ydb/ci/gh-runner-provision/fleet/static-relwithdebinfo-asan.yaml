@@ -1,4 +1,5 @@
-# relwithdebinfo + asan, without postcommit.
+shape: ../shapes/static-relwithdebinfo.yaml
+count: 11
 names:
   - static-relwithdebinfo-d-29
   - static-relwithdebinfo-d-30
@@ -11,11 +12,6 @@ names:
   - static-relwithdebinfo-d-37
   - static-relwithdebinfo-d-38
   - static-relwithdebinfo-d-39
-platform: standard-v4a
-cores: 64
-memory_gb: 256
-disk_gb: 2418
-preset: relwithdebinfo
 labels:
   - auto-provisioned
   - build-preset-relwithdebinfo

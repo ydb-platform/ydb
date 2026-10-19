@@ -1,0 +1,11 @@
+shape: ../shapes/tiny.yaml
+count: 6
+names:
+  - tiny-worker-2026-10-3
+  - tiny-worker-2026-10-8
+  - tiny-worker-2026-10-9
+  - tiny-worker-2026-10-10
+  - tiny-worker-2026-10-11
+  - tiny-worker-2026-10-12
+labels:
+  - tiny-worker

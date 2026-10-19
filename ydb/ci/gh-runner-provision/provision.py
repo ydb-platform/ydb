@@ -96,7 +96,19 @@ def parse_yaml(text):
 
 
 def load_config(path):
-    data = parse_yaml(Path(path).read_text())
+    path = Path(path)
+    data = parse_yaml(path.read_text())
+    fleet_keys = None
+    if "shape" in data:
+        fleet_keys = set(data) - {"shape"}
+        shape_path = (path.parent / str(data["shape"])).resolve()
+        if not shape_path.is_file():
+            raise ConfigError(f"shape not found: {data['shape']}")
+        shape = parse_yaml(shape_path.read_text())
+        forbidden = set(shape) & {"labels", "count", "name", "names", "start", "shape"}
+        if forbidden:
+            raise ConfigError(f"shape {shape_path.name} must not set {', '.join(sorted(forbidden))}")
+        data = {**shape, **{key: value for key, value in data.items() if key != "shape"}}
     unknown = sorted(set(data) - set(DEFAULTS) - set(REQUIRED) - {"name", "names"})
     if unknown:
         raise ConfigError(f"unknown keys: {', '.join(unknown)}")
@@ -107,6 +119,8 @@ def load_config(path):
     cfg = dict(DEFAULTS)
     cfg.update(data)
     cfg["_explicit"] = set(data)
+    cfg["_pool"] = path.stem
+    cfg["_fleet"] = fleet_keys is not None
     for key in REQUIRED:
         if key not in data:
             raise ConfigError(f"missing {key}")
@@ -120,6 +134,11 @@ def load_config(path):
             raise ConfigError(f"{key} must be an integer")
     if cfg["count"] < 1 or cfg["start"] < 0 or cfg["index_width"] < 0:
         raise ConfigError("count, start and index_width must be non-negative; count at least 1")
+    if cfg["_fleet"]:
+        if fleet_keys is None or "count" not in fleet_keys or "labels" not in fleet_keys:
+            raise ConfigError("fleet file must set count and labels")
+        if cfg.get("names") and len(cfg["names"]) != cfg["count"]:
+            raise ConfigError(f"count is {cfg['count']} but names lists {len(cfg['names'])}")
     extra_keys = cfg["ssh_public_keys"]
     if extra_keys is None:
         cfg["ssh_public_keys"] = []
@@ -371,6 +390,64 @@ def label_plan(current, desired):
     return final, added, removed
 
 
+def managed_label_key(labels):
+    """Labels that identify a pool. Platform labels and instance:<id> are not part of it."""
+    names = []
+    for label in labels:
+        name = label_name(label)
+        if not name:
+            continue
+        readonly = isinstance(label, dict) and label.get("type") == "read-only"
+        assigned = name in {"self-hosted", "Linux", "Windows", "macOS", "X64", "X86", "ARM", "ARM64"}
+        if readonly or assigned or name.startswith("instance:"):
+            continue
+        names.append(name)
+    return tuple(sorted(names))
+
+
+def poll_pools(pools, runners):
+    grouped = {tuple(sorted(pool["labels"])): [] for pool in pools}
+    for runner in runners:
+        key = managed_label_key(runner.get("labels") or [])
+        if key in grouped:
+            grouped[key].append(runner)
+    reports = []
+    for pool in pools:
+        found = grouped[tuple(sorted(pool["labels"]))]
+        online_names = [runner.get("name") for runner in found if runner.get("status") == "online"]
+        offline_names = [runner.get("name") for runner in found if runner.get("status") != "online"]
+        wanted = runner_names(pool)
+        reports.append({
+            "pool": pool.get("_pool") or "",
+            "count": int(pool["count"]),
+            "online": len(online_names),
+            "offline": offline_names,
+            "missing": [name for name in wanted if name not in online_names],
+            "extra": [name for name in online_names if name not in wanted],
+        })
+    return reports
+
+
+def poll_ok(report):
+    return (
+        report["online"] == report["count"]
+        and not report["missing"]
+        and not report["offline"]
+        and not report["extra"]
+    )
+
+
+def format_poll(report):
+    text = f"{report['pool']}: {report['online']}/{report['count']} online"
+    if report["missing"]:
+        text += "; missing " + ", ".join(report["missing"])
+    if report["offline"]:
+        text += "; offline " + ", ".join(report["offline"])
+    if report["extra"]:
+        text += "; extra " + ", ".join(report["extra"])
+    return text
+
+
 def set_runner_labels(repo, runner_id, labels):
     proc = run(
         ["gh", "api", "--method", "PUT", f"repos/{repo}/actions/runners/{runner_id}/labels", "--input", "-"],
@@ -523,6 +600,34 @@ def cmd_authorize(cfg, names, dry_run, timeout):
         print(f"{name}: ssh keys updated", flush=True)
 
 
+def load_pools(target):
+    target = Path(target)
+    files = sorted(target.glob("*.yaml")) if target.is_dir() else [target]
+    if not files:
+        raise ConfigError(f"no fleet files in {target}")
+    pools = [load_config(path) for path in files]
+    seen = {}
+    for pool in pools:
+        if not pool.get("_fleet"):
+            raise ConfigError(f"{pool['_pool']} is not a fleet file")
+        key = tuple(sorted(pool["labels"]))
+        if key in seen:
+            raise ConfigError(f"{seen[key]} and {pool['_pool']} use the same labels")
+        seen[key] = pool["_pool"]
+    return pools
+
+
+def cmd_poll(target):
+    pools = load_pools(target)
+    runners = list_runners(pools[0]["repo"])
+    reports = poll_pools(pools, runners)
+    failed = False
+    for report in reports:
+        print(format_poll(report), flush=True)
+        failed = failed or not poll_ok(report)
+    return 1 if failed else 0
+
+
 def cmd_labels(cfg, names, dry_run):
     by_name = {}
     duplicates = []
@@ -656,6 +761,37 @@ labels:
     assert added == [] and removed == [] and same == final
     extra, added, removed = label_plan(current + [{"name": "old-label", "type": "custom"}], desired)
     assert removed == ["old-label"] and "old-label" not in extra
+    reports = poll_pools(
+        [{
+            "_pool": "tiny",
+            "count": 2,
+            "labels": ["tiny-worker"],
+            "names": ["tiny-a", "tiny-b"],
+            "_explicit": {"names"},
+        }],
+        [
+            {"name": "tiny-a", "status": "online", "labels": [
+                {"name": "self-hosted", "type": "read-only"},
+                {"name": "tiny-worker", "type": "custom"},
+                {"name": "instance:abc", "type": "custom"},
+            ]},
+            {"name": "tiny-b", "status": "offline", "labels": [{"name": "tiny-worker", "type": "custom"}]},
+        ],
+    )
+    assert reports[0]["online"] == 1
+    assert reports[0]["missing"] == ["tiny-b"]
+    assert reports[0]["offline"] == ["tiny-b"]
+    assert not poll_ok(reports[0])
+    pools = load_pools(HERE / "fleet")
+    assert {pool["_pool"] for pool in pools} == {
+        "analytic",
+        "tiny",
+        "static-relwithdebinfo-release",
+        "static-relwithdebinfo-msan-tsan",
+        "static-relwithdebinfo-asan",
+        "static-relwithdebinfo-asan-postcommit",
+    }
+    assert sum(pool["count"] for pool in pools) == 49
     argv = create_argv(cfg, "tiny-worker-2026-10-08", "/tmp/user-data")
     assert "--async" in argv
     assert "purpose=gh-runner" in argv
@@ -674,7 +810,7 @@ def load_config_text(text):
 
 def main(argv):
     parser = argparse.ArgumentParser(description="Create or re-register a GitHub Actions runner VM from a config file.")
-    parser.add_argument("command", choices=("create", "register", "labels", "authorize", "self-test"))
+    parser.add_argument("command", choices=("create", "register", "labels", "poll", "authorize", "self-test"))
     parser.add_argument("config", nargs="?")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only", action="append", default=[], help="instance name from this config; repeatable")
@@ -683,6 +819,11 @@ def main(argv):
     if args.command == "self-test":
         self_test()
         return
+    if args.command == "poll":
+        try:
+            raise SystemExit(cmd_poll(args.config or (HERE / "fleet")))
+        except ConfigError as exc:
+            raise SystemExit(f"config: {exc}") from exc
     if not args.config:
         parser.error("config file is required")
     try:

@@ -252,6 +252,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Self->FindEmptyHistoryIntervals.reset();
         Requests.clear();
         RemainingIntervals.clear();
         if (!Self->CanCutHistory()) {
@@ -349,7 +350,7 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
         return result;
     }
     const auto add = [&](const auto& portion) {
-        if (NFindEmptyHistoryIntervals::ShouldScanPortion(*portion)) {
+        if (NFindEmptyHistoryIntervals::MayHaveBlobsInBlobStorage(*portion)) {
             const auto schema = portion->GetSchema(index->GetVersionedIndex());
             result.Portions.push_back({ portion->GetPathId(), portion->GetPortionId(), schema, portion->PredictAccessorsMemory(schema) });
         }
@@ -376,15 +377,6 @@ bool TColumnShard::CanCutHistory() const {
 }
 
 TActorId TFindEmptyHistoryIntervals::Start(ui32 completedBarrierGeneration, const TStartContext& context, const TActorContext& ctx) {
-    if (!WaitingForFirstGC) {
-        return {};
-    }
-    // The first advancing DEFAULT GC covers every history group. Consume the
-    // boot latch even when sharing, feature disablement or empty history prevents a scan.
-    WaitingForFirstGC = false;
-    if (!context.CanCutHistory) {
-        return {};
-    }
     auto scanContext = BuildFindEmptyHistoryIntervalsContext(
         context.StorageInfo, context.Generation, completedBarrierGeneration, context.Index, context.TabletActorId);
     if (scanContext.Intervals.empty()) {
@@ -417,15 +409,22 @@ std::optional<TEmptyHistoryIntervalsScanResult> TFindEmptyHistoryIntervals::Hand
 void TColumnShard::StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx) {
     const TFindEmptyHistoryIntervals::TStartContext context{ *Info(), Generation(),
         HasIndex() ? &GetIndexAs<NOlap::TColumnEngineForLogs>() : nullptr, SelfId(), ResourceSubscribeActor, Counters.GetSubscribeCounters(),
-        ColumnShardConfig->GetCutHistory(), Counters.GetCSCounters(), CanCutHistory() };
-    if (const auto actorId = FindEmptyHistoryIntervals.Start(completedBarrierGeneration, context, ctx)) {
+        ColumnShardConfig->GetCutHistory(), Counters.GetCSCounters() };
+    if (const auto actorId = FindEmptyHistoryIntervals->Start(completedBarrierGeneration, context, ctx)) {
         ActorsToStop.push_back(actorId);
+    } else {
+        FindEmptyHistoryIntervals.reset();
     }
 }
 
 void TColumnShard::Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx) {
-    if (auto result = FindEmptyHistoryIntervals.HandleFinish(ev, CanCutHistory(), Counters.GetCSCounters())) {
+    if (!FindEmptyHistoryIntervals) {
+        return;
+    }
+    if (auto result = FindEmptyHistoryIntervals->HandleFinish(ev, CanCutHistory(), Counters.GetCSCounters())) {
         Execute(new TTxSaveCutHistoryRequests(this, std::move(result->Intervals), result->Finished), ctx);
+    } else if (FindEmptyHistoryIntervals->IsFinished()) {
+        FindEmptyHistoryIntervals.reset();
     }
 }
 

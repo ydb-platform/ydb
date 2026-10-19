@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TFindEmptyHistoryIntervalsPortionFilter) {
             NOlap::TFakeGroupSelector selector;
             UNIT_ASSERT(constructor.MutableMeta().LoadMetadata(meta, indexInfo, selector));
             const auto portion = constructor.Build();
-            UNIT_ASSERT_VALUES_EQUAL(ShouldScanPortion(*portion), test.Scan);
+            UNIT_ASSERT_VALUES_EQUAL(MayHaveBlobsInBlobStorage(*portion), test.Scan);
         }
     }
 }

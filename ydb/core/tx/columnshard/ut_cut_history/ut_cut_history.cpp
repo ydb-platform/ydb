@@ -255,6 +255,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
         ui32 cuts = 0;
         ui32 batches = 0;
+        ui32 gcCompletions = 0;
         f.Schema();
         f.Drive();
         f.Controller->DisableBackground(EBackground::GC);
@@ -264,6 +265,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
             if (dynamic_cast<TEvFindEmptyHistoryIntervals::TEvContinue*>(ev->GetBase())) {
                 ++batches;
+            } else if (dynamic_cast<TEvPrivate::TEvGarbageCollectionFinished*>(ev->GetBase())) {
+                ++gcCompletions;
             } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
                        cut && cut->Record.GetChannel() == FirstDataChannel) {
                 UNIT_ASSERT_VALUES_EQUAL(cut->Record.GetFromGeneration(), 0u);
@@ -290,6 +293,12 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
         UNIT_ASSERT_VALUES_EQUAL(batches, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
+        const auto gcCompletionsBeforeWrite = gcCompletions;
+        f.Write(1, 0, 1);
+        f.Drive();
+        UNIT_ASSERT(gcCompletions > gcCompletionsBeforeWrite);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
         f.Restart();
         f.Drive();

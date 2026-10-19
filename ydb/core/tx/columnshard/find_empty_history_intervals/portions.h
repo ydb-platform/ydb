@@ -4,7 +4,7 @@
 
 namespace NKikimr::NColumnShard::NFindEmptyHistoryIntervals {
 
-inline bool ShouldScanPortion(const NOlap::TPortionInfo& portion) {
+inline bool MayHaveBlobsInBlobStorage(const NOlap::TPortionInfo& portion) {
     const auto& bsIndexBlobBytes = portion.GetMeta().GetBsIndexBlobBytes();
     // Older portions may not have the summary: absence cannot prove there are no BS indexes.
     return portion.IsDefaultTier(NOlap::NBlobOperations::TGlobal::DefaultStorageId) || !bsIndexBlobBytes || *bsIndexBlobBytes != 0;

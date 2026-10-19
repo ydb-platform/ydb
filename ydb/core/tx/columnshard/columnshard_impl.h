@@ -114,7 +114,6 @@ namespace NBlobOperations {
 namespace NBlobStorage {
 class TWriteAction;
 class TOperator;
-class TGCTask;
 }   // namespace NBlobStorage
 
 namespace NTier {
@@ -234,7 +233,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NOlap::NCompaction::TGeneralCompactColumnEngineChanges;
     friend class NOlap::NBlobOperations::NBlobStorage::TWriteAction;
     friend class NOlap::NBlobOperations::NBlobStorage::TOperator;
-    friend class NOlap::NBlobOperations::NBlobStorage::TGCTask;
     friend class NOlap::NBlobOperations::NTier::TOperator;
 
     friend class NOlap::NDataSharing::TTxDataFromSource;
@@ -531,7 +529,7 @@ private:
     THashMap<ui64, TInstant> ScanTxInFlight;
     TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
     TBackgroundController BackgroundController;
-    TFindEmptyHistoryIntervals FindEmptyHistoryIntervals;
+    std::unique_ptr<TFindEmptyHistoryIntervals> FindEmptyHistoryIntervals;
     TSettings Settings;
     TLimits Limits;
     NOlap::TNormalizationController NormalizerController;
@@ -644,6 +642,8 @@ public:
     const TTablesManager& GetTablesManager() const {
         return TablesManager;
     }
+
+    void OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx);
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 

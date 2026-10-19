@@ -119,6 +119,13 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
+void TColumnShard::OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx) {
+    if (CanCutHistory()) {
+        FindEmptyHistoryIntervals = std::make_unique<TFindEmptyHistoryIntervals>();
+        StartFindEmptyHistoryIntervals(completedBarrierGeneration, ctx);
+    }
+}
+
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     using namespace NOlap::NReader;
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));

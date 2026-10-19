@@ -82,7 +82,6 @@ struct TEvFindEmptyHistoryIntervals {
 };
 
 class TFindEmptyHistoryIntervals {
-    bool WaitingForFirstGC = true;
     NActors::TActorId ScanActor;
 
 public:
@@ -95,8 +94,11 @@ public:
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& SubscribeCounters;
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
         const TCSCounters& Counters;
-        bool CanCutHistory;
     };
+
+    bool IsFinished() const {
+        return !ScanActor;
+    }
 
     NActors::TActorId Start(ui32 completedBarrierGeneration, const TStartContext& context, const NActors::TActorContext& ctx);
     std::optional<TEmptyHistoryIntervalsScanResult> HandleFinish(

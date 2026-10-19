@@ -4,9 +4,9 @@
     void TPlanExporter::PrepareGlobalRankProjection(
         TOpMap& map, const THashSet<TString>& inputNames)
     {
-        TVector<std::pair<const TMapElement*, TGlobalRankWindow>> ranks;
+        TVector<std::pair<const TSnapshotMapElement*, TGlobalRankWindow>> ranks;
         THashMap<TString, NJson::TJsonValue> definitions;
-        for (const auto& element : map.MapElements) {
+        for (const auto& element : SnapshotMapElements(map)) {
             const auto& expression = element.GetExpression();
             if (!expression.Node || !expression.Node->IsLambda() ||
                 !expression.GetExpressionBody()->IsCallable("YqlWin"))
@@ -63,14 +63,14 @@
         if ((aggregate.GetAggregationPhase() != EOpPhase::Undefined &&
              aggregate.GetAggregationPhase() != EOpPhase::Final) ||
             aggregate.IsDistinctAll() ||
-            aggregate.GetKeyColumns().empty())
+            SnapshotKeyColumns(aggregate).empty())
         {
             Unsupported(TStringBuilder()
                 << label
                 << " requires one grouped logical or final Aggregate");
         }
 
-        const auto& aggregateKeys = aggregate.GetKeyColumns();
+        const auto& aggregateKeys = SnapshotKeyColumns(aggregate);
         for (const auto& partition : window.PartitionBy) {
             const auto partitionCount = std::count_if(
                 aggregateKeys.begin(),
@@ -105,11 +105,11 @@
             }
         }
 
-        const auto traits = aggregate.GetAggregationTraits();
+        const auto traits = SnapshotAggregationTraits(aggregate);
         const auto inputCount = std::count_if(
             traits.begin(),
             traits.end(),
-            [&](const TOpAggregationTraits& trait) {
+            [&](const TSnapshotAggregationTrait& trait) {
                 return trait.ResultColName.GetFullName() == window.Input;
             });
         if (inputCount != 1) {
@@ -120,7 +120,7 @@
         const auto& trait = *std::find_if(
             traits.begin(),
             traits.end(),
-            [&](const TOpAggregationTraits& candidate) {
+            [&](const TSnapshotAggregationTrait& candidate) {
                 return candidate.ResultColName.GetFullName() == window.Input;
             });
         if (trait.AggFunction != "sum" || trait.Distinct || trait.Unwrap) {
@@ -140,7 +140,7 @@
                 static_cast<TOpAggregate&>(*aggregate.GetInput());
             if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate ||
                 intermediate.IsDistinctAll() ||
-                intermediate.GetKeyColumns() != aggregate.GetKeyColumns())
+                SnapshotKeyColumns(intermediate) != SnapshotKeyColumns(aggregate))
             {
                 Unsupported(TStringBuilder()
                     << "Final " << label
@@ -149,11 +149,11 @@
             }
             const TString state = trait.OriginalColName.GetFullName();
             const auto intermediateTraits =
-                intermediate.GetAggregationTraits();
+                SnapshotAggregationTraits(intermediate);
             const auto sourceCount = std::count_if(
                 intermediateTraits.begin(),
                 intermediateTraits.end(),
-                [&](const TOpAggregationTraits& candidate) {
+                [&](const TSnapshotAggregationTrait& candidate) {
                     return candidate.ResultColName.GetFullName() == state &&
                         candidate.AggFunction == "sum" &&
                         !candidate.Distinct && !candidate.Unwrap;
@@ -161,7 +161,7 @@
             const auto finalUseCount = std::count_if(
                 traits.begin(),
                 traits.end(),
-                [&](const TOpAggregationTraits& candidate) {
+                [&](const TSnapshotAggregationTrait& candidate) {
                     return candidate.OriginalColName.GetFullName() == state;
                 });
             const auto stateType = ExactType(OutputType(intermediate, state));
@@ -237,7 +237,7 @@
         THashMap<const IOperator*, TVector<IOperator*>> parents;
         VisitOperators(Root.GetInput(), mainNodes, [&](IOperator& op) {
             for (const auto& child : op.GetChildren()) {
-                parents[child.Get()].push_back(&op);
+                parents[child].push_back(&op);
             }
         });
         for (const auto& [producer, outputs] : WindowProjectionOutputs) {
@@ -278,13 +278,13 @@
         THashMap<const IOperator*, TVector<IOperator*>> parents;
         VisitOperators(Root.GetInput(), reachableNodes, [&](IOperator& op) {
             for (const auto& child : op.GetChildren()) {
-                parents[child.Get()].push_back(&op);
+                parents[child].push_back(&op);
             }
         });
         for (const auto& subplan : Subplans) {
             VisitOperators(subplan.ExportedRoot, reachableNodes, [&](IOperator& op) {
                 for (const auto& child : op.GetChildren()) {
-                    parents[child.Get()].push_back(&op);
+                    parents[child].push_back(&op);
                 }
             });
         }

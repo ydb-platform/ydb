@@ -10,12 +10,11 @@ private:
 
 public:
     TExactReadRangePredicateExporter(
-        const TOpRead& read,
+        const TOpRead&,
         const TSemanticSnapshotCatalogTableV1& table,
         const TOpRead::TRangeInfo& range,
         const TOlapColumnMap& columns)
-        : Read(read)
-        , Table(table)
+        : Table(table)
         , Range(range)
         , Columns(columns)
     {
@@ -52,20 +51,9 @@ public:
                 "Read range primary key must be a catalog non-null Int64");
         }
 
-        size_t physicalKeyMappings = 0;
-        for (size_t index = 0; index < Read.Columns.size(); ++index) {
-            if (Read.Columns[index] == physicalKey) {
-                ++physicalKeyMappings;
-                KeyOutput = Read.OutputIUs[index].GetFullName();
-            }
-        }
-        if (physicalKeyMappings != 1 || KeyOutput.empty()) {
-            Unsupported(
-                "Read range must emit its physical primary key exactly once");
-        }
-
-        const auto* physical =
-            ResolveOlapColumn(physicalKey, Columns);
+        // The column resolver rejects ambiguous physical-to-ID mappings.
+        const auto* physical = ResolveOlapColumn(physicalKey, Columns);
+        KeyOutput = physical->Output;
         const auto* described =
             ResolveOlapColumn(Range.KeyColumns.front(), Columns);
         if (physical->Output != KeyOutput ||
@@ -919,7 +907,6 @@ private:
     }
 
 private:
-    const TOpRead& Read;
     const TSemanticSnapshotCatalogTableV1& Table;
     const TOpRead::TRangeInfo& Range;
     const TOlapColumnMap& Columns;

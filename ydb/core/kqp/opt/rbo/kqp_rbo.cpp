@@ -204,11 +204,44 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoo
     auto& ctx = rboCtx.ExprCtx;
     int stageCounter = 0;
 
+    struct TRootSnapshotSink final : IRBOSemanticSnapshotSink {
+        IRBOSemanticSnapshotSink* Sink;
+        ui32 Ordinal;
+        ui32 Count;
+
+        TRootSnapshotSink(IRBOSemanticSnapshotSink* sink, ui32 ordinal, ui32 count)
+            : Sink(sink), Ordinal(ordinal), Count(count) {
+        }
+
+        void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
+            result.RootOrdinal = Ordinal;
+            result.RootCount = Count;
+            Sink->OnSemanticSnapshot(std::move(result));
+        }
+
+        std::optional<ui64> GetTransformationPrefixTarget() const override {
+            return Sink->GetTransformationPrefixTarget();
+        }
+    };
+    TVector<THolder<TRootSnapshotSink>> rootSinks;
+    TVector<THolder<TSemanticSnapshotPairCaptureV1>> rootCaptures;
+    if (semanticSnapshotSink && roots.size() <= Max<ui32>()) {
+        // Roots can share plan nodes. Capture every initial boundary before
+        // optimizing any root so an earlier optimization cannot contaminate it.
+        for (size_t index = 0; index < roots.size(); ++index) {
+            rootSinks.push_back(MakeHolder<TRootSnapshotSink>(
+                semanticSnapshotSink, static_cast<ui32>(index), static_cast<ui32>(roots.size())));
+            rootCaptures.push_back(MakeHolder<TSemanticSnapshotPairCaptureV1>(rootSinks.back().Get()));
+            rootCaptures.back()->CaptureInitial(*roots[index], rboCtx);
+        }
+    }
+    size_t rootIndex = 0;
     for (auto & rootPtr : roots) {
         auto & root = *rootPtr;
         root.PlanProps.StageGraph.StageCounter = stageCounter;
-        TSemanticSnapshotPairCaptureV1 semanticSnapshots(semanticSnapshotSink);
-        semanticSnapshots.CaptureInitial(root, rboCtx);
+        TSemanticSnapshotPairCaptureV1 disabledCapture(nullptr);
+        auto& semanticSnapshots = rootCaptures.empty() ? disabledCapture : *rootCaptures[rootIndex];
+        ++rootIndex;
         rboCtx.TransformationDebug.Reset(semanticSnapshots.GetTransformationPrefixTarget());
         SubmitInitialPlanTrace(root, rboCtx);
 

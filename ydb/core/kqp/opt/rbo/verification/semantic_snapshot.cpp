@@ -14,6 +14,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/mkql_date_scaler.h>
+#include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
@@ -42,6 +43,8 @@ namespace {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+
+#include "snapshot_operator_views_impl.h"
 
 constexpr TStringBuf Binary64SemanticMode = "binary64_uf_universal_v1";
 constexpr TStringBuf Binary64OrderingComparison = "binary64_total_v1";
@@ -229,8 +232,8 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             return;
 
         case EOperator::UnionAll:
-            if (children != 2) {
-                Unsupported("UnionAll must have two inputs");
+            if (children < 2) {
+                Unsupported("UnionAll must have at least two inputs");
             }
             return;
 
@@ -250,6 +253,7 @@ void ValidateOperatorArity(IOperator& op, bool allowRoot) {
             return;
 
         case EOperator::CBOTree:
+        default:
             Unsupported(TStringBuilder()
                 << "Unsupported operator " << op.GetExplainName());
     }
@@ -288,35 +292,12 @@ void ValidateOperatorTopology(IOperator& root, bool allowRoot = false) {
 }
 
 TVector<TIntrusivePtr<IOperator>> OrderedSubplanRoots(const TSubplans& subplans) {
-    if (subplans.OrderedList.size() != subplans.PlanMap.size()) {
-        Unsupported("Subplan registry order and map have different sizes");
-    }
-
-    TInfoUnitSet seen;
     TVector<TIntrusivePtr<IOperator>> result;
-    result.reserve(subplans.OrderedList.size());
-    for (const auto& binding : subplans.OrderedList) {
-        const TString name = binding.GetFullName();
-        if (name.empty() || !seen.insert(binding).second) {
-            Unsupported(TStringBuilder()
-                << "Subplan registry has an empty or duplicate binding " << name);
+    for (const auto& [binding, entry] : subplans) {
+        if (binding == TUnorderedIUs::InvalidBit || !entry.Plan) {
+            Unsupported("Subplan registry contains an invalid binding or empty plan");
         }
-        const auto it = subplans.PlanMap.find(binding);
-        if (it == subplans.PlanMap.end()) {
-            Unsupported(TStringBuilder()
-                << "Subplan registry order references missing binding " << name);
-        }
-        const auto& entry = it->second;
-        if (!(entry.IU == binding)) {
-            Unsupported(TStringBuilder()
-                << "Subplan registry entry disagrees with binding " << name);
-        }
-        auto* plan = dynamic_cast<IOperator*>(entry.Plan.Get());
-        if (!plan) {
-            Unsupported(TStringBuilder()
-                << "Subplan registry has no operator plan for binding " << name);
-        }
-        result.emplace_back(plan);
+        result.push_back(entry.Plan);
     }
     return result;
 }
@@ -348,9 +329,9 @@ void ValidateSnapshotTopology(TOpRoot& root) {
                 }
                 const auto& addDependencies =
                     static_cast<const TOpAddDependencies&>(op);
-                if (addDependencies.Dependencies.empty() ||
-                    addDependencies.Dependencies.size() !=
-                        addDependencies.Types.size())
+                if (SnapshotDependencies(addDependencies).empty() ||
+                    SnapshotDependencies(addDependencies).size() !=
+                        SnapshotDependencyTypes(addDependencies).size())
                 {
                     Unsupported(
                         "AddDependencies must have equally sized nonempty "
@@ -358,14 +339,14 @@ void ValidateSnapshotTopology(TOpRoot& root) {
                 }
                 TInfoUnitSet seen;
                 for (size_t index = 0;
-                     index < addDependencies.Dependencies.size();
+                     index < SnapshotDependencies(addDependencies).size();
                      ++index)
                 {
                     const auto& dependency =
-                        addDependencies.Dependencies[index];
+                        SnapshotDependencies(addDependencies)[index];
                     if (dependency.GetFullName().empty() ||
                         !seen.insert(dependency).second ||
-                        !addDependencies.Types[index])
+                        !SnapshotDependencyTypes(addDependencies)[index])
                     {
                         Unsupported(
                             "AddDependencies has an empty or duplicate "
@@ -381,7 +362,6 @@ void CheckSnapshotProperties(IOperator& op, bool stageGraphPresent) {
     const bool joinPhysicalProps = props.JoinAlgo || props.UseBlockHashJoin ||
         props.LeftShuffleBy || props.RightShuffleBy;
     if ((!stageGraphPresent && props.StageId) || props.Algorithm || props.OrderEnforcer ||
-        (props.EnsureAtMostOne && op.GetKind() != EOperator::Limit) ||
         (joinPhysicalProps && (!stageGraphPresent || op.GetKind() != EOperator::Join)))
     {
         Unsupported(TStringBuilder()
@@ -414,7 +394,7 @@ bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
     // the legacy Aggregate/Sort materialization path. A checked Map likewise
     // needs an independently materialized output type before its exceptional
     // projection can be admitted.
-    bool result = !root.PlanProps.Subplans.PlanMap.empty();
+    bool result = !root.PlanProps.Subplans.Empty();
     THashSet<const IOperator*> visited;
     const auto inspect = [&](IOperator& op) {
         result = result || op.GetKind() == EOperator::Aggregate ||
@@ -423,7 +403,7 @@ bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
             return;
         }
         const auto& map = static_cast<const TOpMap&>(op);
-        for (const auto& element : map.MapElements) {
+        for (const auto& element : SnapshotMapElements(map)) {
             if (element.IsRename()) {
                 continue;
             }
@@ -2368,6 +2348,82 @@ void ValidateExactDecimalCoalesceZeroMember(
     CheckScalarSafetyMetadata(*member.Child(1));
 }
 
+struct TExactUint64JustCoalesceZero {
+    const TExprNode* Optional = nullptr;
+    const TExprNode* Zero = nullptr;
+
+    explicit operator bool() const {
+        return Optional && Zero;
+    }
+};
+
+TExactUint64JustCoalesceZero ExactUint64JustCoalesceZero(
+    const TExprNode& node)
+{
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
+        return {};
+    }
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != "Uint64" ||
+        !resultNullable)
+    {
+        return {};
+    }
+
+    const auto& coalesce = *node.Child(0);
+    bool coalesceNullable = false;
+    if (!coalesce.IsCallable("Coalesce") ||
+        coalesce.ChildrenSize() != 2 ||
+        ScalarTypeName(coalesce, &coalesceNullable) != "Uint64" ||
+        coalesceNullable)
+    {
+        return {};
+    }
+
+    const auto& optional = *coalesce.Child(0);
+    bool optionalNullable = false;
+    if (!optional.IsCallable("Member") ||
+        optional.ChildrenSize() != 2 ||
+        ScalarTypeName(optional, &optionalNullable) != "Uint64" ||
+        !optionalNullable)
+    {
+        return {};
+    }
+
+    const auto& zero = *coalesce.Child(1);
+    bool zeroNullable = false;
+    if (!zero.IsCallable("Uint64") ||
+        zero.ChildrenSize() != 1 ||
+        !zero.Child(0)->IsAtom("0") ||
+        ScalarTypeName(zero, &zeroNullable) != "Uint64" ||
+        zeroNullable)
+    {
+        return {};
+    }
+    return {&optional, &zero};
+}
+
+void ValidateExactUint64JustCoalesceZeroMember(
+    const TExactUint64JustCoalesceZero& exact,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    if (!exact) {
+        Unsupported("Exact Uint64 Just/Coalesce zero shape is missing");
+    }
+    const auto& member = *exact.Optional;
+    if (!rowArgument ||
+        member.Child(0) != rowArgument ||
+        !member.Child(1)->IsAtom() ||
+        !visibleColumns.contains(TString(member.Child(1)->Content())))
+    {
+        Unsupported(
+            "Exact Uint64 Just/Coalesce zero requires a direct visible input member");
+    }
+    CheckScalarSafetyMetadata(member);
+    CheckScalarSafetyMetadata(*member.Child(1));
+}
+
 const TExprNode* ExactDecimalJustArgument(const TExprNode& node) {
     if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
         return nullptr;
@@ -4133,7 +4189,7 @@ std::optional<ui16> ShiftConstantDate(
     year = static_cast<ui32>(shiftedYear);
     day = std::min(
         day,
-        NMiniKQL::GetMonthLength(month, NMiniKQL::IsLeapYear(year)));
+        NYql::DateTime::GetMonthLength(month, NYql::DateTime::IsLeapYear(year)));
 
     ui16 result = 0;
     return NMiniKQL::MakeDate(year, month, day, result)
@@ -7692,7 +7748,7 @@ TString JoinKind(TStringBuf kind) {
 
 THashSet<TString> OutputNames(IOperator& op) {
     THashSet<TString> result;
-    for (const auto& iu : op.GetOutputIUs()) {
+    for (const auto& iu : SnapshotOutputIUs(op)) {
         const TString name = iu.GetFullName();
         if (name.empty() || !result.insert(name).second) {
             Unsupported(TStringBuilder() << op.GetExplainName() << " has duplicate or empty output IU " << name);
@@ -7766,7 +7822,7 @@ TString Phase(EOpPhase phase) {
 }
 
 bool IsIntegralAverageOutput(
-    const TOpAggregationTraits& trait,
+    const TSnapshotAggregationTrait& trait,
     const TTypeAnnotationNode* outputType)
 {
     return trait.AggFunction == "avg" &&
@@ -7778,7 +7834,7 @@ bool IsIntegralAverageOutput(
 
 void ValidatePlainIntegralAverageTrait(
     TOpAggregate& aggregate,
-    const TOpAggregationTraits& trait,
+    const TSnapshotAggregationTrait& trait,
     TStringBuf phase)
 {
     if (aggregate.IsDistinctAll() || trait.Distinct || trait.Unwrap) {
@@ -7790,7 +7846,7 @@ void ValidatePlainIntegralAverageTrait(
 
 void ValidateIntegralAverageContract(
     TOpAggregate& aggregate,
-    const TOpAggregationTraits& trait)
+    const TSnapshotAggregationTrait& trait)
 {
     ValidatePlainIntegralAverageTrait(
         aggregate,
@@ -7846,13 +7902,13 @@ void ValidateIntegralAverageContract(
         Unsupported(
             "Final integral avg must directly consume an intermediate Aggregate");
     }
-    if (intermediate.GetKeyColumns() != aggregate.GetKeyColumns()) {
+    if (SnapshotKeyColumns(intermediate) != SnapshotKeyColumns(aggregate)) {
         Unsupported(
             "Final integral avg must preserve identical ordered intermediate keys");
     }
 
-    const auto intermediateTraits = intermediate.GetAggregationTraits();
-    const TOpAggregationTraits* source = nullptr;
+    const auto intermediateTraits = SnapshotAggregationTraits(intermediate);
+    const TSnapshotAggregationTrait* source = nullptr;
     size_t sourceCount = 0;
     for (const auto& candidate : intermediateTraits) {
         if (candidate.ResultColName.GetFullName() == input) {
@@ -7860,11 +7916,11 @@ void ValidateIntegralAverageContract(
             ++sourceCount;
         }
     }
-    const auto finalTraits = aggregate.GetAggregationTraits();
+    const auto finalTraits = SnapshotAggregationTraits(aggregate);
     const size_t finalUseCount = std::count_if(
         finalTraits.begin(),
         finalTraits.end(),
-        [&](const TOpAggregationTraits& candidate) {
+        [&](const TSnapshotAggregationTrait& candidate) {
             return candidate.OriginalColName.GetFullName() == input;
         });
     if (sourceCount != 1 || finalUseCount != 1 || !source ||
@@ -7915,20 +7971,20 @@ bool RequiresBinary64Semantics(IOperator& root) {
             continue;
         }
         if (node->GetKind() == EOperator::Aggregate) {
-            for (const auto& trait : static_cast<TOpAggregate&>(*node).GetAggregationTraits()) {
+            for (const auto& trait : SnapshotAggregationTraits(static_cast<TOpAggregate&>(*node))) {
                 if (trait.AggFunction == "variance_1_1") {
                     return true;
                 }
             }
         }
         for (const auto& child : node->GetChildren()) {
-            pending.push_back(child.Get());
+            pending.push_back(child);
         }
     }
     return false;
 }
 
-NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TOpAggregationTraits& trait) {
+NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TSnapshotAggregationTrait& trait) {
     if (trait.AggFunction != "variance_1_1" || trait.Distinct || trait.Unwrap || aggregate.IsDistinctAll()) {
         Unsupported("Binary64 variance requires one plain stddev_samp trait");
     }
@@ -7939,13 +7995,13 @@ NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TOpAggreg
         }
         auto& intermediate = static_cast<TOpAggregate&>(*aggregate.GetInput());
         if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate ||
-            intermediate.GetKeyColumns() != aggregate.GetKeyColumns())
+            SnapshotKeyColumns(intermediate) != SnapshotKeyColumns(aggregate))
         {
             Unsupported("Final binary64 variance must preserve its intermediate's ordered keys");
         }
         const auto input = trait.OriginalColName.GetFullName();
         size_t producerCount = 0, consumerCount = 0;
-        for (const auto& candidate : intermediate.GetAggregationTraits()) {
+        for (const auto& candidate : SnapshotAggregationTraits(intermediate)) {
             if (candidate.ResultColName.GetFullName() == input) {
                 if (candidate.AggFunction != "variance_1_1" || candidate.Distinct || candidate.Unwrap) {
                     Unsupported("Final binary64 variance requires its matching intermediate state");
@@ -7954,7 +8010,7 @@ NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TOpAggreg
                 sourceAnnotation = OutputType(*intermediate.GetInput(), candidate.OriginalColName.GetFullName());
             }
         }
-        for (const auto& candidate : aggregate.GetAggregationTraits()) {
+        for (const auto& candidate : SnapshotAggregationTraits(aggregate)) {
             consumerCount += candidate.OriginalColName.GetFullName() == input;
         }
         if (producerCount != 1 || consumerCount != 1) {
@@ -7973,7 +8029,7 @@ NJson::TJsonValue VarianceStateContract(TOpAggregate& aggregate, const TOpAggreg
     const TString outputType = TypeName(OutputType(aggregate, trait.ResultColName.GetFullName()), &outputNullable, true);
     const TString expectedInput = aggregate.GetAggregationPhase() == EOpPhase::Final ? TString("Double") : sourceType;
     const bool expectedNullable = sourceNullable ||
-        (aggregate.GetKeyColumns().empty() && aggregate.GetAggregationPhase() != EOpPhase::Intermediate);
+        (SnapshotKeyColumns(aggregate).empty() && aggregate.GetAggregationPhase() != EOpPhase::Intermediate);
     if (inputType != expectedInput || inputNullable != sourceNullable ||
         outputType != "Double" || outputNullable != expectedNullable)
     {
@@ -8065,7 +8121,7 @@ public:
         ValidateSnapshotTopology(Root);
         PrepareSubplans();
         CheckSnapshotProperties(Root, false);
-        if (Root.ColumnOrder.empty()) {
+        if (SnapshotRootColumnOrder(Root).empty()) {
             Unsupported("Root output order must not be empty");
         }
         PrepareDecimalAverageCarriers();
@@ -8089,13 +8145,43 @@ public:
         ValidateGlobalRankProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
-        THashSet<TString> seen;
-        for (const auto& name : Root.ColumnOrder) {
-            if (name.empty() || !seen.insert(name).second || !rootNames.contains(name)) {
-                Unsupported(TStringBuilder() << "Invalid root output IU " << name);
+        auto columns = JsonArray();
+        size_t ordinal = 0;
+        TIntegralAverageOrderingColumns resultAverages;
+        TDecimalAverageCarrierTypes resultDecimals;
+        const auto* inputDecimals = DecimalAverageCarrierOutputMap.FindPtr(Root.GetInput().Get());
+        for (const auto& [id, label] : Root.GetColumns().Items()) {
+            const TString inputName = ToString(id);
+            if (!rootNames.contains(inputName)) {
+                Unsupported(TStringBuilder() << "Invalid root output IU " << inputName);
             }
+            // Position and client label are stable across optimizer ID rewrites.
+            // Repeated bindings or labels remain distinct tuple positions.
+            const TString name = TStringBuilder() << "result[" << ordinal++ << "]:" << label;
+            if (IntegralAverageOrderingOutputs(*Root.GetInput()).contains(inputName)) {
+                resultAverages.insert(name);
+            }
+            if (inputDecimals && inputDecimals->contains(inputName)) {
+                resultDecimals.insert(name);
+            }
+            auto column = JsonMap();
+            column["output"] = name;
+            column["expression"] = ColumnExpr(inputName);
+            columns.AppendValue(std::move(column));
             output.AppendValue(name);
         }
+        auto resultProjection = JsonMap();
+        resultProjection["id"] = "result";
+        resultProjection["op"] = "project";
+        resultProjection["input"] = RootId;
+        resultProjection["ordered"] = true;
+        resultProjection["columns"] = std::move(columns);
+        Nodes.AppendValue(std::move(resultProjection));
+        Ids.emplace(&Root, "result");
+        NodeOrder.push_back(&Root);
+        IntegralAverageOrderingOutputMap.emplace(&Root, std::move(resultAverages));
+        DecimalAverageCarrierOutputMap.emplace(&Root, std::move(resultDecimals));
+        RootId = "result";
 
         auto result = JsonMap();
         result["nodes"] = std::move(Nodes);
@@ -8468,12 +8554,12 @@ private:
                         "Decimal avg carrier requires unordered UnionAll");
                 }
                 return CertifyDecimalAverageUnionTree(
-                           *unionAll.GetLeftInput(),
+                           *SnapshotUnionInput(unionAll, 0),
                            name,
                            unionAll,
                            contract) +
                     CertifyDecimalAverageUnionTree(
-                           *unionAll.GetRightInput(),
+                           *SnapshotUnionInput(unionAll, 1),
                            name,
                            unionAll,
                            contract);
@@ -8481,7 +8567,7 @@ private:
 
             case EOperator::Map: {
                 auto& map = static_cast<TOpMap&>(op);
-                if (map.IsOrdered()) {
+                if (true) {
                     Unsupported(
                         "Decimal avg carrier Project leaf must be "
                         "unordered");
@@ -8496,11 +8582,11 @@ private:
                 auto& aggregate =
                     static_cast<TOpAggregate&>(*map.GetInput());
                 const auto traits =
-                    aggregate.GetAggregationTraits();
+                    SnapshotAggregationTraits(aggregate);
                 if (aggregate.GetAggregationPhase() !=
                         EOpPhase::Intermediate ||
                     aggregate.IsDistinctAll() ||
-                    !aggregate.GetKeyColumns().empty() ||
+                    !SnapshotKeyColumns(aggregate).empty() ||
                     traits.size() != 1)
                 {
                     Unsupported(
@@ -8508,9 +8594,9 @@ private:
                         "one keyless Intermediate Aggregate");
                 }
                 const auto inputNames = OutputNames(*map.GetInput());
-                const auto* carrierElement = map.FindOutputElement(
+                const auto* carrierElement = SnapshotFindOutputElement(map,
                     TInfoUnit(TString(name)));
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     if (&element == carrierElement) {
                         continue;
                     }
@@ -8615,14 +8701,14 @@ private:
 
     void CertifyDecimalAverageFinal(
         TOpAggregate& aggregate,
-        const TOpAggregationTraits& trait)
+        const TSnapshotAggregationTrait& trait)
     {
         const TString input =
             trait.OriginalColName.GetFullName();
         const TString output =
             trait.ResultColName.GetFullName();
         if (aggregate.IsDistinctAll() ||
-            !aggregate.GetKeyColumns().empty() ||
+            !SnapshotKeyColumns(aggregate).empty() ||
             trait.Distinct ||
             trait.Unwrap)
         {
@@ -8631,9 +8717,9 @@ private:
                 "Final avg trait");
         }
         const size_t inputUses = std::count_if(
-            aggregate.AggregationTraitsList.begin(),
-            aggregate.AggregationTraitsList.end(),
-            [&](const TOpAggregationTraits& candidate) {
+            SnapshotAggregationTraits(aggregate).begin(),
+            SnapshotAggregationTraits(aggregate).end(),
+            [&](const TSnapshotAggregationTrait& candidate) {
                 return candidate.OriginalColName.GetFullName() == input;
             });
         if (inputUses != 1) {
@@ -8685,7 +8771,7 @@ private:
             [&](IOperator& op) {
                 orderedNodes.push_back(&op);
                 for (const auto& child : op.GetChildren()) {
-                    MainConsumers[child.Get()].push_back(&op);
+                    MainConsumers[child].push_back(&op);
                 }
             });
 
@@ -8703,7 +8789,7 @@ private:
                 continue;
             }
             for (const auto& trait :
-                aggregate.AggregationTraitsList)
+                SnapshotAggregationTraits(aggregate))
             {
                 if (trait.AggFunction == "avg") {
                     CertifyDecimalAverageFinal(
@@ -9080,7 +9166,7 @@ private:
 
     TScalarSubplanDetails::TCorrelation PrepareScalarCorrelation(
         const TString& binding,
-        const TSubplanEntry& entry,
+        const TSnapshotSubplanEntry& entry,
         const TIntrusivePtr<IOperator>& plan)
     {
         if (entry.DependentIUs.empty()) {
@@ -9102,7 +9188,7 @@ private:
         THashMap<const IOperator*, TVector<IOperator*>> parents;
         TVector<TOpAddDependencies*> outerBinds;
         VisitOperators(plan, nodes, [&](IOperator& op) {
-            if (op.Props.EnsureAtMostOne ||
+            if (false ||
                 op.GetKind() == EOperator::Limit ||
                 op.GetKind() == EOperator::Sort ||
                 (op.GetKind() == EOperator::UnionAll &&
@@ -9115,7 +9201,7 @@ private:
             }
             CheckSnapshotProperties(op, false);
             for (const auto& child : op.GetChildren()) {
-                parents[child.Get()].push_back(&op);
+                parents[child].push_back(&op);
             }
             if (op.GetKind() == EOperator::AddDependencies) {
                 outerBinds.push_back(
@@ -9129,8 +9215,8 @@ private:
         }
 
         auto* outerBind = outerBinds.front();
-        if (outerBind->Dependencies.size() != dependencies.size() ||
-            outerBind->Types.size() != dependencies.size())
+        if (SnapshotDependencies(*outerBind).size() != dependencies.size() ||
+            SnapshotDependencyTypes(*outerBind).size() != dependencies.size())
         {
             Unsupported(TStringBuilder()
                 << "Scalar subplan binding " << binding
@@ -9138,18 +9224,18 @@ private:
         }
         TScalarSubplanDetails::TCorrelation result;
         for (const auto& dependencyIU : entry.DependentIUs) {
-            const auto begin = outerBind->Dependencies.begin();
-            const auto end = outerBind->Dependencies.end();
+            const auto begin = SnapshotDependencies(*outerBind).begin();
+            const auto end = SnapshotDependencies(*outerBind).end();
             const auto found = std::find(begin, end, dependencyIU);
             if (found == end || std::count(begin, end, dependencyIU) != 1 ||
-                !outerBind->Types[found - begin])
+                !SnapshotDependencyTypes(*outerBind)[found - begin])
             {
                 Unsupported(TStringBuilder()
                     << "Scalar subplan binding " << binding
                     << " dependency registry disagrees with AddDependencies");
             }
             result.Dependencies.push_back({
-                dependencyIU.GetFullName(), outerBind->Types[found - begin]});
+                dependencyIU.GetFullName(), SnapshotDependencyTypes(*outerBind)[found - begin]});
         }
 
         auto shape = plan;
@@ -9175,7 +9261,7 @@ private:
                 const auto& aggregate =
                     static_cast<const TOpAggregate&>(*shape);
                 if (aggregate.IsDistinctAll() ||
-                    !aggregate.GetKeyColumns().empty() ||
+                    !SnapshotKeyColumns(aggregate).empty() ||
                     aggregate.GetAggregationPhase() != EOpPhase::Undefined)
                 {
                     Unsupported(TStringBuilder()
@@ -9223,7 +9309,7 @@ private:
                     << " outer dependency collides with an inner column");
             }
             const auto correlation = ExtractScalarCorrelation(
-                binding, dependency.Name, filter->FilterExpr, innerNames, dependencies);
+                binding, dependency.Name, filter->GetFilterExpression(), innerNames, dependencies);
             if (!SameType(
                     ExactType(dependency.Type),
                     ExactType(OutputType(*outerBind, dependency.Name))))
@@ -9255,14 +9341,14 @@ private:
             if (op.GetKind() == EOperator::Aggregate) {
                 const auto& candidate =
                     static_cast<const TOpAggregate&>(op);
-                for (const auto& key : candidate.KeyColumns) {
+                for (const auto& key : SnapshotKeyColumns(candidate)) {
                     if (dependencies.contains(key.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
                             << " aggregates by its outer dependency");
                     }
                 }
-                for (const auto& trait : candidate.AggregationTraitsList) {
+                for (const auto& trait : SnapshotAggregationTraits(candidate)) {
                     if (dependencies.contains(trait.OriginalColName.GetFullName())) {
                         Unsupported(TStringBuilder()
                             << "Scalar subplan binding " << binding
@@ -9282,7 +9368,7 @@ private:
 
     TVector<TString> ReferencedSubplanBindings(IOperator& op) {
         THashSet<TString> referenced;
-        for (const auto& iu : op.GetSubplanIUs(Root.PlanProps)) {
+        for (const auto& iu : SnapshotSubplanIUs(op, Root.PlanProps)) {
             const TString name = iu.GetFullName();
             if (!SubplanIndices.contains(name)) {
                 Unsupported(TStringBuilder()
@@ -9305,7 +9391,7 @@ private:
 
     TSubplanDescriptor PrepareScalarSubplan(
         const TString& binding,
-        const TSubplanEntry& entry,
+        const TSnapshotSubplanEntry& entry,
         const TIntrusivePtr<IOperator>& plan)
     {
         if (!entry.Tuple.empty()) {
@@ -9335,7 +9421,7 @@ private:
             correlation =
                 PrepareScalarCorrelation(binding, entry, plan);
         }
-        const auto resultIUs = GetSubplanResultIUs(plan);
+        const auto resultIUs = entry.ResultIU ? TVector<TInfoUnit>{*entry.ResultIU} : TVector<TInfoUnit>{};
         if (resultIUs.size() != 1) {
             Unsupported(TStringBuilder()
                 << "Scalar subplan binding " << binding
@@ -9369,7 +9455,7 @@ private:
     std::optional<NJson::TJsonValue>
     TryExportErrorOnNullStringProjection(
         TOpMap& map,
-        const TMapElement& element,
+        const TSnapshotMapElement& element,
         const THashSet<TString>& physicalInputColumns)
     {
         if (element.IsRename()) {
@@ -9412,7 +9498,7 @@ private:
         auto& map = static_cast<TOpMap&>(op);
         const auto physicalInputColumns =
             OutputNames(*map.GetInput());
-        for (const auto& element : map.MapElements) {
+        for (const auto& element : SnapshotMapElements(map)) {
             if (!element.IsRename() &&
                 TryExtractErrorOnNullStringUnwrap(
                     element.GetExpression(),
@@ -9463,7 +9549,7 @@ private:
             mainNodes,
             [&](IOperator& op) {
                 for (const auto& child : op.GetChildren()) {
-                    parents[child.Get()].push_back(&op);
+                    parents[child].push_back(&op);
                 }
             });
 
@@ -9498,7 +9584,7 @@ private:
                     Unsupported(
                         "Checked Concat may not cross a Limit with an offset");
                 }
-                if (limit.Props.EnsureAtMostOne) {
+                if (false) {
                     Unsupported(
                         "Checked Concat may not cross an error-bearing Limit");
                 }
@@ -9511,7 +9597,7 @@ private:
             }
             if (parent->GetKind() == EOperator::Sort) {
                 auto& sort = static_cast<TOpSort&>(*parent);
-                for (const auto& element : sort.GetSortElements()) {
+                for (const auto& element : SnapshotSortElements(sort)) {
                     if (element.SortColumn.GetFullName() == column) {
                         Unsupported(
                             "Checked Concat may not be demanded as a Sort key");
@@ -9528,12 +9614,12 @@ private:
                 auto& map = static_cast<TOpMap&>(*parent);
                 size_t aliases = 0;
                 TString nextColumn = column;
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     const bool directAlias =
                         element.IsRename() &&
                         element.GetRename().GetFullName() == column;
                     for (const auto& input :
-                        element.GetExpression().GetInputIUs(false, true))
+                        SnapshotInputIUs(element.GetExpression(), false, true))
                     {
                         if (input.GetFullName() != column) {
                             continue;
@@ -9565,8 +9651,8 @@ private:
         }
 
         if (!THashSet<TString>(
-                Root.ColumnOrder.begin(),
-                Root.ColumnOrder.end()).contains(column))
+                SnapshotRootColumnOrder(Root).begin(),
+                SnapshotRootColumnOrder(Root).end()).contains(column))
         {
             Unsupported(
                 "Checked Concat must terminate in a main result output");
@@ -9586,7 +9672,7 @@ private:
             [&](IOperator& op) {
                 orderedNodes.push_back(&op);
                 for (const auto& child : op.GetChildren()) {
-                    parents[child.Get()].push_back(&op);
+                    parents[child].push_back(&op);
                 }
             });
 
@@ -9598,8 +9684,8 @@ private:
             const auto* mapParents = parents.FindPtr(&map);
             if (Root.GetInput().Get() == &map && (!mapParents || mapParents->empty())) {
                 DemandedErrorProjectionOutputs[&map] = THashSet<TString>(
-                    Root.ColumnOrder.begin(),
-                    Root.ColumnOrder.end());
+                    SnapshotRootColumnOrder(Root).begin(),
+                    SnapshotRootColumnOrder(Root).end());
                 continue;
             }
 
@@ -9613,7 +9699,7 @@ private:
                 continue;
             }
 
-            for (const auto& [left, right] : join.JoinKeys) {
+            for (const auto& [left, right] : SnapshotJoinKeys(join)) {
                 Y_UNUSED(left);
                 DemandedErrorProjectionOutputs[&map].insert(right.GetFullName());
             }
@@ -9622,7 +9708,7 @@ private:
 
     TSubplanDescriptor PrepareInSubplan(
         const TString& binding,
-        const TSubplanEntry& entry,
+        const TSnapshotSubplanEntry& entry,
         const TIntrusivePtr<IOperator>& plan)
     {
         if (entry.Tuple.size() != 1) {
@@ -9649,7 +9735,7 @@ private:
                     << "IN subplan binding " << binding
                     << " has residual AddDependencies");
             }
-            if (op.Props.EnsureAtMostOne) {
+            if (false) {
                 Unsupported(TStringBuilder()
                     << "IN subplan binding " << binding
                     << " has an error-bearing cardinality check");
@@ -9661,7 +9747,7 @@ private:
             }
         });
 
-        const auto resultIUs = GetSubplanResultIUs(plan);
+        const auto resultIUs = entry.ResultIU ? TVector<TInfoUnit>{*entry.ResultIU} : TVector<TInfoUnit>{};
         if (resultIUs.size() != 1) {
             Unsupported(TStringBuilder()
                 << "IN subplan binding " << binding
@@ -9709,7 +9795,7 @@ private:
                 << " has a peeled Map with no output");
         }
         THashSet<TString> produced;
-        for (const auto& element : map.MapElements) {
+        for (const auto& element : SnapshotMapElements(map)) {
             if (!element.IsColumnAccess()) {
                 Unsupported(TStringBuilder()
                     << "EXISTS subplan binding " << binding
@@ -9758,7 +9844,7 @@ private:
                     << "EXISTS subplan binding " << binding
                     << " has residual AddDependencies below its exported root");
             }
-            if (op.Props.EnsureAtMostOne) {
+            if (false) {
                 Unsupported(TStringBuilder()
                     << "EXISTS subplan binding " << binding
                     << " has an error-bearing cardinality check");
@@ -9787,8 +9873,8 @@ private:
         TOpAddDependencies& addDependencies,
         const TVector<TString>& dependencies)
     {
-        const auto& inputIUs = addDependencies.GetInput()->GetOutputIUs();
-        const auto& outputIUs = addDependencies.GetOutputIUs();
+        const auto& inputIUs = SnapshotOutputIUs(*addDependencies.GetInput());
+        const auto& outputIUs = SnapshotOutputIUs(addDependencies);
         if (outputIUs.size() != inputIUs.size() + dependencies.size() ||
             OutputStructType(addDependencies)->GetItems().size() !=
                 outputIUs.size())
@@ -9816,7 +9902,7 @@ private:
                 outputIUs[inputIUs.size() + index].GetFullName();
             if (output != dependencies[index] ||
                 !SameType(
-                    ExactType(addDependencies.Types[index]),
+                    ExactType(SnapshotDependencyTypes(addDependencies)[index]),
                     ExactType(OutputType(addDependencies, output))))
             {
                 Unsupported(TStringBuilder()
@@ -9829,7 +9915,7 @@ private:
 
     TSubplanDescriptor PrepareExistsSubplan(
         const TString& binding,
-        const TSubplanEntry& entry,
+        const TSnapshotSubplanEntry& entry,
         const TIntrusivePtr<IOperator>& originalPlan)
     {
         if (!entry.Tuple.empty()) {
@@ -9891,9 +9977,9 @@ private:
         auto addDependencies =
             CastOperator<TOpAddDependencies>(filter->GetInput());
         CheckSnapshotProperties(*addDependencies, false);
-        if (addDependencies->Dependencies.size() !=
+        if (SnapshotDependencies(*addDependencies).size() !=
                 entry.DependentIUs.size() ||
-            addDependencies->Types.size() !=
+            SnapshotDependencyTypes(*addDependencies).size() !=
                 entry.DependentIUs.size())
         {
             Unsupported(TStringBuilder()
@@ -9901,8 +9987,8 @@ private:
                 << " dependency registry disagrees with AddDependencies");
         }
         for (size_t index = 0; index < entry.DependentIUs.size(); ++index) {
-            if (!addDependencies->Types[index] ||
-                addDependencies->Dependencies[index] !=
+            if (!SnapshotDependencyTypes(*addDependencies)[index] ||
+                SnapshotDependencies(*addDependencies)[index] !=
                     entry.DependentIUs[index])
             {
                 Unsupported(TStringBuilder()
@@ -9922,7 +10008,7 @@ private:
             }
         }
         auto predicateJson = ExportExpr(
-            filter->FilterExpr,
+            filter->GetFilterExpression(),
             [&]() {
                 auto visible = innerNames;
                 visible.insert(
@@ -9933,7 +10019,7 @@ private:
         const auto correlations = ExtractExistsCorrelations(
             binding,
             dependencies,
-            filter->FilterExpr,
+            filter->GetFilterExpression(),
             innerNames);
 
         TVector<TOuterDependency> descriptorDependencies;
@@ -9941,7 +10027,7 @@ private:
         for (size_t index = 0; index < dependencies.size(); ++index) {
             descriptorDependencies.push_back({
                 .Name = dependencies[index],
-                .Type = addDependencies->Types[index],
+                .Type = SnapshotDependencyTypes(*addDependencies)[index],
             });
         }
         TSubplanDescriptor result{
@@ -10048,7 +10134,7 @@ private:
         const TOpFilter& consumer)
     {
         bool found = false;
-        for (const auto& conjunct : consumer.FilterExpr.SplitConjunct()) {
+        for (const auto& conjunct : consumer.GetFilterExpression().SplitConjunct()) {
             if (!ExpressionColumns(conjunct).contains(binding)) {
                 continue;
             }
@@ -10100,20 +10186,14 @@ private:
     {
         Subplans.reserve(roots.size());
         for (size_t index = 0; index < roots.size(); ++index) {
-            const auto& bindingIU = Root.PlanProps.Subplans.OrderedList[index];
+            const auto bindingIU = SnapshotSubplanBindings(Root.PlanProps.Subplans)[index];
             const TString binding = bindingIU.GetFullName();
-            const auto entryIt = Root.PlanProps.Subplans.PlanMap.find(bindingIU);
-            if (entryIt == Root.PlanProps.Subplans.PlanMap.end()) {
-                Unsupported(TStringBuilder()
-                    << "Subplan registry order references missing binding "
-                    << binding);
-            }
+            const auto entry = SnapshotSubplanEntry(Root.PlanProps.Subplans.At(FromString<TInfoUnitId>(binding)));
             if (!SubplanIndices.emplace(binding, Subplans.size()).second) {
                 Unsupported(TStringBuilder()
                     << "Duplicate subplan binding " << binding);
             }
 
-            const auto& entry = entryIt->second;
             switch (entry.Type) {
                 case ESubplanType::EXPR:
                     Subplans.push_back(
@@ -10667,9 +10747,9 @@ private:
                 // legitimately precede operator type annotation; the Concat
                 // auditor still requires each Member annotation to match the
                 // catalog nullability carried here.
-                for (size_t index = 0; index < read.Columns.size(); ++index) {
-                    const auto* provenance = stringColumns.FindPtr(read.Columns[index]);
-                    const TString output = read.OutputIUs[index].GetFullName();
+                for (size_t index = 0; index < SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size(); ++index) {
+                    const auto* provenance = stringColumns.FindPtr(SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index]);
+                    const TString output = SnapshotOutputIUs(read)[index].GetFullName();
                     if (provenance) {
                         result.emplace(output, *provenance);
                     }
@@ -10681,12 +10761,12 @@ private:
                 auto& map = static_cast<TOpMap&>(base);
                 const auto& input = StoredStringOutputs(*map.GetInput());
                 THashSet<TString> renameSources;
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     if (element.IsRename()) {
                         renameSources.insert(element.GetRename().GetFullName());
                     }
                 }
-                for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+                for (const auto& iu : SnapshotOutputIUs(*map.GetInput())) {
                     const TString name = iu.GetFullName();
                     if (!renameSources.contains(name) &&
                         input.contains(name))
@@ -10694,7 +10774,7 @@ private:
                         result.emplace(name, *input.FindPtr(name));
                     }
                 }
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     if (element.IsRename() &&
                         input.contains(element.GetRename().GetFullName()))
                     {
@@ -10724,7 +10804,7 @@ private:
                 auto& aggregate = static_cast<TOpAggregate&>(base);
                 if (!aggregate.IsDistinctAll()) {
                     const auto& input = StoredStringOutputs(*aggregate.GetInput());
-                    for (const auto& key : aggregate.GetKeyColumns()) {
+                    for (const auto& key : SnapshotKeyColumns(aggregate)) {
                         const TString name = key.GetFullName();
                         if (input.contains(name)) {
                             result.emplace(name, *input.FindPtr(name));
@@ -10767,21 +10847,23 @@ private:
 
             case EOperator::UnionAll: {
                 auto& unionAll = static_cast<TOpUnionAll&>(base);
-                const auto& left = StoredStringOutputs(*unionAll.GetLeftInput());
-                const auto& right = StoredStringOutputs(*unionAll.GetRightInput());
-                for (const auto& iu : unionAll.Columns) {
-                    const TString name = iu.GetFullName();
-                    const auto* leftProvenance = left.FindPtr(name);
-                    const auto* rightProvenance = right.FindPtr(name);
-                    if (leftProvenance && rightProvenance) {
-                        result.emplace(
-                            name,
-                            TStoredStringProvenance{
-                                leftProvenance->Nullable || rightProvenance->Nullable,
-                                std::max(
-                                    leftProvenance->MaximumBytes,
-                                    rightProvenance->MaximumBytes)});
+                for (const auto& [id, sources] : unionAll.GetColumns().Items()) {
+                    if (sources.Inputs.size() != unionAll.GetChildCount()) {
+                        Unsupported("UnionAll provenance mapping has the wrong arity");
                     }
+                    std::optional<TStoredStringProvenance> combined;
+                    bool complete = true;
+                    for (size_t index = 0; index < sources.Inputs.size(); ++index) {
+                        const auto& input = StoredStringOutputs(*unionAll.GetChild(index));
+                        const auto* provenance = input.FindPtr(ToString(sources.Inputs[index]));
+                        if (!provenance) { complete = false; break; }
+                        if (!combined) { combined = *provenance; }
+                        else {
+                            combined->Nullable = combined->Nullable || provenance->Nullable;
+                            combined->MaximumBytes = std::max(combined->MaximumBytes, provenance->MaximumBytes);
+                        }
+                    }
+                    if (complete && combined) { result.emplace(ToString(id), *combined); }
                 }
                 break;
             }
@@ -10846,13 +10928,13 @@ private:
             case EOperator::Map: {
                 auto& map = static_cast<TOpMap&>(base);
                 THashSet<TString> renameSources;
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     if (element.IsRename()) {
                         renameSources.insert(
                             element.GetRename().GetFullName());
                     }
                 }
-                for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+                for (const auto& iu : SnapshotOutputIUs(*map.GetInput())) {
                     const TString name = iu.GetFullName();
                     if (!renameSources.contains(name)) {
                         certifyDirectCarrier(
@@ -10861,7 +10943,7 @@ private:
                             name);
                     }
                 }
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     if (!element.IsRename() &&
                         !element.IsColumnAccess())
                     {
@@ -10902,7 +10984,7 @@ private:
                     break;
                 }
                 for (const auto& trait :
-                     aggregate.GetAggregationTraits())
+                     SnapshotAggregationTraits(aggregate))
                 {
                     const TString output =
                         trait.ResultColName.GetFullName();
@@ -10952,52 +11034,38 @@ private:
 
             case EOperator::UnionAll: {
                 auto& unionAll = static_cast<TOpUnionAll&>(base);
-                const auto& left =
-                    IntegralAverageOrderingOutputs(
-                        *unionAll.GetLeftInput());
-                const auto& right =
-                    IntegralAverageOrderingOutputs(
-                        *unionAll.GetRightInput());
-                for (const auto& iu : unionAll.Columns) {
-                    const TString output = iu.GetFullName();
-                    if (!left.contains(output) ||
-                        !right.contains(output))
-                    {
-                        continue;
+                for (const auto& [id, sources] : unionAll.GetColumns().Items()) {
+                    if (sources.Inputs.size() != unionAll.GetChildCount()) {
+                        Unsupported("UnionAll average carrier mapping has the wrong arity");
                     }
-                    if (!IsExactDataAnnotation(
-                            OutputType(
-                                *unionAll.GetLeftInput(),
-                                output),
-                            NUdf::EDataSlot::Double,
-                            true) ||
-                        !IsExactDataAnnotation(
-                            OutputType(
-                                *unionAll.GetRightInput(),
-                                output),
-                            NUdf::EDataSlot::Double,
-                            true) ||
-                        !IsExactDataAnnotation(
-                            OutputType(unionAll, output),
-                            NUdf::EDataSlot::Double,
-                            true))
-                    {
-                        Unsupported(TStringBuilder()
-                            << "UnionAll integral avg ordering carrier "
-                            << output
-                            << " must remain exact Optional<Double> "
-                               "in every positional branch");
+                    const TString output = ToString(id);
+                    bool complete = true;
+                    for (size_t index = 0; index < sources.Inputs.size(); ++index) {
+                        auto& input = *unionAll.GetChild(index);
+                        const TString column = ToString(sources.Inputs[index]);
+                        if (!IntegralAverageOrderingOutputs(input).contains(column)) {
+                            complete = false;
+                            break;
+                        }
+                        if (!IsExactDataAnnotation(OutputType(input, column), NUdf::EDataSlot::Double, true)) {
+                            Unsupported("UnionAll average ordering input must remain Optional<Double>");
+                        }
                     }
-                    result.insert(output);
+                    if (complete) {
+                        if (!IsExactDataAnnotation(OutputType(unionAll, output), NUdf::EDataSlot::Double, true)) {
+                            Unsupported("UnionAll average ordering output must remain Optional<Double>");
+                        }
+                        result.insert(output);
+                    }
                 }
                 break;
             }
 
             case EOperator::CBOTree:
             case EOperator::Root:
+            default:
                 Unsupported(
-                    "Integral avg ordering provenance reached a "
-                    "non-logical-plan operator");
+                    "Integral avg ordering provenance reached an unsupported operator");
         }
 
         if (!IntegralAverageOrderingOutputMap.emplace(
@@ -11015,8 +11083,8 @@ private:
 
         switch (base.GetKind()) {
             case EOperator::EmptySource:
-                if (!children.empty()) {
-                    Unsupported("EmptySource unexpectedly has children");
+                if (!children.empty() || static_cast<TOpEmptySource&>(base).Input) {
+                    Unsupported("Literal or parameter row sources require an explicit snapshot encoding");
                 }
                 node["op"] = "empty_source";
                 return node;
@@ -11051,7 +11119,7 @@ private:
                 if (read.Limit && !StageGraphPresent) {
                     Unsupported("Read pushed limit requires a StageGraph source boundary");
                 }
-                if (read.Columns.empty() || read.Columns.size() != read.OutputIUs.size()) {
+                if (SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).empty() || SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size() != SnapshotOutputIUs(read).size()) {
                     Unsupported("Read has an empty or inconsistent column mapping");
                 }
                 const auto table = TableReference(read, Cluster);
@@ -11075,12 +11143,12 @@ private:
                 THashSet<TString> outputs;
                 TOlapColumnMap olapColumns;
                 auto columns = JsonArray();
-                for (size_t index = 0; index < read.Columns.size(); ++index) {
-                    const TString output = read.OutputIUs[index].GetFullName();
+                for (size_t index = 0; index < SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size(); ++index) {
+                    const TString output = SnapshotOutputIUs(read)[index].GetFullName();
                     const auto* catalogColumn =
-                        catalogColumns.FindPtr(read.Columns[index]);
+                        catalogColumns.FindPtr(SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index]);
                     if (!catalogColumn ||
-                        !sources.insert(read.Columns[index]).second || output.empty() ||
+                        !sources.insert(SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index]).second || output.empty() ||
                         !outputs.insert(output).second)
                     {
                         Unsupported(TStringBuilder() << "Invalid Read column mapping for " << table.Path);
@@ -11092,18 +11160,18 @@ private:
                     };
                     AddOlapColumnReference(
                         olapColumns,
-                        read.Columns[index],
+                        SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index],
                         olapColumn);
                     AddOlapColumnReference(
                         olapColumns,
-                        read.OutputIUs[index].GetFullName(),
+                        SnapshotOutputIUs(read)[index].GetFullName(),
                         olapColumn);
                     AddOlapColumnReference(
                         olapColumns,
-                        read.OutputIUs[index].GetColumnName(),
+                        SnapshotOutputIUs(read)[index].GetColumnName(),
                         olapColumn);
                     auto column = JsonMap();
-                    column["source"] = read.Columns[index];
+                    column["source"] = SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index];
                     column["output"] = output;
                     columns.AppendValue(std::move(column));
                 }
@@ -11131,9 +11199,9 @@ private:
                         "AddDependencies is not authorized as a correlated "
                         "scalar outer_bind");
                 }
-                const size_t count = outerBind.Dependencies.size();
-                if (!count || outerBind.Types.size() != count ||
-                    std::any_of(outerBind.Types.begin(), outerBind.Types.end(),
+                const size_t count = SnapshotDependencies(outerBind).size();
+                if (!count || SnapshotDependencyTypes(outerBind).size() != count ||
+                    std::any_of(SnapshotDependencyTypes(outerBind).begin(), SnapshotDependencyTypes(outerBind).end(),
                         [](const auto* type) { return !type; }))
                 {
                     Unsupported(
@@ -11142,8 +11210,8 @@ private:
                 }
 
                 const auto& inputIUs =
-                    outerBind.GetInput()->GetOutputIUs();
-                const auto& outputIUs = outerBind.GetOutputIUs();
+                    SnapshotOutputIUs(*outerBind.GetInput());
+                const auto& outputIUs = SnapshotOutputIUs(outerBind);
                 auto names = OutputNames(*outerBind.GetInput());
                 if (outputIUs.size() != inputIUs.size() + count ||
                     OutputStructType(outerBind)->GetItems().size() !=
@@ -11168,11 +11236,11 @@ private:
                     }
                 }
                 for (size_t index = 0; index < count; ++index) {
-                    const TString dependency = outerBind.Dependencies[index].GetFullName();
+                    const TString dependency = SnapshotDependencies(outerBind)[index].GetFullName();
                     if (dependency.empty() || !names.insert(dependency).second ||
                         outputIUs[inputIUs.size() + index].GetFullName() != dependency ||
                         !SameType(
-                            ExactType(outerBind.Types[index]),
+                            ExactType(SnapshotDependencyTypes(outerBind)[index]),
                             ExactType(OutputType(outerBind, dependency))))
                     {
                         Unsupported(
@@ -11190,10 +11258,10 @@ private:
                     const TString nodeId = index + 1 == count
                         ? id
                         : TString(TStringBuilder() << id << ":dependency:" << index);
-                    const auto type = ExactType(outerBind.Types[index]);
+                    const auto type = ExactType(SnapshotDependencyTypes(outerBind)[index]);
                     node["id"] = nodeId;
                     node["input"] = input;
-                    node["dependency"] = outerBind.Dependencies[index].GetFullName();
+                    node["dependency"] = SnapshotDependencies(outerBind)[index].GetFullName();
                     node["type"] = type.Name;
                     node["nullable"] = type.Nullable;
                     if (index + 1 < count) {
@@ -11215,7 +11283,7 @@ private:
                     VisibleInputNames(map, *map.GetInput());
                 PrepareGlobalRankProjection(map, inputNames);
                 THashSet<TString> renameSources;
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     AuditInputMemberTypes(element.GetExpression(), *map.GetInput());
                     AuditVirtualBindingMemberTypes(
                         element.GetExpression(),
@@ -11231,7 +11299,7 @@ private:
 
                 auto columns = JsonArray();
                 THashSet<TString> outputs;
-                for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+                for (const auto& iu : SnapshotOutputIUs(*map.GetInput())) {
                     const TString name = iu.GetFullName();
                     if (renameSources.contains(name)) {
                         continue;
@@ -11244,7 +11312,7 @@ private:
                     column["expression"] = ColumnExpr(name);
                     columns.AppendValue(std::move(column));
                 }
-                for (const auto& element : map.MapElements) {
+                for (const auto& element : SnapshotMapElements(map)) {
                     const TString output = element.GetElementName().GetFullName();
                     if (output.empty() || !outputs.insert(output).second) {
                         Unsupported(TStringBuilder() << "Duplicate or empty Map output " << output);
@@ -11273,7 +11341,7 @@ private:
                     } else if (element.IsRename()) {
                         column["expression"] =
                             ColumnExpr(element.GetRename().GetFullName());
-                    } else if (element.GetExpression().GetWindowMetadata()) {
+                    } else if (SnapshotWindowMetadata(element.GetExpression())) {
                         auto window = ExportWholePartitionWindow(
                             element.GetExpression(),
                             inputNames);
@@ -11319,7 +11387,7 @@ private:
                 node["op"] = "project";
                 node["input"] = children[0];
                 node["columns"] = std::move(columns);
-                node["ordered"] = map.IsOrdered();
+                node["ordered"] = true;
                 return node;
             }
 
@@ -11330,10 +11398,10 @@ private:
                 auto& filter = static_cast<TOpFilter&>(base);
                 const auto inputNames =
                     VisibleInputNames(filter, *filter.GetInput());
-                AuditVirtualBindingMemberTypes(filter.FilterExpr, filter);
+                AuditVirtualBindingMemberTypes(filter.GetFilterExpression(), filter);
                 node["op"] = "filter";
                 node["input"] = children[0];
-                node["predicate"] = ExportExpr(filter.FilterExpr, inputNames, Binary64Mode);
+                node["predicate"] = ExportExpr(filter.GetFilterExpression(), inputNames, Binary64Mode);
                 return node;
             }
 
@@ -11342,8 +11410,8 @@ private:
                     Unsupported("Limit must have one input");
                 }
                 auto& limit = static_cast<TOpLimit&>(base);
-                const auto& inputIUs = limit.GetInput()->GetOutputIUs();
-                const auto& outputIUs = limit.GetOutputIUs();
+                const auto& inputIUs = SnapshotOutputIUs(*limit.GetInput());
+                const auto& outputIUs = SnapshotOutputIUs(limit);
                 if (inputIUs.size() != outputIUs.size()) {
                     Unsupported("Limit output IUs do not match its input");
                 }
@@ -11361,7 +11429,7 @@ private:
                     ? Uint64LiteralExpr(*offset, "Limit offset")
                     : NJson::TJsonValue(NJson::JSON_NULL);
                 node["phase"] = Phase(limit.GetLimitPhase());
-                node["ensure_at_most_one"] = limit.Props.EnsureAtMostOne;
+                node["ensure_at_most_one"] = false;
                 return node;
             }
 
@@ -11370,8 +11438,8 @@ private:
                     Unsupported("Sort must have one input");
                 }
                 auto& sort = static_cast<TOpSort&>(base);
-                const auto& inputIUs = sort.GetInput()->GetOutputIUs();
-                const auto& outputIUs = sort.GetOutputIUs();
+                const auto& inputIUs = SnapshotOutputIUs(*sort.GetInput());
+                const auto& outputIUs = SnapshotOutputIUs(sort);
                 if (inputIUs.size() != outputIUs.size()) {
                     Unsupported("Sort output IUs do not match its input");
                 }
@@ -11425,7 +11493,7 @@ private:
 
                 const auto inputNames = OutputNames(*sort.GetInput());
                 const auto outputNames = OutputNames(sort);
-                const auto& sortElements = sort.GetSortElements();
+                const auto& sortElements = SnapshotSortElements(sort);
                 if (sortElements.empty()) {
                     Unsupported("Sort order must not be empty");
                 }
@@ -11497,15 +11565,15 @@ private:
                 auto& aggregate = static_cast<TOpAggregate&>(base);
                 const auto inputNames = OutputNames(*aggregate.GetInput());
                 const auto outputNames = OutputNames(aggregate);
-                const auto traits = aggregate.GetAggregationTraits();
-                const auto& keyColumns = aggregate.GetKeyColumns();
+                const auto traits = SnapshotAggregationTraits(aggregate);
+                const auto& keyColumns = SnapshotKeyColumns(aggregate);
                 if (traits.empty()) {
                     Unsupported("Aggregate has no traits");
                 }
                 const size_t ordinaryDistinctTraits = std::count_if(
                     traits.begin(),
                     traits.end(),
-                    [](const TOpAggregationTraits& trait) {
+                    [](const TSnapshotAggregationTrait& trait) {
                         return trait.Distinct;
                     });
                 if (ordinaryDistinctTraits > 1) {
@@ -11730,7 +11798,7 @@ private:
                     }
                     aggregates.AppendValue(std::move(item));
                 }
-                const auto& actualOutputIUs = aggregate.GetOutputIUs();
+                const auto& actualOutputIUs = SnapshotOutputIUs(aggregate);
                 if (actualOutputIUs.size() != expectedOutputOrder.size()) {
                     Unsupported("Aggregate output IU count does not match keys and traits");
                 }
@@ -11806,7 +11874,7 @@ private:
 
                 TExactScalarBudget budget;
                 auto keys = JsonArray();
-                for (const auto& [left, right] : join.JoinKeys) {
+                for (const auto& [left, right] : SnapshotJoinKeys(join)) {
                     const TString leftName = left.GetFullName();
                     const TString rightName = right.GetFullName();
                     if (!leftNames.contains(leftName) || !rightNames.contains(rightName)) {
@@ -11821,7 +11889,7 @@ private:
                 }
 
                 size_t residualDepth = 1;
-                if (!join.JoinKeys.empty()) {
+                if (!SnapshotJoinKeys(join).empty()) {
                     // Join matching is the effective conjunction of the
                     // side-explicit keys and this residual expression.
                     budget.Charge(1);
@@ -11864,33 +11932,33 @@ private:
             }
 
             case EOperator::UnionAll: {
-                if (children.size() != 2) {
-                    Unsupported("UnionAll must have two inputs");
-                }
                 auto& unionAll = static_cast<TOpUnionAll&>(base);
-                if (unionAll.Columns.empty()) {
-                    Unsupported("UnionAll has no output columns");
-                }
-                const auto leftNames = OutputNames(*unionAll.GetLeftInput());
-                const auto rightNames = OutputNames(*unionAll.GetRightInput());
-                auto inputColumns = JsonArray();
-                auto output = JsonArray();
-                THashSet<TString> outputNames;
-                for (const auto& iu : unionAll.Columns) {
-                    const TString name = iu.GetFullName();
-                    if (!leftNames.contains(name) || !rightNames.contains(name) ||
-                        name.empty() || !outputNames.insert(name).second)
-                    {
-                        Unsupported(TStringBuilder() << "Invalid UnionAll column " << name);
-                    }
-                    inputColumns.AppendValue(name);
-                    output.AppendValue(name);
+                if (children.size() < 2 || children.size() != unionAll.GetChildCount() ||
+                    unionAll.GetColumns().Items().empty()) {
+                    Unsupported("UnionAll has an invalid input or output shape");
                 }
                 auto inputs = JsonArray();
-                for (const auto& child : children) {
+                auto output = JsonArray();
+                for (const auto& [id, sources] : unionAll.GetColumns().Items()) {
+                    if (sources.Inputs.size() != children.size()) {
+                        Unsupported("UnionAll column mapping has the wrong input arity");
+                    }
+                    output.AppendValue(ToString(id));
+                }
+                for (size_t index = 0; index < children.size(); ++index) {
+                    const auto names = OutputNames(*unionAll.GetChild(index));
+                    auto columns = JsonArray();
+                    for (const auto& [id, sources] : unionAll.GetColumns().Items()) {
+                        Y_UNUSED(id);
+                        const TString name = ToString(sources.Inputs[index]);
+                        if (!names.contains(name)) {
+                            Unsupported("UnionAll references an unavailable input column");
+                        }
+                        columns.AppendValue(name);
+                    }
                     auto input = JsonMap();
-                    input["node"] = child;
-                    input["columns"] = inputColumns;
+                    input["node"] = children[index];
+                    input["columns"] = std::move(columns);
                     inputs.AppendValue(std::move(input));
                 }
                 node["op"] = "union_all";
@@ -11917,14 +11985,14 @@ private:
         IntegralAverageOrderingOutputMap;
     THashMap<const IOperator*, TDecimalAverageCarrierTypes>
         DecimalAverageCarrierOutputMap;
-    THashMap<const TMapElement*, TString>
+    THashMap<const TSnapshotMapElement*, TString>
         CertifiedDecimalAveragePads;
     THashMap<const TOpMap*, THashSet<TString>>
         CheckedConcatProjectionOutputs;
     THashMap<TOpMap*, THashSet<TString>>
         WindowProjectionOutputs;
     size_t WholePartitionSumCount = 0;
-    THashMap<const TMapElement*, TGlobalRankWindow>
+    THashMap<const TSnapshotMapElement*, TGlobalRankWindow>
         PreparedGlobalRankWindows;
     THashMap<TOpMap*, TVector<TGlobalRankProjectionWindow>>
         GlobalRankProjectionWindows;
@@ -11986,6 +12054,7 @@ public:
     }
 
     NJson::TJsonValue Export() {
+        NormalizeStageIds();
         ValidateGraphContainers();
         IndexStageNodes();
         IndexBoundaries();
@@ -12052,13 +12121,16 @@ private:
     }
 
     ui32 OperatorStage(const IOperator& op) const {
+        if (&op == &Root) {
+            return OperatorStage(*Root.GetInput());
+        }
         if (!op.Props.StageId || *op.Props.StageId < 0 ||
-            static_cast<ui64>(*op.Props.StageId) >= StageCount)
+            !DenseStageIds.contains(static_cast<ui32>(*op.Props.StageId)))
         {
             Unsupported(TStringBuilder()
                 << "StageGraph has a missing or invalid stage for " << op.GetExplainName());
         }
-        return static_cast<ui32>(*op.Props.StageId);
+        return DenseStageIds.at(static_cast<ui32>(*op.Props.StageId));
     }
 
     static TString SourceStorage(NYql::EStorageType storage) {
@@ -12072,7 +12144,60 @@ private:
         }
     }
 
+    // Main numbers stages across all optimizer roots. Export a dense local
+    // numbering without changing operator properties or the physical graph.
+    void NormalizeStageIds() {
+        TVector<ui32> ids(Graph.StageIds.begin(), Graph.StageIds.end());
+        ::Sort(ids);
+        if (ids.size() > std::numeric_limits<ui32>::max()) {
+            Unsupported("StageGraph has too many stages");
+        }
+        for (size_t index = 0; index < ids.size(); ++index) {
+            if (!DenseStageIds.emplace(ids[index], static_cast<ui32>(index)).second) {
+                Unsupported("StageGraph stage IDs must be unique");
+            }
+        }
+        auto dense = [&](ui32 id) {
+            const auto* result = DenseStageIds.FindPtr(id);
+            if (!result) {
+                Unsupported("StageGraph references an unknown stage");
+            }
+            return *result;
+        };
+        TStageGraph normalized;
+        for (const auto id : ids) {
+            normalized.StageIds.push_back(dense(id));
+        }
+        auto remapKeys = [&](const auto& source, auto& target) {
+            for (const auto& [id, value] : source) {
+                target.emplace(dense(id), value);
+            }
+        };
+        remapKeys(Graph.SourceStages, normalized.SourceStages);
+        remapKeys(Graph.SinkStages, normalized.SinkStages);
+        remapKeys(Graph.StageOutputIndices, normalized.StageOutputIndices);
+        remapKeys(Graph.StageGUIDs, normalized.StageGUIDs);
+        auto remapEdges = [&](const auto& source, auto& target) {
+            for (const auto& [id, edges] : source) {
+                auto& output = target[dense(id)];
+                for (const auto other : edges) {
+                    output.push_back(dense(other));
+                }
+            }
+        };
+        remapEdges(Graph.StageInputs, normalized.StageInputs);
+        remapEdges(Graph.StageOutputs, normalized.StageOutputs);
+        for (const auto& [pair, connections] : Graph.Connections) {
+            normalized.Connections.emplace(
+                TStagePair{dense(pair.first), dense(pair.second)}, connections);
+        }
+        Graph = std::move(normalized);
+    }
+
     void ValidateGraphContainers() {
+        if (!Graph.SinkStages.empty()) {
+            Unsupported("Effect sink stages are outside read-only snapshot semantics");
+        }
         StageCount = Graph.StageIds.size();
         if (StageCount == 0 || StageCount > std::numeric_limits<ui32>::max()) {
             Unsupported("StageGraph must contain a representable non-empty stage set");
@@ -12223,8 +12348,8 @@ private:
 
             if (op->GetKind() == EOperator::Join) {
                 const auto& props = op->Props;
-                if ((props.LeftShuffleBy && props.LeftShuffleBy->empty()) ||
-                    (props.RightShuffleBy && props.RightShuffleBy->empty()))
+                if ((props.LeftShuffleBy && props.LeftShuffleBy->Items().empty()) ||
+                    (props.RightShuffleBy && props.RightShuffleBy->Items().empty()))
                 {
                     Unsupported(
                         "StageGraph relies on an unsupported source co-partitioning "
@@ -12251,7 +12376,7 @@ private:
                 if (!child || OperatorStage(*child) != parentStage) {
                     continue;
                 }
-                auto* parentCount = sameStageParents.FindPtr(child.Get());
+                auto* parentCount = sameStageParents.FindPtr(child);
                 if (!parentCount) {
                     Unsupported("StageGraph same-stage child is absent from plan membership");
                 }
@@ -12271,7 +12396,9 @@ private:
             }
             if (sourceStage &&
                 Graph.SourceStages.at(stageId).StorageType == NYql::EStorageType::RowStorage &&
-                StageNodes[stageId].size() != 1)
+                StageNodes[stageId].size() != 1 &&
+                !(stageId == OperatorStage(*Root.GetInput()) &&
+                  StageNodes[stageId].size() == 2 && StageNodes[stageId].back() == &Root))
             {
                 Unsupported("StageGraph row-storage source stage must contain only its Read");
             }
@@ -12294,7 +12421,7 @@ private:
         }
 
         RootStageId = OperatorStage(*Root.GetInput());
-        if (StageSinks[RootStageId] != Root.GetInput().Get() ||
+        if (StageSinks[RootStageId] != &Root ||
             NodeId(*StageSinks[RootStageId]) != RootNodeId)
         {
             Unsupported("StageGraph root operator does not match plan.root");
@@ -12350,7 +12477,7 @@ private:
                 if (!connection) {
                     Unsupported("StageGraph lacks a connection for a cross-stage logical child");
                 }
-                boundaries.push_back({child.Get(), connection, static_cast<ui32>(occurrence)});
+                boundaries.push_back({child, connection, static_cast<ui32>(occurrence)});
                 LogicalInputNodes[consumerStage].push_back(NodeId(*child));
             }
         }
@@ -12436,13 +12563,13 @@ private:
         }
         if (const auto* shuffle = dynamic_cast<const TShuffleConnection*>(&connection)) {
             CheckConnectionType(connection, "HashShuffle");
-            if (shuffle->Keys.empty()) {
+            if (shuffle->Keys.Items().empty()) {
                 Unsupported("StageGraph HashShuffle connection has no keys");
             }
             edge["kind"] = "hash_shuffle";
             auto keys = JsonArray();
             const auto producerOutputs = OutputNames(*boundary.ProducerNode);
-            for (const auto& key : shuffle->Keys) {
+            for (const auto& key : SnapshotIUs(shuffle->Keys)) {
                 const TString name = key.GetFullName();
                 if (name.empty() || !producerOutputs.contains(name)) {
                     Unsupported("StageGraph HashShuffle key is absent from its producer output");
@@ -12469,7 +12596,7 @@ private:
         }
         if (const auto* merge = dynamic_cast<const TMergeConnection*>(&connection)) {
             CheckConnectionType(connection, "Merge");
-            if (merge->Order.empty()) {
+            if (merge->Order.Items().empty()) {
                 Unsupported("StageGraph Merge connection has no ordering");
             }
             edge["kind"] = "merge";
@@ -12483,7 +12610,7 @@ private:
                     "StageGraph Merge producer has no integral avg "
                     "ordering provenance");
             }
-            for (const auto& sort : merge->Order) {
+            for (const auto& sort : SnapshotMergeOrder(*merge)) {
                 const TString column = sort.SortColumn.GetFullName();
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
@@ -12707,7 +12834,8 @@ private:
 
 private:
     TOpRoot& Root;
-    const TStageGraph& Graph;
+    TStageGraph Graph;
+    THashMap<ui32, ui32> DenseStageIds;
     const THashMap<const IOperator*, TString>& NodeIds;
     const TVector<IOperator*>& NodeOrder;
     const THashMap<const IOperator*, TIntegralAverageOrderingColumns>&
@@ -12784,6 +12912,7 @@ TString SerializeSnapshot(
     const TSemanticSnapshotCatalogV1& catalog,
     TStringBuf cluster)
 {
+    TSnapshotOperatorViewScope viewScope;
     ValidateSnapshotTopology(root);
     const bool stageGraphPresent = HasStageGraphState(root);
     TPlanExporter planExporter(root, catalog, cluster, stageGraphPresent);
@@ -12835,6 +12964,7 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
     TOpRoot& initialRoot,
     const TRBOContext& ctx)
 {
+    TSnapshotOperatorViewScope viewScope;
     return CatchUnsupported<TSemanticSnapshotCatalogCaptureResult>([&](auto& result) {
         ValidateSnapshotTopology(initialRoot);
         const auto subplanRoots =
@@ -12851,7 +12981,7 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
                 return;
             }
             auto& read = static_cast<TOpRead&>(op);
-            if (read.Columns.empty() || read.Columns.size() != read.OutputIUs.size()) {
+            if (SnapshotReadColumns(read, initialRoot.PlanProps.InfoUnitRegistry).empty() || SnapshotReadColumns(read, initialRoot.PlanProps.InfoUnitRegistry).size() != SnapshotOutputIUs(read).size()) {
                 Unsupported("Read has an empty or inconsistent column mapping");
             }
             const auto table = TableReference(read, ctx.KqpCtx.Cluster);
@@ -12860,7 +12990,7 @@ TSemanticSnapshotCatalogCaptureResult CaptureSemanticSnapshotCatalogV1(
                 Unsupported(TStringBuilder() << "Colliding table identity " << table.Identity);
             }
             scannedTable.Path = table.Path;
-            scannedTable.Columns.insert(read.Columns.begin(), read.Columns.end());
+            scannedTable.Columns.insert(SnapshotReadColumns(read, initialRoot.PlanProps.InfoUnitRegistry).begin(), SnapshotReadColumns(read, initialRoot.PlanProps.InfoUnitRegistry).end());
         };
         VisitOperators(initialRoot.GetInput(), visited, recordRead);
         for (const auto& subplanRoot : subplanRoots) {
@@ -12953,6 +13083,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureInitial(
         return;
     }
 
+    TSnapshotOperatorViewScope viewScope;
     InitialAttempted = true;
     Catalog.reset();
     CatalogFailure.clear();
@@ -13009,6 +13140,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureFinal(
         return;
     }
 
+    TSnapshotOperatorViewScope viewScope;
     TRBOSemanticSnapshotBoundaryResultV1 result{
         ERBOSemanticSnapshotBoundaryV1::Final,
         {},
@@ -13051,6 +13183,7 @@ void TSemanticSnapshotPairCaptureV1::CaptureTransformationPrefix(
         return;
     }
 
+    TSnapshotOperatorViewScope viewScope;
     TRBOSemanticSnapshotBoundaryResultV1 result{
         ERBOSemanticSnapshotBoundaryV1::TransformationPrefix,
         {},

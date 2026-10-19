@@ -15,6 +15,14 @@ preserves observable order, correlates choices created by shared DAG nodes, and
 allows independent choices where executions are independent. Root names,
 column order, types, and nullability are checked before the formula is built.
 
+Native snapshots use numeric plan-local IDs for internal bindings and an explicit
+ordered result projection. Its output names include the result position and
+client label; repeated bindings and labels therefore retain distinct tuple
+positions. A root row-storage source stage may contain this one passive
+projection of direct columns. It preserves multiplicity, order, and errors when
+applied inside each source task. Calculations and predicates inside row-storage
+source stages remain excluded.
+
 If the pinned solver returns `UNSAT`, `VERIFIED_BOUNDED` means:
 
 > For every database represented by the declared row bound and catalog

@@ -19,7 +19,7 @@ bool IsQ51WindowCandidate(const TExpression& expression) {
     if (exactAvg) {
         return false;
     }
-    const auto& metadata = expression.GetWindowMetadata();
+    const auto& metadata = SnapshotWindowMetadata(expression);
     return !(metadata && metadata->Definition &&
         (!metadata->Definition->IsCallable("YqlWindow") ||
          metadata->Definition->ChildrenSize() != 5 ||
@@ -35,7 +35,7 @@ class TQ51WindowAdmission;
 // normalized window contract and receives no trusted admission flag.
 class TAuditedQ51WindowPlan {
 public:
-    const NJson::TJsonValue* FindExpression(const TMapElement& element) const {
+    const NJson::TJsonValue* FindExpression(const TSnapshotMapElement& element) const {
         return Expressions.FindPtr(&element);
     }
 
@@ -43,12 +43,12 @@ private:
     friend class TQ51WindowAdmission;
 
     explicit TAuditedQ51WindowPlan(
-        THashMap<const TMapElement*, NJson::TJsonValue> expressions)
+        THashMap<const TSnapshotMapElement*, NJson::TJsonValue> expressions)
         : Expressions(std::move(expressions))
     {
     }
 
-    THashMap<const TMapElement*, NJson::TJsonValue> Expressions;
+    THashMap<const TSnapshotMapElement*, NJson::TJsonValue> Expressions;
 };
 
 class TQ51WindowAdmission {
@@ -77,13 +77,13 @@ public:
                 admission.MainNodes,
                 [&](IOperator& op) {
                     for (const auto& child : op.GetChildren()) {
-                        admission.Parents[child.Get()].push_back(&op);
+                        admission.Parents[child].push_back(&op);
                     }
                 });
         }
         admission.ValidateTopology(!subplanRoots.empty());
 
-        THashMap<const TMapElement*, NJson::TJsonValue> expressions;
+        THashMap<const TSnapshotMapElement*, NJson::TJsonValue> expressions;
         for (auto& [element, window] : admission.PreparedWindows) {
             expressions.emplace(element, std::move(window.Expression));
         }
@@ -102,9 +102,9 @@ private:
     };
 
     void CollectProjection(TOpMap& map) {
-        TVector<std::pair<const TMapElement*, TQ51Window>> windows;
+        TVector<std::pair<const TSnapshotMapElement*, TQ51Window>> windows;
         std::optional<THashSet<TString>> inputNames;
-        for (const auto& element : map.MapElements) {
+        for (const auto& element : SnapshotMapElements(map)) {
             const auto& expression = element.GetExpression();
             if (!IsQ51WindowCandidate(expression)) {
                 // A non-Q51 window is still checked by its own exporter. Its
@@ -114,7 +114,7 @@ private:
                     : TExprNode::TPtr{};
                 HasOtherWindowFamily |=
                     (body && body->IsCallable("YqlWin")) ||
-                    (!element.IsRename() && expression.GetWindowMetadata());
+                    (!element.IsRename() && SnapshotWindowMetadata(expression));
                 continue;
             }
             if (!inputNames) {
@@ -215,8 +215,8 @@ private:
             map,
             "q51 running SUM Aggregate");
         const auto phase = aggregate.GetAggregationPhase();
-        const auto keys = aggregate.GetKeyColumns();
-        const auto traits = aggregate.GetAggregationTraits();
+        const auto keys = SnapshotKeyColumns(aggregate);
+        const auto traits = SnapshotAggregationTraits(aggregate);
         if ((phase != EOpPhase::Undefined && phase != EOpPhase::Final) ||
             aggregate.IsDistinctAll() || keys.size() != 2 ||
             keys[0].GetFullName() != window.PartitionColumn ||
@@ -258,19 +258,19 @@ private:
                 aggregate,
                 "q51 running SUM intermediate Aggregate");
             const auto intermediateTraits =
-                intermediate.GetAggregationTraits();
+                SnapshotAggregationTraits(intermediate);
             const TString state = trait.OriginalColName.GetFullName();
             const size_t finalUses = std::count_if(
                 traits.begin(),
                 traits.end(),
-                [&](const TOpAggregationTraits& candidate) {
+                [&](const TSnapshotAggregationTrait& candidate) {
                     return candidate.OriginalColName.GetFullName() == state;
                 });
             if (state.empty() ||
                 intermediate.GetAggregationPhase() !=
                     EOpPhase::Intermediate ||
                 intermediate.IsDistinctAll() ||
-                intermediate.GetKeyColumns() != keys ||
+                SnapshotKeyColumns(intermediate) != keys ||
                 intermediateTraits.size() != 1 || finalUses != 1 ||
                 intermediateTraits.front().ResultColName.GetFullName() !=
                     state ||
@@ -356,7 +356,7 @@ private:
             }
 
             size_t computedElements = 0;
-            for (const auto& element : project->MapElements) {
+            for (const auto& element : SnapshotMapElements(*project)) {
                 if (!element.IsColumnAccess()) {
                     ++computedElements;
                     if (!PreparedWindows.contains(&element)) {
@@ -442,7 +442,7 @@ private:
 private:
     THashSet<const IOperator*> MainNodes;
     THashMap<const IOperator*, TVector<IOperator*>> Parents;
-    THashMap<const TMapElement*, TQ51Window> PreparedWindows;
+    THashMap<const TSnapshotMapElement*, TQ51Window> PreparedWindows;
     THashMap<TOpMap*, TVector<TQ51ProjectionWindow>> Projections;
     bool HasOtherWindowFamily = false;
 };

@@ -4022,6 +4022,29 @@ class SnapshotTest(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, "row-storage source stage.*only its scan"):
             parse_snapshot(value)
 
+    def test_row_source_accepts_only_a_passive_result_projection(self):
+        value = copy.deepcopy(minimal_snapshot())
+        value["plan"]["nodes"] = [value["plan"]["nodes"][0], {
+            "id": "result", "op": "project", "input": "scan", "ordered": True,
+            "columns": [{"output": "first", "expression": {"kind": "column", "column": "a.k"}},
+                        {"output": "second", "expression": {"kind": "column", "column": "a.k"}}],
+        }]
+        value["plan"]["root"] = "result"
+        value["plan"]["output"] = ["first", "second"]
+        value["stage_graph"] = {
+            "root_stage": "s0", "edges": [], "assumptions": [],
+            "stages": [{"id": "s0", "nodes": ["scan", "result"], "inputs": [],
+                        "outputs": [{"index": 0, "node": "result"}], "source_storage": "row"}],
+        }
+        parse_snapshot(value)
+        for expression in ({"kind": "literal", "type": "Int64", "value": 1},
+                           {"kind": "add", "left": {"kind": "column", "column": "a.k"},
+                            "right": {"kind": "literal", "type": "Int64", "value": 1}}):
+            malformed = copy.deepcopy(value)
+            malformed["plan"]["nodes"][1]["columns"][0]["expression"] = expression
+            with self.assertRaises(SnapshotError):
+                parse_snapshot(malformed)
+
     def test_repeated_shuffle_keys_preserve_order(self):
         value = copy.deepcopy(minimal_snapshot())
         value["stage_graph"] = {

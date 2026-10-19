@@ -87,7 +87,7 @@ void CheckExactWindowAtom(
 }
 
 TVector<TWholePartitionWindowKey> AuditWholePartitionWindowDefinition(
-    const TExpression::TWindowMetadata& metadata,
+    const TSnapshotWindowMetadata& metadata,
     TStringBuf windowName,
     EWholePartitionWindowFunction function)
 {
@@ -512,7 +512,7 @@ TString AuditRankKey(const TExprNode& key, const TExpression& expression,
         Unsupported("Rank key written type disagrees with its annotation");
     }
     TInfoUnit resolved(TString(member.Child(1)->Content()));
-    for (const auto& renames : expression.GetWindowMetadata()->RenameHistory) {
+    for (const auto& renames : SnapshotWindowMetadata(expression)->RenameHistory) {
         if (const auto it = renames.find(resolved); it != renames.end()) {
             resolved = it->second;
         }
@@ -604,7 +604,7 @@ TGlobalRankWindow ExportGlobalRankWindow(const TExpression& expression,
     {
         Unsupported("Rank result descriptor disagrees with its annotation");
     }
-    const auto& metadata = expression.GetWindowMetadata();
+    const auto& metadata = SnapshotWindowMetadata(expression);
     if (!metadata || !metadata->Definition) {
         Unsupported("Rank expression has no source window metadata");
     }
@@ -630,15 +630,15 @@ TGlobalRankWindow ExportGlobalRankWindow(const TExpression& expression,
         }
         partitionBy.AppendValue(name);
     }
-    if (expression.GetWindowPartitionBy().size() != partitions.size()) {
+    if (SnapshotWindowPartitionBy(expression).size() != partitions.size()) {
         Unsupported("Rank tracked partition dependencies disagree with source metadata");
     }
-    for (const auto& tracked : expression.GetWindowPartitionBy()) {
+    for (const auto& tracked : SnapshotWindowPartitionBy(expression)) {
         if (!partitions.contains(tracked.GetFullName())) {
             Unsupported("Rank tracked partition dependency disagrees with source metadata");
         }
     }
-    const auto trackedOrder = expression.GetWindowOrderBy();
+    const auto trackedOrder = SnapshotWindowOrderBy(expression);
     const auto& sourceOrder = definition.Child(3)->Children();
     if (trackedOrder.size() != sourceOrder.size()) {
         Unsupported("Rank tracked order dependencies disagree with source metadata");
@@ -856,7 +856,7 @@ TString AuditQ51WindowDefinitionKey(
 
 TString ResolveQ51WindowColumn(
     TString source,
-    const TExpression::TWindowMetadata& metadata)
+    const TSnapshotWindowMetadata& metadata)
 {
     TInfoUnit resolved(std::move(source));
     for (const auto& renameMap : metadata.RenameHistory) {
@@ -874,7 +874,7 @@ std::pair<TString, TString> AuditQ51WindowDefinition(
     const THashSet<TString>& visibleColumns)
 {
     const TStringBuf label = Q51WindowLabel(function);
-    const auto& metadata = expression.GetWindowMetadata();
+    const auto& metadata = SnapshotWindowMetadata(expression);
     if (!metadata || !metadata->Definition) {
         Unsupported(TStringBuilder()
             << label << " expression has no source window metadata");
@@ -993,8 +993,8 @@ std::pair<TString, TString> AuditQ51WindowDefinition(
 
     partition = ResolveQ51WindowColumn(std::move(partition), *metadata);
     orderColumn = ResolveQ51WindowColumn(std::move(orderColumn), *metadata);
-    const auto resolvedPartitions = expression.GetWindowPartitionBy();
-    const auto resolvedOrder = expression.GetWindowOrderBy();
+    const auto resolvedPartitions = SnapshotWindowPartitionBy(expression);
+    const auto resolvedOrder = SnapshotWindowOrderBy(expression);
     if (partition.empty() || orderColumn.empty() ||
         partition == orderColumn ||
         resolvedPartitions.size() != 1 ||
@@ -1116,7 +1116,7 @@ TWholePartitionWindow ExportWholePartitionWindowSum(
     const TExpression& expression,
     const THashSet<TString>& visibleColumns)
 {
-    const auto& metadata = expression.GetWindowMetadata();
+    const auto& metadata = SnapshotWindowMetadata(expression);
     if (!metadata) {
         Unsupported("Window sum expression has no source metadata");
     }
@@ -1219,7 +1219,7 @@ TWholePartitionWindow ExportWholePartitionWindowAvg(
     const TExpression& expression,
     const THashSet<TString>& visibleColumns)
 {
-    const auto& metadata = expression.GetWindowMetadata();
+    const auto& metadata = SnapshotWindowMetadata(expression);
     if (!metadata) {
         Unsupported("Window avg expression has no source metadata");
     }

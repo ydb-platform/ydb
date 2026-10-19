@@ -3188,7 +3188,24 @@ def _validate_stage_graph(
             if len(scans) != 1 or stage.inputs:
                 _fail(stage_path, "a source stage must contain one scan and have no inputs")
             if stage.source_storage == "row" and len(stage.nodes) != 1:
-                _fail(stage_path, "a row-storage source stage must contain only its scan")
+                # A result-boundary projection only copies typed fields. It
+                # commutes with source partitioning and preserves row order,
+                # multiplicity, and errors; arbitrary row-stage work does not.
+                projection = plan_nodes[stage.nodes[-1]]
+                passive_result = (
+                    len(stage.nodes) == 2
+                    and stage.id == graph.root_stage
+                    and stage.nodes[0] == scans[0].id
+                    and isinstance(projection, Project)
+                    and projection.input == scans[0].id
+                    and projection.ordered
+                    and projection.columns
+                    and all(column.expression.kind == "column"
+                            for column in projection.columns)
+                )
+                if not passive_result:
+                    _fail(stage_path, "a row-storage source stage must contain only its scan "
+                          "and an optional passive result projection")
         if (
             scans
             and (scans[0].predicate is not None or scans[0].pushed_limit is not None)

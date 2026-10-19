@@ -228,6 +228,21 @@ def _set_connection(edge, connection):
     edge.update(common, **connection)
 
 
+def row_source_result_snapshot(*, staged, second="a.k"):
+    projection = {
+        "id": "result", "op": "project", "input": "a", "ordered": True,
+        "columns": [
+            {"output": "first", "expression": {"kind": "column", "column": "a.k"}},
+            {"output": "second", "expression": {"kind": "column", "column": second}},
+        ],
+    }
+    stages = [_stage("source", ["a", "result"], [], ["result"], "row")] if staged else None
+    return parse_snapshot(_snapshot_with_stage_graph(
+        _stage_schema("A"), [copy.deepcopy(SCAN_A), projection], "result", ["first", "second"],
+        stages, [] if staged else None,
+    ))
+
+
 def passthrough_stage_snapshot(connection=None):
     project = {
         "id": "project",
@@ -9246,6 +9261,16 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_row_source_result_projection_preserves_each_tuple_position(self):
+        initial = row_source_result_snapshot(staged=False)
+        final = row_source_result_snapshot(staged=True)
+        result = solve(build_problem(initial, final, 2, 10_000), SOLVER, 2, 10_000)
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+        changed = row_source_result_snapshot(staged=True, second="a.x")
+        result = solve(build_problem(initial, changed, 2, 10_000), SOLVER, 2, 10_000)
+        self.assertEqual(result.status, "COUNTEREXAMPLE")
+
     def test_q28_decimal_avg_union_carrier_has_end_to_end_obligations(self):
         logical = q28_decimal_logical_snapshot()
         staged = q28_decimal_avg_union_carrier_snapshot()

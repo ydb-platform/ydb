@@ -147,6 +147,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<std::size_t> Limit;
     int UptimeSeconds = 0;
     bool ProblemNodesOnly = false;
+    bool AliveOnly = false;
     TString Filter;
     bool AllWhiteboardFields = false;
 
@@ -1192,8 +1193,9 @@ public:
         FieldsRequired.set(+ENodeFields::NodeId);
         UptimeSeconds = FromStringWithDefault<int>(Params.Get("uptime"), 0);
         ProblemNodesOnly = FromStringWithDefault<bool>(Params.Get("problems_only"), ProblemNodesOnly);
+        AliveOnly = FromStringWithDefault<bool>(Params.Get("alive"), AliveOnly);
         Filter = Params.Get("filter");
-        if (UptimeSeconds || ProblemNodesOnly || !Filter.empty()) {
+        if (UptimeSeconds || ProblemNodesOnly || AliveOnly || !Filter.empty()) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
         FilterPath = Params.Get("path");
@@ -1271,7 +1273,7 @@ public:
         } else if (Params.Get("filter_peer_role") == "other") {
             FilterPeerRole = EPeerRole::Other;
         }
-        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
+        NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty();
         if (Params.Has("offset")) {
             Offset = FromStringWithDefault<ui32>(Params.Get("offset"), 0);
             NeedLimit = true;
@@ -1632,6 +1634,18 @@ public:
             AddEvent("Id Filter Applied");
         }
         if (NeedFilter) {
+            if (AliveOnly && FieldsAvailable.test(+ENodeFields::SystemState)) {
+                TNodeView nodeView;
+                for (TNode* node : NodeView) {
+                    if (!node->Disconnected) {
+                        nodeView.push_back(node);
+                    }
+                }
+                NodeView.swap(nodeView);
+                AliveOnly = false;
+                InvalidateNodes();
+                AddEvent("Alive Filter Applied");
+            }
             if (With == EWith::MissingDisks && FieldsAvailable.test(+ENodeFields::Missing)) {
                 TNodeView nodeView;
                 for (TNode* node : NodeView) {
@@ -1723,7 +1737,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
             FoundNodes = NodeView.size();
         }
     }
@@ -3886,6 +3900,16 @@ public:
                     description: return only problem nodes
                     required: false
                     type: boolean
+                  - name: alive
+                    in: query
+                    description: >
+                        Exclude disconnected nodes before grouping, sorting and pagination.
+                        Connected nodes with Yellow or Red status are included.
+                        FoundNodes counts matching nodes; TotalNodes is unaffected by this filter.
+                        Supported when the /viewer/nodes/alive capability is at least 1.
+                    required: false
+                    type: boolean
+                    default: false
                   - name: uptime
                     in: query
                     description: return only nodes with less uptime in sec.

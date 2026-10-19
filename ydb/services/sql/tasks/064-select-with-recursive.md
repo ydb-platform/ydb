@@ -1,7 +1,7 @@
 # WITH RECURSIVE
 
-status: pending
-commit:
+status: done
+commit: df9e40fef0b1b1384d9d00b77c3b50100ee04603
 id: select-with-recursive
 depends: select-with
 

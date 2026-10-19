@@ -78,6 +78,18 @@ struct TAggCall {
     size_t Target = 0;
 };
 
+enum class EWindowFunc {
+    RowNumber,
+    Rank,
+};
+
+struct TWindowCall {
+    EWindowFunc Func = EWindowFunc::RowNumber;
+    TVector<TIdentifier> Partition;
+    TVector<TOrderKey> Order;
+    size_t Target = 0;
+};
+
 struct TSelectStmt {
     bool Star = false;
     bool Distinct = false;
@@ -89,6 +101,7 @@ struct TSelectStmt {
     std::optional<TJoin> Join;
     TVector<TComparison> Where;
     TVector<TAggCall> Aggs;
+    TVector<TWindowCall> Windows;
     TVector<TIdentifier> Group;
     TVector<TComparison> Having;
     TVector<TOrderKey> Order;

@@ -161,7 +161,6 @@ private:
         if (Aggregating && !Materialize()) {
             return;
         }
-        Replied = true;
         if (!Aggregating && !SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
             TVector<size_t> order(Rows.size());
             for (size_t i = 0; i < order.size(); ++i) {
@@ -171,12 +170,23 @@ private:
                 return Less(SortKeys[left], SortKeys[right]);
             });
             TVector<TVector<TQueryCell>> sorted;
+            TVector<TWindowBytes> held;
             sorted.reserve(Rows.size());
             for (size_t index : order) {
                 sorted.push_back(std::move(Rows[index]));
+                if (Windowing) {
+                    held.push_back(std::move(WindowHeld[index]));
+                }
             }
             Rows = std::move(sorted);
+            if (Windowing) {
+                WindowHeld = std::move(held);
+            }
         }
+        if (Windowing && !NumberWindows()) {
+            return;
+        }
+        Replied = true;
         if (ReverseRead && !ReadingIndex) {
             AccessPath = "Reverse";
         }
@@ -494,7 +504,7 @@ private:
                 Filters.push_back(std::move(filter));
             }
         }
-        ReadColumns = Output;
+        ReadColumns = Windowing ? Physical : Output;
         for (TFilter& filter : Filters) {
             size_t index = ReadColumns.size();
             for (size_t i = 0; i < ReadColumns.size(); ++i) {
@@ -613,6 +623,239 @@ private:
             unique.push_back(row);
         }
         Rows = std::move(unique);
+        return true;
+    }
+
+    struct TWindowKey {
+        size_t ReadIndex = 0;
+        size_t HeldIndex = 0;
+        bool Desc = false;
+        bool NullsFirst = false;
+        NScheme::TTypeInfo Type;
+    };
+
+    struct TWindowPlan {
+        EWindowFunc Func = EWindowFunc::RowNumber;
+        size_t Output = 0;
+        TVector<TWindowKey> Partition;
+        TVector<TWindowKey> Order;
+    };
+
+    struct TWindowBytes {
+        TVector<TString> Bytes;
+        TVector<bool> Nulls;
+    };
+
+    bool EnsurePhysical(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIdentifier& name, size_t& index) {
+        if (!name.Qualifier.empty() && name.Qualifier != Statement.From.Name && name.Qualifier != Statement.Alias) {
+            Fail("42703", name.Qualifier);
+            return false;
+        }
+        const auto* info = FindColumn(entry, name.Name);
+        if (!info) {
+            Fail("42703", name.Name);
+            return false;
+        }
+        for (size_t i = 0; i < Physical.size(); ++i) {
+            if (Physical[i].Id == info->Id) {
+                index = i;
+                return true;
+            }
+        }
+        TColumn column;
+        if (!PrepareColumn(*info, column)) {
+            Fail("0A000", "not supported");
+            return false;
+        }
+        index = Physical.size();
+        Physical.push_back(std::move(column));
+        return true;
+    }
+
+    bool BindWindowColumns(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        Windowing = true;
+        Output.clear();
+        OutputSources.clear();
+        Physical.clear();
+        WindowPlans.clear();
+        WindowCapture.clear();
+        for (size_t target = 0; target < Statement.Columns.size(); ++target) {
+            const TWindowCall* call = nullptr;
+            for (const TWindowCall& candidate : Statement.Windows) {
+                if (candidate.Target == target) {
+                    call = &candidate;
+                    break;
+                }
+            }
+            if (call) {
+                TColumn column;
+                column.Name = Statement.Columns[target].Name;
+                column.Type = NScheme::TTypeInfo(NScheme::NTypeIds::Int64);
+                column.TypeOid = 20;
+                column.TypeSize = 8;
+                Output.push_back(std::move(column));
+                OutputSources.push_back(-1);
+                continue;
+            }
+            size_t index = 0;
+            if (!EnsurePhysical(entry, Statement.Columns[target], index)) {
+                return false;
+            }
+            Output.push_back(Physical[index]);
+            Output.back().Name = Statement.Columns[target].Name;
+            OutputSources.push_back(static_cast<int>(index));
+        }
+        for (const TWindowCall& call : Statement.Windows) {
+            TWindowPlan plan;
+            plan.Func = call.Func;
+            plan.Output = call.Target;
+            for (const TIdentifier& column : call.Partition) {
+                TWindowKey key;
+                if (!EnsurePhysical(entry, column, key.ReadIndex)) {
+                    return false;
+                }
+                key.HeldIndex = CaptureWindow(key.ReadIndex);
+                plan.Partition.push_back(key);
+            }
+            for (const TOrderKey& order : call.Order) {
+                TWindowKey key;
+                if (!EnsurePhysical(entry, order.Column, key.ReadIndex)) {
+                    return false;
+                }
+                key.Desc = order.Desc;
+                key.NullsFirst = order.NullsFirst;
+                key.Type = Physical[key.ReadIndex].Type;
+                key.HeldIndex = CaptureWindow(key.ReadIndex);
+                plan.Order.push_back(key);
+            }
+            WindowPlans.push_back(std::move(plan));
+        }
+        return !Output.empty();
+    }
+
+    size_t CaptureWindow(size_t readIndex) {
+        for (size_t i = 0; i < WindowCapture.size(); ++i) {
+            if (WindowCapture[i] == readIndex) {
+                return i;
+            }
+        }
+        WindowCapture.push_back(readIndex);
+        return WindowCapture.size() - 1;
+    }
+
+    bool TakeWindowRow(const TConstArrayRef<TCell>& cells) {
+        TVector<TQueryCell> line;
+        line.reserve(Output.size());
+        for (size_t i = 0; i < Output.size(); ++i) {
+            if (OutputSources[i] < 0) {
+                line.push_back({});
+                continue;
+            }
+            const TCell& cell = cells[OutputSources[i]];
+            const TStringBuf bytes = cell.IsNull() ? TStringBuf() : cell.AsBuf();
+            TQueryCell encoded;
+            if (!EncodeRaw(Output[i], cell.IsNull(), bytes, encoded)) {
+                return false;
+            }
+            line.push_back(std::move(encoded));
+        }
+        TWindowBytes held;
+        held.Bytes.reserve(WindowCapture.size());
+        held.Nulls.reserve(WindowCapture.size());
+        for (size_t readIndex : WindowCapture) {
+            const TCell& cell = cells[readIndex];
+            held.Nulls.push_back(cell.IsNull());
+            held.Bytes.push_back(cell.IsNull() ? TString() : TString(cell.AsBuf()));
+        }
+        if (!SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
+            TSortBytes sort;
+            sort.Bytes.reserve(SortSlots.size());
+            sort.Nulls.reserve(SortSlots.size());
+            for (const TSortSlot& slot : SortSlots) {
+                const TCell& cell = cells[slot.Index];
+                sort.Nulls.push_back(cell.IsNull());
+                sort.Bytes.push_back(cell.IsNull() ? TString() : TString(cell.AsBuf()));
+            }
+            SortKeys.push_back(std::move(sort));
+        }
+        WindowHeld.push_back(std::move(held));
+        Rows.push_back(std::move(line));
+        return true;
+    }
+
+    int CompareWindow(size_t left, size_t right, const TWindowKey& key) const {
+        const bool leftNull = WindowHeld[left].Nulls[key.HeldIndex];
+        const bool rightNull = WindowHeld[right].Nulls[key.HeldIndex];
+        if (leftNull || rightNull) {
+            if (leftNull && rightNull) {
+                return 0;
+            }
+            if (key.NullsFirst) {
+                return leftNull ? -1 : 1;
+            }
+            return leftNull ? 1 : -1;
+        }
+        const TString& leftBytes = WindowHeld[left].Bytes[key.HeldIndex];
+        const TString& rightBytes = WindowHeld[right].Bytes[key.HeldIndex];
+        const TCell leftCell(leftBytes.data(), leftBytes.size());
+        const TCell rightCell(rightBytes.data(), rightBytes.size());
+        const int compared = CompareTypedCells(leftCell, rightCell, NScheme::TTypeInfoOrder(key.Type));
+        if (compared == 0) {
+            return 0;
+        }
+        return key.Desc ? -compared : compared;
+    }
+
+    TString PartitionKey(size_t row, const TWindowPlan& plan) const {
+        TString key;
+        for (const TWindowKey& column : plan.Partition) {
+            key.push_back(WindowHeld[row].Nulls[column.HeldIndex] ? '\0' : '\1');
+            key.append(WindowHeld[row].Bytes[column.HeldIndex]);
+            key.push_back('\0');
+        }
+        return key;
+    }
+
+    bool NumberWindows() {
+        if (WindowHeld.size() != Rows.size()) {
+            Fail("XX000", "internal error");
+            return false;
+        }
+        for (const TWindowPlan& plan : WindowPlans) {
+            absl::flat_hash_map<TString, TVector<size_t>> groups;
+            for (size_t row = 0; row < Rows.size(); ++row) {
+                groups[PartitionKey(row, plan)].push_back(row);
+            }
+            for (auto& [key, group] : groups) {
+                Y_UNUSED(key);
+                std::sort(group.begin(), group.end(), [&](size_t left, size_t right) {
+                    for (const TWindowKey& column : plan.Order) {
+                        const int compared = CompareWindow(left, right, column);
+                        if (compared != 0) {
+                            return compared < 0;
+                        }
+                    }
+                    return false;
+                });
+                i64 rank = 1;
+                for (size_t n = 0; n < group.size(); ++n) {
+                    if (plan.Func == EWindowFunc::Rank && n > 0) {
+                        bool same = true;
+                        for (const TWindowKey& column : plan.Order) {
+                            if (CompareWindow(group[n - 1], group[n], column) != 0) {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if (!same) {
+                            rank = static_cast<i64>(n) + 1;
+                        }
+                    }
+                    const i64 number = plan.Func == EWindowFunc::RowNumber ? static_cast<i64>(n) + 1 : rank;
+                    Rows[group[n]][plan.Output] = {false, ToString(number)};
+                }
+            }
+        }
         return true;
     }
 
@@ -1064,11 +1307,19 @@ private:
             return;
         }
         if (!Statement.Aggs.empty() || !Statement.Group.empty()) {
-            if (Statement.Star || !Statement.Order.empty()) {
+            if (Statement.Star || !Statement.Order.empty() || !Statement.Windows.empty()) {
                 Fail("0A000", "not supported");
                 return;
             }
             if (!CollectAggregateInputs(entry)) {
+                return;
+            }
+        } else if (!Statement.Windows.empty()) {
+            if (Statement.Star || Statement.Distinct || !Statement.DistinctOn.empty()) {
+                Fail("0A000", "not supported");
+                return;
+            }
+            if (!BindWindowColumns(entry)) {
                 return;
             }
         } else if (Statement.Star) {
@@ -1123,7 +1374,7 @@ private:
         }
         MainTable = Table;
         MainReadColumns = ReadColumns;
-        if (Aggregating) {
+        if (Aggregating || Windowing) {
             Indexes.clear();
         } else if (!CollectIndexes(entry)) {
             return;
@@ -1393,6 +1644,12 @@ private:
             }
             if (Aggregating) {
                 if (!Absorb(cells)) {
+                    return false;
+                }
+                continue;
+            }
+            if (Windowing) {
+                if (!TakeWindowRow(cells)) {
                     return false;
                 }
                 continue;
@@ -2014,6 +2271,12 @@ private:
     TTableId Table;
     TVector<TColumn> Output;
     TVector<TColumn> ReadColumns;
+    TVector<TColumn> Physical;
+    TVector<int> OutputSources;
+    TVector<TWindowPlan> WindowPlans;
+    TVector<size_t> WindowCapture;
+    TVector<TWindowBytes> WindowHeld;
+    bool Windowing = false;
     TVector<TString> KeyNames;
     TVector<NScheme::TTypeInfo> KeyTypes;
     TVector<TString> BoundBytes;

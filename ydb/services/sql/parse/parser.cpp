@@ -1351,6 +1351,9 @@ private:
         TIdentifier name = Identifier();
         Advance();
         if (Current.Kind == ETokenKind::LeftParen) {
+            if (name.Name == "row_number" || name.Name == "rank") {
+                return WindowItem(select, name);
+            }
             EAggFunc func;
             if (name.Name == "count") {
                 func = EAggFunc::Count;
@@ -1407,6 +1410,88 @@ private:
         }
         select.ScalarOf.push_back(-1);
         select.Columns.push_back(std::move(name));
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> WindowItem(TSelectStmt& select, const TIdentifier& name) {
+        Advance();
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (!IsKeyword("over")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        TWindowCall call;
+        call.Func = name.Name == "rank" ? EWindowFunc::Rank : EWindowFunc::RowNumber;
+        call.Target = select.Columns.size();
+        if (IsKeyword("partition")) {
+            Advance();
+            if (!IsKeyword("by")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            for (;;) {
+                TIdentifier column;
+                if (auto error = ColumnRef(column)) {
+                    return error;
+                }
+                call.Partition.push_back(std::move(column));
+                if (Current.Kind != ETokenKind::Comma) {
+                    break;
+                }
+                Advance();
+            }
+        }
+        if (IsKeyword("order")) {
+            Advance();
+            if (!IsKeyword("by")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            for (;;) {
+                TOrderKey key;
+                if (auto error = ColumnRef(key.Column)) {
+                    return error;
+                }
+                if (IsKeyword("asc")) {
+                    Advance();
+                } else if (IsKeyword("desc")) {
+                    key.Desc = true;
+                    Advance();
+                }
+                if (IsKeyword("nulls")) {
+                    Advance();
+                    if (IsKeyword("first")) {
+                        key.NullsFirst = true;
+                    } else if (IsKeyword("last")) {
+                        key.NullsFirst = false;
+                    } else {
+                        return Unsupported(Current.Text);
+                    }
+                    Advance();
+                } else {
+                    key.NullsFirst = key.Desc;
+                }
+                call.Order.push_back(std::move(key));
+                if (Current.Kind != ETokenKind::Comma) {
+                    break;
+                }
+                Advance();
+            }
+        }
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        select.Windows.push_back(std::move(call));
+        select.ScalarOf.push_back(-1);
+        select.Columns.push_back({name.Name, name.Quoted, {}});
         return std::nullopt;
     }
 

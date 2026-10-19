@@ -4,13 +4,18 @@
 
 ```bash
 python3 ydb/ci/gh-runner-provision/provision.py poll
-python3 ydb/ci/gh-runner-provision/provision.py create path/to/runners.yaml --dry-run
-python3 ydb/ci/gh-runner-provision/provision.py labels path/to/runners.yaml --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py reconcile
+python3 ydb/ci/gh-runner-provision/provision.py reconcile --apply
+python3 ydb/ci/gh-runner-provision/provision.py create ydb/ci/gh-runner-provision/fleet/tiny.yaml --name tiny-worker-2026-10-13 --dry-run
+python3 ydb/ci/gh-runner-provision/provision.py register ydb/ci/gh-runner-provision/fleet/tiny.yaml --name tiny-worker-2026-10-13
+python3 ydb/ci/gh-runner-provision/provision.py labels ydb/ci/gh-runner-provision/fleet/tiny.yaml --name tiny-worker-2026-10-13
 ```
 
-У пула в `fleet/` нет имён машин. `poll` считает, сколько раннеров с этими лейблами сейчас online, и если кто-то offline, пишет его имя из ответа GitHub. `count` больше или меньше этого числа — пул не сошёлся.
+У пула в `fleet/` нет списка машин. `name` — префикс, из которого `reconcile` берёт следующий свободный номер. Раннер принадлежит пулу по служебному лейблу `pool:<имя файла>`, его ставит `create` и первый `reconcile`. Пока этот лейбл не проставлен, привязка идёт по точному совпадению `labels:`. Сначала один раз запусти `reconcile --apply`, и только потом меняй лейблы в файле: иначе старые раннеры не узнаются и будут созданы новые.
 
-`labels` приводит custom labels раннера к списку из файла через GitHub API. Сервис не останавливается, раннер может быть занят джобой. `self-hosted`, `Linux`, `X64` команда не трогает. `instance:<id>` оставляет. Файл fleet для этого не подходит: в нём нет имён. Имена задаются отдельным конфигом на `create`, `register` и `labels`.
+`reconcile` без `--apply` только печатает план. С `--apply` он сначала проставляет `pool:` и правит workload-лейблы через GitHub API, затем снимает лишних (сначала offline и пропавшие VM, занятого джобой не трогает), оживляет оставшихся (старт VM, перезапуск сервиса, и не больше одной замены на пул, если раннер так и не стал online) и создаёт недостающих до `count`. Файл, которого больше нет в `fleet/`, машины не удаляет: такие раннеры печатаются как orphan.
+
+`create`, `register` и `labels` по файлу пула работают с одной VM, имя передаётся `--name`. Форма и лейблы берутся из файла. `register` занятого раннера не перерегистрирует. Для смены лейблов у живого раннера достаточно `labels`.
 
 `register` заново снимает и записывает регистрацию раннера. Для смены лейблов он не нужен. Если раннер сейчас занят джобой, `register` ничего не делает.
 
@@ -44,6 +49,7 @@ preset: tiny-worker
 ```yaml
 # fleet/tiny.yaml
 shape: ../shapes/tiny.yaml
+name: tiny-worker-2026-10
 count: 6
 labels:
   - tiny-worker

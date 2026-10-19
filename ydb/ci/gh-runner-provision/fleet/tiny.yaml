@@ -1,4 +1,5 @@
 shape: ../shapes/tiny.yaml
+name: tiny-worker-2026-10
 count: 6
 labels:
   - tiny-worker

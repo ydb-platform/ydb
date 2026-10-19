@@ -120,8 +120,11 @@ def load_config(path):
     cfg["_pool"] = path.stem
     cfg["_fleet"] = fleet_keys is not None
     if cfg["_fleet"]:
-        if "name" in data or "names" in data:
-            raise ConfigError("fleet file sets count and labels, not runner names")
+        if "names" in data:
+            raise ConfigError("fleet file sets count, labels, and a name prefix, not a runner list")
+        prefix = data.get("name")
+        if "name" not in (fleet_keys or set()) or not isinstance(prefix, str) or not NAME_RE.fullmatch(prefix):
+            raise ConfigError("fleet file must set name to a VM name prefix")
     elif "name" not in data and "names" not in data:
         raise ConfigError("set name or names")
     for key in REQUIRED:
@@ -409,10 +412,53 @@ def managed_label_key(labels):
     return tuple(sorted(names))
 
 
+def pool_label(pool):
+    return f"pool:{pool['_pool']}"
+
+
+def effective_labels(cfg):
+    labels = list(cfg["labels"])
+    if cfg.get("_fleet"):
+        extra = pool_label(cfg)
+        if extra not in labels:
+            labels.append(extra)
+    return labels
+
+
+def workload_key(labels):
+    return tuple(name for name in managed_label_key(labels) if not str(name).startswith("pool:"))
+
+
+def runner_pool_name(labels):
+    for name in managed_label_key(labels):
+        if str(name).startswith("pool:"):
+            return str(name)[len("pool:"):]
+    return None
+
+
+def next_instance_name(prefix, taken):
+    """Smallest prefix-N whose N is not already used, ignoring zero-padding."""
+    used = set()
+    head = prefix + "-"
+    for name in taken:
+        if not name.startswith(head):
+            continue
+        tail = name[len(head):]
+        if tail.isdigit():
+            used.add(int(tail))
+    number = 1
+    while number in used:
+        number += 1
+    candidate = f"{prefix}-{number}"
+    if not NAME_RE.fullmatch(candidate):
+        raise ConfigError(f"bad instance name: {candidate}")
+    return candidate
+
+
 def poll_pools(pools, runners):
     grouped = {tuple(sorted(pool["labels"])): [] for pool in pools}
     for runner in runners:
-        key = managed_label_key(runner.get("labels") or [])
+        key = workload_key(runner.get("labels") or [])
         if key in grouped:
             grouped[key].append(runner)
     reports = []
@@ -440,6 +486,298 @@ def format_poll(report):
     return text
 
 
+def _vm_rank(member, instance_status):
+    if member["name"] not in instance_status:
+        return 0
+    if member.get("status") != "online":
+        return 1
+    if not member.get("busy"):
+        return 2
+    return 3
+
+
+def reconcile_actions(pools, runners, instance_status):
+    """Actions that bring runners in line with fleet. instance_status maps VM name to yc status."""
+    members = {pool["_pool"]: [] for pool in pools}
+    actions = []
+    for runner in runners:
+        owner = runner_pool_name(runner.get("labels") or [])
+        if owner:
+            if owner in members:
+                members[owner].append(runner)
+            else:
+                actions.append({"op": "orphan", "pool": owner, "name": runner.get("name")})
+            continue
+        key = workload_key(runner.get("labels") or [])
+        matches = [pool for pool in pools if tuple(sorted(pool["labels"])) == key]
+        if len(matches) == 1:
+            pool = matches[0]
+            members[pool["_pool"]].append(runner)
+            actions.append({
+                "op": "bind",
+                "pool": pool["_pool"],
+                "name": runner.get("name"),
+                "id": runner.get("id"),
+                "current": runner.get("labels") or [],
+            })
+    for pool in pools:
+        for runner in members[pool["_pool"]]:
+            if runner_pool_name(runner.get("labels") or []) != pool["_pool"]:
+                continue
+            final, added, removed = label_plan(runner.get("labels") or [], effective_labels(pool))
+            if added or removed:
+                actions.append({
+                    "op": "sync",
+                    "pool": pool["_pool"],
+                    "name": runner.get("name"),
+                    "id": runner.get("id"),
+                    "add": added,
+                    "remove": removed,
+                    "labels": final,
+                })
+    for pool in pools:
+        owned = members[pool["_pool"]]
+        excess = len(owned) - int(pool["count"])
+        delete = []
+        if excess > 0:
+            ordered = sorted(owned, key=lambda member: _vm_rank(member, instance_status))
+            for member in ordered:
+                if len(delete) >= excess or _vm_rank(member, instance_status) == 3:
+                    break
+                delete.append(member)
+        if excess > len(delete):
+            actions.append({"op": "stuck", "pool": pool["_pool"], "count": excess - len(delete)})
+        delete_ids = {member.get("id") for member in delete}
+        for member in delete:
+            actions.append({
+                "op": "delete",
+                "pool": pool["_pool"],
+                "name": member.get("name"),
+                "id": member.get("id"),
+                "vm": member["name"] in instance_status,
+            })
+        kept = [member for member in owned if member.get("id") not in delete_ids]
+        revive_marked = False
+        future = 0
+        for member in kept:
+            status = instance_status.get(member["name"])
+            if status is None:
+                actions.append({
+                    "op": "delete",
+                    "pool": pool["_pool"],
+                    "name": member.get("name"),
+                    "id": member.get("id"),
+                    "vm": False,
+                })
+                continue
+            future += 1
+            if status != "RUNNING" or member.get("status") != "online":
+                actions.append({
+                    "op": "start" if status != "RUNNING" else "restart",
+                    "pool": pool["_pool"],
+                    "name": member.get("name"),
+                    "id": member.get("id"),
+                    "replace": not revive_marked,
+                })
+                revive_marked = True
+        create_n = max(0, int(pool["count"]) - future)
+        if create_n:
+            actions.append({"op": "create", "pool": pool["_pool"], "count": create_n})
+    return actions
+
+
+def format_action(action):
+    pool = action.get("pool") or ""
+    op = action["op"]
+    if op == "orphan":
+        return f"orphan pool:{pool} {action['name']}"
+    if op == "bind":
+        return f"{pool}: bind pool:{pool} on {action['name']}"
+    if op == "sync":
+        added = ", ".join(action["add"]) if action["add"] else "-"
+        removed = ", ".join(action["remove"]) if action["remove"] else "-"
+        return f"{pool}: sync {action['name']} add {added} remove {removed}"
+    if op == "delete":
+        what = "runner and VM" if action["vm"] else "runner"
+        return f"{pool}: delete {what} {action['name']}"
+    if op == "stuck":
+        return f"{pool}: {action['count']} extra runners are busy and were left in place"
+    if op == "start":
+        text = f"{pool}: start VM {action['name']}"
+    elif op == "restart":
+        text = f"{pool}: restart service on {action['name']}"
+    elif op == "create":
+        return f"{pool}: create {action['count']}"
+    else:
+        return f"{pool}: {op}"
+    if action.get("replace"):
+        text += "; replace it if it stays offline"
+    return text
+
+
+REVIVE_WAIT = 120
+
+
+def list_instances(cfg):
+    proc = run(
+        ["yc", "--folder-id", cfg["folder_id"], "compute", "instance", "list", "--format", "json"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(proc.stderr.strip() or "failed to list instances")
+    payload = json.loads(proc.stdout or "[]")
+    if isinstance(payload, dict):
+        payload = payload.get("instances") or []
+    return {item["name"]: item for item in payload if isinstance(item, dict) and item.get("name")}
+
+
+def delete_github_runner(repo, runner_id):
+    proc = run(
+        ["gh", "api", "--method", "DELETE", f"repos/{repo}/actions/runners/{runner_id}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0 and "not found" not in (proc.stderr or "").lower():
+        raise SystemExit(proc.stderr.strip() or f"failed to delete runner {runner_id}")
+
+
+def delete_vm(cfg, name):
+    proc = run(
+        ["yc", "--folder-id", cfg["folder_id"], "compute", "instance", "delete", "--name", name, "--async"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0 and "not found" not in (proc.stderr or "").lower():
+        raise SystemExit(proc.stderr.strip() or f"failed to delete VM {name}")
+
+
+def start_vm(cfg, name, timeout):
+    proc = run(
+        ["yc", "--folder-id", cfg["folder_id"], "compute", "instance", "start", "--name", name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0:
+        raise SystemExit(proc.stderr.strip() or f"failed to start {name}")
+    return wait_running(cfg, name, timeout)
+
+
+def runner_service_script():
+    return """set -euo pipefail
+dir=/home/runner/actions_runner
+if [ ! -f "$dir/.runner" ]; then
+  exit 42
+fi
+systemctl restart "$(cat "$dir/.service")"
+"""
+
+
+def wait_runner_online(repo, name, timeout):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        for runner in list_runners(repo):
+            if runner.get("name") == name and runner.get("status") == "online":
+                return True
+        time.sleep(10)
+    return False
+
+
+def taken_names(runners, instances):
+    names = set(instances)
+    for runner in runners:
+        if runner.get("name"):
+            names.add(runner["name"])
+    return names
+
+
+def ensure_runner_up(cfg, name, timeout, allow_replace, taken, vm_was_running):
+    info = yc_instance(cfg, name)
+    if info is None:
+        return "gone", taken
+    if info.get("status") != "RUNNING":
+        ip = start_vm(cfg, name, timeout)
+        vm_was_running = False
+    else:
+        ip = instance_ip(info)
+    if not vm_was_running and wait_runner_online(cfg["repo"], name, REVIVE_WAIT):
+        return "online", taken
+    proc = run(ssh_argv(cfg, ip) + ["sudo", "bash", "-s"], input=runner_service_script())
+    if proc.returncode == 42:
+        register(cfg, name, ip)
+    elif proc.returncode != 0:
+        print(f"{name}: service restart failed", flush=True)
+    if wait_runner_online(cfg["repo"], name, REVIVE_WAIT):
+        return "online", taken
+    if not allow_replace:
+        print(f"{name}: still offline", flush=True)
+        return "offline", taken
+    print(f"{name}: replacing", flush=True)
+    runner_id = None
+    for runner in list_runners(cfg["repo"]):
+        if runner.get("name") == name:
+            runner_id = runner.get("id")
+            break
+    if runner_id:
+        delete_github_runner(cfg["repo"], runner_id)
+    delete_vm(cfg, name)
+    taken.discard(name)
+    new_name = next_instance_name(cfg["name"], taken)
+    taken.add(new_name)
+    cmd_create(cfg, [new_name], False, timeout)
+    return "replaced", taken
+
+
+def cmd_reconcile(target, apply, timeout):
+    pools = load_pools(target)
+    runners = list_runners(pools[0]["repo"])
+    instances = list_instances(pools[0])
+    status = {name: info.get("status") for name, info in instances.items()}
+    actions = reconcile_actions(pools, runners, status)
+    if not actions:
+        print("fleet matches", flush=True)
+        return 0
+    for action in actions:
+        print(format_action(action), flush=True)
+    if not apply:
+        print("dry-run: nothing was changed", flush=True)
+        return 0
+    by_pool = {pool["_pool"]: pool for pool in pools}
+    taken = taken_names(runners, instances)
+    replaced = set()
+    for action in actions:
+        op = action["op"]
+        pool = by_pool.get(action.get("pool"))
+        if op in ("orphan", "stuck"):
+            continue
+        if op == "bind":
+            final, added, removed = label_plan(action["current"], effective_labels(pool))
+            if added or removed:
+                set_runner_labels(pool["repo"], action["id"], final)
+        elif op == "sync":
+            set_runner_labels(pool["repo"], action["id"], action["labels"])
+        elif op == "delete":
+            if action.get("id"):
+                delete_github_runner(pool["repo"], action["id"])
+            if action.get("vm"):
+                delete_vm(pool, action["name"])
+            taken.discard(action["name"])
+        elif op in ("start", "restart"):
+            allow = bool(action.get("replace")) and action["pool"] not in replaced
+            outcome, taken = ensure_runner_up(
+                pool, action["name"], timeout, allow, taken, op == "restart",
+            )
+            if outcome == "replaced":
+                replaced.add(action["pool"])
+        elif op == "create":
+            for _ in range(action["count"]):
+                new_name = next_instance_name(pool["name"], taken)
+                taken.add(new_name)
+                print(f"{pool['_pool']}: creating {new_name}", flush=True)
+                cmd_create(pool, [new_name], False, timeout)
+    return 0
+
+
 def set_runner_labels(repo, runner_id, labels):
     proc = run(
         ["gh", "api", "--method", "PUT", f"repos/{repo}/actions/runners/{runner_id}/labels", "--input", "-"],
@@ -457,7 +795,7 @@ def registration_script(cfg, name):
         "GITHUB_TOKEN": github_token(cfg["repo"], "registration-token"),
         "REMOVE_TOKEN": github_token(cfg["repo"], "remove-token"),
         "RUNNER_NAME": name,
-        "RUNNER_LABELS": ",".join(cfg["labels"]),
+        "RUNNER_LABELS": ",".join(effective_labels(cfg)),
         "PRESET_NAME": str(cfg.get("preset") or ""),
         "AGENT_MIRROR_URL_PREFIX": str(cfg.get("agent_mirror") or ""),
     }
@@ -511,7 +849,7 @@ def selected_names(cfg, only):
 
 def describe(cfg, names):
     print(f"repo: {cfg['repo']}")
-    print(f"labels: {', '.join(cfg['labels'])}")
+    print(f"labels: {', '.join(effective_labels(cfg))}")
     print(
         f"vm: {cfg['platform']} {cfg['cores']} vCPU / {cfg['memory_gb']} GB / "
         f"{cfg['disk_gb']} GB {cfg['disk_type']} in {cfg['zone']}"
@@ -773,8 +1111,54 @@ labels:
     assert reports[0]["online"] == 1
     assert reports[0]["offline"] == ["tiny-b"]
     assert not poll_ok(reports[0])
+    taken = {"static-relwithdebinfo-d", "static-relwithdebinfo-d-01", "static-relwithdebinfo-d-2"}
+    assert next_instance_name("static-relwithdebinfo-d", taken) == "static-relwithdebinfo-d-3"
+    tiny_pool = {
+        "_pool": "tiny", "_fleet": True, "count": 1, "name": "tiny-worker",
+        "labels": ["tiny-worker"], "repo": "ydb-platform/ydb",
+    }
+    online = {
+        "id": 1, "name": "tiny-worker-1", "status": "online", "busy": True,
+        "labels": [
+            {"name": "tiny-worker", "type": "custom"},
+            {"name": "pool:tiny", "type": "custom"},
+            {"name": "instance:abc", "type": "custom"},
+        ],
+    }
+    offline = {
+        "id": 2, "name": "tiny-worker-8", "status": "offline", "busy": False,
+        "labels": [
+            {"name": "tiny-worker", "type": "custom"},
+            {"name": "pool:tiny", "type": "custom"},
+        ],
+    }
+    plain = {
+        "id": 3, "name": "tiny-worker-9", "status": "online", "busy": False,
+        "labels": [{"name": "tiny-worker", "type": "custom"}, {"name": "instance:z", "type": "custom"}],
+    }
+    actions = reconcile_actions(
+        [tiny_pool],
+        [online, offline, plain],
+        {"tiny-worker-1": "RUNNING", "tiny-worker-8": "RUNNING", "tiny-worker-9": "RUNNING"},
+    )
+    ops = [(item["op"], item.get("name")) for item in actions]
+    assert ("bind", "tiny-worker-9") in ops
+    assert ("delete", "tiny-worker-8") in ops
+    assert all(item["op"] != "create" for item in actions)
+    short = reconcile_actions(
+        [{**tiny_pool, "count": 2}],
+        [online],
+        {"tiny-worker-1": "RUNNING"},
+    )
+    assert any(item["op"] == "create" and item["count"] == 1 for item in short)
+    stopped = reconcile_actions(
+        [{**tiny_pool, "count": 1}],
+        [online],
+        {"tiny-worker-1": "STOPPED"},
+    )
+    assert any(item["op"] == "start" and item["replace"] for item in stopped)
     pools = load_pools(HERE / "fleet")
-    assert all(not pool.get("names") for pool in pools)
+    assert all(not pool.get("names") and pool.get("name") for pool in pools)
     assert {pool["_pool"] for pool in pools} == {
         "analytic",
         "tiny",
@@ -800,27 +1184,46 @@ def load_config_text(text):
         path.unlink(missing_ok=True)
 
 
+def command_names(cfg, only, names):
+    if cfg.get("_fleet"):
+        if not names:
+            raise ConfigError("fleet file needs --name")
+        for name in names:
+            if not NAME_RE.fullmatch(name):
+                raise ConfigError(f"bad instance name: {name}")
+        return list(names)
+    return selected_names(cfg, only or names)
+
+
 def main(argv):
     parser = argparse.ArgumentParser(description="Create or re-register a GitHub Actions runner VM from a config file.")
-    parser.add_argument("command", choices=("create", "register", "labels", "poll", "authorize", "self-test"))
+    parser.add_argument(
+        "command",
+        choices=("create", "register", "labels", "poll", "reconcile", "authorize", "self-test"),
+    )
     parser.add_argument("config", nargs="?")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--apply", action="store_true", help="reconcile performs the plan; default prints it")
     parser.add_argument("--only", action="append", default=[], help="instance name from this config; repeatable")
+    parser.add_argument("--name", action="append", default=[], help="VM name; required when the config is a fleet file")
     parser.add_argument("--timeout", type=int, default=900, help="seconds to wait for the VM and cloud-init")
     args = parser.parse_args(argv)
     if args.command == "self-test":
         self_test()
         return
-    if args.command == "poll":
+    if args.command in ("poll", "reconcile"):
+        target = args.config or (HERE / "fleet")
         try:
-            raise SystemExit(cmd_poll(args.config or (HERE / "fleet")))
+            if args.command == "poll":
+                raise SystemExit(cmd_poll(target))
+            raise SystemExit(cmd_reconcile(target, args.apply, args.timeout))
         except ConfigError as exc:
             raise SystemExit(f"config: {exc}") from exc
     if not args.config:
         parser.error("config file is required")
     try:
         cfg = load_config(args.config)
-        names = selected_names(cfg, args.only)
+        names = command_names(cfg, args.only, args.name)
     except ConfigError as exc:
         raise SystemExit(f"config: {exc}") from exc
     if args.command == "create":

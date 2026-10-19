@@ -1,4 +1,5 @@
 shape: ../shapes/static-relwithdebinfo.yaml
+name: static-relwithdebinfo-d
 count: 15
 labels:
   - auto-provisioned

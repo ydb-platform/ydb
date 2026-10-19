@@ -1,4 +1,5 @@
 shape: ../shapes/analytic.yaml
+name: analytic-node-2026-10
 count: 3
 labels:
   - auto-provisioned

@@ -654,7 +654,9 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildChainLambda(bool update) const {
     }
 
     const auto& sortElements = Window.GetSortElements().Items();
-    TExprNode::TPtr sortKeyChanged;
+    // Without ORDER BY every row in a partition is a peer. Rank and dense
+    // rank must keep their initial value instead of building an If with no condition.
+    auto sortKeyChanged = Ctx.NewCallable(Pos, "Bool", {Ctx.NewAtom(Pos, "false")});
     if (update && NeedsPeerKey) {
         TExprNode::TListType comparisons;
         for (ui32 k = 0; k < sortElements.size(); ++k) {

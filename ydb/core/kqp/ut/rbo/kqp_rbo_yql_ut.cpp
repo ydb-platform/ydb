@@ -6663,6 +6663,21 @@ FROM (
                 FROM `/Root/t1`
                 ORDER BY a;
             )"},
+            {"global rank without order", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, Rank() OVER () AS rank, DenseRank() OVER () AS dense_rank
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"partitioned rank without order", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, Rank() OVER w AS rank, DenseRank() OVER w AS dense_rank
+                FROM `/Root/t1`
+                WINDOW w AS (PARTITION BY b)
+                ORDER BY a;
+            )"},
             {"rank over group by without aggregates", R"(
                 PRAGMA YqlSelect = "force";
 

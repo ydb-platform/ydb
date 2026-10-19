@@ -722,7 +722,6 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvHttpProxy::TEvResolveHostResponse, HandleResolving);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
@@ -731,7 +730,6 @@ protected:
             hFunc(NActors::TEvPollerReady, HandleConnecting);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
             hFunc(NActors::TEvPollerRegisterResult, HandleConnecting);
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 

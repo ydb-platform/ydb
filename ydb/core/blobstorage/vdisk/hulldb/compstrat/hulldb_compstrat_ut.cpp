@@ -3,6 +3,9 @@
 #include "hulldb_compstrat_ranks.h"
 #include <util/stream/null.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/test/testhull_index.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/test/test_sst.h>
+#include "hulldb_compstrat_test_context.h"
+#include "hulldb_compstrat_ratio_test_iterators.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -21,33 +24,10 @@ namespace NKikimr {
         using TTask = ::NKikimr::NHullComp::TTask<TKeyLogoBlob, TMemRecLogoBlob>;
 
 
-        void RunInActorContext(std::function<void()> callback) {
-            class TRunner : public TActor<TRunner> {
-                std::function<void()> Callback;
-
-                STFUNC(Execute) {
-                    Y_UNUSED(ev);
-                    Callback();
-                    PassAway();
-                }
-
-            public:
-                explicit TRunner(std::function<void()> callback)
-                    : TActor(&TRunner::Execute)
-                    , Callback(std::move(callback))
-                {}
-            };
-
-            TTestActorRuntimeBase runtime;
-            runtime.Initialize();
-            const auto actor = runtime.Register(new TRunner(std::move(callback)));
-            runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvWakeup));
-        }
-
         template<class TKey, class TMemRec>
         NHullComp::EAction SelectInActorContext(NHullComp::TStrategy<TKey, TMemRec>& strategy) {
             NHullComp::EAction action = NHullComp::ActNothing;
-            RunInActorContext([&] { action = strategy.Select(); });
+            NHullComp::NTesting::RunInActorContext([&](auto&) { action = strategy.Select(); });
             return action;
         }
 
@@ -70,24 +50,16 @@ namespace NKikimr {
             }
 
             ui64 AddSst(ui32 level, ui32 chunks) {
-                auto sst = MakeIntrusive<TLogoBlobsSst>(Contexts.GetVCtx());
-                sst->AssignedSstId = NextSstId++;
-                sst->AllChunks.resize(chunks, 1);
+                const ui64 id = NextSstId++;
                 TMemRecLogoBlob memRec;
                 memRec.SetNoBlob();
                 TTrackableVector<TLogoBlobsSst::TRec> index(TMemoryConsumer(Contexts.GetVCtx()->SstIndex));
-                index.emplace_back(TKeyLogoBlob(TLogoBlobID(sst->AssignedSstId, 1, 1, 0, 1, 0)), memRec);
-                sst->LoadedIndex = std::move(index);
-                auto &slice = *Ds->LogoBlobs->CurSlice;
-                if (level == 0) {
-                    slice.Level0.Put(sst);
-                } else {
-                    while (slice.SortedLevels.size() < level) {
-                        slice.SortedLevels.emplace_back(TKeyLogoBlob());
-                    }
-                    slice.SortedLevels[level - 1].Put(sst);
-                }
-                return sst->AssignedSstId;
+                index.emplace_back(TKeyLogoBlob(TLogoBlobID(id, 1, 1, 0, 1, 0)), memRec);
+                auto sst = NTest::MakeTestSst<TKeyLogoBlob, TMemRecLogoBlob>(
+                    Contexts.GetVCtx(), id, std::move(index));
+                sst->AllChunks.resize(chunks, 1);
+                NTest::PutTestSst(*Ds->LogoBlobs, level, sst, NTest::ETestSstLevels::Grow);
+                return id;
             }
 
             NHullComp::TLevelRanks GetRanks() const {
@@ -294,6 +266,37 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
         }
 
+        Y_UNIT_TEST(HighRankStorageRatioSkipRequiresFeatureFlag) {
+            constexpr ui32 level0Boundary = HullCompLevel0MaxSstsAtOnce * (Level0UseDreg ? 2 : 1);
+            constexpr ui32 skipChunks = level0Boundary * NHullComp::TLevelRanks::StorageRatioSkipRank;
+            for (bool enableOptimization : {false, true}) {
+                for (const auto& [chunks, expectedInvocationsWhenEnabled] : {
+                        std::make_pair(skipChunks - 1, 1u),
+                        std::make_pair(skipChunks, 0u),
+                        std::make_pair(skipChunks + 1, 0u)}) {
+                    TPriorityTestEnv env;
+                    env.AddSst(0, chunks);
+                    auto hullCtx = env.Contexts.GetHullCtx();
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioOptimization(enableOptimization);
+
+                    auto checkSelection = [&](ui64 expectedInvocations) {
+                        TTask task;
+                        UNIT_ASSERT(env.Select(task) == NHullComp::ActCompactSsts);
+                        UNIT_ASSERT(task.SelectStrategy == NHullComp::ESelectStrategy::BalanceLevel);
+                        UNIT_ASSERT_VALUES_EQUAL(task.Priority.MaxRank, chunks / double(level0Boundary));
+                        UNIT_ASSERT_VALUES_EQUAL(task.CompactSsts.TargetLevel, 1);
+                        UNIT_ASSERT_VALUES_EQUAL(hullCtx->StorageRatioGroup.StorageRatioInvocations().Val(),
+                            expectedInvocations);
+                    };
+
+                    checkSelection(1); // Unset flag preserves calculation at any rank.
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioHighRankSkip(true);
+                    checkSelection(1 + expectedInvocationsWhenEnabled);
+                    hullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioHighRankSkip(false);
+                    checkSelection(2 + expectedInvocationsWhenEnabled);
+                }
+            }
+        }
 
         Y_UNIT_TEST(Test1) {
             STR << "Building LevelIndex\n";
@@ -303,11 +306,11 @@ namespace NKikimr {
 
 
             // calculate storage ratio
-            TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> barriersEssence =
-                snap.BarriersSnap.CreateEssence(snap.HullCtx);
-            RunInActorContext([&] {
+            NHullComp::NTesting::RunInActorContext([&](auto&) {
+                // The selector below reuses this snapshot, so keep it alive.
                 NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>
-                    (snap.HullCtx, snap.LogoBlobsSnap, std::move(barriersEssence), true).Work();
+                    (snap.HullCtx, snap.LogoBlobsSnap, snap.BarriersSnap, true)
+                    .Work(NHullComp::NTesting::TRetainingIteratorFactory<TKeyLogoBlob, TMemRecLogoBlob>{});
             });
 
             snap.LogoBlobsSnap.Output(STR);

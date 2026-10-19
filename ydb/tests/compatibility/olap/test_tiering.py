@@ -11,19 +11,11 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-CURRENT = (float("inf"),)
-TREE_VERSION = (26, 4, 1)
-
-
 class TieringTestBase(RestartToAnotherVersionFixture):
     requires_prefix_alter = False
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, tree):
-        if self.requires_prefix_alter and CURRENT not in self.versions:
-            pytest.skip("Prefix ALTER requires the current checkout")
-        if (tree or self.requires_prefix_alter) and any(version < TREE_VERSION for version in self.versions):
-            pytest.skip("Tree keys require 26.4 or newer on both sides of the restart")
         flags = ["enable_tiering_in_column_shard", "enable_external_data_sources"]
         if tree or self.requires_prefix_alter:
             flags.append("enable_tiering_object_key_tree")
@@ -136,7 +128,6 @@ class TieringTestBase(RestartToAnotherVersionFixture):
         elif prefix:
             assert all(key.startswith(prefix + "/") for key in keys), keys
         else:
-            # Empty prefix still selects the tree layout: tablet/generation/hash/hash/blob.
             assert all(len(key.split("/")) == 5 and key.split("/")[0].isdigit() for key in keys), keys
 
     def active_keys(self, bucket):
@@ -146,7 +137,6 @@ class TieringTestBase(RestartToAnotherVersionFixture):
         """)
         blob_ids = {"[" + row.BlobId.split("[", 1)[1] for row in result[0].rows}
         keys = {obj.key for obj in bucket.objects.all() if obj.key.rsplit("/", 1)[-1] in blob_ids}
-        # Different storage ids can allocate the same blob id under different prefixes.
         assert {key.rsplit("/", 1)[-1] for key in keys} == blob_ids, (keys, blob_ids)
         return keys
 
@@ -181,28 +171,41 @@ class TestTieringRestart(TieringTestBase):
 class TestTieringPrefixAlter(TieringTestBase):
     requires_prefix_alter = True
 
+    def object_versions(self, bucket):
+        versions = {}
+        for obj in bucket.object_versions.all():
+            assert obj.id != "null", "S3 versioning must be enabled before writing data"
+            versions.setdefault(obj.object_key, set()).add(obj.id)
+        return versions
+
+    def check_preserved_versions(self, bucket, preserved):
+        versions = self.object_versions(bucket)
+        assert {key: versions.get(key) for key in preserved} == preserved, (preserved, versions)
+        return versions
+
     @pytest.mark.parametrize("tree", [False, True])
     def test_prefix_changes_preserve_existing_objects(self, tree):
         prefix = "archive/data" if tree else None
         bucket = self.create_table(prefix)
+        bucket.Versioning().enable()
         rows = self.write_rows()
         self.wait_evicted(len(rows))
         preserved_keys = self.active_keys(bucket)
         preserved_portions = self.active_portions()
+        preserved_versions = self.object_versions(bucket)
         self.check_keys(preserved_keys, prefix)
-
-        if self.versions[0] != CURRENT:
-            # Start with objects written by the previous binary, then ALTER on the new binary.
-            self.change_cluster_version()
-            self.check_rows(rows)
-            assert self.active_keys(bucket) == preserved_keys
-            assert self.active_portions() == preserved_portions
 
         for prefix in ("archive/new", "", None, "archive/last"):
             self.query(f"""
                 ALTER TABLE tiered SET TTL Interval("PT1S")
                 TO EXTERNAL DATA SOURCE {self.tier_target(prefix)} ON ts;
             """)
+            if prefix == "archive/new":
+                self.change_cluster_version()
+                self.check_rows(rows)
+                assert self.active_keys(bucket) == preserved_keys
+                assert self.active_portions() == preserved_portions
+                assert self.object_versions(bucket) == preserved_versions
             rows += self.write_rows(offset=len(rows))
             self.wait_evicted(len(rows))
             keys = self.active_keys(bucket)
@@ -210,33 +213,27 @@ class TestTieringPrefixAlter(TieringTestBase):
             assert preserved_portions <= portions, (preserved_portions - portions, portions)
             assert preserved_keys <= keys, (preserved_keys - keys, keys)
             self.check_keys(keys - preserved_keys, prefix)
+            preserved_versions = self.check_preserved_versions(bucket, preserved_versions)
             preserved_keys = keys
             preserved_portions = portions
             self.check_rows(rows)
 
-        # The new binary must recover historical storage ids even with admission disabled.
-        next_version = self.versions[(self.current_binary_paths_index + 1) % len(self.versions)]
-        if next_version == CURRENT:
-            self.config.yaml_config["feature_flags"]["enable_tiering_object_key_tree"] = False
+        self.config.yaml_config["feature_flags"]["enable_tiering_object_key_tree"] = False
         self.change_cluster_version()
         self.check_rows(rows)
-        if self.versions[self.current_binary_paths_index] == CURRENT:
-            assert self.active_keys(bucket) == preserved_keys
-            assert self.active_portions() == preserved_portions
-        # The previous binary may re-evict portions using its original prefix comparison.
-        # Also exercise writes with the persisted setting after restart/downgrade.
+        assert self.active_keys(bucket) == preserved_keys
+        assert self.active_portions() == preserved_portions
+        assert self.object_versions(bucket) == preserved_versions
         keys_before_write = self.active_keys(bucket)
         rows += self.write_rows(offset=len(rows))
         self.wait_evicted(len(rows))
         self.check_rows(rows)
         self.check_keys(self.active_keys(bucket) - keys_before_write, "archive/last")
+        assert preserved_portions <= self.active_portions()
+        assert preserved_keys <= self.active_keys(bucket)
+        self.check_preserved_versions(bucket, preserved_versions)
 
-        # Use TTL to collect the objects while the shards are alive. Dropping a standalone
-        # table deletes its shards and does not guarantee external object collection.
-        # The previous binary only admits ALTER when the list of tree storage ids is unchanged.
-        retained_tier = (f'Interval("PT1S") TO EXTERNAL DATA SOURCE {self.tier_target("archive/last")}, '
-                         if next_version != CURRENT else "")
-        self.query(f'ALTER TABLE tiered SET TTL {retained_tier}Interval("PT2S") DELETE ON ts;')
+        self.query('ALTER TABLE tiered SET TTL Interval("PT2S") DELETE ON ts;')
         self.wait_for(lambda: self.query("SELECT COUNT(*) AS count FROM tiered;")[0].rows[0].count == 0,
                       "Expired rows from historical prefixes were not deleted")
         self.wait_for(lambda: not list(bucket.objects.all()),

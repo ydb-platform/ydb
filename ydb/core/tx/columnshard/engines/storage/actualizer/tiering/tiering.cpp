@@ -27,14 +27,11 @@ bool NeedsTierChange(const TString& current, const TString& target, const TTieri
     if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
         return true;
     }
-    // Distinct TTL stages may use different prefixes of the same external data source.
     for (const auto& tier : tiering.GetOrderedTiers()) {
         if (tier.Get().GetExternalStorageId() == currentStorage) {
             return true;
         }
     }
-    // Prefix changes only affect new evictions. Keep the persisted storage id of an already evicted portion
-    // so that reads and GC continue to address its original objects.
     return false;
 }
 

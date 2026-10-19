@@ -35,6 +35,13 @@ Y_UNIT_TEST(MakeStringWithPad) {
     }
 }
 
+Y_UNIT_TEST(MakeStringWithPadRejectsSizeOverflow) {
+    TScopedAlloc alloc(__LOCATION__);
+    // Before the check this wraps to zero and returns an embedded string;
+    // the regression never needs a large allocation, even on the old code.
+    UNIT_ASSERT_EXCEPTION(MakeStringNotFilled(1U, 0xFFFFFFFFU), yexception);
+}
+
 // Disable test since it produces too much memory for msan.
 #if !defined(_msan_enabled_)
 Y_UNIT_TEST(MakeLargeString) {

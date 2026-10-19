@@ -206,7 +206,7 @@ NUdf::TUnboxedValuePod MakeString(const NUdf::TStringRef ref)
 
 NUdf::TUnboxedValuePod MakeStringNotFilled(ui32 size, ui32 pad)
 {
-    const auto fullSize = size + pad;
+    const auto fullSize = CheckedSum(size, pad);
     if (fullSize <= NUdf::TUnboxedValuePod::InternalBufferSize) {
         return NUdf::TUnboxedValuePod::Embedded(size);
     }

@@ -1866,7 +1866,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(legacyScheme.columns(1).name(), "value");
         }
 
-        void CheckSqlBackup(const TString& prefix, const TString& expected, bool encrypted = false, bool checksums = true) {
+        TString CheckSqlBackup(const TString& prefix, const TString& expected, bool encrypted = false, bool checksums = true) {
             const TString key = prefix + "/create_table.sql";
             TString content;
             TMaybe<NBackup::TEncryptionIV> sqlIv;
@@ -1917,6 +1917,187 @@ namespace {
                     NBackup::ComputeChecksum(legacyContent) + " scheme.pb");
             }
             UNIT_ASSERT(!HasS3File(legacyKey + ".enc.sha256"));
+            return content;
+        }
+
+        enum class ESqlExportDatabase {
+            Root,
+            LocalSubdomain,
+            ExternalSubdomain,
+            Serverless,
+        };
+
+        enum class ESqlExportPathScenario {
+            Plain,
+            Encrypted,
+            EncryptedAfterSourceDropAndReboot,
+        };
+
+        void CheckSqlExportDomainPaths(ESqlExportDatabase databaseType, bool isColumn, ESqlExportPathScenario scenario) {
+            Env();
+            auto& flags = Runtime().GetAppData().FeatureFlags;
+            flags.SetEnableTableBackupAsSql(true);
+            flags.SetEnableColumnTablesBackup(true);
+            flags.SetEnableChecksumsExport(true);
+            flags.SetEnableEncryptedExport(true);
+            flags.SetEnableExportAutoDropping(false);
+
+            ui64 txId = 100;
+            ui64 schemeShardId = TTestTxConfig::SchemeShard;
+            TString database = "/MyRoot";
+            switch (databaseType) {
+            case ESqlExportDatabase::Root:
+                break;
+            case ESqlExportDatabase::LocalSubdomain:
+                database = "/MyRoot/USER_0";
+                TestCreateSubDomain(Runtime(), ++txId, "/MyRoot", R"(
+                    Name: "USER_0"
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                )");
+                Env().TestWaitNotification(Runtime(), txId);
+                break;
+            case ESqlExportDatabase::ExternalSubdomain:
+                database = "/MyRoot/USER_0";
+                TestCreateExtSubDomain(Runtime(), ++txId, "/MyRoot", R"(Name: "USER_0")");
+                Env().TestWaitNotification(Runtime(), txId);
+                TestAlterExtSubDomain(Runtime(), ++txId, "/MyRoot", R"(
+                    Name: "USER_0"
+                    PlanResolution: 50
+                    Coordinators: 1
+                    Mediators: 1
+                    TimeCastBucketsPerMediator: 2
+                    ExternalSchemeShard: true
+                    StoragePools { Name: "pool-1" Kind: "pool-kind-1" }
+                )");
+                Env().TestWaitNotification(Runtime(), txId);
+                TestDescribeResult(DescribePath(Runtime(), database), {
+                    NLs::PathExist,
+                    NLs::ExtractTenantSchemeshard(&schemeShardId),
+                });
+                UNIT_ASSERT_VALUES_UNEQUAL(schemeShardId, TTestTxConfig::SchemeShard);
+                break;
+            case ESqlExportDatabase::Serverless:
+                database = "/MyRoot/ServerLessDB";
+                TestCreateServerLessDb(Runtime(), Env(), txId, schemeShardId);
+                UNIT_ASSERT_VALUES_UNEQUAL(schemeShardId, TTestTxConfig::SchemeShard);
+                break;
+            }
+
+            const TString databaseName = TStringBuf(database).RNextTok('/');
+            // Repeated database names must survive stripping the database prefix.
+            // All three items deliberately have the same table name.
+            const TVector<TString> directories = {"", "Dir/Nested", databaseName};
+            TestMkDir(Runtime(), schemeShardId, ++txId, database, "Dir");
+            Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+            TestMkDir(Runtime(), schemeShardId, ++txId, database + "/Dir", "Nested");
+            Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+            TestMkDir(Runtime(), schemeShardId, ++txId, database, databaseName);
+            Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+
+            NKikimrExport::TCreateExportRequest request;
+            auto& settings = *request.MutableExportToS3Settings();
+            settings.set_endpoint(Sprintf("localhost:%d", S3Port()));
+            settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
+            const bool encrypted = scenario != ESqlExportPathScenario::Plain;
+            if (encrypted) {
+                settings.set_destination_prefix("encrypted");
+                auto& encryption = *settings.mutable_encryption_settings();
+                encryption.set_encryption_algorithm("AES-128-GCM");
+                encryption.mutable_symmetric_key()->set_key("0123456789012345");
+            }
+            for (ui32 i = 0; i < directories.size(); ++i) {
+                const auto& directory = directories[i];
+                const TString parent = database + (directory.empty() ? "" : "/" + directory);
+                if (isColumn) {
+                    TestCreateColumnTable(Runtime(), schemeShardId, ++txId, parent, R"(
+                        Name: "Table"
+                        ColumnShardCount: 1
+                        Schema {
+                            Columns { Name: "key" Type: "Uint32" NotNull: true }
+                            Columns { Name: "value" Type: "Utf8" }
+                            KeyColumnNames: "key"
+                        }
+                    )");
+                    Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+                    TestAlterColumnTable(Runtime(), schemeShardId, ++txId, parent, R"(
+                        Name: "Table"
+                        AlterSchema { Options { ScanReaderPolicyName: "SIMPLE" } }
+                    )");
+                } else {
+                    TestCreateTable(Runtime(), schemeShardId, ++txId, parent, R"(
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Uint32" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    )");
+                }
+                Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+
+                auto& item = *settings.add_items();
+                item.set_source_path(parent + "/Table");
+                item.set_destination_prefix("item" + ToString(i));
+            }
+
+            const bool dropSourceAndReboot = scenario == ESqlExportPathScenario::EncryptedAfterSourceDropAndReboot;
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> copyProposal(Runtime(), [dropSourceAndReboot](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return dropSourceAndReboot && record.TransactionSize() == 1
+                    && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
+            });
+            const auto exportId = ++txId;
+            TString requestText;
+            UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(request, &requestText));
+            TestExport(Runtime(), schemeShardId, exportId, database, requestText);
+            if (dropSourceAndReboot) {
+                Runtime().WaitFor("blocked consistent copy proposal", [&] { return !copyProposal.empty(); });
+                const ui64 copyTxId = copyProposal.front()->Get()->Record.GetTxId();
+                TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyCompletion(Runtime(), [copyTxId](const auto& ev) {
+                    return ev->Get()->Record.GetTxId() == copyTxId;
+                });
+                copyProposal.Stop().Unblock();
+                Runtime().WaitFor("blocked consistent copy completion", [&] { return !copyCompletion.empty(); });
+                UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(schemeShardId), directories.size());
+
+                for (const auto& item : settings.items()) {
+                    const TString parent = TStringBuf(item.source_path()).RBefore('/');
+                    if (isColumn) {
+                        TestDropColumnTable(Runtime(), schemeShardId, ++txId, parent, "Table");
+                    } else {
+                        TestDropTable(Runtime(), schemeShardId, ++txId, parent, "Table");
+                    }
+                    Env().TestWaitNotification(Runtime(), txId, schemeShardId);
+                    TestDescribeResult(DescribePath(Runtime(), schemeShardId, item.source_path()), {NLs::PathNotExist});
+                }
+
+                // Lose the completion, then regenerate SQL without any live source table.
+                copyCompletion.clear();
+                RebootTablet(Runtime(), schemeShardId, Runtime().AllocateEdgeActor());
+                Runtime().WaitFor("blocked consistent copy completion after reboot", [&] { return !copyCompletion.empty(); });
+                copyCompletion.Stop().Unblock();
+            }
+
+            Env().TestWaitNotification(Runtime(), exportId, schemeShardId);
+            TestGetExport(Runtime(), schemeShardId, exportId, database, Ydb::StatusIds::SUCCESS);
+            for (ui32 i = 0; i < directories.size(); ++i) {
+                const auto& directory = directories[i];
+                const TString relativePath = directory.empty() ? "Table" : directory + "/Table";
+                const TString prefix = (encrypted ? "/encrypted/item" : "/item") + ToString(i);
+                const auto sql = CheckSqlBackup(prefix, {}, encrypted);
+                UNIT_ASSERT_STRING_CONTAINS(sql, "CREATE TABLE `" + relativePath + "`");
+                if (isColumn) {
+                    UNIT_ASSERT_STRING_CONTAINS(sql,
+                        "ALTER OBJECT `" + relativePath + "` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS");
+                }
+                UNIT_ASSERT_C(!sql.Contains(database + "/"), sql);
+            }
+
+            TestForgetExport(Runtime(), schemeShardId, ++txId, database, exportId);
+            Env().TestWaitNotification(Runtime(), exportId, schemeShardId);
+            TestGetExport(Runtime(), schemeShardId, exportId, database, Ydb::StatusIds::NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(schemeShardId), 0u);
         }
 
     private:
@@ -3747,60 +3928,51 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlUsesLocalSubdomainRelativePath, IsColumn) {
-        Env();
-        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
-        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
-        ui64 txId = 100;
-        const TString database = "/MyRoot/USER_0";
-        TestCreateSubDomain(Runtime(), ++txId, "/MyRoot", R"(
-            Name: "USER_0"
-            PlanResolution: 50
-            Coordinators: 1
-            Mediators: 1
-            TimeCastBucketsPerMediator: 2
-        )");
-        Env().TestWaitNotification(Runtime(), txId);
+        CheckSqlExportDomainPaths(ESqlExportDatabase::LocalSubdomain, IsColumn, ESqlExportPathScenario::Plain);
+    }
 
-        if (IsColumn) {
-            TestCreateColumnTable(Runtime(), ++txId, database, R"(
-                Name: "Table"
-                ColumnShardCount: 1
-                Schema {
-                    Columns { Name: "key" Type: "Uint32" NotNull: true }
-                    Columns { Name: "value" Type: "Utf8" }
-                    KeyColumnNames: "key"
-                }
-            )");
-        } else {
-            TestCreateTable(Runtime(), ++txId, database, R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Uint32" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )");
-        }
-        Env().TestWaitNotification(Runtime(), txId);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsRoot, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Root, IsColumn, ESqlExportPathScenario::Plain);
+    }
 
-        const auto exportId = ++txId;
-        TestExport(Runtime(), exportId, database, Sprintf(R"(
-            ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_path: "/MyRoot/USER_0/Table"
-                    destination_prefix: "local"
-                }
-            }
-        )", S3Port()));
-        Env().TestWaitNotification(Runtime(), exportId);
-        TestGetExport(Runtime(), exportId, database, Ydb::StatusIds::SUCCESS);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsExternalSubdomain, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::ExternalSubdomain, IsColumn, ESqlExportPathScenario::Plain);
+    }
 
-        CheckSqlBackup("/local", {});
-        const auto sql = GetS3FileContent("/local/create_table.sql");
-        UNIT_ASSERT_STRING_CONTAINS(sql, "CREATE TABLE `Table`");
-        UNIT_ASSERT_C(!sql.Contains("USER_0"), sql);
-        UNIT_ASSERT_C(!sql.Contains("/MyRoot"), sql);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsServerless, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Serverless, IsColumn, ESqlExportPathScenario::Plain);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsRootEncrypted, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Root, IsColumn, ESqlExportPathScenario::Encrypted);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsLocalSubdomainEncrypted, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::LocalSubdomain, IsColumn, ESqlExportPathScenario::Encrypted);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsExternalSubdomainEncrypted, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::ExternalSubdomain, IsColumn, ESqlExportPathScenario::Encrypted);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsServerlessEncrypted, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Serverless, IsColumn, ESqlExportPathScenario::Encrypted);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsRootDropSourceAndReboot, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Root, IsColumn, ESqlExportPathScenario::EncryptedAfterSourceDropAndReboot);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsLocalSubdomainDropSourceAndReboot, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::LocalSubdomain, IsColumn, ESqlExportPathScenario::EncryptedAfterSourceDropAndReboot);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsExternalSubdomainDropSourceAndReboot, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::ExternalSubdomain, IsColumn, ESqlExportPathScenario::EncryptedAfterSourceDropAndReboot);
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlDomainPathsServerlessDropSourceAndReboot, IsColumn) {
+        CheckSqlExportDomainPaths(ESqlExportDatabase::Serverless, IsColumn, ESqlExportPathScenario::EncryptedAfterSourceDropAndReboot);
     }
 
     Y_UNIT_TEST(ColumnTableBackupAsSqlUsesDatabaseRelativePath) {

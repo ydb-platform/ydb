@@ -1358,8 +1358,8 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     state=state,
                 )
             )
-        if not aggregates:
-            _fail(f"{path}.aggregates", "must not be empty")
+        if not aggregates and (not keys or obj["distinct_all"] is not False):
+            _fail(f"{path}.aggregates", "empty traits require nonempty grouping keys and distinct_all:false")
         phase = _string(obj["phase"], f"{path}.phase")
         if phase not in OPERATOR_PHASES:
             _fail(f"{path}.phase", f"unsupported aggregate phase {phase!r}")
@@ -4063,6 +4063,9 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(f"node {node.id!r}.keys", f"column {key!r} is not available")
                 if input_schema[key].type == DOUBLE:
                     _fail(f"node {node.id!r}.keys", "aggregate keys may not consume Double")
+            if not node.aggregates and (not node.keys or node.distinct_all):
+                _fail(f"node {node.id!r}.aggregates",
+                      "empty traits require nonempty grouping keys and distinct_all:false")
             if node.distinct_all and (
                 not node.keys or len(node.aggregates) != len(node.keys)
             ):

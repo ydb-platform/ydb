@@ -9,6 +9,7 @@ TEST_SRCS(
     test_ir.py
     test_analysis.py
     test_join.py
+    test_key_only_aggregate.py
     test_decimal.py
     test_diagnostics.py
     test_encoding_strategies.py

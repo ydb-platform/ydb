@@ -409,6 +409,37 @@ struct TFixture {
         return Export(root);
     }
 
+    TSemanticSnapshotExportResult KeyOnlyAggregate(bool staged, bool extraKey = false, bool distinctAll = false) {
+        const auto pos = TPositionHandle();
+        const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+        const auto* groupType = Expr.MakeType<TOptionalExprType>(
+            Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+        auto read = Read();
+        read->GetColumns() = TUnorderedIUs{Key, Group};
+        SetType(*read, {{Key, int32}, {Group, groupType}});
+        TOrderedIUs<> keys{Group};
+        TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> columns{{Group, groupType}};
+        if (extraKey) {
+            keys.Append(Key);
+            columns.emplace_back(Key, int32);
+        }
+        auto aggregate = MakeIntrusive<TOpAggregate>(read, TAggregationIUs{}, keys,
+            staged ? EOpPhase::Intermediate : EOpPhase::Undefined, distinctAll, pos);
+        SetType(*aggregate, columns);
+        TIntrusivePtr<IOperator> result = aggregate;
+        if (staged) {
+            auto final = MakeIntrusive<TOpAggregate>(aggregate, TAggregationIUs{}, keys,
+                EOpPhase::Final, distinctAll, pos);
+            SetType(*final, columns);
+            result = final;
+        }
+        TOpRoot root(result, pos, {{Group, "group"}});
+        if (staged) {
+            StageSerial(root);
+        }
+        return Export(root);
+    }
+
     TExprContext Expr;
     TTypeAnnotationContext Types;
     TNullTransformer TypeAnnotation;
@@ -701,6 +732,31 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
 
     Y_UNIT_TEST(InitialBoundaryMaterializesNativeComputedMapTypes) {
         CheckNativeInitialScalarTypes(false);
+    }
+
+    Y_UNIT_TEST(NativeKeyOnlyAggregatePreservesNullableGroups) {
+        TFixture before, after;
+        const auto initial = before.KeyOnlyAggregate(false);
+        const auto final = after.KeyOnlyAggregate(true);
+        Parse(initial);
+        Parse(final);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeKeyOnlyAggregateDetectsAnExtraGroupingKey) {
+        TFixture before, after;
+        const auto initial = before.KeyOnlyAggregate(false);
+        const auto final = after.KeyOnlyAggregate(true, true);
+        Parse(initial);
+        Parse(final);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeKeyOnlyAggregateRejectsUnboundDistinctAliases) {
+        TFixture fixture;
+        const auto result = fixture.KeyOnlyAggregate(false, false, true);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "without traits");
     }
 
     Y_UNIT_TEST(NativeStaticTextMembershipMatchesItsEqualityExpansion) {

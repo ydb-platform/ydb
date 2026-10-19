@@ -11901,8 +11901,10 @@ private:
                 const auto outputNames = OutputNames(aggregate);
                 const auto traits = SnapshotAggregationTraits(aggregate);
                 const auto& keyColumns = SnapshotKeyColumns(aggregate);
-                if (traits.empty()) {
-                    Unsupported("Aggregate has no traits");
+                // Main represents grouping-only DISTINCT as nonempty keys
+                // without traits. The physical builder rejects the keyless form.
+                if (traits.empty() && (keyColumns.empty() || aggregate.IsDistinctAll())) {
+                    Unsupported("Aggregate without traits requires nonempty grouping keys and no DistinctAll aliases");
                 }
                 const size_t ordinaryDistinctTraits = std::count_if(
                     traits.begin(),

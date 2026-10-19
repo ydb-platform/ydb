@@ -402,18 +402,12 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&
     CheckFinish(ctx);
 }
 
-<<<<<<< HEAD
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
-=======
-template <EProtocol Protocol>
-void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
     if (!Token) {
         CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
         return;
     }
-
->>>>>>> d241cfa5e8a (YDBBACKPORT-1260 Fix segfault when tvm is broken)
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;

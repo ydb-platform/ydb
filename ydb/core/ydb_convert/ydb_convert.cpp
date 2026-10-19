@@ -972,6 +972,15 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     return it->second;
 }
 
+void RevokeYdbPermission(NACLib::TDiffACL& acl, const TString& name, const TString& sid) {
+    const auto attrs = ConvertYdbPermissionNameToACLAttrs(name);
+    acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, attrs.InheritanceType);
+    if (attrs.AccessMask == NACLib::EAccessRights::ConnectDatabase) {
+        // CONNECT grants created before inheritance support must also be revoked.
+        acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, NACLib::EInheritanceType::InheritNone);
+    }
+}
+
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
     static const TVector<std::pair<ui32, TString>> maskByPower = CalcMaskByPower();
     TVector<TString> result;

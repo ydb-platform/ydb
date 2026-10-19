@@ -12,6 +12,34 @@
 
 namespace NKikimr::NOlap::NActualizer {
 
+namespace {
+
+bool NeedsTierChange(const TString& current, const TString& target, const TTiering& tiering) {
+    if (current == target) {
+        return false;
+    }
+    if (current == IStoragesManager::DefaultStorageId || target == IStoragesManager::DefaultStorageId ||
+        target == NTiering::NCommon::DeleteTierName) {
+        return true;
+    }
+    using NColumnShard::NTiers::TExternalStorageId;
+    const auto currentStorage = TExternalStorageId::FromString(current);
+    if (currentStorage.GetConfigPath() != TExternalStorageId::FromString(target).GetConfigPath()) {
+        return true;
+    }
+    // Distinct TTL stages may use different prefixes of the same external data source.
+    for (const auto& tier : tiering.GetOrderedTiers()) {
+        if (tier.Get().GetExternalStorageId() == currentStorage) {
+            return true;
+        }
+    }
+    // Prefix changes only affect new evictions. Keep the persisted storage id of an already evicted portion
+    // so that reads and GC continue to address its original objects.
+    return false;
+}
+
+}   // namespace
+
 std::shared_ptr<NKikimr::NOlap::ISnapshotSchema> TTieringActualizer::GetTargetSchema(
     const std::shared_ptr<ISnapshotSchema>& portionSchema) const {
     if (!TargetCriticalSchema) {
@@ -56,7 +84,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         std::optional<i64> d;
         std::set<TString> storagesWrite;
         TString targetTierName;
-        if (portion.GetTierNameDef(IStoragesManager::DefaultStorageId) != tieringInfo.GetCurrentTierName()) {
+        if (NeedsTierChange(currentTierName, tieringInfo.GetCurrentTierName(), *Tiering)) {
             d = -1 * tieringInfo.GetCurrentTierLag().GetValue();
             targetTierName = tieringInfo.GetCurrentTierName();
         } else if (tieringInfo.GetNextTierName()) {

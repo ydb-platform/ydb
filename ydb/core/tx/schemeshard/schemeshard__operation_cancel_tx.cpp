@@ -31,10 +31,18 @@ public:
         return fake;
     }
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Execute cancel tx"
             << ": opId# " << OperationId
             << ", target opId# " << TargetOperationId);
+=======
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        YDB_LOG_DEBUG_CTX(context.Ctx, "Execute cancel tx",
+            {"txId", TxId},
+            {"targetTxId", TargetTxId},
+        );
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
 
         auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
         auto result = MakeHolder<TEvSchemeShard::TEvCancelTxResult>(ui64(TargetOperationId.GetTxId()), ui64(OperationId.GetTxId()));
@@ -75,7 +83,7 @@ public:
         return proposeResult;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TTxCancelTx");
     }
 

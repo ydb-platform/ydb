@@ -343,7 +343,7 @@ void VerifyParams(TProposeResponse* result, TParamsDelta* delta, const TPathId p
     result->SetStatus(status, reason);
 }
 
-void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TOperationContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
+void RegisterChanges(const TTxState& txState, const TTxId operationTxId, TProposeContext& context, TPath& path, TSubDomainInfo::TPtr& subdomainInfo, TSubDomainInfo::TPtr& alter) {
     const auto& basenameId = path.Base()->PathId;
 
     context.MemChanges.GrabPath(context.SS, basenameId);
@@ -596,7 +596,13 @@ class TAlterExtSubDomainCreateHive: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TAlterExtSubDomainCreateHive"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -678,10 +684,15 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterExtSubDomainCreateHive AbortPropose"
             << ", opId " << OperationId
         );
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -848,7 +859,13 @@ class TAlterExtSubDomain: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TAlterExtSubDomain"; }
+
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         const NKikimrSubDomains::TSubDomainSettings& inputSettings = Transaction.GetSubDomain();
 
@@ -1029,7 +1046,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterExtSubDomain");
     }
 

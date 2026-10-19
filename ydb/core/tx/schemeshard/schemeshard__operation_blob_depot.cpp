@@ -151,10 +151,15 @@ namespace NKikimr::NSchemeShard {
                 SetState(state);
             }
 
+<<<<<<< HEAD
             THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::Propose"
                     << " OperationId# " << OperationId
                     << " at schemeshard# " << context.SS->SelfTabletId());
+=======
+            THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+                YDB_LOG_DEBUG_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
 
                 switch (Action) {
                     case EAction::Create: return ProposeCreate(owner, context);
@@ -164,10 +169,15 @@ namespace NKikimr::NSchemeShard {
                 Y_ABORT("unreachable code");
             }
 
+<<<<<<< HEAD
             void AbortPropose(TOperationContext& context) override {
                 LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TBlobDepot::AbortPropose"
                     << " OperationId# " << OperationId
                     << " at schemeshard# " << context.SS->SelfTabletId());
+=======
+            void AbortPropose(TProposeContext& context) override {
+                YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
 
                 Y_ABORT();
             }

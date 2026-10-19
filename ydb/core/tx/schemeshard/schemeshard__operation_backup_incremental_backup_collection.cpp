@@ -62,7 +62,13 @@ class TCreateLongIncrementalBackupOp : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+=======
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& streamPathIds = Transaction.GetCreateLongIncrementalBackupOp().GetStreamPathIds();
 
@@ -125,9 +131,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateLongIncrementalBackupOp AbortPropose"
             << ": opId# " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {

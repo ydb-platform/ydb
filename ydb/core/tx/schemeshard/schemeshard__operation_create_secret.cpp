@@ -137,7 +137,13 @@ class TCreateSecret : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+=======
+    virtual const char* Name() const override final { return "TCreateSecret"; }
+
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisting = !Transaction.GetFailOnExist();
@@ -296,8 +302,13 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateSecret AbortPropose" << ", opId: " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

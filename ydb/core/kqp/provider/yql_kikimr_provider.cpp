@@ -356,9 +356,8 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     }
 
     if (withSystemColumns) {
-        const bool isOlap = Metadata->IsOlap();
         for (const auto& [name, type] : KikimrSystemColumns()) {
-            if (!IsKikimrSystemColumn(name, isOlap)) {
+            if (!IsKikimrSystemColumn(name, *Metadata)) {
                 continue;
             }
             const TOptionalExprType* optType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(type));
@@ -635,9 +634,8 @@ TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHand
     }
 
     if (withSystemColumns) {
-        const bool isOlap = table.Metadata->IsOlap();
         for (const auto& pair : KikimrSystemColumns()) {
-            if (!IsKikimrSystemColumn(pair.first, isOlap)) {
+            if (!IsKikimrSystemColumn(pair.first, *table.Metadata)) {
                 continue;
             }
             auto atom = Build<TCoAtom>(ctx, pos)
@@ -981,12 +979,15 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
 
-bool IsKikimrSystemColumn(const TStringBuf columnName, bool isOlapTable) {
+bool IsKikimrSystemColumn(const TStringBuf columnName, const TKikimrTableMetadata& metadata) {
     if (!KikimrSystemColumns().FindPtr(columnName)) {
         return false;
     }
+    if (metadata.IsOlap() && !metadata.SysView.empty()) {
+        return false;
+    }
     if (columnName == NKikimr::YqlPortionColumnName) {
-        return isOlapTable;
+        return metadata.IsOlap();
     }
     return true;
 }

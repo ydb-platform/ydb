@@ -348,7 +348,7 @@ const TTypeAnnotationNode* GetReadTableRowTypeFullText(TExprContext& ctx, const 
         if (column) {
             columnName = column->Name;
         } else {
-            if (withSystemColumns && IsKikimrSystemColumn(item.Value(), tableDesc->Metadata->IsOlap())) {
+            if (withSystemColumns && IsKikimrSystemColumn(item.Value(), *tableDesc->Metadata)) {
                 columnName = TString(item.Value());
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(select.Pos()), TStringBuilder()

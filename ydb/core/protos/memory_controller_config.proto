@@ -29,8 +29,8 @@ message TMemoryControllerConfig {
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
 
-    // Budget against AnonRss (minus slack for allocator caches) when it exceeds AllocatedMemory,
-    // so caches do not grow into memory the allocator still holds.
+    // Budget against non-reclaimable AnonRss beyond the slack when it exceeds AllocatedMemory.
+    // Free page-heap bytes remain reusable; other allocator overhead reduces consumer budgets.
     optional bool RssAwareBudget = 140 [default = false];
     optional uint64 RssBudgetSlackBytes = 141 [default = 536870912];
     // Release allocator caches to the OS in the same tick when AnonRss exceeds the soft limit.

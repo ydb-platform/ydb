@@ -406,21 +406,87 @@ Y_UNIT_TEST(RssAwareBudget) {
     UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(66_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 0);
 
-    // rss above soft limit while allocated is low: caches are cut and allocator caches get released
+    // Reclaimable pages remain reusable, but non-reclaimable RSS still cuts caches.
+    // Measured RSS above the soft limit also triggers an allocator release.
     server->ProcessMemoryInfo->AnonRss = 180_MB;
     server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
     server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 140_MB);
+    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 28_MB);
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
 
-    // rss below soft limit again: no release; budget 100 MB leaves caches at their minimums
+    // Below the soft limit, retained free pages do not displace useful caches.
     server->ProcessMemoryInfo->AnonRss = 110_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
     UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 70_MB);
-    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(40_MB), static_cast<i64>(1_MB));
+    UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 20_MB);
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(48_MB), static_cast<i64>(1_MB));
+}
+
+Y_UNIT_TEST(RssAwareBudget_DoesNotRecutRetainedPages) {
+    for (bool releaseEnabled : {false, true}) {
+        NKikimrConfig::TMemoryControllerConfig config;
+        config.SetHardLimitBytes(200_MB);
+        config.SetRssAwareBudget(true);
+        config.SetRssBudgetSlackBytes(0);
+        config.SetReleaseAllocatorCachesOnPressure(releaseEnabled);
+        config.SetMinAllocatorCachesReleaseBytes(0);
+        TControllerFixture fixture(config);
+        auto& info = fixture.Provider->ProcessMemoryInfo;
+        info.AnonRss = 120_MB;
+        info.AllocatedMemory = 120_MB;
+        auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+        ui64 used = 80_MB;
+        std::optional<ui64> firstLimit;
+        for (ui32 tick = 0; tick != 5; ++tick) {
+            consumer->SetConsumption(used);
+            fixture.Tick();
+            const ui64 limit = fixture.Counter("Consumer/SharedCache/Limit");
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 40_MB);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/AllocatorCachesReleaseRequested"), 0);
+            if (firstLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(limit, *firstLimit);
+            } else {
+                UNIT_ASSERT_GT(limit, 40_MB);
+                UNIT_ASSERT_LT(limit, used);
+                firstLimit = limit;
+            }
+            // Eviction returns pages to the allocator, but not to the OS.
+            if (used > limit) {
+                const ui64 freed = used - limit;
+                used = limit;
+                info.AllocatedMemory -= freed;
+                info.AllocatorCachesMemory += freed;
+                info.AllocatorCachesReclaimable += freed;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(*info.AnonRss, 120_MB);
+        UNIT_ASSERT_VALUES_EQUAL(info.AllocatorCachesReclaimable, 80_MB - *firstLimit);
+    }
+}
+
+Y_UNIT_TEST(RssAwareBudget_ReclaimablePagesDoNotHideAllocatedMemory) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetRssAwareBudget(true);
+    config.SetRssBudgetSlackBytes(10_MB);
+    TControllerFixture fixture(config);
+    auto& info = fixture.Provider->ProcessMemoryInfo;
+    info.AllocatedMemory = 180_MB;
+    info.AnonRss = 200_MB;
+    info.AllocatorCachesMemory = 100_MB;
+    info.AllocatorCachesReclaimable = 100_MB;
+    fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::SharedCache);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 180_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
+
+    // Inconsistent samples must neither underflow nor reduce the allocated-memory floor.
+    info.AnonRss = 5_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/OtherConsumption"), 180_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/RssExcess"), 0);
 }
 
 Y_UNIT_TEST(RssAwareBudget_Disabled) {
@@ -464,8 +530,8 @@ Y_UNIT_TEST(RssAwareBudget_BudgetOnly) {
     server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
     server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 140_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), 28_MB);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 0);
 }
 

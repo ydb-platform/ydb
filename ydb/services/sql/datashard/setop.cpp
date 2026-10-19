@@ -34,7 +34,7 @@ public:
     }
 
     void Bootstrap() {
-        if (Combine != ECombine::Union && Combine != ECombine::UnionAll) {
+        if (Combine != ECombine::Union && Combine != ECombine::UnionAll && Combine != ECombine::Intersect) {
             Fail("0A000", "not supported");
             return;
         }
@@ -106,7 +106,22 @@ private:
             return;
         }
         Rows = std::move(LeftRows);
-        if (Combine == ECombine::UnionAll) {
+        if (Combine == ECombine::Intersect) {
+            THashSet<TString> rightKeys;
+            for (const auto& row : ev->Get()->Rows) {
+                rightKeys.insert(RowKey(row));
+            }
+            TVector<TVector<TQueryCell>> shared;
+            THashSet<TString> seen;
+            for (auto& row : Rows) {
+                const TString key = RowKey(row);
+                if (!rightKeys.contains(key) || !seen.insert(key).second) {
+                    continue;
+                }
+                shared.push_back(std::move(row));
+            }
+            Rows = std::move(shared);
+        } else if (Combine == ECombine::UnionAll) {
             for (auto& row : ev->Get()->Rows) {
                 Rows.push_back(std::move(row));
             }

@@ -182,6 +182,13 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(once.Combine == ECombine::Union);
     }
 
+    Y_UNIT_TEST(IntersectKeepsTheOperator) {
+        const TParseResult parsed = Parse("SELECT a FROM t INTERSECT SELECT a FROM u");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Combine == ECombine::Intersect);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.SelectRight->From.Name, "u");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

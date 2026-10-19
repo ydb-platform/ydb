@@ -574,13 +574,19 @@ public:
                 return *error;
             }
         }
+        ECombine combine = ECombine::None;
         if (IsKeyword("union")) {
             Advance();
-            ECombine combine = ECombine::Union;
+            combine = ECombine::Union;
             if (IsKeyword("all")) {
                 combine = ECombine::UnionAll;
                 Advance();
             }
+        } else if (IsKeyword("intersect")) {
+            Advance();
+            combine = ECombine::Intersect;
+        }
+        if (combine != ECombine::None) {
             TParseResult right = SelectStmt();
             if (!right.SqlState.empty()) {
                 return right;
@@ -594,7 +600,7 @@ public:
             result.SelectRight = std::move(right.Select);
             return result;
         }
-        if (IsKeyword("intersect") || IsKeyword("except") || IsKeyword("for")) {
+        if (IsKeyword("except") || IsKeyword("for")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("limit")) {

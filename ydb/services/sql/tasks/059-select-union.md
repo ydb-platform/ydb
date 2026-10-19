@@ -1,7 +1,7 @@
 # UNION и UNION ALL
 
-status: pending
-commit:
+status: done
+commit: ca256be3d3d22d6c34f5ddad5009b20a1651341a
 id: select-union
 depends: select-where-limit
 

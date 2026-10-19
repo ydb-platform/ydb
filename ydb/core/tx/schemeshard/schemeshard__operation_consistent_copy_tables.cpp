@@ -380,6 +380,7 @@ bool CreateConsistentCopyTables(
 
                 indexDescr.SetOmitFollowers(descr.GetOmitFollowers());
                 indexDescr.SetIsBackup(descr.GetIsBackup());
+                indexDescr.SetCaptureBackupSchemeSnapshot(descr.GetCaptureBackupSchemeSnapshot());
                 indexDescr.SetAllowUnderSameOperation(descr.GetAllowUnderSameOperation());
 
                 if (descr.HasTargetPathTargetState()) {

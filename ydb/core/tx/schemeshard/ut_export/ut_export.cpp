@@ -4416,7 +4416,26 @@ partitioning_settings {
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlDropSourceAfterConsistentCopySucceeds, IsColumn) {
         ui64 txId = 100;
-        CreateTableForSqlBackup(txId, IsColumn);
+        EnvOptions().EnableIndexMaterialization(true);
+        if (IsColumn) {
+            CreateTableForSqlBackup(txId, true);
+        } else {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+            TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+                TableDescription {
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                }
+                IndexDescription { Name: "index" KeyColumnNames: ["value"] }
+            )");
+            Env().TestWaitNotification(Runtime(), txId);
+            UpdateRow(Runtime(), "Table", 1, "valueA");
+            UpdateRow(Runtime(), "Table", 2, "valueB");
+        }
+        const ui64 snapshotCount = IsColumn ? 1 : 2;
         Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
         Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
         const auto expected = DescribeTableAsSql();
@@ -4426,7 +4445,8 @@ partitioning_settings {
             return record.TransactionSize() == 1
                 && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
         });
-        const auto exportId = StartTableSqlExport(txId, "sql");
+        const auto exportId = StartTableSqlExport(txId, "sql",
+            IsColumn ? "" : "include_index_data: true");
         Runtime().WaitFor("blocked consistent copy proposal", [&] { return !copyProposal.empty(); });
         const ui64 copyTxId = copyProposal.front()->Get()->Record.GetTxId();
 
@@ -4435,7 +4455,7 @@ partitioning_settings {
         });
         copyProposal.Stop().Unblock();
         Runtime().WaitFor("blocked consistent copy completion", [&] { return !copyCompletion.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), snapshotCount);
 
         if (IsColumn) {
             TestDropColumnTable(Runtime(), ++txId, "/MyRoot", "Table");
@@ -4444,7 +4464,7 @@ partitioning_settings {
         }
         Env().TestWaitNotification(Runtime(), txId);
         TestDescribeResult(DescribePath(Runtime(), "/MyRoot/Table"), {NLs::PathNotExist});
-        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), snapshotCount);
 
         copyCompletion.clear();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
@@ -4454,7 +4474,20 @@ partitioning_settings {
         WaitTableSqlExport(exportId);
         CheckSqlBackup("/sql", expected);
         UNIT_ASSERT(HasS3File("/sql/data_00.csv"));
-        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 1u);
+        if (!IsColumn) {
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/sql/data_00.csv"), "1,\"valueA\"\n2,\"valueB\"\n");
+            const TString indexPrefix = "/sql/index/indexImplTable";
+            const auto scheme = GetS3FileContent(indexPrefix + "/scheme.pb");
+            Ydb::Table::CreateTableRequest description;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(scheme, &description));
+            UNIT_ASSERT_VALUES_EQUAL(description.primary_key_size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(description.primary_key(0), "value");
+            UNIT_ASSERT_VALUES_EQUAL(description.primary_key(1), "key");
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(indexPrefix + "/scheme.pb.sha256"),
+                NBackup::ComputeChecksum(scheme) + " scheme.pb");
+            UNIT_ASSERT(HasS3File(indexPrefix + "/data_00.csv"));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), snapshotCount);
 
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
         Env().TestWaitNotification(Runtime(), exportId);

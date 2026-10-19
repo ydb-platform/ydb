@@ -1115,6 +1115,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
 
             NKikimrSchemeOp::TModifyScheme schema;
             schema.SetFailOnExist(tx.GetFailOnExist());
+            schema.SetCaptureBackupSchemeSnapshot(tx.GetCaptureBackupSchemeSnapshot());
             schema.SetWorkingDir(JoinPath({dstPath.PathString(), name}));
             schema.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable);
 

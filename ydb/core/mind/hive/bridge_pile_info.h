@@ -10,8 +10,6 @@ struct TBridgePileInfo {
     bool Drain = false;
     TVector<TActorId> DrainInitiators; // Currently always empty
 
-    std::unordered_set<TNodeId> Nodes;
-
     TBridgePileInfo(const TBridgeInfo::TPile& wardenPileInfo)
         : Id(wardenPileInfo.BridgePileId)
         , State(wardenPileInfo.State)

@@ -10396,7 +10396,14 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         });
     }
 
-    void TestBridgeDemotion(bool rebootHive) {
+    enum class EBridgeHiveRestart {
+        None,
+        BeforePromotion,
+        BeforeDisconnect,
+        DisconnectBeforeResync,
+    };
+
+    void TestBridgeDemotion(EBridgeHiveRestart hiveRestart) {
         static constexpr ui32 NUM_NODES = 4;
         static constexpr ui32 NUM_TABLETS = 4;
         TTestBasicRuntime runtime(NUM_NODES, false);
@@ -10467,19 +10474,47 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return sum;
         };
 
-        UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), NUM_TABLETS);
-
-        if (rebootHive) {
-            RebootTablet(runtime, hiveTablet, senderA);
-            bool settled = hiveSettled();
-            for (ui32 i = 0; i < 100 && !settled; ++i) {
+        auto waitUntil = [&](auto&& condition) -> bool {
+            bool done = condition();
+            for (ui32 i = 0; i < 100 && !done; ++i) {
                 runtime.SimulateSleep(TDuration::MilliSeconds(100));
-                settled = hiveSettled();
+                done = condition();
             }
-            UNIT_ASSERT_C(settled, "Locals did not reconnect to the restarted Hive");
+            return done;
+        };
+
+        auto restartHive = [&] {
+            RebootTablet(runtime, hiveTablet, senderA);
+            UNIT_ASSERT_C(waitUntil(hiveSettled), "Locals did not reconnect to the restarted Hive");
             bridge.Unsubscribe(hiveActor);
             hiveActor = GetHiveActor(runtime, hiveTablet);
             bridge.Subscribe(hiveActor);
+        };
+
+        auto allInPile1 = [&] {
+            auto distribution = getDistribution();
+            return tabletsInPile(distribution, 0) == 0 && tabletsInPile(distribution, 1) == NUM_TABLETS;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(getDistribution(), 0), NUM_TABLETS);
+
+        if (hiveRestart == EBridgeHiveRestart::DisconnectBeforeResync) {
+            bridge.Unsubscribe(hiveActor); // the old Hive must not see the disconnect
+            bridge.Disconnect(0);
+            restartHive();
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
+        if (hiveRestart == EBridgeHiveRestart::BeforeDisconnect) {
+            restartHive();
+            bridge.Disconnect(0);
+            UNIT_ASSERT_C(waitUntil(allInPile1), "tablets stayed in the disconnected pile after Hive restart");
+            return;
+        }
+
+        if (hiveRestart == EBridgeHiveRestart::BeforePromotion) {
+            restartHive();
         }
 
         TBlockEvents<TEvLocal::TEvBootTablet> blockBoot(runtime);
@@ -10505,11 +10540,19 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestBridgeDemotion) {
-        TestBridgeDemotion(false);
+        TestBridgeDemotion(EBridgeHiveRestart::None);
     }
 
     Y_UNIT_TEST(TestBridgeDemotionAfterHiveRestart) {
-        TestBridgeDemotion(true);
+        TestBridgeDemotion(EBridgeHiveRestart::BeforePromotion);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectAfterHiveRestart) {
+        TestBridgeDemotion(EBridgeHiveRestart::BeforeDisconnect);
+    }
+
+    Y_UNIT_TEST(TestBridgeDisconnectBeforeResync) {
+        TestBridgeDemotion(EBridgeHiveRestart::DisconnectBeforeResync);
     }
 
     // pile removed from the cluster is forgotten along with its drain, as its id may be given to another pile later

@@ -1722,7 +1722,7 @@ namespace Tests {
             sqlSettings.Port = static_cast<uint16_t>(Settings->AppConfig->GetSqlConfig().GetListeningPort());
             sqlSettings.Address = Settings->AppConfig->GetSqlConfig().GetListeningAddress();
             sqlSettings.TcpNotDelay = true;
-            IActor* sqlListener = NSql::CreateSqlListener(MakePollerActorId(), sqlSettings, Settings->AppConfig->GetSqlConfig().GetInternalErrorRetries());
+            IActor* sqlListener = NSql::CreateSqlListener(MakePollerActorId(), sqlSettings, Settings->AppConfig->GetSqlConfig().GetInternalErrorRetries(), Settings->AppConfig->GetSqlConfig().GetRecursionLimit());
             Runtime->Register(sqlListener, nodeIdx, userPoolId);
         }
 

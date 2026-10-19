@@ -3502,7 +3502,7 @@ void TSqlServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
     setup->LocalServices.emplace_back(
         TActorId(),
-        TActorSetupCmd(NSql::CreateSqlListener(MakePollerActorId(), settings, Config.GetSqlConfig().GetInternalErrorRetries()),
+        TActorSetupCmd(NSql::CreateSqlListener(MakePollerActorId(), settings, Config.GetSqlConfig().GetInternalErrorRetries(), Config.GetSqlConfig().GetRecursionLimit()),
             TMailboxType::HTSwap, appData->UserPoolId)
     );
 }

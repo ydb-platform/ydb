@@ -87,9 +87,10 @@ bool ApplyParams(TParseResult& parsed, const TVector<TBoundParam>& params, TStri
 
 class TSqlSession : public NActors::TActorBootstrapped<TSqlSession> {
 public:
-    TSqlSession(TString database, ui32 internalErrorRetries)
+    TSqlSession(TString database, ui32 internalErrorRetries, ui32 recursionLimit)
         : Database(std::move(database))
         , InternalErrorRetries(internalErrorRetries)
+        , RecursionLimit(recursionLimit == 0 ? 100 : recursionLimit)
     {
         Remember("DateStyle", "ISO, MDY");
         Remember("TimeZone", "UTC");
@@ -299,7 +300,7 @@ private:
             return;
         }
         if (parsed.Select && parsed.Cte) {
-            Register(CreateWithActor(SelfId(), Database, sql, *parsed.Select, parsed.SelectRight, parsed.Combine, *parsed.Cte, parsed.CteName, InternalErrorRetries, Tx == ETx::Open ? TxId : 0));
+            Register(CreateWithActor(SelfId(), Database, sql, *parsed.Select, parsed.SelectRight, parsed.Combine, *parsed.Cte, parsed.CteName, InternalErrorRetries, Tx == ETx::Open ? TxId : 0, parsed.Recursive, parsed.CteStep, parsed.CteCombine, RecursionLimit));
             return;
         }
         if (parsed.Select && (parsed.FromSubquery || !parsed.Scalars.empty())) {
@@ -464,6 +465,7 @@ private:
 
     const TString Database;
     const ui32 InternalErrorRetries;
+    const ui32 RecursionLimit;
     enum class ETx {
         Idle,
         Open,
@@ -491,8 +493,8 @@ private:
 
 } // namespace
 
-NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries) {
-    return new TSqlSession(std::move(database), internalErrorRetries);
+NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries, ui32 recursionLimit) {
+    return new TSqlSession(std::move(database), internalErrorRetries, recursionLimit);
 }
 
 } // namespace NKikimr::NSql

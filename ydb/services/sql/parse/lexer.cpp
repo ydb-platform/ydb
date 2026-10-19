@@ -129,6 +129,10 @@ TToken TLexer::Next() {
         }
         return {ETokenKind::Error, text, false};
     }
+    if (ch == '+') {
+        ++Position;
+        return {ETokenKind::Operator, "+", false};
+    }
     if (ch == '=' || ch == '<' || ch == '>' || ch == '!') {
         TString text(1, ch);
         ++Position;

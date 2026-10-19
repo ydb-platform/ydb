@@ -11,7 +11,7 @@ public:
     TSqlClient(Tests::TServer& server, TString database, ui32 internalErrorRetries = 3)
         : Runtime(*server.GetRuntime())
         , Edge(Runtime.AllocateEdgeActor())
-        , Session(Runtime.Register(CreateSqlSession(std::move(database), internalErrorRetries)))
+        , Session(Runtime.Register(CreateSqlSession(std::move(database), internalErrorRetries, RecursionLimit(server))))
     {
     }
 
@@ -38,6 +38,14 @@ public:
     }
 
 private:
+    static ui32 RecursionLimit(Tests::TServer& server) {
+        const auto& config = server.GetSettings().AppConfig;
+        if (!config || config->GetSqlConfig().GetRecursionLimit() == 0) {
+            return 100;
+        }
+        return config->GetSqlConfig().GetRecursionLimit();
+    }
+
     TTestActorRuntime& Runtime;
     NActors::TActorId Edge;
     NActors::TActorId Session;

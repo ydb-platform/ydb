@@ -35,6 +35,6 @@ struct TEvExecuteResult : public NActors::TEventLocal<TEvExecuteResult, EvExecut
     TString AccessPath;
 };
 
-NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries);
+NActors::IActor* CreateSqlSession(TString database, ui32 internalErrorRetries, ui32 recursionLimit);
 
 } // namespace NKikimr::NSql

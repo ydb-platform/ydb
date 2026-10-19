@@ -26,11 +26,13 @@ public:
     TSqlConnection(const NActors::TActorId& listenerActorId,
                    TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
                    NRawSocket::TNetworkConfig::TSocketAddressType address,
-                   ui32 internalErrorRetries)
+                   ui32 internalErrorRetries,
+                   ui32 recursionLimit)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(std::move(address))
         , InternalErrorRetries(internalErrorRetries)
+        , RecursionLimit(recursionLimit == 0 ? 100 : recursionLimit)
     {
     }
 
@@ -174,7 +176,7 @@ private:
         }
         const ui32 backendPid = static_cast<ui32>(SelfId().LocalId());
         const ui32 secret = SelfId().Hint() ^ 0x53514c;
-        Session = Register(CreateSqlSession(DatabasePath, InternalErrorRetries));
+        Session = Register(CreateSqlSession(DatabasePath, InternalErrorRetries, RecursionLimit));
         Write(MakeHandshake(backendPid, secret));
         Become(&TSqlConnection::StateQuery);
         RequestRead();
@@ -607,6 +609,7 @@ private:
     absl::flat_hash_map<TString, TPrepared> Statements;
     absl::flat_hash_map<TString, TPortal> Portals;
     ui32 InternalErrorRetries = 3;
+    ui32 RecursionLimit = 100;
     bool Extended = false;
     char TxState = 'I';
     bool CloseAfterWrite = false;
@@ -617,8 +620,9 @@ private:
 NActors::IActor* CreateSqlConnection(const NActors::TActorId& listenerActorId,
                                      TIntrusivePtr<NRawSocket::TSocketDescriptor> socket,
                                      NRawSocket::TNetworkConfig::TSocketAddressType address,
-                                     ui32 internalErrorRetries) {
-    return new TSqlConnection(listenerActorId, std::move(socket), std::move(address), internalErrorRetries);
+                                     ui32 internalErrorRetries,
+                                     ui32 recursionLimit) {
+    return new TSqlConnection(listenerActorId, std::move(socket), std::move(address), internalErrorRetries, recursionLimit);
 }
 
 } // namespace NKikimr::NSql

@@ -499,11 +499,14 @@ public:
         };
         TString cteName;
         std::optional<TSelectStmt> cte;
+        bool recursive = false;
+        std::optional<TSelectStmt> cteStep;
+        ECombine cteCombine = ECombine::None;
         if (!nested && IsKeyword("with")) {
             Advance();
             if (IsKeyword("recursive")) {
-                restore();
-                return Unsupported(Current.Text);
+                recursive = true;
+                Advance();
             }
             if (Current.Kind != ETokenKind::Identifier) {
                 restore();
@@ -530,7 +533,16 @@ public:
                 restore();
                 return Unsupported(Current.Text);
             }
+            const bool unionBody = body.Combine == ECombine::Union || body.Combine == ECombine::UnionAll;
+            if (recursive && (!unionBody || !body.SelectRight)) {
+                restore();
+                return Unsupported("recursive");
+            }
             Advance();
+            if (recursive) {
+                cteStep = std::move(body.SelectRight);
+                cteCombine = body.Combine;
+            }
             cte = std::move(*body.Select);
         }
         if (IsKeyword("with") || IsKeyword("values") || IsKeyword("table") || Current.Kind == ETokenKind::LeftParen) {
@@ -635,7 +647,7 @@ public:
             combine = ECombine::Except;
         }
         if (combine != ECombine::None) {
-            TParseResult right = SelectStmt();
+            TParseResult right = SelectStmt(nested);
             if (!right.SqlState.empty()) {
                 return right;
             }
@@ -650,6 +662,9 @@ public:
             result.FromSubquery = std::move(PendingFrom);
             result.CteName = cteName;
             result.Cte = std::move(cte);
+            result.Recursive = recursive;
+            result.CteStep = std::move(cteStep);
+            result.CteCombine = cteCombine;
             PendingScalars = std::move(savedScalars);
             PendingFrom = std::move(savedFrom);
             return result;
@@ -679,6 +694,9 @@ public:
         result.FromSubquery = std::move(PendingFrom);
         result.CteName = cteName;
         result.Cte = std::move(cte);
+        result.Recursive = recursive;
+        result.CteStep = std::move(cteStep);
+        result.CteCombine = cteCombine;
         PendingScalars = std::move(savedScalars);
         PendingFrom = std::move(savedFrom);
         return result;
@@ -1376,6 +1394,15 @@ private:
             name.Qualifier = name.Name;
             name.Name = second.Name;
             name.Quoted = second.Quoted;
+            Advance();
+        }
+        if (Current.Kind == ETokenKind::Operator && Current.Text == "+") {
+            Advance();
+            i64 addend = 0;
+            if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, addend) || addend <= 0 || select.Addend != 0) {
+                return Unsupported(Current.Text);
+            }
+            select.Addend = addend;
             Advance();
         }
         select.ScalarOf.push_back(-1);

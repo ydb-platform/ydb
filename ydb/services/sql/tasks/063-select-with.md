@@ -1,7 +1,7 @@
 # WITH
 
-status: pending
-commit:
+status: done
+commit: 52e2ad5d47cd2e4b67734af369c96ff8c19c2ab2
 id: select-with
 depends: select-subquery
 

@@ -3447,6 +3447,8 @@ message TSqlConfig {
     optional int32 ListeningPort = 2 [default = 5432];
     optional string ListeningAddress = 3 [default = "::"];
     optional uint32 InternalErrorRetries = 4 [default = 3];
+    // Steps of WITH RECURSIVE before the query is failed instead of running on.
+    optional uint32 RecursionLimit = 5 [default = 100];
 }
 
 message TAwsCompatibilityConfig {

@@ -95,6 +95,8 @@ struct TSelectStmt {
     TVector<int> ScalarOf;
     bool FromQuery = false;
     std::optional<ui64> Limit;
+    // Added to the single selected column of a recursive step. Zero means the column is copied.
+    i64 Addend = 0;
 };
 
 // PostgreSQL type name. Quoted names are explicit YDB types.
@@ -287,6 +289,9 @@ struct TParseResult {
     std::optional<TSelectStmt> FromSubquery;
     TString CteName;
     std::optional<TSelectStmt> Cte;
+    bool Recursive = false;
+    std::optional<TSelectStmt> CteStep;
+    ECombine CteCombine = ECombine::None;
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;

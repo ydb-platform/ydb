@@ -17,6 +17,7 @@ SRCS(
     tx_ut.cpp
     union_ut.cpp
     update_ut.cpp
+    with_ut.cpp
     extended_ut.cpp
     index_ut.cpp
     insert_ut.cpp

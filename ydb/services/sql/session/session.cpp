@@ -298,6 +298,10 @@ private:
             Register(CreateAlterSequenceActor(SelfId(), Database, *parsed.AlterSequence));
             return;
         }
+        if (parsed.Select && parsed.Cte) {
+            Register(CreateWithActor(SelfId(), Database, sql, *parsed.Select, parsed.SelectRight, parsed.Combine, *parsed.Cte, parsed.CteName, InternalErrorRetries, Tx == ETx::Open ? TxId : 0));
+            return;
+        }
         if (parsed.Select && (parsed.FromSubquery || !parsed.Scalars.empty())) {
             Register(CreateSubqueryActor(SelfId(), Database, sql, *parsed.Select, parsed.Scalars, parsed.FromSubquery, InternalErrorRetries, Tx == ETx::Open ? TxId : 0));
             return;

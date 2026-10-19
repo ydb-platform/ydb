@@ -8,6 +8,7 @@ SRCS(
     join.cpp
     setop.cpp
     subquery.cpp
+    with.cpp
     select.cpp
     update.cpp
 )

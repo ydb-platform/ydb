@@ -1,7 +1,7 @@
 # Подзапрос
 
-status: pending
-commit:
+status: done
+commit: 84569be859be9365b5617be937da0cd81d2bdb54
 id: select-subquery
 depends: select-where-limit
 

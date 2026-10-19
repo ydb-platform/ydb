@@ -493,7 +493,48 @@ public:
         std::optional<TSelectStmt> savedFrom = std::move(PendingFrom);
         PendingScalars.clear();
         PendingFrom.reset();
+        const auto restore = [&]() {
+            PendingScalars = std::move(savedScalars);
+            PendingFrom = std::move(savedFrom);
+        };
+        TString cteName;
+        std::optional<TSelectStmt> cte;
+        if (!nested && IsKeyword("with")) {
+            Advance();
+            if (IsKeyword("recursive")) {
+                restore();
+                return Unsupported(Current.Text);
+            }
+            if (Current.Kind != ETokenKind::Identifier) {
+                restore();
+                return Unsupported(Current.Text);
+            }
+            cteName = Identifier().Name;
+            Advance();
+            if (!IsKeyword("as")) {
+                restore();
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (Current.Kind != ETokenKind::LeftParen) {
+                restore();
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            TParseResult body = SelectStmt(true);
+            if (!body.SqlState.empty()) {
+                restore();
+                return body;
+            }
+            if (!body.Select || Current.Kind != ETokenKind::RightParen) {
+                restore();
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            cte = std::move(*body.Select);
+        }
         if (IsKeyword("with") || IsKeyword("values") || IsKeyword("table") || Current.Kind == ETokenKind::LeftParen) {
+            restore();
             return Unsupported(Current.Text);
         }
         if (Current.Kind == ETokenKind::Error || !IsKeyword("select")) {
@@ -607,6 +648,8 @@ public:
             result.SelectRight = std::move(right.Select);
             result.Scalars = std::move(PendingScalars);
             result.FromSubquery = std::move(PendingFrom);
+            result.CteName = cteName;
+            result.Cte = std::move(cte);
             PendingScalars = std::move(savedScalars);
             PendingFrom = std::move(savedFrom);
             return result;
@@ -634,6 +677,8 @@ public:
         result.Select = std::move(select);
         result.Scalars = std::move(PendingScalars);
         result.FromSubquery = std::move(PendingFrom);
+        result.CteName = cteName;
+        result.Cte = std::move(cte);
         PendingScalars = std::move(savedScalars);
         PendingFrom = std::move(savedFrom);
         return result;

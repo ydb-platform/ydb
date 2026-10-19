@@ -285,6 +285,8 @@ struct TParseResult {
     std::optional<TSelectStmt> SelectRight;
     TVector<TSelectStmt> Scalars;
     std::optional<TSelectStmt> FromSubquery;
+    TString CteName;
+    std::optional<TSelectStmt> Cte;
     std::optional<TCreateTableStmt> CreateTable;
     std::optional<TAlterTableStmt> AlterTable;
     std::optional<TCreateSequenceStmt> CreateSequence;

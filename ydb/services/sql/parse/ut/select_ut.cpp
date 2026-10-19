@@ -211,6 +211,15 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT_VALUES_EQUAL(derived.FromSubquery->From.Name, "lefts");
     }
 
+    Y_UNIT_TEST(WithNamesTheQuery) {
+        const TParseResult parsed = Parse("WITH s AS (SELECT note FROM items WHERE id = 1) SELECT note FROM s");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT(parsed.Cte);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.CteName, "s");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Cte->From.Name, "items");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->From.Name, "s");
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

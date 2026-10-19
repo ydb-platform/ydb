@@ -117,9 +117,8 @@ public:
 
         TVector<TCoNameValueTuple> sourceMetadata;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
-            for (auto sysColumn :
-                GetAllowedPqMetaSysColumns(State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery))
-            {
+            for (auto sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery)) {
                 sourceMetadata.push_back(
                     Build<TCoNameValueTuple>(ctx, read.Pos()).Name().Build("system") .Value<TCoAtom>().Build(sysColumn) .Done());
             }

@@ -298,8 +298,9 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind partition_id metadata to column"));
                     return {};
                 }
-                const auto clusterDescriptor = GetPqMetaFieldDescriptorByKey("cluster", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
-                    State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
+                const auto clusterDescriptor =
+                    GetPqMetaFieldDescriptorByKey("cluster", State_->ShouldAddTransparentPrefixToTransparentSystemColumns(),
+                        State_->EnableUserAttributesInTopicQuery, State_->ForbidYqlSysColumnsAndSystemMetadata);
                 if (!clusterDescriptor) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Cannot bind cluster metadata to column"));
                     return {};
@@ -978,9 +979,8 @@ public:
 
         TExprNode::TListType metadataFieldsList;
         if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
-            for (const auto& sysColumn :
-                GetAllowedPqMetaSysColumns(State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery))
-            {
+            for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->ShouldAddTransparentPrefixToTransparentSystemColumns(), State_->EnableUserAttributesInTopicQuery)) {
                 metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
             }
         }

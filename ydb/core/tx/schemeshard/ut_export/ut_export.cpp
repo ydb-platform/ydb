@@ -1635,8 +1635,10 @@ namespace {
             options.SetReturnIndexTableBoundaries(true);
             const auto description = DescribePath(Runtime(), path, options).GetPathDescription();
             NSysView::TCreateTableFormatter formatter;
+            // Column-table ALTER OBJECT statements use the second path argument;
+            // keep them relative to the database just like CREATE TABLE.
             auto result = description.HasColumnTableDescription()
-                ? formatter.Format(description.GetSelf().GetName(), path, description.GetColumnTableDescription(), false,
+                ? formatter.Format(description.GetSelf().GetName(), description.GetSelf().GetName(), description.GetColumnTableDescription(), false,
                     Runtime().GetAppData().FeatureFlags.GetEnableLocalIndexAsSchemeObject())
                 : formatter.Format(description.GetSelf().GetName(), path, description.GetTable(), false, {}, {});
             UNIT_ASSERT_C(result.IsSuccess(), result.GetError());

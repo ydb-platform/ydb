@@ -4,6 +4,7 @@ RECURSE(
     impl
     regexp
     tools
+    yt
 )
 
 RECURSE_FOR_TESTS(

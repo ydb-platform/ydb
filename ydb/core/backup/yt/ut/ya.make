@@ -1,0 +1,9 @@
+UNITTEST()
+SRCS(format_ut.cpp)
+PEERDIR(
+    ydb/core/backup/yt
+    yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
+)
+YQL_LAST_ABI_VERSION()
+END()

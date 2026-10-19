@@ -1415,23 +1415,32 @@ public:
 
             // TxManager must know all shards that will participate in commit
             // before Prepare/Commit is sent to them.
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
+            // The partitioning metadata is consumed only by the split/merge
+            // handling (FindCoveringShards/MoveShardTo), so it is filled only
+            // under the WriteSeqNum protocol; everywhere else shards are
+            // registered without metadata. A shard already registered with
+            // borders is left untouched: the shard never changes borders between
+            // resolves (a split/merge removes the tablet id entirely), so
+            // re-adding it would only rebuild and re-merge the same metadata. A
+            // shard registered without borders (e.g. a fresh MoveShardTo transfer
+            // target) still needs this UpdateShards pass — that is how it learns
+            // its exact borders.
+            if (AttachWriteSeqNum && (!TxManager->HasShard(shardInfo.ShardId)
+                    || TxManager->GetShardMeta(shardInfo.ShardId).Borders.From.empty())) {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
+            } else {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            }
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
     }
 
     // Borders/version of the shard in the partitioning this actor currently works
-    // with. Empty for column tables (no range info per partition).
-    // The only consumer of the registered partitioning metadata is the split/merge
-    // handling (FindCoveringShards/MoveShardTo), so it is collected only when this
-    // actor participates in the WriteSeqNum protocol; everywhere else shards are
-    // registered without metadata.
+    // with. Called only under the WriteSeqNum protocol (UpdateShards gates on
+    // AttachWriteSeqNum): row tables only, where the resolved partitioning always
+    // has representable per-shard key ranges.
     TShardMeta MakeShardMeta(const ui64 shardId) const {
-        if (!AttachWriteSeqNum) {
-            TShardMeta meta;
-            meta.TableId = TableId;
-            return meta;
-        }
+        AFL_ENSURE(AttachWriteSeqNum);
         return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 

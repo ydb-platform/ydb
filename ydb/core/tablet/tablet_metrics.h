@@ -1,6 +1,7 @@
 #pragma once
 #include <unordered_map>
 #include <ydb/core/base/defs.h>
+#include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/metrics.h>
 
@@ -44,6 +45,9 @@ class TResourceMetricsValues {
 public:
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> CPU;
     TGaugeValue<ui64> Memory;
+    // Keep the report together: legacy writers may update Memory independently.
+    // An engaged optional includes reports whose values are all zero.
+    std::optional<NMemory::TConsumerReport> TabletMemoryReport;
     TDecayingAverageValue<ui64, DurationPer15Seconds, DurationPerSecond> Network;
     TGaugeValue<ui64> StorageSystem;
     TGaugeValue<ui64> StorageUser;
@@ -52,12 +56,16 @@ public:
     TTabletIopsValue ReadIops;
     TTabletIopsValue WriteIops;
 
+    void SetMemoryReport(ui64 used, ui64 demand, ui64 reclaimable) {
+        TabletMemoryReport = NMemory::TConsumerReport{.Used = used, .Demand = demand, .Reclaimable = reclaimable};
+    }
+
     void Fill(NKikimrTabletBase::TMetrics& metrics) const;
 };
 
 class TResourceMetricsSendState {
 public:
-    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher);
+    TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {}, const TActorId& systemTablet = {});
     bool FillChanged(TResourceMetricsValues& src, NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false);
     bool TryUpdate(TResourceMetricsValues& src, const TActorContext& ctx);
 
@@ -72,8 +80,14 @@ protected:
     const ui64 TabletId;
     const ui32 FollowerId;
     const TActorId Launcher;
+    const TActorId Executor;
+    const TActorId SystemTablet;
+    std::optional<NMemory::TConsumerReport> LastTabletMemoryReport;
     std::optional<ui32> LevelCPU;
     std::optional<ui32> LevelMemory;
+    std::optional<ui32> LevelTabletMemoryUsed;
+    std::optional<ui32> LevelMemoryDemand;
+    std::optional<ui32> LevelMemoryReclaimable;
     std::optional<ui32> LevelNetwork;
     std::optional<ui32> LevelStorage;
     std::optional<ui32> LevelIops;
@@ -82,12 +96,13 @@ protected:
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
     TInstant LastUpdate;
+    TInstant LastHiveUpdate;
 };
 
 class TResourceMetrics : public TResourceMetricsValues, public TResourceMetricsSendState {
 public:
-    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher)
-        : TResourceMetricsSendState(tabletId, followerId, launcher) {}
+    TResourceMetrics(ui64 tabletId, ui32 followerId, const TActorId& launcher, const TActorId& executor = {}, const TActorId& systemTablet = {})
+        : TResourceMetricsSendState(tabletId, followerId, launcher, executor, systemTablet) {}
 
     bool FillChanged(NKikimrTabletBase::TMetrics& metrics, TInstant now = TInstant::Now(), bool forceAll = false) {
         return TResourceMetricsSendState::FillChanged(*this, metrics, now, forceAll);

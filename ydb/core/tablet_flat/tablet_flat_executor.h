@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/tablet_memory_admission.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/lwtrace/shuttle.h>
@@ -519,6 +520,23 @@ namespace NFlatExecutorSetup {
         // memory usage excluding transactions and executor cache.
         virtual ui64 GetMemoryUsage() const { return 50 << 10; }
 
+        // the requests the tablet holds back or runs under its memory admission; zeros when it has none
+        virtual NMemory::TMemoryAdmissionStats GetMemoryAdmissionStats() const { return {}; }
+
+        // the tablet's own bytes for the memory controller; memtable and pinned pages report under other kinds
+        virtual NMemory::TConsumerReport GetMemoryReport() const {
+            const ui64 used = GetMemoryUsage() + GetMemoryAdmissionStats().HeldBytes();
+            return {.Used = used, .Demand = used, .Reclaimable = 0};
+        }
+
+        // called in the tablet's context when the node zone changed
+        virtual void OnMemoryZone(NMemory::EMemoryZone) { /* default */ }
+
+        // keep the reclaimable part at or below shareBytes: a tablet that reports Reclaimable > 0 promises to honor it
+        virtual void OnMemoryLimit(ui64 /* shareBytes */) { /* default */ }
+        // A withdrawn elastic allocation is zeroed first, then its optional share is cleared.
+        virtual void OnMemoryLimitCleared() { /* default */ }
+
         virtual void OnLeaderUserAuxUpdate(TString) { /* default */ }
 
         virtual bool ReadOnlyLeaseEnabled();
@@ -577,6 +595,12 @@ namespace NFlatExecutorSetup {
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+
+        // the node zone the tablet's Local last delivered; Green with no Local or with the host off
+        virtual NMemory::EMemoryZone GetMemoryZone() const { return NMemory::EMemoryZone::Green; }
+
+        // how much of its reclaimable part the tablet may keep, when the node told it one
+        virtual std::optional<ui64> GetMemoryShare() const { return std::nullopt; }
 
         /**
          * Enqueue a transaction for execution

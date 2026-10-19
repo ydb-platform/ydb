@@ -347,6 +347,11 @@ ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections) {
 };
 
 bool IsBuiltEffect(const TExprBase& effect) {
+    // Unsafe truncate is executed directly by its transaction, without a DQ stage.
+    if (effect.Maybe<TKqlUnsafeTruncate>()) {
+        return true;
+    }
+
     // Stage with effect output
     if (effect.Maybe<TDqOutput>()) {
         return true;

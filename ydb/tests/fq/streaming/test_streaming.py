@@ -2439,6 +2439,10 @@ FROM `{table_name}`"""
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
+                  AND CAST(str1 AS Utf8) NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT ILIKE "%FOO%BAR%" -- YQ-4054
+                  AND str1 NOT ILIKE "%Foo%Bar!%" ESCAPE "!" -- YQ-4054
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;
@@ -2493,6 +2497,9 @@ FROM `{table_name}`"""
                     assert "`str1`" in filter
                     assert "`str2`" in filter
                     assert " REGEXP " in filter
+                    assert " LIKE " in filter
+                    assert " ILIKE " in filter
+                    assert " ESCAPE " in filter
                     sources += 1
         assert sources > 0
 

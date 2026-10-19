@@ -1783,10 +1783,12 @@ namespace {
             Aws::S3::S3Errors code = Aws::S3::S3Errors::ACCESS_DENIED,
             bool retryable = false)
         {
+            Aws::Client::AWSError<Aws::S3::S3Errors> error(code, retryable);
+            error.SetResponseCode(retryable ? Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE
+                : Aws::Http::HttpResponseCode::FORBIDDEN);
             auto response = MakeHolder<NWrappers::NExternalStorage::TEvPutObjectResponse>(
                 TString(request->Get()->Request.GetKey().data(), request->Get()->Request.GetKey().size()),
-                Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(
-                    Aws::Client::AWSError<Aws::S3::S3Errors>(code, retryable)));
+                Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>(std::move(error)));
             Runtime().Send(new IEventHandle(request->Sender, request->Recipient,
                 response.Release(), request->Flags, request->Cookie), 0, true);
         }
@@ -1795,22 +1797,25 @@ namespace {
             const NWrappers::NExternalStorage::TEvDeleteObjectRequest::TPtr& request,
             bool retryable = false)
         {
+            Aws::Client::AWSError<Aws::S3::S3Errors> error(retryable
+                ? Aws::S3::S3Errors::SLOW_DOWN : Aws::S3::S3Errors::ACCESS_DENIED, retryable);
+            error.SetResponseCode(retryable ? Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE
+                : Aws::Http::HttpResponseCode::FORBIDDEN);
             auto response = MakeHolder<NWrappers::NExternalStorage::TEvDeleteObjectResponse>(
                 TString(request->Get()->Request.GetKey().c_str()),
-                Aws::Utils::Outcome<Aws::S3::Model::DeleteObjectResult, Aws::S3::S3Error>(
-                    Aws::Client::AWSError<Aws::S3::S3Errors>(retryable
-                        ? Aws::S3::S3Errors::SLOW_DOWN : Aws::S3::S3Errors::ACCESS_DENIED, retryable)));
+                Aws::Utils::Outcome<Aws::S3::Model::DeleteObjectResult, Aws::S3::S3Error>(std::move(error)));
             Runtime().Send(new IEventHandle(request->Sender, request->Recipient,
                 response.Release(), request->Flags, request->Cookie), 0, true);
         }
 
-        void SeedSqlCleanupDestination(const TString& prefix) {
+        void SeedSqlCleanupDestination(const TString& prefix, bool encrypted = false) {
             auto& objects = S3Mock().GetData();
             objects[prefix + "/create_table.sql"] = "old SQL";
             objects[prefix + "/create_table.sql.sha256"] = NBackup::ComputeChecksum("old SQL") + " create_table.sql";
             objects[prefix + "/create_table.sql.enc"] = "old encrypted SQL";
-            objects[prefix + "/scheme.pb"] = "old schema";
-            objects[prefix + "/data_00.csv"] = "old data";
+            const TString suffix = encrypted ? ".enc" : "";
+            objects[prefix + "/scheme.pb" + suffix] = "old schema";
+            objects[prefix + "/data_00.csv" + suffix] = "old data";
         }
 
         void CheckSqlArtifactsAbsent(const TString& prefix) {
@@ -2152,7 +2157,7 @@ namespace {
                 break;
             }
 
-            const TString databaseName = TStringBuf(database).RNextTok('/');
+            const TString databaseName(TStringBuf(database).RNextTok('/'));
             // Repeated database names must survive stripping the database prefix.
             // All three items deliberately have the same table name.
             const TVector<TString> directories = {"", "Dir/Nested", databaseName};
@@ -2228,7 +2233,7 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(schemeShardId), directories.size());
 
                 for (const auto& item : settings.items()) {
-                    const TString parent = TStringBuf(item.source_path()).RBefore('/');
+                    const TString parent(TStringBuf(item.source_path()).RBefore('/'));
                     if (isColumn) {
                         TestDropColumnTable(Runtime(), schemeShardId, ++txId, parent, "Table");
                     } else {
@@ -3903,7 +3908,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         const auto expected = DescribeTableAsSql();
         const TString prefix = Encrypted ? "/encrypted/sql" : "/sql";
-        SeedSqlCleanupDestination(prefix);
+        SeedSqlCleanupDestination(prefix, Encrypted);
         bool failChecksum = true;
         auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
             if (failChecksum && ev->Get()->Request.GetKey() == prefix.substr(1) + "/create_table.sql.sha256") {
@@ -3942,16 +3947,16 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckSqlBackup(prefix, expected, Encrypted);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtChecksum, Cancel) {
-        CheckSqlCleanupInterrupted("create_table.sql.sha256", Cancel);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtChecksum, CancelExport) {
+        CheckSqlCleanupInterrupted("create_table.sql.sha256", CancelExport);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtPlainSql, Cancel) {
-        CheckSqlCleanupInterrupted("create_table.sql", Cancel);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtPlainSql, CancelExport) {
+        CheckSqlCleanupInterrupted("create_table.sql", CancelExport);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtEncryptedSql, Cancel) {
-        CheckSqlCleanupInterrupted("create_table.sql.enc", Cancel);
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupInterruptedAtEncryptedSql, CancelExport) {
+        CheckSqlCleanupInterrupted("create_table.sql.enc", CancelExport);
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlCleanupChecksumDeletionFailure, ExhaustRetries) {

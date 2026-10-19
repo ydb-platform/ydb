@@ -4,12 +4,6 @@
 
 namespace NKikimr::NColumnShard::NFindEmptyHistoryIntervals {
 
-inline bool MayHaveBlobsInBlobStorage(const NOlap::TPortionInfo& portion) {
-    const auto& bsIndexBlobBytes = portion.GetMeta().GetBsIndexBlobBytes();
-    // Older portions may not have the summary: absence cannot prove there are no BS indexes.
-    return portion.IsDefaultTier(NOlap::NBlobOperations::TGlobal::DefaultStorageId) || !bsIndexBlobBytes || *bsIndexBlobBytes != 0;
-}
-
 template <class TVisitor>
 void VisitBlobStorageBlobs(const NOlap::TPortionDataAccessor& accessor, const NOlap::TIndexInfo& index, TVisitor&& visitor) {
     const auto& portion = accessor.GetPortionInfo();

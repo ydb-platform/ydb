@@ -350,8 +350,8 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
         return result;
     }
     const auto add = [&](const auto& portion) {
-        if (NFindEmptyHistoryIntervals::MayHaveBlobsInBlobStorage(*portion)) {
-            const auto schema = portion->GetSchema(index->GetVersionedIndex());
+        const auto schema = portion->GetSchema(index->GetVersionedIndex());
+        if (portion->HasBlobsInBlobStorage(schema->GetIndexInfo())) {
             result.Portions.push_back({ portion->GetPathId(), portion->GetPortionId(), schema, portion->PredictAccessorsMemory(schema) });
         }
     };

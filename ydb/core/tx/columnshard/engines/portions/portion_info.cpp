@@ -20,6 +20,22 @@ ui64 TPortionInfo::GetColumnBlobBytes() const {
     return GetMeta().GetColumnBlobBytes();
 }
 
+bool TPortionInfo::HasBlobsInBlobStorage(const TIndexInfo& indexInfo) const {
+    const auto& defaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
+    if (IsDefaultTier(defaultStorageId)) {
+        return true;
+    }
+    if (const auto& bsIndexBlobBytes = Meta.GetBsIndexBlobBytes()) {
+        return *bsIndexBlobBytes != 0;
+    }
+    for (const auto entityId : indexInfo.GetEntityIds()) {
+        if (GetEntityStorageId(entityId, indexInfo) == defaultStorageId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const {
     const TString& defaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
 

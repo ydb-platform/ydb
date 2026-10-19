@@ -26,6 +26,7 @@ SRCS(
     group_ut.cpp
     having_ut.cpp
     join_ut.cpp
+    offset_ut.cpp
     order_ut.cpp
     listener_ut.cpp
     schemata_ut.cpp

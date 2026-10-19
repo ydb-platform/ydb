@@ -108,6 +108,7 @@ struct TSelectStmt {
     TVector<int> ScalarOf;
     bool FromQuery = false;
     std::optional<ui64> Limit;
+    std::optional<ui64> Offset;
     // Added to the single selected column of a recursive step. Zero means the column is copied.
     i64 Addend = 0;
 };

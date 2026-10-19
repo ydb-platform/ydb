@@ -193,6 +193,13 @@ private:
         if ((Statement.Distinct || !Statement.DistinctOn.empty()) && !Dedup()) {
             return;
         }
+        if (Statement.Offset && *Statement.Offset > 0) {
+            if (*Statement.Offset >= Rows.size()) {
+                Rows.clear();
+            } else {
+                Rows.erase(Rows.begin(), Rows.begin() + static_cast<size_t>(*Statement.Offset));
+            }
+        }
         if (Statement.Limit && Rows.size() > *Statement.Limit) {
             Rows.resize(*Statement.Limit);
         }

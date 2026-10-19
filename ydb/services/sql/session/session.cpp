@@ -299,6 +299,13 @@ private:
             Register(CreateAlterSequenceActor(SelfId(), Database, *parsed.AlterSequence));
             return;
         }
+        if (parsed.Select && parsed.Select->Offset) {
+            const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
+            if (parsed.Cte || parsed.FromSubquery || !parsed.Scalars.empty() || parsed.Combine != ECombine::None || parsed.Select->Join || catalog) {
+                Fail("0A000", "not supported");
+                return;
+            }
+        }
         if (parsed.Select && !parsed.Select->Windows.empty()) {
             const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
             if (parsed.Cte || parsed.FromSubquery || !parsed.Scalars.empty() || parsed.Combine != ECombine::None || parsed.Select->Join || catalog) {

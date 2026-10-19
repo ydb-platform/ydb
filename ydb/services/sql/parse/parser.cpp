@@ -677,8 +677,9 @@ public:
             if (auto error = LimitClause(select)) {
                 return *error;
             }
-        } else if (IsKeyword("offset") || IsKeyword("fetch")) {
-            return Unsupported(Current.Text);
+        }
+        if (auto error = OffsetFetch(select)) {
+            return *error;
         }
         if (!nested) {
             if (auto error = Finish()) {
@@ -1740,8 +1741,44 @@ private:
         }
         select.Limit = limit;
         Advance();
-        if (IsKeyword("offset") || IsKeyword("fetch")) {
-            return Unsupported(Current.Text);
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> OffsetFetch(TSelectStmt& select) {
+        if (IsKeyword("offset")) {
+            Advance();
+            ui64 offset = 0;
+            if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, offset)) {
+                return Unsupported(Current.Text);
+            }
+            select.Offset = offset;
+            Advance();
+            if (IsKeyword("row") || IsKeyword("rows")) {
+                Advance();
+            }
+        }
+        if (IsKeyword("fetch")) {
+            Advance();
+            if (!IsKeyword("first") && !IsKeyword("next")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            ui64 count = 0;
+            if (Current.Kind != ETokenKind::Number || !TryFromString(Current.Text, count)) {
+                return Unsupported(Current.Text);
+            }
+            if (select.Limit) {
+                return Unsupported(Current.Text);
+            }
+            select.Limit = count;
+            Advance();
+            if (IsKeyword("row") || IsKeyword("rows")) {
+                Advance();
+            }
+            if (!IsKeyword("only")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
         }
         return std::nullopt;
     }

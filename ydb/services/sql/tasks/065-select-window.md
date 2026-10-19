@@ -1,7 +1,7 @@
 # Оконные функции OVER
 
-status: pending
-commit:
+status: done
+commit: aee6403aed97342533bdbfe1ec29593a593b12f3
 id: select-window
 depends: select-order
 

@@ -731,6 +731,45 @@ public:
         return Unsupported(Current.Text);
     }
 
+    // WITH (store = column) selects a column table. Any other option is rejected
+    // before a statement is produced, so the session does not propose it.
+    std::optional<TParseResult> WithOptions(TCreateTableStmt& create) {
+        if (!IsKeyword("with")) {
+            return std::nullopt;
+        }
+        Advance();
+        if (Current.Kind != ETokenKind::LeftParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        bool column = false;
+        for (;;) {
+            if (!IsKeyword("store")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (Current.Kind != ETokenKind::Operator || Current.Text != "=") {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (!IsKeyword("column")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            column = true;
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
+        }
+        if (Current.Kind != ETokenKind::RightParen) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        create.ColumnStore = column;
+        return std::nullopt;
+    }
+
     // CreateStmt: CREATE TABLE [IF NOT EXISTS] qualified_name '(' TableElementList ')'
     TParseResult CreateStmt() {
         Advance();
@@ -760,9 +799,12 @@ public:
         if (auto error = TableElementList(create)) {
             return *error;
         }
-        if (IsKeyword("inherits") || IsKeyword("partition") || IsKeyword("using") || IsKeyword("with")
+        if (IsKeyword("inherits") || IsKeyword("partition") || IsKeyword("using")
             || IsKeyword("on") || IsKeyword("tablespace")) {
             return Unsupported(Current.Text);
+        }
+        if (auto error = WithOptions(create)) {
+            return *error;
         }
         if (create.PrimaryKey.empty()) {
             return Unsupported("primary key");

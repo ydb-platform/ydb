@@ -24,7 +24,10 @@ public:
     }
 
     void Bootstrap() {
-        if (Statement.Kind == EAlterTableKind::SetDefault) {
+        if (Statement.Kind == EAlterTableKind::SetDefault
+            || Statement.Kind == EAlterTableKind::AddColumn
+            || Statement.Kind == EAlterTableKind::DropColumn)
+        {
             auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             TString path = Database;
@@ -189,7 +192,15 @@ private:
             Reply(false, "42P01", Statement.Name.Name);
             return;
         }
-        for (const auto& [id, column] : request->ResultSet[0].Columns) {
+        const auto& entry = request->ResultSet[0];
+        if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable
+            && (Statement.Kind == EAlterTableKind::AddColumn || Statement.Kind == EAlterTableKind::DropColumn))
+        {
+            Register(CreateAlterColumnTableActor(ReplyTo, Database, Statement));
+            PassAway();
+            return;
+        }
+        for (const auto& [id, column] : entry.Columns) {
             Y_UNUSED(id);
             if (column.Name == Statement.Column.Name.Name) {
                 DefaultType = NScheme::TypeName(column.PType, column.PTypeMod);

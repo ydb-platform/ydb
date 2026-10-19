@@ -8,6 +8,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
+    column_ut.cpp
     columns_ut.cpp
     constraints_ut.cpp
     create_table_ut.cpp

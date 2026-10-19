@@ -1,7 +1,7 @@
 # FOR UPDATE на row-таблице
 
-status: pending
-commit:
+status: done
+commit: 00c4cd23959cbeeda8d293471bb6fa126b539ef3
 id: select-for-update
 depends: tx-one-shard
 

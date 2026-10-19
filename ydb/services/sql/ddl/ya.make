@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     alter_sequence.cpp
     alter_table.cpp
+    create_column_table.cpp
     create_index.cpp
     create_schema.cpp
     create_sequence.cpp

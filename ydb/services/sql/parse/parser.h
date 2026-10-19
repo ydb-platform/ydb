@@ -140,6 +140,7 @@ struct TColumnDef {
 
 struct TCreateTableStmt {
     bool IfNotExists = false;
+    bool ColumnStore = false;
     std::optional<TIdentifier> Schema;
     TIdentifier Name;
     TVector<TColumnDef> Columns;

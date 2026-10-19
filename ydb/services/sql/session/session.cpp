@@ -276,7 +276,11 @@ private:
             return;
         }
         if (parsed.CreateTable) {
-            Register(CreateTableActor(SelfId(), Database, *parsed.CreateTable));
+            if (parsed.CreateTable->ColumnStore) {
+                Register(CreateColumnTableActor(SelfId(), Database, *parsed.CreateTable));
+            } else {
+                Register(CreateTableActor(SelfId(), Database, *parsed.CreateTable));
+            }
             return;
         }
         if (parsed.AlterTable) {

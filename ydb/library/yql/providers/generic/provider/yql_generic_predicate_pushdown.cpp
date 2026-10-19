@@ -633,7 +633,7 @@ bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children,
            SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
 }
 
-TExpression*  MaybeWrapUtf8(TExpression* proto, bool isUtf8) {
+TExpression* MaybeWrapUtf8(TExpression* proto, bool isUtf8) {
     auto& cast = *proto->mutable_cast();
     cast.mutable_type()->set_type_id(isUtf8 ? Ydb::Type::UTF8 : Ydb::Type::STRING);
     return cast.mutable_value();
@@ -645,8 +645,8 @@ bool SerializeLikeExpression(const NPushdown::TLikeSettings& settings, TPredicat
         return false;
     }
     dstProto->set_case_sensitive(settings.CaseSensitive);
-    return SerializeExpression(TExprBase(settings.Pattern), MaybeWrapUtf8(dstProto->mutable_pattern(), settings.IsUtf8), ctx, depth + 1)
-        && SerializeExpression(TExprBase(settings.Haystack), MaybeWrapUtf8(dstProto->mutable_value(), settings.IsUtf8), ctx, depth + 1);
+    return SerializeExpression(TExprBase(settings.Pattern), MaybeWrapUtf8(dstProto->mutable_pattern(), settings.IsUtf8), ctx, depth + 1) &&
+           SerializeExpression(TExprBase(settings.Haystack), MaybeWrapUtf8(dstProto->mutable_value(), settings.IsUtf8), ctx, depth + 1);
 }
 
 bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {

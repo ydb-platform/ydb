@@ -703,16 +703,16 @@ private:
             if (Settings.IsEnabled(EFlag::LikeOperator)) {
                 auto settings = ExtractLikeSettings(apply);
                 if (settings) {
-                   if (!CheckExpressionNodeForPushdown(TExprBase(settings->Pattern))) {
-                       return false;
-                   }
-                   if (!CheckExpressionNodeForPushdown(TExprBase(settings->Haystack))) {
-                       return false;
-                   }
-                   if (settings->Escape && !CheckExpressionNodeForPushdown(TExprBase(settings->Escape))) {
-                       return false;
-                   }
-                   return true;
+                    if (!CheckExpressionNodeForPushdown(TExprBase(settings->Pattern))) {
+                        return false;
+                    }
+                    if (!CheckExpressionNodeForPushdown(TExprBase(settings->Haystack))) {
+                        return false;
+                    }
+                    if (settings->Escape && !CheckExpressionNodeForPushdown(TExprBase(settings->Escape))) {
+                        return false;
+                    }
+                    return true;
                 }
             }
             return false;
@@ -816,7 +816,7 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
     if (matchUdf.MethodName() != "Re2.Match") {
         return std::nullopt;
     }
-    if (apply.Ref().ChildrenSize() != 1+1) {
+    if (apply.Ref().ChildrenSize() != 1 + 1) {
         return std::nullopt;
     }
     // TODO deeper validation
@@ -829,14 +829,14 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
         return std::nullopt;
     }
     TLikeSettings settings;
-    
+
     auto regexp = runConfigValue.ChildPtr(0);
     if (!regexp->IsCallable("Apply") || regexp->ChildrenSize() != 2) {
         return std::nullopt;
     }
     auto patternFromLike = regexp->ChildPtr(0);
     auto patternFromLikeUdf = TExprBase(patternFromLike).Maybe<TCoUdf>();
-    
+
     if (!patternFromLikeUdf || patternFromLikeUdf.Cast().MethodName() != "Re2.PatternFromLike") {
         return std::nullopt;
     }
@@ -859,7 +859,7 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
     if (!maybeAsStruct) {
         return std::nullopt;
     }
-    for (const auto& child: maybeAsStruct.Cast()) {
+    for (const auto& child : maybeAsStruct.Cast()) {
         if (child.Size() != 2) {
             return std::nullopt;
         }

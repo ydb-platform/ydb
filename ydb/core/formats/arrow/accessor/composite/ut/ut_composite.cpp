@@ -101,6 +101,12 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(slice->GetChunkedArray()->length(), 0);
     }
 
+    Y_UNIT_TEST(EmptySliceInsideChunk) {
+        const auto slice = BuildCompositeArray()->ISlice(1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetRecordsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetChunkedArray()->length(), 0);
+    }
+
     Y_UNIT_TEST(SliceFromBoundaryThroughPartialChunk) {
         const auto slice = BuildCompositeArray()->ISlice(10, 7);
         UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(slice->GetChunkedArray()->ToString()),

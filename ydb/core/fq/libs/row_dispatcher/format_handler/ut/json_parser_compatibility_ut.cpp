@@ -11,14 +11,15 @@ namespace {
 
 // Same payloads and names as ClickHouseClient's test_parse_format.py.
 // These tests record the current RD contract, including differences from ClickHouse.
-class TJsonCompatibilityFixture : public TBaseFixture {
-    class TConsumer : public IParsedDataConsumer {
+class TJsonCompatibilityFixture: public TBaseFixture {
+    class TConsumer: public IParsedDataConsumer {
     public:
         explicit TConsumer(TJsonCompatibilityFixture& owner, bool nullable)
             : Owner(owner)
-            , Columns({{"a", nullable ? "[OptionalType; [DataType; Int32]]" : "[DataType; Int32]"}})
+            , Columns({ { "a", nullable ? "[OptionalType; [DataType; Int32]]" : "[DataType; Int32]" } })
             , Nullable(nullable)
-        {}
+        {
+        }
 
         const TVector<TSchemaColumn>& GetColumns() const override {
             return Columns;
@@ -58,12 +59,11 @@ public:
         TBaseFixture::TearDown(ctx);
     }
 
-    void Check(const TString& name, const std::vector<TMessageStreamRecord>& records,
-        bool nullable, bool expectedError, const TVector<std::optional<i32>>& expectedValues = {},
-        const TVector<ui64>& expectedOffsets = {}, bool skipErrors = false)
+    void Check(const TString& name, const std::vector<TMessageStreamRecord>& records, bool nullable, bool expectedError,
+        const TVector<std::optional<i32>>& expectedValues = {}, const TVector<ui64>& expectedOffsets = {}, bool skipErrors = false)
     {
         auto consumer = MakeIntrusive<TConsumer>(*this, nullable);
-        TJsonParserConfig config{.FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Zero(), .SkipErrors = skipErrors};
+        TJsonParserConfig config{ .FunctionRegistry = FunctionRegistry, .LatencyLimit = TDuration::Zero(), .SkipErrors = skipErrors };
         Parser = CheckSuccess(CreateJsonParser(consumer, config, {}));
         Parser->ParseRecords(records);
         Parser->Refresh(true);
@@ -71,13 +71,20 @@ public:
         TStringBuilder report;
         report << "RD_JSON_CASE " << name << " " << (Error ? "ERROR" : "OK") << " values=[";
         for (size_t i = 0; i < Values.size(); ++i) {
-            if (i) report << ",";
-            if (Values[i]) report << *Values[i];
-            else report << "null";
+            if (i) {
+                report << ",";
+            }
+            if (Values[i]) {
+                report << *Values[i];
+            } else {
+                report << "null";
+            }
         }
         report << "] offsets=[";
         for (size_t i = 0; i < Offsets.size(); ++i) {
-            if (i) report << ",";
+            if (i) {
+                report << ",";
+            }
             report << Offsets[i];
         }
         report << "]";
@@ -100,74 +107,74 @@ private:
     TVector<ui64> Offsets;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(RowDispatcherJsonCompatibility) {
     Y_UNIT_TEST_F(SingleObject, TJsonCompatibilityFixture) {
-        Check("SingleObject", {GetRecord(42, "{\"a\":1}")}, false, false, {1}, {42});
+        Check("SingleObject", { GetRecord(42, "{\"a\":1}") }, false, false, { 1 }, { 42 });
     }
 
     Y_UNIT_TEST_F(AdjacentObjects, TJsonCompatibilityFixture) {
-        Check("AdjacentObjects", {GetRecord(42, "{\"a\":1}{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("AdjacentObjects", { GetRecord(42, "{\"a\":1}{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(SpaceSeparatedObjects, TJsonCompatibilityFixture) {
-        Check("SpaceSeparatedObjects", {GetRecord(42, "{\"a\":1} {\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("SpaceSeparatedObjects", { GetRecord(42, "{\"a\":1} {\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(NewlineSeparatedObjects, TJsonCompatibilityFixture) {
-        Check("NewlineSeparatedObjects", {GetRecord(42, "{\"a\":1}\n{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("NewlineSeparatedObjects", { GetRecord(42, "{\"a\":1}\n{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(CrLfSeparatedObjects, TJsonCompatibilityFixture) {
-        Check("CrLfSeparatedObjects", {GetRecord(42, "{\"a\":1}\r\n{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("CrLfSeparatedObjects", { GetRecord(42, "{\"a\":1}\r\n{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(TabSeparatedObjects, TJsonCompatibilityFixture) {
-        Check("TabSeparatedObjects", {GetRecord(42, "{\"a\":1}\t{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("TabSeparatedObjects", { GetRecord(42, "{\"a\":1}\t{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(BlankLinesBetweenObjects, TJsonCompatibilityFixture) {
-        Check("BlankLinesBetweenObjects", {GetRecord(42, "{\"a\":1}\n\n \t\n{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("BlankLinesBetweenObjects", { GetRecord(42, "{\"a\":1}\n\n \t\n{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(CommaSeparatedObjects, TJsonCompatibilityFixture) {
-        Check("CommaSeparatedObjects", {GetRecord(42, "{\"a\":1}, {\"a\":2}")}, false, true);
+        Check("CommaSeparatedObjects", { GetRecord(42, "{\"a\":1}, {\"a\":2}") }, false, true);
     }
 
     Y_UNIT_TEST_F(ArrayOfObjects, TJsonCompatibilityFixture) {
-        Check("ArrayOfObjects", {GetRecord(42, "[{\"a\":1},{\"a\":2}]")}, false, false, {1, 2}, {42, 42});
+        Check("ArrayOfObjects", { GetRecord(42, "[{\"a\":1},{\"a\":2}]") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(MultilineArray, TJsonCompatibilityFixture) {
-        Check("MultilineArray", {GetRecord(42, "[\n {\"a\":1},\n {\"a\":2}\n ]")}, false, false, {1, 2}, {42, 42});
+        Check("MultilineArray", { GetRecord(42, "[\n {\"a\":1},\n {\"a\":2}\n ]") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(ArraysAndObjectsAcrossMessages, TJsonCompatibilityFixture) {
-        Check("ArraysAndObjectsAcrossMessages", {GetRecord(42, R"([][{"a":1},{"a":2}]{"a":3})"), GetRecord(43, R"([{"a":4}][])")}, false, false, {1, 2, 3, 4}, {42, 42, 42, 43});
+        Check("ArraysAndObjectsAcrossMessages", { GetRecord(42, R"([][{"a":1},{"a":2}]{"a":3})"), GetRecord(43, R"([{"a":4}][])") }, false,
+            false, { 1, 2, 3, 4 }, { 42, 42, 42, 43 });
     }
 
     Y_UNIT_TEST_F(ScalarAfterObjectInArray, TJsonCompatibilityFixture) {
-        Check("ScalarAfterObjectInArray", {GetRecord(42, R"([{"a":1},null])")}, false, true);
+        Check("ScalarAfterObjectInArray", { GetRecord(42, R"([{"a":1},null])") }, false, true);
     }
 
     Y_UNIT_TEST_F(TrailingCommaInArray, TJsonCompatibilityFixture) {
-        Check("TrailingCommaInArray", {GetRecord(42, R"([{"a":1},])")}, false, true);
+        Check("TrailingCommaInArray", { GetRecord(42, R"([{"a":1},])") }, false, true);
     }
 
     Y_UNIT_TEST_F(NullableArrayElements, TJsonCompatibilityFixture) {
-        Check("NullableArrayElements", {GetRecord(42, R"([{"a":1},{"a":null},{}])")}, true, false,
-            {1, std::nullopt, std::nullopt}, {42, 42, 42});
+        Check("NullableArrayElements", { GetRecord(42, R"([{"a":1},{"a":null},{}])") }, true, false, { 1, std::nullopt, std::nullopt },
+            { 42, 42, 42 });
     }
 
     Y_UNIT_TEST_F(SkipBadArrayRow, TJsonCompatibilityFixture) {
-        Check("SkipBadArrayRow", {GetRecord(42, R"([{"a":1},{"a":"bad"},{},{"a":2}])")}, false, false,
-            {1, 2}, {42, 42}, true);
+        Check("SkipBadArrayRow", { GetRecord(42, R"([{"a":1},{"a":"bad"},{},{"a":2}])") }, false, false, { 1, 2 }, { 42, 42 }, true);
     }
 
     Y_UNIT_TEST_F(SkipMalformedArrayKeepsNextOffset, TJsonCompatibilityFixture) {
-        Check("SkipMalformedArrayKeepsNextOffset", {GetRecord(42, R"([{"a":1},null,{"a":2}])"), GetRecord(43, R"([{"a":3}])")}, false, false,
-            {1, 3}, {42, 43}, true);
+        Check("SkipMalformedArrayKeepsNextOffset", { GetRecord(42, R"([{"a":1},null,{"a":2}])"), GetRecord(43, R"([{"a":3}])") }, false, false,
+            { 1, 3 }, { 42, 43 }, true);
     }
 
     Y_UNIT_TEST_F(LargeArray, TJsonCompatibilityFixture) {
@@ -176,25 +183,27 @@ Y_UNIT_TEST_SUITE(RowDispatcherJsonCompatibility) {
         TVector<std::optional<i32>> values;
         TVector<ui64> offsets;
         for (size_t i = 0; i < 2001; ++i) {
-            if (i) input << ",";
+            if (i) {
+                input << ",";
+            }
             input << "{\"a\":" << i << "}";
             values.push_back(i);
             offsets.push_back(42);
         }
         input << "]";
-        Check("LargeArray", {GetRecord(42, input)}, false, false, values, offsets);
+        Check("LargeArray", { GetRecord(42, input) }, false, false, values, offsets);
     }
 
     Y_UNIT_TEST_F(AdjacentObjectsInArray, TJsonCompatibilityFixture) {
-        Check("AdjacentObjectsInArray", {GetRecord(42, "[{\"a\":1}{\"a\":2}]")}, false, true);
+        Check("AdjacentObjectsInArray", { GetRecord(42, "[{\"a\":1}{\"a\":2}]") }, false, true);
     }
 
     Y_UNIT_TEST_F(MultilineObject, TJsonCompatibilityFixture) {
-        Check("MultilineObject", {GetRecord(42, "{\n \"a\" : 1\n}\n{\n \"a\" : 2\n}")}, false, false, {1, 2}, {42, 42});
+        Check("MultilineObject", { GetRecord(42, "{\n \"a\" : 1\n}\n{\n \"a\" : 2\n}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(SurroundingWhitespace, TJsonCompatibilityFixture) {
-        Check("SurroundingWhitespace", {GetRecord(42, " \r\n\t{\"a\":1}{\"a\":2}\t\r\n ")}, false, false, {1, 2}, {42, 42});
+        Check("SurroundingWhitespace", { GetRecord(42, " \r\n\t{\"a\":1}{\"a\":2}\t\r\n ") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(EmptyStream, TJsonCompatibilityFixture) {
@@ -202,138 +211,143 @@ Y_UNIT_TEST_SUITE(RowDispatcherJsonCompatibility) {
     }
 
     Y_UNIT_TEST_F(EmptyPayload, TJsonCompatibilityFixture) {
-        Check("EmptyPayload", {GetRecord(42, "")}, false, true);
+        Check("EmptyPayload", { GetRecord(42, "") }, false, true);
     }
 
     Y_UNIT_TEST_F(SpaceOnlyPayload, TJsonCompatibilityFixture) {
-        Check("SpaceOnlyPayload", {GetRecord(42, " ")}, false, true);
+        Check("SpaceOnlyPayload", { GetRecord(42, " ") }, false, true);
     }
 
     Y_UNIT_TEST_F(WhitespaceOnlyPayload, TJsonCompatibilityFixture) {
-        Check("WhitespaceOnlyPayload", {GetRecord(42, "\n\r\t  \r\n")}, false, true);
+        Check("WhitespaceOnlyPayload", { GetRecord(42, "\n\r\t  \r\n") }, false, true);
     }
 
     Y_UNIT_TEST_F(EmptyArray, TJsonCompatibilityFixture) {
-        Check("EmptyArray", {GetRecord(42, "[]")}, false, false);
+        Check("EmptyArray", { GetRecord(42, "[]") }, false, false);
     }
 
     Y_UNIT_TEST_F(WhitespaceOnlyArray, TJsonCompatibilityFixture) {
-        Check("WhitespaceOnlyArray", {GetRecord(42, "[ \n\t ]")}, false, false);
+        Check("WhitespaceOnlyArray", { GetRecord(42, "[ \n\t ]") }, false, false);
     }
 
     Y_UNIT_TEST_F(EmptyObject, TJsonCompatibilityFixture) {
         // Optional a isolates object framing from required-column validation.
-        Check("EmptyObject", {GetRecord(42, "{}")}, true, false, {std::nullopt}, {42});
+        Check("EmptyObject", { GetRecord(42, "{}") }, true, false, { std::nullopt }, { 42 });
     }
 
     Y_UNIT_TEST_F(EmptyObjects, TJsonCompatibilityFixture) {
-        Check("EmptyObjects", {GetRecord(42, "{}{}")}, true, false, {std::nullopt, std::nullopt}, {42, 42});
+        Check("EmptyObjects", { GetRecord(42, "{}{}") }, true, false, { std::nullopt, std::nullopt }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(MissingRequiredField, TJsonCompatibilityFixture) {
         // A schema error despite the valid JSON object.
-        Check("MissingRequiredField", {GetRecord(42, "{}")}, false, true);
+        Check("MissingRequiredField", { GetRecord(42, "{}") }, false, true);
     }
 
     Y_UNIT_TEST_F(EmptyMessagesBetweenObjects, TJsonCompatibilityFixture) {
-        Check("EmptyMessagesBetweenObjects", {GetRecord(42, ""), GetRecord(43, "{\"a\":1}{\"a\":2}"), GetRecord(44, " \n"), GetRecord(45, "[{\"a\":3}]"), GetRecord(46, "")}, false, true);
+        Check("EmptyMessagesBetweenObjects", { GetRecord(42, ""), GetRecord(43, "{\"a\":1}{\"a\":2}"), GetRecord(44, " \n"),
+                                                 GetRecord(45, "[{\"a\":3}]"), GetRecord(46, "") }, false, true);
     }
 
     Y_UNIT_TEST_F(SeveralPayloads, TJsonCompatibilityFixture) {
-        Check("SeveralPayloads", {GetRecord(42, "{\"a\":1}{\"a\":2}"), GetRecord(43, "{\"a\":3}")}, false, false, {1, 2, 3}, {42, 42, 43});
+        Check("SeveralPayloads", { GetRecord(42, "{\"a\":1}{\"a\":2}"), GetRecord(43, "{\"a\":3}") }, false, false, { 1, 2, 3 }, { 42, 42, 43 });
     }
 
     Y_UNIT_TEST_F(QuotedNumber, TJsonCompatibilityFixture) {
-        Check("QuotedNumber", {GetRecord(42, "{\"a\":\"1\"}{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("QuotedNumber", { GetRecord(42, "{\"a\":\"1\"}{\"a\":2}") }, false, false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(NestedUnknownFields, TJsonCompatibilityFixture) {
-        Check("NestedUnknownFields", {GetRecord(42, "{\"a\":1,\"unused\":{\"array\":[1,{\"x\":2}],\"text\":\"} {\\n\"}}{\"a\":2}")}, false, false, {1, 2}, {42, 42});
+        Check("NestedUnknownFields", { GetRecord(42, "{\"a\":1,\"unused\":{\"array\":[1,{\"x\":2}],\"text\":\"} {\\n\"}}{\"a\":2}") }, false,
+            false, { 1, 2 }, { 42, 42 });
     }
 
     Y_UNIT_TEST_F(TrailingSemicolon, TJsonCompatibilityFixture) {
-        Check("TrailingSemicolon", {GetRecord(42, "{\"a\":1};")}, false, true);
+        Check("TrailingSemicolon", { GetRecord(42, "{\"a\":1};") }, false, true);
     }
 
     Y_UNIT_TEST_F(ArrayWithSemicolon, TJsonCompatibilityFixture) {
-        Check("ArrayWithSemicolon", {GetRecord(42, "[{\"a\":1},{\"a\":2}];")}, false, true);
+        Check("ArrayWithSemicolon", { GetRecord(42, "[{\"a\":1},{\"a\":2}];") }, false, true);
     }
 
     Y_UNIT_TEST_F(RootNull, TJsonCompatibilityFixture) {
-        Check("RootNull", {GetRecord(42, "null")}, false, true);
+        Check("RootNull", { GetRecord(42, "null") }, false, true);
     }
 
     Y_UNIT_TEST_F(RootNumber, TJsonCompatibilityFixture) {
-        Check("RootNumber", {GetRecord(42, "123")}, false, true);
+        Check("RootNumber", { GetRecord(42, "123") }, false, true);
     }
 
     Y_UNIT_TEST_F(RootBoolean, TJsonCompatibilityFixture) {
-        Check("RootBoolean", {GetRecord(42, "true")}, false, true);
+        Check("RootBoolean", { GetRecord(42, "true") }, false, true);
     }
 
     Y_UNIT_TEST_F(RootString, TJsonCompatibilityFixture) {
-        Check("RootString", {GetRecord(42, "\"text\"")}, false, true);
+        Check("RootString", { GetRecord(42, "\"text\"") }, false, true);
     }
 
     Y_UNIT_TEST_F(ArrayOfScalars, TJsonCompatibilityFixture) {
-        Check("ArrayOfScalars", {GetRecord(42, "[1,2]")}, false, true);
+        Check("ArrayOfScalars", { GetRecord(42, "[1,2]") }, false, true);
     }
 
     Y_UNIT_TEST_F(NestedRootArray, TJsonCompatibilityFixture) {
-        Check("NestedRootArray", {GetRecord(42, "[[{\"a\":1}]]")}, false, true);
+        Check("NestedRootArray", { GetRecord(42, "[[{\"a\":1}]]") }, false, true);
     }
 
     Y_UNIT_TEST_F(LeadingComma, TJsonCompatibilityFixture) {
-        Check("LeadingComma", {GetRecord(42, ",{\"a\":1}")}, false, true);
+        Check("LeadingComma", { GetRecord(42, ",{\"a\":1}") }, false, true);
     }
 
     Y_UNIT_TEST_F(UnclosedObject, TJsonCompatibilityFixture) {
-        Check("UnclosedObject", {GetRecord(42, "{\"a\":1")}, false, true);
+        Check("UnclosedObject", { GetRecord(42, "{\"a\":1") }, false, true);
     }
 
     Y_UNIT_TEST_F(UnclosedArray, TJsonCompatibilityFixture) {
-        Check("UnclosedArray", {GetRecord(42, "[{\"a\":1}")}, false, true);
+        Check("UnclosedArray", { GetRecord(42, "[{\"a\":1}") }, false, true);
     }
 
     Y_UNIT_TEST_F(MissingColon, TJsonCompatibilityFixture) {
-        Check("MissingColon", {GetRecord(42, "{\"a\" 1}")}, false, true);
+        Check("MissingColon", { GetRecord(42, "{\"a\" 1}") }, false, true);
     }
 
     Y_UNIT_TEST_F(MissingFieldComma, TJsonCompatibilityFixture) {
-        Check("MissingFieldComma", {GetRecord(42, "{\"a\":1 \"b\":2}")}, false, true);
+        Check("MissingFieldComma", { GetRecord(42, "{\"a\":1 \"b\":2}") }, false, true);
     }
 
     Y_UNIT_TEST_F(WrongFieldType, TJsonCompatibilityFixture) {
-        Check("WrongFieldType", {GetRecord(42, "{\"a\":\"not a number\"}")}, false, true);
+        Check("WrongFieldType", { GetRecord(42, "{\"a\":\"not a number\"}") }, false, true);
     }
 
     Y_UNIT_TEST_F(DuplicateField, TJsonCompatibilityFixture) {
-        Check("DuplicateField", {GetRecord(42, "{\"a\":1,\"a\":2}")}, false, false, {1}, {42});
+        Check("DuplicateField", { GetRecord(42, "{\"a\":1,\"a\":2}") }, false, false, { 1 }, { 42 });
     }
 
     Y_UNIT_TEST_F(GarbageAfterObject, TJsonCompatibilityFixture) {
-        Check("GarbageAfterObject", {GetRecord(42, "{\"a\":1} garbage")}, false, true);
+        Check("GarbageAfterObject", { GetRecord(42, "{\"a\":1} garbage") }, false, true);
     }
 
     Y_UNIT_TEST_F(TruncatedTail, TJsonCompatibilityFixture) {
-        Check("TruncatedTail", {GetRecord(42, "{\"a\":1}{")}, false, true);
+        Check("TruncatedTail", { GetRecord(42, "{\"a\":1}{") }, false, true);
     }
 
     Y_UNIT_TEST_F(JsonSplitAcrossMessages, TJsonCompatibilityFixture) {
-        Check("JsonSplitAcrossMessages", {GetRecord(42, "{\"a\":1"), GetRecord(43, "}")}, false, true);
+        Check("JsonSplitAcrossMessages", { GetRecord(42, "{\"a\":1"), GetRecord(43, "}") }, false, true);
     }
 
     Y_UNIT_TEST_F(RepeatedMessageMetadata, TJsonCompatibilityFixture) {
-        Check("RepeatedMessageMetadata", {GetRecord(42, "{\"a\":1}{\"a\":2}"), GetRecord(43, "{\"a\":3}")}, false, false, {1, 2, 3}, {42, 42, 43});
+        Check("RepeatedMessageMetadata", { GetRecord(42, "{\"a\":1}{\"a\":2}"), GetRecord(43, "{\"a\":3}") }, false, false, { 1, 2, 3 },
+            { 42, 42, 43 });
     }
 
     Y_UNIT_TEST_F(EmptyMessagesDoNotShiftMetadata, TJsonCompatibilityFixture) {
-        Check("EmptyMessagesDoNotShiftMetadata", {GetRecord(41, ""), GetRecord(42, "[{\"a\":1},{\"a\":2}]"), GetRecord(43, " \n"), GetRecord(44, "{\"a\":3}")}, false, true);
+        Check("EmptyMessagesDoNotShiftMetadata",
+            { GetRecord(41, ""), GetRecord(42, "[{\"a\":1},{\"a\":2}]"), GetRecord(43, " \n"), GetRecord(44, "{\"a\":3}") }, false, true);
     }
 
     Y_UNIT_TEST_F(NullableFieldAndMissingField, TJsonCompatibilityFixture) {
-        Check("NullableFieldAndMissingField", {GetRecord(42, "{\"a\":1}{\"a\":null}{}")}, true, false, {1, std::nullopt, std::nullopt}, {42, 42, 42});
+        Check("NullableFieldAndMissingField", { GetRecord(42, "{\"a\":1}{\"a\":null}{}") }, true, false, { 1, std::nullopt, std::nullopt },
+            { 42, 42, 42 });
     }
 }
 
-} // namespace NFq::NRowDispatcher::NTests
+}   // namespace NFq::NRowDispatcher::NTests

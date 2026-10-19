@@ -1,9 +1,8 @@
 #pragma once
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
 
-#include <ydb/library/testlib/common/test_with_actor_system.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -14,9 +13,15 @@ namespace NFq::NRowDispatcher::NTests {
 
 static constexpr TDuration WAIT_TIMEOUT = TDuration::Seconds(20);
 
-class TBaseFixture: public NTestUtils::TTestWithActorSystemFixture, public TTypeParser {
-    using TBase = NTestUtils::TTestWithActorSystemFixture;
+class TFormatHandlerTestRuntime: public NActors::TTestActorRuntimeBase {
+public:
+    TFormatHandlerTestRuntime();
 
+protected:
+    void InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) override;
+};
+
+class TBaseFixture: public NUnitTest::TBaseFixture, public TTypeParser {
 public:
     // Helper classes for checking serialized rows in multi type format
     class ICell: public TThrRefBase {

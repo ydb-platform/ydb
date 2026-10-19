@@ -200,7 +200,7 @@ public:
     void CheckStringMessages(const std::vector<TMessageStreamRecord>& records, const TVector<TString>& values, const TVector<ui64>& offsets) {
         // MakeParser replaces the consumer, whose batch counter starts at zero.
         ExpectedBatches = 1;
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, auto result) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]", [&](ui64 numberRows, auto result) {
             UNIT_ASSERT_VALUES_EQUAL(numberRows, values.size());
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             const auto actualOffsets = Parser->GetOffsets();
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(MultipleJsonObjectsInMessage, TJsonParserFixture) {
         ExpectedBatches = 1;
 
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
             const auto offsets = Parser->GetOffsets();
             UNIT_ASSERT_VALUES_EQUAL(3, offsets.size());
@@ -649,53 +649,51 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("third", TString(result[0][2].AsStringRef()));
         }, false));
 
-        Parser->ParseRecords({
-            GetRecord(FIRST_OFFSET, R"({"col": "first"} {"col": "second"})"),
-            GetRecord(FIRST_OFFSET + 1, R"({"col": "third"})")
-        });
+        Parser->ParseRecords(
+            { GetRecord(FIRST_OFFSET, R"({"col": "first"} {"col": "second"})"), GetRecord(FIRST_OFFSET + 1, R"({"col": "third"})") });
     }
 
     Y_UNIT_TEST_F(MultipleJsonObjectsSeparators, TJsonParserFixture) {
-        for (const TString separator : {"", " ", "\n", "\r\n\t "}) {
-            CheckStringMessages({
-                GetRecord(FIRST_OFFSET, TStringBuilder() << R"({"col":"first"})" << separator << R"({"col":"second"})"),
-                GetRecord(FIRST_OFFSET + 1, R"({"col":"third"})")
-            }, {"first", "second", "third"}, {FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1});
+        for (const TString separator : { "", " ", "\n", "\r\n\t " }) {
+            CheckStringMessages({ GetRecord(FIRST_OFFSET, TStringBuilder() << R"({"col":"first"})" << separator << R"({"col":"second"})"),
+                                    GetRecord(FIRST_OFFSET + 1, R"({"col":"third"})") },
+                { "first", "second", "third" }, { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1 });
         }
     }
 
     Y_UNIT_TEST_F(MultipleJsonObjectsInEachMessage, TJsonParserFixture) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(FIRST_OFFSET + 1, R"({"col":"third"}{"col":"fourth"})")
-        }, {"first", "second", "third", "fourth"}, {FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1, FIRST_OFFSET + 1});
+        CheckStringMessages(
+            { GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 1, R"({"col":"third"}{"col":"fourth"})") },
+            { "first", "second", "third", "fourth" }, { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1, FIRST_OFFSET + 1 });
     }
 
     Y_UNIT_TEST_F(MultipleJsonObjectsMultilineAndEscapes, TJsonParserFixture) {
-        CheckStringMessages({GetRecord(FIRST_OFFSET, R"(
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, R"(
             {
                 "col": "first\n{\"nested\":1}",
                 "unknown": {"list": [1, {"col": "ignored"}]}
             }
             {"col":"second"}
-        )")}, {"first\n{\"nested\":1}", "second"}, {FIRST_OFFSET, FIRST_OFFSET});
+        )") },
+            { "first\n{\"nested\":1}", "second" }, { FIRST_OFFSET, FIRST_OFFSET });
     }
 
     Y_UNIT_TEST_F(MultipleJsonObjectsGrowColumnBuffers, TJsonParserFixture) {
         Config.BufferCellCount = 1;
-        CheckSuccess(MakeParser({{"col", "[DataType; String]"}, {"optional", "[OptionalType; [DataType; String]]"}}, [&](ui64 numberRows, auto result) {
-            UNIT_ASSERT_VALUES_EQUAL(numberRows, 2001);
-            const auto offsets = Parser->GetOffsets();
-            for (size_t i = 0; i < numberRows; ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(offsets[i], FIRST_OFFSET);
-                UNIT_ASSERT_VALUES_EQUAL(TString(result[0][i].AsStringRef()), ToString(i));
-                if (i % 2) {
-                    UNIT_ASSERT(!result[1][i]);
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(TString(result[1][i].AsStringRef()), "present");
+        CheckSuccess(MakeParser(
+            { { "col", "[DataType; String]" }, { "optional", "[OptionalType; [DataType; String]]" } }, [&](ui64 numberRows, auto result) {
+                UNIT_ASSERT_VALUES_EQUAL(numberRows, 2001);
+                const auto offsets = Parser->GetOffsets();
+                for (size_t i = 0; i < numberRows; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(offsets[i], FIRST_OFFSET);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(result[0][i].AsStringRef()), ToString(i));
+                    if (i % 2) {
+                        UNIT_ASSERT(!result[1][i]);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(TString(result[1][i].AsStringRef()), "present");
+                    }
                 }
-            }
-        }, false));
+            }, false));
         TStringBuilder data;
         for (size_t i = 0; i < 2001; ++i) {
             data << "{\"col\":\"" << i << "\"";
@@ -708,72 +706,65 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(EmptyMessagesAreErrors, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
-        for (const TString data : {"", " ", "\n\r\t"}) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
+        for (const TString data : { "", " ", "\n\r\t" }) {
             CheckBatchError(data, EStatusId::BAD_REQUEST, "expected at least one json object, got empty message");
         }
     }
 
     Y_UNIT_TEST_F(EmptyMessageBetweenObjectsIsError, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         ExpectedBatches = 1;
-        ParserHandler->ExpectCommonError(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1);
-        Parser->ParseRecords({
-            GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(FIRST_OFFSET + 1, ""),
-            GetRecord(FIRST_OFFSET + 2, R"({"col":"third"})")
-        });
+        ParserHandler->ExpectCommonError(
+            EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1);
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 1, ""),
+            GetRecord(FIRST_OFFSET + 2, R"({"col":"third"})") });
     }
 
     Y_UNIT_TEST_F(SkipEmptyMessagesKeepsOffsets, TJsonParserFixtureSkipErrors) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, ""),
-            GetRecord(FIRST_OFFSET + 1, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(FIRST_OFFSET + 2, " \n"),
-            GetRecord(FIRST_OFFSET + 3, R"({"col":"third"})"),
-            GetRecord(FIRST_OFFSET + 4, "")
-        }, {"first", "second", "third"}, {FIRST_OFFSET + 1, FIRST_OFFSET + 1, FIRST_OFFSET + 3});
+        CheckStringMessages(
+            { GetRecord(FIRST_OFFSET, ""), GetRecord(FIRST_OFFSET + 1, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 2, " \n"),
+                GetRecord(FIRST_OFFSET + 3, R"({"col":"third"})"), GetRecord(FIRST_OFFSET + 4, "") },
+            { "first", "second", "third" }, { FIRST_OFFSET + 1, FIRST_OFFSET + 1, FIRST_OFFSET + 3 });
     }
 
     Y_UNIT_TEST_F(SkipOnlyEmptyMessages, TJsonParserFixtureSkipErrors) {
-        CheckStringMessages({GetRecord(FIRST_OFFSET, ""), GetRecord(FIRST_OFFSET + 1, " \n")}, {}, {});
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, ""), GetRecord(FIRST_OFFSET + 1, " \n") }, {}, {});
     }
 
     Y_UNIT_TEST_F(SkipBadColumnWithinMessage, TJsonParserFixtureSkipErrors) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":123}{"col":"second"}{}{"col":"third"})"),
-            GetRecord(FIRST_OFFSET + 1, R"({"col":"fourth"})")
-        }, {"first", "second", "third", "fourth"}, {FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1});
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":123}{"col":"second"}{}{"col":"third"})"),
+                                GetRecord(FIRST_OFFSET + 1, R"({"col":"fourth"})") },
+            { "first", "second", "third", "fourth" }, { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 1 });
     }
 
     Y_UNIT_TEST_F(SkipTruncatedMessageKeepsNextOffset, TJsonParserFixtureSkipErrors) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, R"({"col":"first"}{)"),
-            GetRecord(FIRST_OFFSET + 1, R"({"col":"second"}{"col":"third"})")
-        }, {"first", "second", "third"}, {FIRST_OFFSET, FIRST_OFFSET + 1, FIRST_OFFSET + 1});
+        CheckStringMessages(
+            { GetRecord(FIRST_OFFSET, R"({"col":"first"}{)"), GetRecord(FIRST_OFFSET + 1, R"({"col":"second"}{"col":"third"})") },
+            { "first", "second", "third" }, { FIRST_OFFSET, FIRST_OFFSET + 1, FIRST_OFFSET + 1 });
     }
 
     Y_UNIT_TEST_F(TruncatedTailIsError, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         CheckBatchError(R"({"col":"first"}{)", EStatusId::BAD_REQUEST, "json batch truncated bytes");
     }
 
     Y_UNIT_TEST_F(ColumnErrorDoesNotHideTruncatedTail, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         CheckBatchError(R"({"col":123}{)", EStatusId::BAD_REQUEST, "json batch truncated bytes");
     }
 
     Y_UNIT_TEST_F(JsonCannotCrossMessageBoundary, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         ExpectedBatches = 1;
         ParserHandler->ExpectCommonError(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET);
-        Parser->ParseRecords({GetRecord(FIRST_OFFSET, R"({"col":)"), GetRecord(FIRST_OFFSET + 1, R"("first"})")});
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, R"({"col":)"), GetRecord(FIRST_OFFSET + 1, R"("first"})") });
     }
 
     Y_UNIT_TEST_F(MultipleObjectsDeferredFlush, TJsonParserFixture) {
         Config.LatencyLimit = TDuration::Hours(1);
         ExpectedBatches = 1;
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, auto result) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]", [&](ui64 numberRows, auto result) {
             UNIT_ASSERT_VALUES_EQUAL(numberRows, 3);
             UNIT_ASSERT_VALUES_EQUAL(TString(result[0][0].AsStringRef()), "first");
             UNIT_ASSERT_VALUES_EQUAL(TString(result[0][1].AsStringRef()), "second");
@@ -783,21 +774,20 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL(offsets[1], FIRST_OFFSET);
             UNIT_ASSERT_VALUES_EQUAL(offsets[2], FIRST_OFFSET + 1);
         }, false));
-        Parser->ParseRecords({GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})")});
-        Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, R"({"col":"third"})")});
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})") });
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET + 1, R"({"col":"third"})") });
         UNIT_ASSERT_VALUES_EQUAL(ParserHandler->NumberBatches, 0);
         Parser->Refresh(true);
     }
 
     Y_UNIT_TEST_F(MultipleObjectsWithNonConsecutiveOffsets, TJsonParserFixture) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(FIRST_OFFSET + 10, R"({"col":"third"})")
-        }, {"first", "second", "third"}, {FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 10});
+        CheckStringMessages(
+            { GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 10, R"({"col":"third"})") },
+            { "first", "second", "third" }, { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 10 });
     }
 
     Y_UNIT_TEST_F(MultipleObjectsWithEmptyOptionalFields, TJsonParserFixture) {
-        CheckSuccess(MakeParser({{"col", "[OptionalType; [DataType; String]]"}}, [&](ui64 numberRows, auto result) {
+        CheckSuccess(MakeParser({ { "col", "[OptionalType; [DataType; String]]" } }, [&](ui64 numberRows, auto result) {
             UNIT_ASSERT_VALUES_EQUAL(numberRows, 3);
             UNIT_ASSERT(!result[0][0]);
             UNIT_ASSERT(!result[0][1]);
@@ -810,7 +800,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(MultipleObjectsColumnErrorUsesMessageOffset, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, auto) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]", [&](ui64 numberRows, auto) {
             UNIT_ASSERT_VALUES_EQUAL(numberRows, 2);
             UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET);
             UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[1], FIRST_OFFSET);
@@ -820,25 +810,22 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(NonObjectJsonIsError, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
-        for (const TString data : {"[1]", "null", "123", R"("text")"}) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
+        for (const TString data : { "[1]", "null", "123", R"("text")" }) {
             CheckBatchError(data, EStatusId::BAD_REQUEST, "Failed to parse json message for offset");
         }
     }
 
     Y_UNIT_TEST_F(SkipNonObjectMessages, TJsonParserFixtureSkipErrors) {
-        CheckStringMessages({
-            GetRecord(FIRST_OFFSET, "[]"),
-            GetRecord(FIRST_OFFSET + 1, "null"),
-            GetRecord(FIRST_OFFSET + 2, R"({"col":"first"}{"col":"second"})"),
-            GetRecord(FIRST_OFFSET + 3, "123")
-        }, {"first", "second"}, {FIRST_OFFSET + 2, FIRST_OFFSET + 2});
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, "[]"), GetRecord(FIRST_OFFSET + 1, "null"),
+                                GetRecord(FIRST_OFFSET + 2, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 3, "123") },
+            { "first", "second" }, { FIRST_OFFSET + 2, FIRST_OFFSET + 2 });
     }
 
     Y_UNIT_TEST_F(MultipleObjectsBuffersReusedAndCleared, TJsonParserFixture) {
         Config.BufferCellCount = 1;
         ExpectedBatches = 2;
-        CheckSuccess(MakeParser({{"col", "[OptionalType; [ListType; [DataType; String]]]"}}, [&](ui64 numberRows, auto result) {
+        CheckSuccess(MakeParser({ { "col", "[OptionalType; [ListType; [DataType; String]]]" } }, [&](ui64 numberRows, auto result) {
             if (ParserHandler->NumberBatches == 1) {
                 UNIT_ASSERT_VALUES_EQUAL(numberRows, 3);
                 for (size_t i = 0; i < numberRows; ++i) {
@@ -853,8 +840,8 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
                 UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 1);
             }
         }, false));
-        Parser->ParseRecords({GetRecord(FIRST_OFFSET, R"({"col":["0"]}{"col":["1"]}{"col":["2"]})")});
-        Parser->ParseRecords({GetRecord(FIRST_OFFSET + 1, "{}")});
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, R"({"col":["0"]}{"col":["1"]}{"col":["2"]})") });
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET + 1, "{}") });
     }
 
     Y_UNIT_TEST_F(MultipleObjectsBeyondUint16RowCount, TJsonParserFixture) {
@@ -866,15 +853,15 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             values.push_back("x");
             offsets.push_back(FIRST_OFFSET);
         }
-        CheckStringMessages({GetRecord(FIRST_OFFSET, data)}, values, offsets);
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, data) }, values, offsets);
     }
 
     Y_UNIT_TEST_F(MultipleObjectsMemoryQuotaReleased, TJsonParserFixture) {
         auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
         Config.MemoryQuotaManager = manager;
         Config.BufferCellCount = 1;
-        CheckStringMessages({GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"}{"col":"third"})")},
-            {"first", "second", "third"}, {FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET});
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"}{"col":"third"})") }, { "first", "second", "third" },
+            { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET });
         Parser.Reset();
         UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
     }
@@ -883,7 +870,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(32_MB, 32_MB);
         Config.MemoryQuotaManager = manager;
         Config.BufferCellCount = 1;
-        CheckSuccess(MakeParser({"col"}, "[DataType; Bool]", [&](ui64 numberRows, auto result) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; Bool]", [&](ui64 numberRows, auto result) {
             UNIT_ASSERT_VALUES_EQUAL(numberRows, 1);
             UNIT_ASSERT(result[0][0].template Get<bool>());
             UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], ParserHandler->NumberBatches == 1 ? FIRST_OFFSET : FIRST_OFFSET + 2);
@@ -908,10 +895,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     }
 
     Y_UNIT_TEST_F(NullPayloadIsUnsupported, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]"));
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         auto record = GetRecord(FIRST_OFFSET, "");
         record.Data.reset();
-        UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({record}), TMessageStreamException);
+        UNIT_ASSERT_EXCEPTION(Parser->ParseRecords({ record }), TMessageStreamException);
     }
 
     Y_UNIT_TEST_F(MissingFields, TJsonParserFixture) {
@@ -1476,14 +1463,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST,
             TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1
                              << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
-        CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR,
-            TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2
-                             << " but got 2 (expected one json row for each offset from topic API in json each row format, maybe initial data "
-                                "was corrupted or messages is not in json format), current data batch: {\"a1\": \"x\"} {\"a1\": \"y\"}");
-        CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR,
-            TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3
-                             << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data "
-                                "was corrupted or messages is not in json format), current data batch: {");
+        CheckBatchError(R"({)", EStatusId::BAD_REQUEST, "json batch truncated bytes");
     }
 
     Y_UNIT_TEST_F(SkipErrorsNotOptional, TJsonParserFixtureSkipErrors) {
@@ -1659,10 +1639,15 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
     Y_UNIT_TEST_F(SkipErrors1JsonIn2Messages, TJsonParserFixtureSkipErrors) {
         ExpectedBatches = 1;
-        CheckSuccess(
-            MakeParser({ "a1", "a2" }, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> /*result*/) {
-                UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
-            }, false));
+        CheckSuccess(MakeParser({ "a1", "a2" }, "[DataType; String]", [&](ui64 numberRows, auto result) {
+            UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(TString(result[0][0].AsStringRef()), "hello1");
+            UNIT_ASSERT_VALUES_EQUAL(TString(result[0][1].AsStringRef()), "hello2");
+            UNIT_ASSERT_VALUES_EQUAL(TString(result[1][0].AsStringRef()), "101");
+            UNIT_ASSERT_VALUES_EQUAL(TString(result[1][1].AsStringRef()), "102");
+            UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 2);
+            UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[1], FIRST_OFFSET + 3);
+        }, false));
 
         Parser->ParseRecords({
             GetRecord(FIRST_OFFSET, R"({"a1": "hel)"), GetRecord(FIRST_OFFSET + 1, R"(lo0", "a2": "100"})"),

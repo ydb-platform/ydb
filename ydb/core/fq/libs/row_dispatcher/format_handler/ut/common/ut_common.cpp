@@ -1,7 +1,5 @@
 #include "ut_common.h"
 
-#include <library/cpp/testing/common/env.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
@@ -9,11 +7,11 @@
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
+#include <library/cpp/testing/common/env.h>
+#include <util/system/datetime.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
-
-#include <util/system/datetime.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -166,33 +164,31 @@ TBaseFixture::TBatch& TBaseFixture::TBatch::AddRow(TRow row) {
 
 TFormatHandlerTestRuntime::TFormatHandlerTestRuntime()
     : TTestActorRuntimeBase(/* nodeCount */ 1, /* useRealThreads */ true)
-{}
+{
+}
 
 void TFormatHandlerTestRuntime::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
     // These tests need AppData for actor helpers, but no tablet services or factories.
-    node->AppData0 = std::make_shared<NKikimr::TAppData>(
-        0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, FunctionRegistry.Get(), nullptr, nullptr);
-    node->LogSettings->Append(
-        NKikimrServices::EServiceKikimr_MIN,
-        NKikimrServices::EServiceKikimr_MAX,
-        NKikimrServices::EServiceKikimr_Name);
+    node->AppData0 = std::make_shared<NKikimr::TAppData>(0, 0, 0, 0, TMap<TString, ui32>{}, nullptr, FunctionRegistry.Get(), nullptr, nullptr);
+    node->LogSettings->Append(NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
 
     const THashMap<TString, NActors::NLog::EPriority> priorities = {
-        {"TRACE", NActors::NLog::PRI_TRACE},
-        {"DEBUG", NActors::NLog::PRI_DEBUG},
-        {"INFO", NActors::NLog::PRI_INFO},
-        {"NOTICE", NActors::NLog::PRI_NOTICE},
-        {"WARN", NActors::NLog::PRI_WARN},
-        {"ERROR", NActors::NLog::PRI_ERROR},
-        {"CRIT", NActors::NLog::PRI_CRIT},
-        {"ALERT", NActors::NLog::PRI_ALERT},
-        {"EMERG", NActors::NLog::PRI_EMERG},
+        { "TRACE", NActors::NLog::PRI_TRACE },
+        { "DEBUG", NActors::NLog::PRI_DEBUG },
+        { "INFO", NActors::NLog::PRI_INFO },
+        { "NOTICE", NActors::NLog::PRI_NOTICE },
+        { "WARN", NActors::NLog::PRI_WARN },
+        { "ERROR", NActors::NLog::PRI_ERROR },
+        { "CRIT", NActors::NLog::PRI_CRIT },
+        { "ALERT", NActors::NLog::PRI_ALERT },
+        { "EMERG", NActors::NLog::PRI_EMERG },
     };
     for (int service = NKikimrServices::EServiceKikimr_MIN; service <= NKikimrServices::EServiceKikimr_MAX; ++service) {
         if (!NKikimrServices::EServiceKikimr_IsValid(service)) {
             continue;
         }
-        TString level = GetTestParam(TStringBuilder() << "TEST_LOG_" << NKikimrServices::EServiceKikimr_Name(static_cast<NKikimrServices::EServiceKikimr>(service)));
+        TString level = GetTestParam(
+            TStringBuilder() << "TEST_LOG_" << NKikimrServices::EServiceKikimr_Name(static_cast<NKikimrServices::EServiceKikimr>(service)));
         if (level.empty()) {
             level = GetTestParam("TEST_LOG");
         }

@@ -386,7 +386,7 @@ Default value: `1s`
 Default value: `5m`
 ||
 || `external_idp_config.discovery_periodic_settings.request_timeout`
-| Discovery document request timeout.
+| Total timeout for receiving the complete Discovery document response. A positive value sets a response deadline; `0s` disables this deadline.
 
 Default value: `15s`
 ||
@@ -406,7 +406,7 @@ Default value: `1s`
 Default value: `5m`
 ||
 || `external_idp_config.jwks_periodic_settings.request_timeout`
-| JWKS request timeout.
+| Total timeout for receiving the complete JWKS response. A positive value sets a response deadline; `0s` disables this deadline.
 
 Default value: `15s`
 ||
@@ -421,6 +421,8 @@ Default value: `2h`
 Default value: `sso`
 ||
 |#
+
+Discovery and JWKS requests for the same IdP share one retry policy: an error in either stage delays subsequent requests to that IdP using the failed stage's `min_error_refresh_period` and `max_error_refresh_period`. Successful refresh periods remain separate, and the consecutive failure count resets after all due requests succeed. Expiration of a previously populated JWKS cache clears its keys and permits one early recovery attempt; if it fails, further attempts honor the shared retry delay even while the cache remains empty.
 
 {% note warning %}
 

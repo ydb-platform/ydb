@@ -373,6 +373,256 @@ const TString KID = "test-key-1";
 
 Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
 
+    Y_UNIT_TEST_F(DiscoveryErrorBackoffSurvivesStaleCache, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("0s");
+        config.MutableDiscoveryPeriodicSettings()->SetMinErrorRefreshPeriod("1h");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1h");
+        std::ignore = RegProvider(config);
+
+        auto first = WaitHttp();
+        const auto failedAt = Rt->GetClock();
+        ReplyHttpError(Rt.get(), Node, Proxy, first, "Connection refused");
+        const auto retry = WaitHttp();
+        const auto elapsed = Rt->GetClock() - failedAt;
+
+        // Downward jitter permits [50%, 100%] of the configured hour.
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "Cache maintenance overwrote discovery backoff; retry after " << elapsed);
+    }
+
+    Y_UNIT_TEST_F(JwksErrorBackoffSurvivesStaleCache, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("0s");
+        config.MutableJwksPeriodicSettings()->SetMinErrorRefreshPeriod("1h");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("1h");
+        std::ignore = RegProvider(config);
+
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto first = WaitHttp();
+        UNIT_ASSERT_STRING_CONTAINS(TString{first->Get()->Request->URL}, "jwks.json");
+        const auto failedAt = Rt->GetClock();
+        ReplyHttpError(Rt.get(), Node, Proxy, first, "Connection refused");
+
+        auto retry = WaitHttp();
+        while (!TString{retry->Get()->Request->URL}.Contains("jwks.json")) {
+            ReplyHttp(Rt.get(), Node, Proxy, retry, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+            retry = WaitHttp();
+        }
+        const auto elapsed = Rt->GetClock() - failedAt;
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "Cache maintenance overwrote JWKS backoff; retry after " << elapsed);
+    }
+
+    Y_UNIT_TEST_F(DiscoverySuccessPeriodSurvivesStaleCache, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("0s");
+        std::ignore = RegProvider(config);
+        auto discovery = WaitHttp();
+        const auto succeededAt = Rt->GetClock();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto jwks = WaitHttp();
+        UNIT_ASSERT_STRING_CONTAINS(TString{jwks->Get()->Request->URL}, "jwks.json");
+        ReplyHttpError(Rt.get(), Node, Proxy, jwks, "Connection refused");
+        auto retry = WaitHttp();
+        while (!TString{retry->Get()->Request->URL}.Contains(".well-known")) {
+            ReplyHttpError(Rt.get(), Node, Proxy, retry, "Connection refused");
+            retry = WaitHttp();
+        }
+        const auto elapsed = Rt->GetClock() - succeededAt;
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "Cache maintenance overwrote successful discovery interval; refresh after " << elapsed);
+    }
+
+    Y_UNIT_TEST_F(JwksFailureBacksOffDiscoveryForTheSameSource, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("0s");
+        config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("10s");
+        config.MutableJwksPeriodicSettings()->SetMinErrorRefreshPeriod("1h");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("1h");
+        std::ignore = RegProvider(config);
+
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto jwks = WaitHttp();
+        UNIT_ASSERT_STRING_CONTAINS(TString{jwks->Get()->Request->URL}, "jwks.json");
+        const auto failedAt = Rt->GetClock();
+        ReplyHttpError(Rt.get(), Node, Proxy, jwks, "Connection refused");
+
+        const auto next = WaitHttp();
+        const auto elapsed = Rt->GetClock() - failedAt;
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "A JWKS failure must back off the entire IdP source; next request after " << elapsed);
+    }
+
+    Y_UNIT_TEST_F(SourceBackoffGrowsUntilJwksRecovery, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("0s");
+        config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("0s");
+        config.MutableJwksPeriodicSettings()->SetMinErrorRefreshPeriod("0s");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("1m");
+        std::ignore = RegProvider(config);
+
+        auto nextJwks = [&] {
+            auto request = WaitHttp();
+            while (TString{request->Get()->Request->URL}.Contains(".well-known")) {
+                ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+                request = WaitHttp();
+            }
+            UNIT_ASSERT_STRING_CONTAINS(TString{request->Get()->Request->URL}, "jwks.json");
+            return request;
+        };
+
+        auto request = nextJwks();
+        for (size_t attempt = 0; attempt < 3; ++attempt) {
+            const auto failedAt = Rt->GetClock();
+            ReplyHttpError(Rt.get(), Node, Proxy, request, "Connection refused");
+            request = nextJwks();
+            UNIT_ASSERT_C(Rt->GetClock() - failedAt >= TDuration::Seconds(1u << attempt),
+                "Successful discovery must not reset the retry sequence of a still-failing source");
+        }
+
+        ReplyHttp(Rt.get(), Node, Proxy, request, "200", "OK", BuildJwksJson(KID, keys.X5cBase64));
+        request = nextJwks();
+        const auto failedAt = Rt->GetClock();
+        ReplyHttpError(Rt.get(), Node, Proxy, request, "Connection refused");
+        request = nextJwks();
+        UNIT_ASSERT_C(Rt->GetClock() - failedAt <= TDuration::Seconds(3),
+            "A recovered source must start a new retry sequence after its next error");
+    }
+
+    Y_UNIT_TEST_F(CacheExpiryRecoveryRetainsSourceBackoff, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableJwksCacheSettings()->SetTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetSuccessRefreshPeriod("2h");
+        config.MutableDiscoveryPeriodicSettings()->SetMinErrorRefreshPeriod("1h");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1h");
+        config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("1s");
+        config.MutableJwksPeriodicSettings()->SetMinErrorRefreshPeriod("1h");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("1h");
+        std::ignore = RegProvider(config);
+        DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
+
+        auto renewal = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, renewal, "Connection refused");
+        auto recovery = WaitHttp();
+        const auto failedAt = Rt->GetClock();
+        ReplyHttpError(Rt.get(), Node, Proxy, recovery, "Connection refused");
+        const auto retry = WaitHttp();
+        const auto elapsed = Rt->GetClock() - failedAt;
+        UNIT_ASSERT_C(elapsed >= TDuration::Minutes(30),
+            TStringBuilder() << "Cache expiry permits one recovery attempt; its failure must back off, got " << elapsed);
+    }
+
+    Y_UNIT_TEST_F(DiscoveryDeadlineRejectsLateResponseAndRecovers, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("1s");
+        config.MutableDiscoveryPeriodicSettings()->SetMinErrorRefreshPeriod("0s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("0s");
+        const auto id = RegProvider(config);
+        auto first = WaitHttp();
+        const auto startedAt = Rt->GetClock();
+
+        // A proxy can keep an incomplete response alive with incoming bytes.
+        // Withhold its completion to exercise the provider's total deadline.
+        using TOutgoing = NHttp::TEvHttpProxy::TEvHttpOutgoingRequest;
+        std::unique_ptr<TEventHandle<TOutgoing>> retry;
+        Rt->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TOutgoing::EventType) {
+                retry.reset(reinterpret_cast<TEventHandle<TOutgoing>*>(event.release()));
+                return false;
+            }
+            return true;
+        };
+        Rt->Sim([&] { return !retry && Rt->GetClock() < startedAt + TDuration::Seconds(3); });
+        Rt->FilterFunction = {};
+        UNIT_ASSERT_C(retry, "An incomplete HTTP response must not stall source refresh indefinitely");
+
+        ReplyHttp(Rt.get(), Node, Proxy, first, "200", "OK", BuildDiscoveryJson(ISS, ISS + "/obsolete-jwks"));
+        ReplyHttp(Rt.get(), Node, Proxy, retry, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto jwks = WaitHttp();
+        UNIT_ASSERT_STRING_CONTAINS(TString{jwks->Get()->Request->URL}, "jwks.json");
+        ReplyHttp(Rt.get(), Node, Proxy, jwks, "200", "OK", BuildJwksJson(KID, keys.X5cBase64));
+
+        SendAuth(id, "after-deadline", CreateJwt(keys, KID, ISS, "u1", {}));
+        const auto auth = WaitAuth();
+        UNIT_ASSERT_EQUAL(auth->Get()->Status, TEvExternalIdpProvider::EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST_F(PoisonDuringBackoffStopsProvider, TSetup) {
+        const auto id = RegProvider(MakeConfig(ISS));
+        auto first = WaitHttp();
+        ReplyHttpError(Rt.get(), Node, Proxy, first, "Connection refused");
+        Rt->Send(new IEventHandle(id, Edge, new TEvents::TEvPoisonPill()), Node);
+        Rt->Send(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), Node);
+        std::ignore = Rt->WaitForEdgeActorEvent<TEvents::TEvWakeup>(Edge, false);
+
+        UNIT_ASSERT_C(Rt->GetActor(id) == nullptr, "Source backoff must be cancelled when the provider stops");
+        UNIT_ASSERT_C(Rt->GetActor(Proxy) != nullptr, "An injected HTTP proxy belongs to the caller");
+    }
+
+    Y_UNIT_TEST_F(PoisonStopsProvider, TSetup) {
+        const auto id = RegProvider(MakeConfig(ISS));
+        std::ignore = WaitHttp();
+
+        Rt->Send(new IEventHandle(id, Edge, new TEvents::TEvPoisonPill()), Node);
+        Rt->Send(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), Node);
+        std::ignore = Rt->WaitForEdgeActorEvent<TEvents::TEvWakeup>(Edge, false);
+
+        UNIT_ASSERT_C(Rt->GetActor(id) == nullptr,
+            "External IdP provider must stop when its owner sends PoisonPill");
+        UNIT_ASSERT_C(Rt->GetActor(Proxy) != nullptr, "An injected HTTP proxy belongs to the caller");
+    }
+
+    Y_UNIT_TEST_F(DeadlineReplacesOwnedHttpProxy, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("1s");
+        config.MutableDiscoveryPeriodicSettings()->SetMinErrorRefreshPeriod("0s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("0s");
+        TVector<TActorId> proxies;
+        Rt->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::EventType) {
+                proxies.push_back(event->GetRecipientRewrite());
+                return false;
+            }
+            return true;
+        };
+        const auto id = Rt->Register(CreateExternalIdpProvider(config, {}), Node);
+        RegisteredActors.insert(id);
+        Rt->Sim([&] { return proxies.size() < 2 && Rt->GetClock() < TInstant::Seconds(4); });
+
+        UNIT_ASSERT_VALUES_EQUAL(proxies.size(), 2);
+        UNIT_ASSERT_C(proxies[0] != proxies[1], "A deadline must replace the proxy owning the timed-out request");
+        UNIT_ASSERT_C(Rt->GetActor(proxies[0]) == nullptr, "The old proxy must stop its outstanding transports");
+        UNIT_ASSERT_C(Rt->GetActor(proxies[1]) != nullptr, "The source needs a live replacement proxy");
+    }
+
+    Y_UNIT_TEST_F(PoisonStopsOwnedHttpProxy, TSetup) {
+        TActorId ownedProxy;
+        Rt->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::EventType) {
+                ownedProxy = event->GetRecipientRewrite();
+                return false;
+            }
+            return true;
+        };
+        const auto id = Rt->Register(CreateExternalIdpProvider(MakeConfig(ISS), {}), Node);
+        RegisteredActors.insert(id);
+        Rt->Sim([&] { return !ownedProxy; });
+
+        Rt->Send(new IEventHandle(id, Edge, new TEvents::TEvPoisonPill()), Node);
+        for (size_t i = 0; i < 2; ++i) {
+            Rt->Send(new IEventHandle(Edge, Edge, new TEvents::TEvWakeup()), Node);
+            std::ignore = Rt->WaitForEdgeActorEvent<TEvents::TEvWakeup>(Edge, false);
+        }
+        UNIT_ASSERT_C(Rt->GetActor(id) == nullptr, "Provider must stop with an outstanding HTTP request");
+        UNIT_ASSERT_C(Rt->GetActor(ownedProxy) == nullptr, "Provider must stop its owned HTTP proxy");
+    }
+
     Y_UNIT_TEST_F(DiscoveryFetchOnBootstrap, TSetup) {
         std::ignore = RegProvider(MakeConfig(ISS));
         const auto req = WaitHttp();
@@ -948,9 +1198,8 @@ Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
         auto jwksReq = WaitHttp();
         ReplyHttpError(Rt.get(), Node, Proxy, jwksReq, "Connection refused");
 
-        // After the staleness period the cache is cleared and the backoffs of both
-        // the discovery and the JWKS refresh are reset, so two more requests
-        // (discovery and JWKS) arrive; fail both of them
+        // Expiry clears the cache and starts one source recovery attempt.
+        // A failed recovery is retried using the shared source backoff.
         auto req2 = WaitHttp();
         ReplyHttpError(Rt.get(), Node, Proxy, req2, "Connection refused");
         auto req3 = WaitHttp();

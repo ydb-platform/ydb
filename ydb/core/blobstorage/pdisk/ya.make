@@ -82,7 +82,6 @@ JOIN_SRCS(
 
 JOIN_SRCS(
     all_pdisk_2.cpp
-    blobstorage_pdisk_params.cpp
     blobstorage_pdisk_requestimpl.cpp
     blobstorage_pdisk_sectorrestorator.cpp
     blobstorage_pdisk_util_atomicblockcounter.cpp
@@ -90,6 +89,13 @@ JOIN_SRCS(
     blobstorage_pdisk_util_signal_event.cpp
     blobstorage_pdisk_writer.cpp
     drivedata_serializer.cpp
+)
+
+# Not joined: the VDisk tests without a PDisk take only TPDiskParams from this library. Joined with the other
+# sources, it would pull in all of the PDisk, with the compatibility info that only binaries define
+# (ydb/apps/version), and those tests would not link.
+SRCS(
+    blobstorage_pdisk_params.cpp
 )
 
 END()

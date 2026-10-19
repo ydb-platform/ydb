@@ -56,6 +56,10 @@ namespace NKikimr::NStorage {
                 const auto newState = newClusterState.GetPerPileState(i);
                 if (currentState != newState) {
                     ++numDifferent;
+                    if (currentState == NKikimrBridge::TClusterState::INACTIVE) {
+                        throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name
+                            << "' is not added to the cluster";
+                    }
                     switch (newState) {
                         case NKikimrBridge::TClusterState::DISCONNECTED:
                             // valid transition from any state
@@ -76,6 +80,9 @@ namespace NKikimr::NStorage {
                         case NKikimrBridge::TClusterState::SUSPENDED:
                             // explicit SUSPENDED request is allowed
                             break;
+
+                        case NKikimrBridge::TClusterState::INACTIVE:
+                            throw TExError() << "Can't switch to INACTIVE, pile has to be removed from the cluster";
 
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                         case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -138,11 +145,11 @@ namespace NKikimr::NStorage {
                                 continue;
                             }
                             auto *state = group->MutableBridgeGroupState();
-                            Y_ABORT_UNLESS(changedPileIndex < state->PileSize());
-                            auto *pile = state->MutablePile(changedPileIndex);
+                            auto *pile = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(changedPileIndex));
+                            Y_ABORT_UNLESS(pile); // disconnected pile is not INACTIVE, so the group has its part there
                             pile->ClearStage();
                             pile->SetBecameUnsyncedGeneration(clusterState->GetGeneration() + 1);
-                            for (auto& pile : *state->MutablePile()) {
+                            NBridge::ForEachGroupPile(state, [&](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
                                 const auto refGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                                 auto *refGroup = groupMap[refGroupId];
                                 Y_ABORT_UNLESS(refGroup);
@@ -150,7 +157,7 @@ namespace NKikimr::NStorage {
                                 refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
                                 pile.SetGroupGeneration(refGroup->GetGroupGeneration());
                                 changedGroupIds.insert(refGroupId);
-                            }
+                            });
                             BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
                         }
                         for (auto& vdisk : *ss->MutableVDisks()) {
@@ -171,6 +178,7 @@ namespace NKikimr::NStorage {
 
                 case NKikimrBridge::TClusterState::SYNCHRONIZED:
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2:
+                case NKikimrBridge::TClusterState::INACTIVE:
                     Y_ABORT("invalid transition");
 
                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -241,6 +249,11 @@ namespace NKikimr::NStorage {
         THashMap<TGroupId, ui32> referencedGroups;
         for (size_t i = 0; i < newState.PileSize(); ++i) {
             const auto& pile = newState.GetPile(i);
+            if (pile.GetAbsent() != state->GetPile(i).GetAbsent()) {
+                throw TExError() << "can't change set of piles in TGroupInfo.BridgeGroupState";
+            } else if (pile.GetAbsent()) {
+                continue; // the group has no part in this pile
+            }
             const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
             if (it == groupMap.end()) {
                 throw TExError() << "can't find referenced group";
@@ -258,11 +271,11 @@ namespace NKikimr::NStorage {
 
         // update referenced group generations
         BumpBridgeProxyGeneration(bridgeProxyGroup, [&](TGroupId id) { return referencedGroups.contains(id); });
-        for (auto& pile : *state->MutablePile()) {
+        NBridge::ForEachGroupPile(state, [&](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
             const auto it = groupMap.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
             Y_ABORT_UNLESS(it != groupMap.end());
             pile.SetGroupGeneration(it->second->GetGroupGeneration());
-        }
+        });
 
         // update vdisk generations
         for (auto& vdisk : *ss->MutableVDisks()) {
@@ -308,36 +321,64 @@ namespace NKikimr::NStorage {
             throw TExError() << "Cluster is already bridged one";
         }
 
-        // nodes running without BridgeConfig won't be able to work in bridged cluster, so ensure there are none of them
-        // among static nodes and dynamic nodes connected to them; every configured static node must positively report
-        // its capability, as the one being temporarily disconnected may still run without BridgeConfig and return
-        // after the conversion; dynamic nodes can't be enumerated this way, the ones that are missed here can't serve
-        // bridged groups until restarted with BridgeConfig
+        // nodes running without BridgeConfig won't be able to work in bridged cluster
+        THashSet<ui32> requiredNodeIds;
+        for (const auto& node : Self->StorageConfig->GetAllNodes()) {
+            requiredNodeIds.insert(node.GetNodeId());
+        }
+        RequireBridgeCapability(false, std::move(requiredNodeIds), {}, [this] {
+            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
+                throw TExError() << *error;
+            }
+            StartProposition(&config);
+        });
+    }
+
+    void TInvokeRequestHandlerActor::RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+            THashSet<ui32> ignoredNodeIds, std::function<void()> callback) {
+        // every required static node must positively report its capability, as the one being temporarily disconnected
+        // may still run without it and return later; dynamic nodes can't be enumerated this way, the ones that are
+        // missed here can't serve bridged groups until restarted; every node that is connected gets the new config,
+        // so it must be capable even being ignored (that is, going to leave the cluster)
         TEvScatter task;
         task.MutableCollectBridgeCapability();
-        IssueScatterTask(std::move(task), [this](TEvGather *res) {
+        IssueScatterTask(std::move(task), [this, pileListChange, requiredNodeIds = std::move(requiredNodeIds),
+                ignoredNodeIds = std::move(ignoredNodeIds), callback = std::move(callback)](TEvGather *res) {
             if (!res->HasCollectBridgeCapability()) {
                 throw TExError() << "Incorrect CollectBridgeCapability response";
             }
             const auto& response = res->GetCollectBridgeCapability();
 
-            const THashSet<ui32> capable(response.GetCapableNodeIds().begin(), response.GetCapableNodeIds().end());
+            const auto& capableIds = pileListChange
+                ? response.GetPileListChangeCapableNodeIds()
+                : response.GetCapableNodeIds();
+            const THashSet<ui32> capable(capableIds.begin(), capableIds.end());
             std::set<ui32> notCapable(response.GetNotCapableNodeIds().begin(), response.GetNotCapableNodeIds().end());
+            for (const ui32 nodeId : response.GetCapableNodeIds()) {
+                if (!capable.contains(nodeId)) {
+                    notCapable.insert(nodeId); // node runs older version not supporting changes of the list of piles
+                }
+            }
             std::set<ui32> unknown;
-            for (const auto& node : Self->StorageConfig->GetAllNodes()) {
-                if (const ui32 nodeId = node.GetNodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+            for (const ui32 nodeId : requiredNodeIds) {
+                if (!capable.contains(nodeId) && !notCapable.contains(nodeId)) {
                     unknown.insert(nodeId); // node is not connected or runs older version that doesn't report anything
                 }
             }
             for (const auto& [node, _] : Self->AllBoundNodes) {
-                if (const ui32 nodeId = node.NodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId)) {
+                if (const ui32 nodeId = node.NodeId(); !capable.contains(nodeId) && !notCapable.contains(nodeId) &&
+                        !ignoredNodeIds.contains(nodeId)) {
                     unknown.insert(nodeId);
                 }
             }
             if (!notCapable.empty() || !unknown.empty()) {
                 TStringBuilder err;
                 if (!notCapable.empty()) {
-                    err << "Some nodes are running without BridgeConfig NodeIds#";
+                    err << (pileListChange
+                        ? "Some connected nodes are running without BridgeConfig or with version not supporting changes"
+                            " of the list of piles, they have to be upgraded or stopped first NodeIds#"
+                        : "Some nodes are running without BridgeConfig NodeIds#");
                     for (const ui32 nodeId : notCapable) {
                         err << ' ' << nodeId;
                     }
@@ -355,11 +396,7 @@ namespace NKikimr::NStorage {
                 throw TExError() << err;
             }
 
-            NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
-            if (auto error = ConvertStorageConfigToBridge(&config, *Self->Cfg->BridgeConfig)) {
-                throw TExError() << *error;
-            }
-            StartProposition(&config);
+            callback();
         });
     }
 

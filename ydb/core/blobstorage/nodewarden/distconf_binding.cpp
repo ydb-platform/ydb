@@ -77,6 +77,8 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC13"},
             {"newNodeList", newNodeList});
 
+        // node list may contain nodes of the pile that is not in the registry (just removed from the cluster config, or
+        // not added there yet); such nodes are not bound to any known pile
         const auto registry = GetCurrentPileRegistry();
         auto resolvePileId = [&](const TNodeLocation& location) {
             return ResolveNodePileId(registry, location).value_or(TBridgePileId());
@@ -212,7 +214,6 @@ namespace NKikimr::NStorage {
         } else if (const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName())) {
             return bridgePileId;
         } else {
-            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
             return std::nullopt;
         }
     }

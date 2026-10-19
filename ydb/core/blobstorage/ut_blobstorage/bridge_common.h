@@ -152,6 +152,30 @@ namespace NBridgeTest {
         return res;
     }
 
+    // define new storage pool with the same settings as the existing one
+    inline void CreateAnotherPool(TEnvironmentSetup& env, ui64 storagePoolId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *read = request.AddCommand()->MutableReadStoragePool();
+        read->SetBoxId(1);
+        read->AddStoragePoolId(1);
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).StoragePoolSize(), 1);
+
+        NKikimrBlobStorage::TDefineStoragePool pool = response.GetStatus(0).GetStoragePool(0);
+        pool.SetStoragePoolId(storagePoolId);
+        pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
+        pool.SetKind(pool.GetName());
+        pool.SetNumGroups(1);
+        pool.ClearItemConfigGeneration();
+
+        request.Clear();
+        request.AddCommand()->MutableDefineStoragePool()->CopyFrom(pool);
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     // keeps the latest group info distributed by BS_CONTROLLER to nodes; Filter is to be called from the filter function
     // of the test runtime
     class TGroupInfoTracker {

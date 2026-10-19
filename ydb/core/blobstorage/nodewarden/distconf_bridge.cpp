@@ -86,31 +86,31 @@ namespace NKikimr::NStorage {
     }
 
     std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
-            NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig) {
+            NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig,
+            const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged) {
+        *pileListChanged = false;
         if (!config->HasClusterState()) {
             return std::nullopt; // the cluster is not bridged one yet, pile ids are not persisted anywhere
         }
         const auto registry = GetPileRegistry(*config, localBridgeConfig);
         if (!registry) {
             return "this node runs without BridgeConfig while the cluster is bridged one";
+        } else if (!bridgeConfig.PilesSize()) {
+            return "bridged cluster can't run without bridge config";
         }
-        auto makeError = [&](TStringBuf message) {
-            TStringBuilder err;
-            err << message << ", expected piles#";
-            for (const auto& pile : registry->GetPiles()) {
-                if (pile.HasName()) {
-                    err << " '" << pile.GetName() << "'";
-                }
-            }
-            return err;
-        };
         auto next = NBridge::AssignPileIds(*registry, bridgeConfig);
         auto equals = google::protobuf::util::MessageDifferencer::Equals;
-        if (!equals(next, *registry)) {
-            return makeError("list of bridge piles can't be changed");
-        } else if (!equals(NBridge::MakeImpliedPileRegistry(bridgeConfig), next)) {
-            // nodes running older versions take pile ids from positions of piles in their BridgeConfig
-            return makeError("order of bridge piles can't be changed");
+        // nodes running older versions take pile ids from positions of piles in their BridgeConfig, so they can't run
+        // with the list of piles changed or reordered; the change is the one of pile ids, or of positions of piles
+        // (against the ones in the current config, or the ones matching pile ids when it is unknown)
+        const auto implied = NBridge::MakeImpliedPileRegistry(bridgeConfig);
+        *pileListChanged = !equals(next, *registry) || !equals(implied, currentBridgeConfig
+            ? NBridge::MakeImpliedPileRegistry(*currentBridgeConfig)
+            : next);
+        if (*pileListChanged && config->GetClusterStateDetails().GetBscConversionPending()) {
+            return "list of bridge piles can't be changed until BSC finishes conversion of the cluster";
+        } else if (auto error = NBridge::ApplyPileRegistryChange(*registry, next, config->MutableClusterState())) {
+            return error;
         }
         config->MutableClusterStateDetails()->MutablePileRegistry()->Swap(&next);
         return std::nullopt;
@@ -153,13 +153,11 @@ namespace NKikimr::NStorage {
                         if (!groupInfo.HasBridgeGroupState()) {
                             continue;
                         }
-                        const auto& groupState = groupInfo.GetBridgeGroupState();
-                        if (groupState.PileSize() <= bridgePileId.GetPileIndex()) {
-                            Y_DEBUG_ABORT();
+                        const auto *pile = NBridge::GetGroupPile(groupInfo.GetBridgeGroupState(), bridgePileId);
+                        if (!pile) {
+                            Y_DEBUG_ABORT(); // pile being synced has its part in every bridged group
                             return false;
-                        }
-                        const auto& pile = groupState.GetPile(bridgePileId.GetPileIndex());
-                        if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                        } else if (pile->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                             return false;
                         }
                     }
@@ -190,7 +188,11 @@ namespace NKikimr::NStorage {
             auto *entry = config->MutableClusterStateDetails()->AddUnsyncedHistory();
             entry->MutableClusterState()->CopyFrom(*clusterState);
             for (size_t i = 0; i < clusterState->PerPileStateSize(); ++i) {
-                TBridgePileId::FromPileIndex(i).CopyToProto(entry, &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
+                if (clusterState->GetPerPileState(i) != NKikimrBridge::TClusterState::INACTIVE) {
+                    // INACTIVE pile has no state to sync, it gets the whole config when it becomes part of the cluster
+                    TBridgePileId::FromPileIndex(i).CopyToProto(entry,
+                        &std::decay_t<decltype(*entry)>::AddUnsyncedPiles);
+                }
             }
         }
 
@@ -212,11 +214,11 @@ namespace NKikimr::NStorage {
                 for (int j = 0; j < unsyncedPiles->size(); ++j) {
                     const auto unsyncedBridgePileId = TBridgePileId::FromProto(unsyncedPiles,
                         &std::decay_t<decltype(*unsyncedPiles)>::at, j);
-                    if (clusterState.PerPileStateSize() <= unsyncedBridgePileId.GetPileIndex()) {
-                        Y_DEBUG_ABORT(); // incorrect per pile state
-                    } else if (NBridge::PileStateTraits(clusterState.GetPerPileState(
-                            unsyncedBridgePileId.GetPileIndex())).RequiresConfigQuorum) {
-                        // this pile is a part of quorum we expect to obtain, so it will be config-synced
+                    const auto state = NBridge::GetPileState(clusterState, unsyncedBridgePileId);
+                    if (state == NKikimrBridge::TClusterState::INACTIVE ||
+                            NBridge::PileStateTraits(state).RequiresConfigQuorum) {
+                        // this pile is a part of quorum we expect to obtain, so it will be config-synced, or it is not
+                        // a part of the cluster anymore and it won't ever need this history
                         unsyncedPiles->SwapElements(j--, unsyncedPiles->size() - 1);
                         unsyncedPiles->RemoveLast();
                     }
@@ -277,6 +279,9 @@ namespace NKikimr::NStorage {
                                 case NKikimrBridge::TClusterState::SUSPENDED:
                                     state = T::SYNCHRONIZED;
                                     break;
+
+                                case NKikimrBridge::TClusterState::INACTIVE:
+                                    break; // INACTIVE pile can't have ring groups
 
                                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MIN_SENTINEL_DO_NOT_USE_:
                                 case NKikimrBridge::TClusterState_EPileState_TClusterState_EPileState_INT_MAX_SENTINEL_DO_NOT_USE_:

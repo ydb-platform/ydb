@@ -623,15 +623,14 @@ public:
         // fill in correct relations between bridged groups
         for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
             if (proxyGroup->BridgeGroupInfo) {
-                const auto& state = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                for (size_t i = 0; i < state.PileSize(); ++i) {
-                    const auto& pile = state.GetPile(i);
+                NBridge::ForEachGroupPile(proxyGroup->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId bridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
                     Y_ABORT_UNLESS(group);
-                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
+                    Y_ABORT_UNLESS(group->BridgePileId == bridgePileId);
                     Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
                     group->BridgeProxyGroupId = proxyGroupId;
-                }
+                });
             }
         }
 
@@ -720,10 +719,10 @@ public:
                 return {}; // group deleted
             }
 
-            if (groupState->PileSize() <= bridgePileId.GetPileIndex()) {
-                return {};
+            if (const auto *pile = NBridge::GetGroupPile(*groupState, bridgePileId)) {
+                return pile->GetStage();
             }
-            return groupState->GetPile(bridgePileId.GetPileIndex()).GetStage();
+            return {};
         };
 
         std::vector<TGroupId> groupsToErase;
@@ -740,7 +739,8 @@ public:
         // start syncers for unsynced groups
         for (const auto& [groupId, group] : Self->GroupMap) {
             if (group->BridgeGroupInfo) {
-                for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
                         const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
@@ -748,7 +748,7 @@ public:
                         Y_ABORT_UNLESS(inserted);
                         Self->SyncersRequiringAction.PushBack(&it->second);
                     }
-                }
+                });
             }
         }
 

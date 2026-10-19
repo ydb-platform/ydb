@@ -770,7 +770,8 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         }
     }
 
-    // replaced config gets pile registry stored; neither the list of piles nor their order can be changed yet
+    // replaced config gets pile registry stored; new piles are INACTIVE, only INACTIVE piles can be dropped; change of
+    // the list of piles or their order is reported, as it requires every node to support it
     Y_UNIT_TEST(UpdatePileRegistry) {
         auto makeBridgeConfig = [](const TVector<TString>& names) {
             NKikimrConfig::TBridgeConfig res;
@@ -780,64 +781,304 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             return res;
         };
         const auto local = makeBridgeConfig({"pile0", "pile1"});
+        auto update = [&](const NKikimrConfig::TBridgeConfig& bridgeConfig, NKikimrBlobStorage::TStorageConfig *config,
+                const NKikimrConfig::TBridgeConfig *localBridgeConfig, bool expectChanged,
+                const NKikimrConfig::TBridgeConfig *currentBridgeConfig = nullptr) {
+            bool changed = true;
+            const auto error = NStorage::UpdatePileRegistry(bridgeConfig, config, localBridgeConfig,
+                currentBridgeConfig, &changed);
+            if (!error) {
+                UNIT_ASSERT_VALUES_EQUAL(changed, expectChanged);
+                NStorage::TDistributedConfigKeeper::UpdateFingerprint(config);
+                if (const auto error = NStorage::ValidateConfig(*config)) {
+                    UNIT_FAIL(*error);
+                }
+            }
+            return error;
+        };
+        auto piles = [](const NKikimrBlobStorage::TStorageConfig& config) {
+            TStringBuilder res;
+            const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+            for (size_t i = 0; i < registry.PilesSize(); ++i) {
+                const auto& pile = registry.GetPiles(i);
+                const auto state = config.GetClusterState().GetPerPileState(i);
+                res << (res.empty() ? "" : " ") << (pile.HasName() ? pile.GetName() : "-") << ':'
+                    << NKikimrBridge::TClusterState::EPileState_Name(state);
+            }
+            return res;
+        };
 
         // implied registry gets persisted
         const auto initial = MakeTwoPileBridgedConfigWithoutRegistry();
         auto config = initial;
-        if (const auto error = NStorage::UpdatePileRegistry(local, &config, &local)) {
+        if (const auto error = update(local, &config, &local, false)) {
             UNIT_FAIL(*error);
         }
         const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
-        UNIT_ASSERT_VALUES_EQUAL(registry.PilesSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(0).GetName(), "pile0");
-        UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(1).GetName(), "pile1");
+        UNIT_ASSERT_VALUES_EQUAL(piles(config), "pile0:SYNCHRONIZED pile1:SYNCHRONIZED");
         UNIT_ASSERT(!registry.GetImplicitPileId());
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
-        if (const auto error = NStorage::ValidateConfig(config)) {
-            UNIT_FAIL(*error);
-        }
 
         // persisted registry is kept as is
         auto again = config;
-        if (const auto error = NStorage::UpdatePileRegistry(local, &again, &local)) {
+        if (const auto error = update(local, &again, &local, false)) {
             UNIT_FAIL(*error);
         }
         UNIT_ASSERT_VALUES_EQUAL(again.GetClusterStateDetails().GetPileRegistry().DebugString(), registry.DebugString());
 
         for (const auto *base : {&initial, &std::as_const(config)}) {
+            // piles keep their ids when reordered, new ones are INACTIVE
             for (const auto& [names, expected] : std::initializer_list<std::pair<TVector<TString>, TString>>{
-                    {{"pile1", "pile0"}, "order of bridge piles can't be changed"},
-                    {{"pile0"}, "list of bridge piles can't be changed"},
-                    {{"pile0", "pile1", "pile2"}, "list of bridge piles can't be changed"},
-                    {{"pile0", "pile2"}, "list of bridge piles can't be changed"}}) {
+                    {{"pile1", "pile0"}, "pile0:SYNCHRONIZED pile1:SYNCHRONIZED"},
+                    {{"pile2", "pile1", "pile0"}, "pile0:SYNCHRONIZED pile1:SYNCHRONIZED pile2:INACTIVE"}}) {
                 auto copy = *base;
-                const auto error = NStorage::UpdatePileRegistry(makeBridgeConfig(names), &copy, &local);
+                if (const auto error = update(makeBridgeConfig(names), &copy, &local, true)) {
+                    UNIT_FAIL(*error);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(piles(copy), expected);
+                UNIT_ASSERT_VALUES_EQUAL(copy.GetClusterState().GetGeneration(),
+                    base->GetClusterState().GetGeneration());
+            }
+
+            // piles being part of the cluster can't be dropped
+            for (const TVector<TString>& names : {TVector<TString>{"pile0"}, TVector<TString>{"pile0", "pile2"},
+                    TVector<TString>{}}) {
+                auto copy = *base;
+                const auto error = update(makeBridgeConfig(names), &copy, &local, true);
                 UNIT_ASSERT(error);
-                UNIT_ASSERT_STRING_CONTAINS(*error, expected);
+                UNIT_ASSERT_STRING_CONTAINS(*error, names.empty()
+                    ? "bridged cluster can't run without bridge config"
+                    : "pile 'pile1' in state SYNCHRONIZED can't be removed from BridgeConfig");
             }
         }
+
+        // INACTIVE piles can be dropped, their slots are reused
+        auto added = config;
+        if (const auto error = update(makeBridgeConfig({"pile0", "pile1", "pile2", "pile3"}), &added, &local, true)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(piles(added), "pile0:SYNCHRONIZED pile1:SYNCHRONIZED pile2:INACTIVE pile3:INACTIVE");
+        if (const auto error = update(makeBridgeConfig({"pile0", "pile1", "pile3"}), &added, &local, true)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(piles(added), "pile0:SYNCHRONIZED pile1:SYNCHRONIZED -:INACTIVE pile3:INACTIVE");
+
+        // the same list of piles in the same order is not a change, though positions of piles don't match their ids;
+        // reordering them is
+        const auto withHole = makeBridgeConfig({"pile0", "pile1", "pile3"});
+        for (const auto& [names, expectChanged] : std::initializer_list<std::pair<TVector<TString>, bool>>{
+                {{"pile0", "pile1", "pile3"}, false}, {{"pile3", "pile0", "pile1"}, true}}) {
+            auto copy = added;
+            if (const auto error = update(makeBridgeConfig(names), &copy, &local, expectChanged, &withHole)) {
+                UNIT_FAIL(*error);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(piles(copy), piles(added));
+        }
+        if (const auto error = update(makeBridgeConfig({"pile4", "pile0", "pile1", "pile3"}), &added, &local, true)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(piles(added), "pile0:SYNCHRONIZED pile1:SYNCHRONIZED pile4:INACTIVE pile3:INACTIVE");
+        if (const auto error = update(local, &added, &local, true)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(piles(added), "pile0:SYNCHRONIZED pile1:SYNCHRONIZED");
+
+        // the list of piles can't be changed while BSC converts the cluster
+        auto converting = config;
+        converting.MutableClusterStateDetails()->SetBscConversionPending(true);
+        const auto error = update(makeBridgeConfig({"pile0", "pile1", "pile2"}), &converting, &local, true);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "can't be changed until BSC finishes conversion");
 
         // empty pile name is persisted as a name, not as a free slot
         const auto withEmpty = makeBridgeConfig({"", "pile1"});
         auto empty = MakeTwoPileBridgedConfigWithoutRegistry("", "pile1");
-        if (const auto error = NStorage::UpdatePileRegistry(withEmpty, &empty, &withEmpty)) {
+        if (const auto error = update(withEmpty, &empty, &withEmpty, false)) {
             UNIT_FAIL(*error);
         }
         UNIT_ASSERT(empty.GetClusterStateDetails().GetPileRegistry().GetPiles(0).HasName());
         UNIT_ASSERT_VALUES_EQUAL(empty.GetClusterStateDetails().GetPileRegistry().GetPiles(0).GetName(), "");
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&empty);
-        if (const auto error = NStorage::ValidateConfig(empty)) {
-            UNIT_FAIL(*error);
-        }
 
         // config of the cluster that is not bridged yet gets no registry
         auto plain = MakeStorageConfig(4);
-        UNIT_ASSERT(!NStorage::UpdatePileRegistry(local, &plain, &local));
+        UNIT_ASSERT(!update(local, &plain, &local, false));
         UNIT_ASSERT(!plain.GetClusterStateDetails().HasPileRegistry());
 
         // node running without BridgeConfig can't replace config of bridged cluster
         auto copy = initial;
-        UNIT_ASSERT(NStorage::UpdatePileRegistry(local, &copy, nullptr));
+        UNIT_ASSERT(update(local, &copy, nullptr, false));
+    }
+
+    // INACTIVE piles have no state to sync, so they are not tracked in the history of unsynced cluster state changes
+    Y_UNIT_TEST(UnsyncedHistoryIgnoresInactivePiles) {
+        const auto prev = MakeTwoPileBridgedConfig("pile0", "pile1");
+        NKikimrConfig::TBridgeConfig bridge;
+        for (const char *name : {"pile0", "pile1", "pile2"}) {
+            bridge.AddPiles()->SetName(name);
+        }
+
+        auto config = prev;
+        bool changed = false;
+        if (const auto error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, nullptr, &changed)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT(changed);
+        config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        config.SetGeneration(prev.GetGeneration() + 1);
+        config.MutablePrevConfig()->CopyFrom(prev);
+        if (const auto error = NStorage::TDistributedConfigKeeper::TransformConfigBeforeCommit(&config)) {
+            UNIT_FAIL(*error);
+        }
+
+        // the disconnected pile has to learn this change, while the INACTIVE one has nothing to learn
+        const auto& cs = config.GetClusterState();
+        UNIT_ASSERT_VALUES_EQUAL(cs.GetGeneration(), prev.GetClusterState().GetGeneration() + 1);
+        const auto& history = config.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_VALUES_EQUAL(history.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(history[0].UnsyncedPilesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(history[0].GetUnsyncedPiles(0), TBridgePileId::FromPileIndex(1).GetLocalDb());
+
+        // INACTIVE piles (and the ones not listed anymore) are removed from history entries
+        auto trimmed = config;
+        auto *entry = trimmed.MutableClusterStateDetails()->MutableUnsyncedHistory(0);
+        entry->ClearUnsyncedPiles();
+        for (ui32 pileIndex : {2u, 3u}) {
+            TBridgePileId::FromPileIndex(pileIndex).CopyToProto(entry,
+                &NKikimrBridge::TClusterStateDetails::TUnsyncedHistory::AddUnsyncedPiles);
+        }
+        auto *next = trimmed.MutableClusterStateDetails()->AddUnsyncedHistory();
+        next->MutableClusterState()->CopyFrom(cs);
+        TBridgePileId::FromPileIndex(1).CopyToProto(next,
+            &NKikimrBridge::TClusterStateDetails::TUnsyncedHistory::AddUnsyncedPiles);
+        if (const auto error = NStorage::TDistributedConfigKeeper::TrimHistoryEntries(&trimmed)) {
+            UNIT_FAIL(*error);
+        }
+        const auto& trimmedHistory = trimmed.GetClusterStateDetails().GetUnsyncedHistory();
+        UNIT_ASSERT_VALUES_EQUAL(trimmedHistory.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[0].UnsyncedPilesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(trimmedHistory[1].UnsyncedPilesSize(), 1);
+    }
+
+    // node warden handing out the designated storage config and bridge info to the bridge connection checker
+    class TStorageConfigProvider : public TActor<TStorageConfigProvider> {
+        const std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> Config;
+        const TBridgeInfo::TPtr BridgeInfo;
+
+    public:
+        TStorageConfigProvider(std::shared_ptr<const NKikimrBlobStorage::TStorageConfig> config,
+                TBridgeInfo::TPtr bridgeInfo)
+            : TActor(&TThis::StateFunc)
+            , Config(std::move(config))
+            , BridgeInfo(std::move(bridgeInfo))
+        {}
+
+        void StateFunc(TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenQueryStorageConfig::EventType) {
+                Send(ev->Sender, new TEvNodeWardenStorageConfig(Config, true, BridgeInfo, Config));
+            }
+        }
+    };
+
+    // nodes of the pile that is listed in BridgeConfig, but not added to the cluster, connect neither to other piles,
+    // nor to each other; the ones trying to connect get the cluster config to learn that
+    Y_UNIT_TEST(InactivePileNodesDontConnect) {
+        // nodes 5 and 6 belong to the third pile, which is INACTIVE
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        for (ui32 nodeId : {5u, 6u}) {
+            auto *node = config.AddAllNodes();
+            node->SetNodeId(nodeId);
+            node->SetHost("node-" + std::to_string(nodeId));
+            node->SetPort(19000 + nodeId);
+            node->MutableLocation()->SetBridgePileName("pile2");
+            node->MutableLocation()->SetDataCenter("dc0");
+        }
+        NKikimrConfig::TBridgeConfig bridge;
+        for (const char *name : {"pile0", "pile1", "pile2"}) {
+            bridge.AddPiles()->SetName(name);
+        }
+        bool changed = false;
+        if (const auto error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, nullptr, &changed)) {
+            UNIT_FAIL(*error);
+        }
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        UNIT_ASSERT_EQUAL(config.GetClusterState().GetPerPileState(2), NKikimrBridge::TClusterState::INACTIVE);
+        const auto configPtr = std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config);
+
+        TTestActorSystem runtime(6);
+        runtime.GetAppDataBridgeConfig().CopyFrom(bridge);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+
+        auto startChecker = [&](ui32 nodeId, ui32 pileIndex) {
+            const auto bridgeInfo = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
+                *MakeNodeWardenConfig(config, &bridge), nodeId);
+            runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), runtime.Register(
+                new TStorageConfigProvider(configPtr, bridgeInfo), nodeId));
+            runtime.RegisterService(GetNameserviceActorId(), runtime.Register(new TIgnoreActor, nodeId));
+            return runtime.Register(CreateDistconfBridgeConnectionCheckerActor(TBridgePileId::FromPileIndex(pileIndex),
+                bridge.GetPiles(pileIndex).GetName()), nodeId);
+        };
+        auto prepare = [&](TActorId checkerId, ui32 peerNodeId) -> std::optional<TString> {
+            const TActorId edge = runtime.AllocateEdgeActor(checkerId.NodeId());
+            runtime.Send(new IEventHandle(checkerId, edge,
+                new TEvInterconnect::TEvPrepareOutgoingConnection(peerNodeId)), checkerId.NodeId());
+            auto ev = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(edge);
+            if (const auto *error = std::get_if<TString>(&ev->Get()->Conclusion)) {
+                return *error;
+            }
+            return std::nullopt;
+        };
+        auto check = [&](TActorId checkerId, ui32 peerNodeId, ui32 peerPileIndex,
+                const NKikimrBlobStorage::TStorageConfig& peerConfig) {
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            TBridgePileId::FromPileIndex(peerPileIndex).CopyToProto(&payload,
+                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            payload.SetBridgePileName(bridge.GetPiles(peerPileIndex).GetName());
+            payload.MutableStorageConfig()->CopyFrom(peerConfig);
+            THashMap<TString, TString> params;
+            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
+            const TActorId edge = runtime.AllocateEdgeActor(checkerId.NodeId());
+            runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvCheckIncomingConnection(peerNodeId,
+                std::move(params))), checkerId.NodeId());
+            auto ev = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(edge);
+            return std::make_pair(ev->Get()->ErrorReason, ev->Get()->ParamsToSend);
+        };
+
+        // node of the pile being part of the cluster connects within its pile and to other active piles only
+        const TActorId active = startChecker(1, 0);
+        UNIT_ASSERT(!prepare(active, 4));
+        UNIT_ASSERT(!prepare(active, 2));
+        const auto outgoing = prepare(active, 5);
+        UNIT_ASSERT(outgoing);
+        UNIT_ASSERT_STRING_CONTAINS(*outgoing, "disconnected pile");
+        UNIT_ASSERT(!check(active, 4, 0, config).first);
+        UNIT_ASSERT(!check(active, 2, 1, config).first);
+
+        // freshly started node of INACTIVE pile is refused, but it gets the config of the cluster
+        auto fresh = config;
+        fresh.SetGeneration(0);
+        fresh.MutableClusterState()->CopyFrom(NBridge::MakeInitialClusterState(3));
+        fresh.ClearClusterStateDetails(); // base config of the node has just the registry implied by BridgeConfig
+        fresh.MutableClusterStateDetails()->MutablePileRegistry()->CopyFrom(
+            config.GetClusterStateDetails().GetPileRegistry());
+        const auto [error, params] = check(active, 5, 2, fresh);
+        UNIT_ASSERT(error);
+        UNIT_ASSERT_STRING_CONTAINS(*error, "peer is not allowed to connect");
+        UNIT_ASSERT(params.contains("distconf"));
+        NKikimrBlobStorage::TConnectivityPayload reply;
+        UNIT_ASSERT(reply.ParseFromString(params.at("distconf")));
+        UNIT_ASSERT_EQUAL(reply.GetStorageConfig().GetClusterState().GetPerPileState(2),
+            NKikimrBridge::TClusterState::INACTIVE);
+
+        // knowing its pile is INACTIVE, node of this pile doesn't connect to the nodes of the same pile, though it
+        // still tries other piles to get config updates
+        const TActorId inactive = startChecker(5, 2);
+        const auto samePile = prepare(inactive, 6);
+        UNIT_ASSERT(samePile);
+        UNIT_ASSERT_STRING_CONTAINS(*samePile, "disconnected pile");
+        UNIT_ASSERT(!prepare(inactive, 1));
+        const auto incoming = check(inactive, 6, 2, config).first;
+        UNIT_ASSERT(incoming);
+        UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
     }
 
     // nodes take bridge config from the main config merged with the storage one, where the main config has precedence;
@@ -873,10 +1114,11 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         local.AddPiles()->SetName("pile0");
         local.AddPiles()->SetName("pile1");
         auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        bool changed = false;
         const auto error = NStorage::UpdatePileRegistry(NStorage::GetMergedBridgeConfig(none, nullptr, false), &config,
-            &local);
+            &local, nullptr, &changed);
         UNIT_ASSERT(error);
-        UNIT_ASSERT_STRING_CONTAINS(*error, "list of bridge piles can't be changed");
+        UNIT_ASSERT_STRING_CONTAINS(*error, "bridged cluster can't run without bridge config");
     }
 
     // cluster bridged before pile registry was introduced gets the registry implied by BridgeConfig persisted
@@ -1200,7 +1442,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_VALUES_EQUAL(*error, "cluster is already bridged one");
 
         // piles can't be added until BSC converts its groups
-        config.MutableClusterState()->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        config.MutableClusterState()->AddPerPileState(NKikimrBridge::TClusterState::INACTIVE);
         config.MutableClusterStateDetails()->MutablePileRegistry()->AddPiles()->SetName("pile1");
         UNIT_ASSERT(NStorage::ValidateConfig(config));
         config.MutableClusterStateDetails()->SetBscConversionPending(false);

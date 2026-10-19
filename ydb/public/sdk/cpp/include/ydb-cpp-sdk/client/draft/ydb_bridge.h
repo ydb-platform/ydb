@@ -24,6 +24,7 @@ enum class EPileState {
     NOT_SYNCHRONIZED = 4,
     SUSPENDED = 5,
     DISCONNECTED = 6,
+    INACTIVE = 7,
 };
 
 struct TPileStateUpdate {

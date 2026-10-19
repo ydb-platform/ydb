@@ -576,7 +576,13 @@ namespace NKikimr::NStorage {
     }
 
     TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config) {
-        const auto registry = GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(Cfg);
+        return GenerateBridgeInfo(config, *Cfg, SelfNode.NodeId());
+    }
+
+    TBridgeInfo::TPtr TDistributedConfigKeeper::GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeWardenConfig& cfg, ui32 selfNodeId) {
+        const auto registry = GetPileRegistry(config, cfg.BridgeConfig ? &*cfg.BridgeConfig : nullptr);
         Y_ABORT_UNLESS(registry);
 
         // prepare structure with all the piles of the registry
@@ -604,13 +610,13 @@ namespace NKikimr::NStorage {
             const ui32 nodeId = node.GetNodeId();
             pile.StaticNodeIds.push_back(node.GetNodeId());
             bridgeInfo->StaticNodeIdToPile[nodeId] = &pile;
-            if (nodeId == SelfNode.NodeId()) {
+            if (nodeId == selfNodeId) {
                 bridgeInfo->SelfNodePile = &pile;
             }
         }
 
-        if (Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo()) {
-            const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
+        if (cfg.DynamicNodeConfig && cfg.DynamicNodeConfig->HasNodeInfo()) {
+            const auto& nodeInfo = cfg.DynamicNodeConfig->GetNodeInfo();
             if (!nodeInfo.HasLocation()) {
                 Y_ABORT("missing Location in dynamic TNodeInfo");
             }
@@ -621,7 +627,8 @@ namespace NKikimr::NStorage {
             bridgeInfo->SelfNodePile = &bridgeInfo->Piles[bridgePileId.GetPileIndex()];
         }
 
-        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << SelfNode.NodeId() << " Config# " << NKikimr::SecureDebugString(config));
+        Y_VERIFY_S(bridgeInfo->SelfNodePile, "SelfNodeId# " << selfNodeId << " Config# "
+            << NKikimr::SecureDebugString(config));
 
         // the cluster may be not converted to bridged one yet; then it runs single pile in implicit state
         std::optional<NKikimrBridge::TClusterState> implicitState;

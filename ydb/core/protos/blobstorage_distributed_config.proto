@@ -165,6 +165,7 @@ message TEvNodeConfigGather {
     message TCollectBridgeCapability {
         repeated uint32 CapableNodeIds = 1; // nodes running with BridgeConfig (static ones and their dynamic subscribers)
         repeated uint32 NotCapableNodeIds = 2; // nodes running without BridgeConfig
+        repeated uint32 PileListChangeCapableNodeIds = 3; // nodes supporting changes of the list of piles
     }
 
     optional uint64 Cookie = 1;
@@ -411,6 +412,7 @@ message TEvNodeConfigInvokeOnRootResult {
 
 message TEvNodeWardenDynamicConfigSubscribe {
     bool BridgeCapable = 1; // dynamic node runs with BridgeConfig
+    bool PileListChangeCapable = 2; // dynamic node supports changes of the list of piles
 }
 
 message TEvNodeWardenDynamicConfigPush {

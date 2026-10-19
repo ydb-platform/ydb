@@ -14,8 +14,8 @@ TSolomonConfiguration::TSolomonConfiguration(bool strictConfigValidation)
     REGISTER_SETTING(*this, _EnableSolomonClientPostApi);
     REGISTER_SETTING(*this, _TruePointsFindRange);
     REGISTER_SETTING(*this, _MaxListingPageSize);
-    REGISTER_SETTING(*this, Auth).ValueSetter([this](const TString&, const TString& value) {
-        Auth = value;
+    REGISTER_SETTING(*this, Auth).ValueSetter([this](TSolomonSettings& settings, const TString&, const TString& value) {
+        settings.Auth = value;
         for (auto& token : Tokens) {
             token.second = ComposeStructuredTokenJsonForServiceAccount("", "", value);
         }

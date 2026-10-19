@@ -1498,7 +1498,7 @@ public:
                     value = TString(configure.Arg(4).Cast<TCoAtom>().Value());
                 }
 
-                if (!SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::TSettingDispatcher::EStage::RUNTIME, NCommon::TSettingDispatcher::GetErrorCallback(input->Pos(), ctx))) {
+                if (!SessionCtx->Config().Dispatch(clusterName, name, value, NCommon::ISettingDispatcher::EStage::RUNTIME, NCommon::GetErrorCallback(input->Pos(), ctx))) {
                     return SyncError();
                 };
             }

@@ -24,7 +24,7 @@ public:
     };
 };
 
-struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingDispatcher {
+struct TGenericConfiguration: public NCommon::TDispatcherAndSettings<TGenericSettings> {
     using TPtr = TIntrusivePtr<TGenericConfiguration>;
 
     explicit TGenericConfiguration(bool strictConfigValidation = false);
@@ -39,9 +39,27 @@ struct TGenericConfiguration: public TGenericSettings, public NCommon::TSettingD
     TGenericSettings::TConstPtr Snapshot() const;
     bool HasCluster(TStringBuf cluster) const;
 
+<<<<<<<
 private:
     TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
 
+|||||||
+        TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
+
+    public:
+        TDuration DescribeTableTimeout; 
+        THashMap<TString, TString> Tokens;
+        THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
+        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
+=======
+        TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
+
+    public:
+        TDuration DescribeTableTimeout;
+        THashMap<TString, TString> Tokens;
+        THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
+        THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name
+>>>>>>>
 public:
     TDuration DescribeTableTimeout;
     THashMap<TString, TString> Tokens;

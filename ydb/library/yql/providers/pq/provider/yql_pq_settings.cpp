@@ -4,7 +4,25 @@
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
+<<<<<<<
 namespace NYql {
+|||||||
+TPqConfiguration::TPqConfiguration() {
+    REGISTER_SETTING(*this, Auth)
+        .ValueSetter([this](const TString&, const TString& value) {
+            Auth = value;
+            for (auto& clusterSetting : ClustersConfigurationSettings) {
+                clusterSetting.second.AuthToken = value;
+            }
+=======
+TPqConfiguration::TPqConfiguration() {
+    REGISTER_SETTING(*this, Auth)
+        .ValueSetter([this](TPqSettings& settings, const TString&, const TString& value) {
+            settings.Auth = value;
+            for (auto& clusterSetting : ClustersConfigurationSettings) {
+                clusterSetting.second.AuthToken = value;
+            }
+>>>>>>>
 
 using namespace NCommon;
 

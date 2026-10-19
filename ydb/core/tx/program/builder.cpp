@@ -59,7 +59,9 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             return TConclusionStatus::Fail(
                 TStringBuilder() << "Unknown kernel for " << name.GetColumnName() << ";kernel_idx=" << func.GetKernelIdx());
         }
-        if (kernelLogic->GetClassName() == TToStringKernel::GetClassNameStatic()) {
+        if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+            kernelLogic = std::make_shared<TCoalesceKernelLogic>(*kernelFunction->kernels().front());
+        } else if (kernelLogic->GetClassName() == TToStringKernel::GetClassNameStatic()) {
             kernelLogic = TToStringKernel::Resolve(*kernelFunction);
         }
         if (PatternIndexHintsEnabled && func.HasPatternHint() && func.GetPatternHint().HasLike()) {

@@ -5,13 +5,11 @@
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/generic/overloaded.h>
-
-#include <atomic>
-
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <atomic>
 
 namespace NYql::NDq {
 
@@ -36,10 +34,14 @@ struct TQuotaState {
     TDuration RetryDelay = TDuration::MilliSeconds(10);
 };
 
-class TTestWorkFactory : public IDqSchedulableWorkFactory {
-    class TWork : public IDqSchedulableWork {
+class TTestWorkFactory: public IDqSchedulableWorkFactory {
+    class TWork: public IDqSchedulableWork {
     public:
-        explicit TWork(std::shared_ptr<TQuotaState> state) : State(std::move(state)) {}
+        explicit TWork(std::shared_ptr<TQuotaState> state)
+            : State(std::move(state))
+        {
+        }
+
         std::optional<TDuration> TryStartExecution(TMonotonic) override {
             Executing = State->Allow.load();
             if (!Executing) {
@@ -48,6 +50,7 @@ class TTestWorkFactory : public IDqSchedulableWorkFactory {
             }
             return std::nullopt;
         }
+
         void StopExecution() override {
             if (Executing) {
                 ++State->Executed;
@@ -56,22 +59,36 @@ class TTestWorkFactory : public IDqSchedulableWorkFactory {
                 ++State->Cancelled;
             }
         }
-        void NotifyResumed(bool) override {}
-        void RegisterForResume(const NActors::TActorId& id) override { State->ActorId = id; }
-        TWorkScope GetWorkScope() const override { return {}; }
+
+        void NotifyResumed(bool) override {
+        }
+
+        void RegisterForResume(const NActors::TActorId& id) override {
+            State->ActorId = id;
+        }
+
+        TWorkScope GetWorkScope() const override {
+            return {};
+        }
+
     private:
         std::shared_ptr<TQuotaState> State;
         bool Executing = false;
     };
+
 public:
     const std::shared_ptr<TQuotaState> State = std::make_shared<TQuotaState>();
+
     std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() override {
         return std::make_unique<TWork>(State);
     }
-    TWorkScope GetWorkScope() const override { return {}; }
+
+    TWorkScope GetWorkScope() const override {
+        return {};
+    }
 };
 
-class TFixture : public TPqIoTestFixture {
+class TFixture: public TPqIoTestFixture {
 public:
     void InitSource(NYql::NPq::NProto::TDqPqTopicSource&& settings, IDqSchedulableWorkFactoryPtr workFactory = nullptr) const {
         CaSetup->Execute([&](TFakeActor& actor) {
@@ -81,44 +98,17 @@ public:
             partitioningParams->SetEachTopicPartitionGroupId(0);
             partitioningParams->SetDqPartitionsCount(1);
 
-            TPqGatewayServices pqServices(
-                Driver,
-                nullptr,
-                CredentialsFactory,
-                std::make_shared<TPqGatewayConfig>(),
-                nullptr
-            );
+            TPqGatewayServices pqServices(Driver, nullptr, CredentialsFactory, std::make_shared<TPqGatewayConfig>(), nullptr);
 
             const auto gateway = CreatePqNativeGateway(std::move(pqServices));
-            const auto controlPlaneId = CaSetup->Runtime->Register(
-                CreateDqPqControlPlaneActor(Driver, CredentialsFactory, gateway, {}));
+            const auto controlPlaneId = CaSetup->Runtime->Register(CreateDqPqControlPlaneActor(Driver, CredentialsFactory, gateway, {}));
             i64 freeSpace = 1_MB;
 
-            auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqReadActor(
-                std::move(settings),
-                0,
-                NYql::NDq::TCollectStatsLevel::None,
-                "query_1",
-                0,
-                {},
-                {params},
-                Driver,
-                CredentialsFactory,
-                actor.SelfId(),
-                actor.GetHolderFactory(),
-                actor.TypeEnv,
-                std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](auto*) {}),
-                MakeIntrusive<NMonitoring::TDynamicCounters>(),
-                gateway,
-                1,
-                true,
-                freeSpace,
-                {},
-                TDuration::Seconds(1),
-                controlPlaneId,
-                false,
-                std::move(workFactory)
-            );
+            auto [dqAsyncInput, dqAsyncInputAsActor] = CreateDqPqReadActor(std::move(settings), 0, NYql::NDq::TCollectStatsLevel::None,
+                "query_1", 0, {}, { params }, Driver, CredentialsFactory, actor.SelfId(), actor.GetHolderFactory(), actor.TypeEnv,
+                std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>(&actor.Alloc, [](auto*) {
+                }), MakeIntrusive<NMonitoring::TDynamicCounters>(), gateway, 1, true, freeSpace,
+                {}, TDuration::Seconds(1), controlPlaneId, false, std::move(workFactory));
 
             actor.InitAsyncInput(dqAsyncInput, dqAsyncInputAsActor);
         });
@@ -129,11 +119,12 @@ public:
     }
 
     NYdb::NTopic::TPartitionConsumerStats DescribeConsumer(const TString& topic) const {
-        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
-            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
-        const auto result = client.DescribeConsumer(topic, DefaultPqConsumer,
-            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
-                .ClientTimeout(TDuration::Seconds(10))).GetValueSync();
+        NYdb::NTopic::TTopicClient client(
+            Driver, NYdb::NTopic::TTopicClientSettings().Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto result = client
+                                .DescribeConsumer(topic, DefaultPqConsumer,
+                                    NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true).ClientTimeout(TDuration::Seconds(10)))
+                                .GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         const auto& partitions = result.GetConsumerDescription().GetPartitions();
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
@@ -142,8 +133,8 @@ public:
     }
 
     void CommitConsumerOffset(const TString& topic, ui64 offset) const {
-        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
-            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        NYdb::NTopic::TTopicClient client(
+            Driver, NYdb::NTopic::TTopicClientSettings().Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
         const auto result = client.CommitOffset(topic, 0, DefaultPqConsumer, offset).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
@@ -169,13 +160,11 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 
-    template<typename T>
-    void PQRead(
-        const std::vector<TWatermarkOr<T>>& expected,
-        TReadValueParser<T> parser = UVParser,
-        i64 eachReadFreeSpace = 1'000
-    ) const {
-        auto op = [](size_t init, const TWatermarkOr<T>& v) { return init + std::holds_alternative<T>(v); };
+    template <typename T>
+    void PQRead(const std::vector<TWatermarkOr<T>>& expected, TReadValueParser<T> parser = UVParser, i64 eachReadFreeSpace = 1'000) const {
+        auto op = [](size_t init, const TWatermarkOr<T>& v) {
+            return init + std::holds_alternative<T>(v);
+        };
         auto size = std::accumulate(expected.begin(), expected.end(), 0ull, op);
         auto actual = SourceReadDataUntil<TString>(parser, size, eachReadFreeSpace);
         AssertDataWithWatermarks(expected, actual);
@@ -183,44 +172,41 @@ public:
 
     // We can't be sure that no extra watermarks were generated (we can't control LB receipt write time).
     // So, we will check only if there is at least one watermark before each specified position.
-    template<typename T>
-    void AssertDataWithWatermarks(
-        const std::vector<TWatermarkOr<T>>& expected,
-        const std::vector<TWatermarkOr<T>>& actual
-    ) const {
+    template <typename T>
+    void AssertDataWithWatermarks(const std::vector<TWatermarkOr<T>>& expected, const std::vector<TWatermarkOr<T>>& actual) const {
         size_t expected_i = 0, actual_i = 0;
         for (; expected_i < expected.size() && actual_i < actual.size(); ++expected_i, ++actual_i) {
             std::visit(TOverloaded{
-                [&expected_i, &actual_i](const T& expected, const T& actual) {
-                    UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, "expected_i = " << expected_i << ", actual_i = " << actual_i);
-                },
-                [&expected_i](const T&, const TInstant&) {
-                    --expected_i;
-                },
-                [&actual_i](const TInstant&, const T&) {
-                    --actual_i;
-                },
-                [](TInstant, TInstant) {
-                },
-            }, expected[expected_i], actual[actual_i]);
+                           [&expected_i, &actual_i](const T& expected, const T& actual) {
+                               UNIT_ASSERT_VALUES_EQUAL_C(expected, actual, "expected_i = " << expected_i << ", actual_i = " << actual_i);
+                           },
+                           [&expected_i](const T&, const TInstant&) {
+                               --expected_i;
+                           },
+                           [&actual_i](const TInstant&, const T&) {
+                               --actual_i;
+                           },
+                           [](TInstant, TInstant) {
+                           },
+                       }, expected[expected_i], actual[actual_i]);
         }
         for (; expected_i < expected.size(); ++expected_i) {
             std::visit(TOverloaded{
-                [expected_i](const T&) {
-                    UNIT_FAIL("expected_i = " << expected_i);
-                },
-                [](TInstant) {
-                },
-            }, expected[expected_i]);
+                           [expected_i](const T&) {
+                               UNIT_FAIL("expected_i = " << expected_i);
+                           },
+                           [](TInstant) {
+                           },
+                       }, expected[expected_i]);
         }
         for (; actual_i < actual.size(); ++actual_i) {
             std::visit(TOverloaded{
-                [actual_i](const T&) {
-                    UNIT_FAIL("actual_i = " << actual_i);
-                },
-                [](TInstant) {
-                },
-            }, actual[actual_i]);
+                           [actual_i](const T&) {
+                               UNIT_FAIL("actual_i = " << actual_i);
+                           },
+                           [](TInstant) {
+                           },
+                       }, actual[actual_i]);
         }
     }
 
@@ -231,24 +217,24 @@ public:
     }
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_F(RewindConsumerToOldest, TFixture) {
         const TString topicName = "RewindConsumerToOldest";
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
         InitSource(topicName);
 
-        PQRead<TString>({Message0, Message1, Message2});
+        PQRead<TString>({ Message0, Message1, Message2 });
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
     }
 
     Y_UNIT_TEST_TWIN_F(SkipConsumerRewindForCurrentData, Fresh, TFixture) {
         const TString topicName = TStringBuilder() << "SkipConsumerRewindForCurrentData" << Fresh;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
@@ -258,20 +244,19 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         }
         InitSource(std::move(settings));
 
-        PQWrite({Message3}, topicName);
-        PQRead<TString>({Message3});
+        PQWrite({ Message3 }, topicName);
+        PQRead<TString>({ Message3 });
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
     }
 
     Y_UNIT_TEST_F(SkipConsumerRewindForFutureTimestamp, TFixture) {
         const TString topicName = "SkipConsumerRewindForFutureTimestamp";
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
-        settings.mutable_disposition()->mutable_from_time()->mutable_timestamp()
-            ->set_seconds((TInstant::Now() + TDuration::Hours(1)).Seconds());
+        settings.mutable_disposition()->mutable_from_time()->mutable_timestamp()->set_seconds((TInstant::Now() + TDuration::Hours(1)).Seconds());
         InitSource(std::move(settings));
 
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
@@ -290,7 +275,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_QUAD_F(TableReadOffsetDoesNotRewindConsumer, ZeroOffset, CommittedAhead, TFixture) {
         const TString topicName = TStringBuilder() << "TableReadOffsetDoesNotRewindConsumer" << ZeroOffset << CommittedAhead;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         const ui64 committedOffset = CommittedAhead ? 3 : 0;
         CommitConsumerOffset(topicName, committedOffset);
         auto settings = BuildPqTopicSourceSettings(topicName);
@@ -312,9 +297,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToOneLineString(),
                 TStringBuilder() << "trying to read from position that is less than committed: read " << beginOffset << " committed 3");
         } else if constexpr (ZeroOffset) {
-            PQRead<TString>({Message0, Message1, Message2});
+            PQRead<TString>({ Message0, Message1, Message2 });
         } else {
-            PQRead<TString>({Message1, Message2});
+            PQRead<TString>({ Message1, Message2 });
         }
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), committedOffset);
     }
@@ -322,7 +307,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_TWIN_F(ExplicitDispositionRewindsBeforeReadOffset, TableMode, TFixture) {
         const TString topicName = TStringBuilder() << "ExplicitDispositionRewindsBeforeReadOffset" << TableMode;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
@@ -332,14 +317,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         settings.MutableOffsetPredicate()->AddItem()->SetBegin(1);
         InitSource(std::move(settings));
 
-        PQRead<TString>({Message1, Message2});
+        PQRead<TString>({ Message1, Message2 });
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
     }
 
     Y_UNIT_TEST_QUAD_F(CheckpointOffsetKeepsStrictRead, CommittedAhead, FromLastCheckpoint, TFixture) {
         const TString topicName = TStringBuilder() << "CheckpointOffsetKeepsStrictRead" << CommittedAhead << FromLastCheckpoint;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         const ui64 committedOffset = CommittedAhead ? 3 : 1;
         CommitConsumerOffset(topicName, committedOffset);
 
@@ -366,10 +351,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
                 Sleep(TDuration::MilliSeconds(20));
             }
             UNIT_ASSERT_C(error.HasValue(), "Checkpoint offset below the committed offset was not rejected");
-            UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToOneLineString(),
-                "trying to read from position that is less than committed: read 1 committed 3");
+            UNIT_ASSERT_STRING_CONTAINS(
+                error.GetValue().ToOneLineString(), "trying to read from position that is less than committed: read 1 committed 3");
         } else {
-            PQRead<TString>({Message1, Message2});
+            PQRead<TString>({ Message1, Message2 });
         }
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), committedOffset);
     }
@@ -377,7 +362,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_TWIN_F(SkipConsumerRewindFromLastCheckpointWithoutOffsets, RestoreTimestamp, TFixture) {
         const TString topicName = TStringBuilder() << "SkipConsumerRewindFromLastCheckpointWithoutOffsets" << RestoreTimestamp;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
@@ -392,15 +377,15 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             CaSetup->LoadSource(state);
         }
 
-        PQWrite({Message3}, topicName);
-        PQRead<TString>({Message3});
+        PQWrite({ Message3 }, topicName);
+        PQRead<TString>({ Message3 });
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
     }
 
     Y_UNIT_TEST_TWIN_F(SkipConsumerRewindForCheckpointWithoutOffsets, Fresh, TFixture) {
         const TString topicName = TStringBuilder() << "SkipConsumerRewindForCheckpointWithoutOffsets" << Fresh;
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
@@ -417,20 +402,20 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         state.Data.emplace_back(proto.SerializeAsString(), 1);
         CaSetup->LoadSource(state);
 
-        PQWrite({Message3}, topicName);
-        PQRead<TString>({Message3});
+        PQWrite({ Message3 }, topicName);
+        PQRead<TString>({ Message3 });
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 3);
     }
 
     Y_UNIT_TEST_F(CommitAfterConsumerRewind, TFixture) {
         const TString topicName = "CommitAfterConsumerRewind";
         PQCreateStream(topicName);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         CommitConsumerOffset(topicName, 3);
         auto settings = BuildPqTopicSourceSettings(topicName);
         settings.MutableDisposition()->mutable_oldest();
         InitSource(std::move(settings));
-        PQRead<TString>({Message0, Message1, Message2});
+        PQRead<TString>({ Message0, Message1, Message2 });
 
         UNIT_ASSERT_VALUES_EQUAL(DescribeConsumer(topicName).GetCommittedOffset(), 0);
         const auto checkpoint = CreateCheckpoint(1);
@@ -451,7 +436,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         // A scheduler must also cover SDK work when this legacy flag is off.
         settings.SetUseActorSystemThreadsInTopicClient(false);
         InitSource(std::move(settings), factory);
-        PQWrite({Message0, Message1, Message2}, topicName);
+        PQWrite({ Message0, Message1, Message2 }, topicName);
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
         while (!factory->State->Denied.load() && TInstant::Now() < deadline) {
             UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
@@ -463,11 +448,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         if constexpr (SchedulerWakeup) {
             CaSetup->Execute([&](TFakeActor&) {
                 // KQP scheduler uses TEvWakeup with tag 201.
-                NActors::TActivationContext::Send(factory->State->ActorId,
-                    std::make_unique<NActors::TEvents::TEvWakeup>(201));
+                NActors::TActivationContext::Send(factory->State->ActorId, std::make_unique<NActors::TEvents::TEvWakeup>(201));
             });
         }
-        PQRead<TString>({Message0, Message1, Message2});
+        PQRead<TString>({ Message0, Message1, Message2 });
         UNIT_ASSERT(factory->State->Executed.load() > 0);
         CaSetup->Execute([](TFakeActor& actor) {
             UNIT_ASSERT(actor.DqAsyncInput->GetCpuTime() > TDuration::Zero());
@@ -480,7 +464,7 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         auto factory = std::make_shared<TTestWorkFactory>();
         factory->State->RetryDelay = TDuration::Hours(1);
         InitSource(BuildPqTopicSourceSettings(topicName), factory);
-        PQWrite({Message0}, topicName);
+        PQWrite({ Message0 }, topicName);
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
         while (!factory->State->Denied.load() && TInstant::Now() < deadline) {
             UNIT_ASSERT(SourceRead<TString>(UVParser).empty());
@@ -499,14 +483,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         PQCreateStream(topicName);
         InitSource(topicName);
 
-        auto messages = std::vector{Message0, Message1, Message2, Message3};
+        auto messages = std::vector{ Message0, Message1, Message2, Message3 };
         PQWrite(messages, topicName);
 
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message0},
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2},
-            TWatermarkOr<TString>{Message3},
+            TWatermarkOr<TString>{ Message0 },
+            TWatermarkOr<TString>{ Message1 },
+            TWatermarkOr<TString>{ Message2 },
+            TWatermarkOr<TString>{ Message3 },
         };
         PQRead(expected);
     }
@@ -515,21 +499,21 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         const TString topicName = "ReadFromTopicFromNow";
         PQCreateStream(topicName);
 
-        auto oldMessages = std::vector{Message0};
+        auto oldMessages = std::vector{ Message0 };
         PQWrite(oldMessages, topicName);
 
         auto settings = BuildPqTopicSourceSettings(topicName);
         settings.mutable_disposition()->mutable_fresh()->CopyFrom(google::protobuf::Empty{});
         InitSource(std::move(settings));
 
-        auto messages = std::vector{Message1, Message2, Message3, Message4};
+        auto messages = std::vector{ Message1, Message2, Message3, Message4 };
         PQWrite(messages, topicName);
 
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2},
-            TWatermarkOr<TString>{Message3},
-            TWatermarkOr<TString>{Message4},
+            TWatermarkOr<TString>{ Message1 },
+            TWatermarkOr<TString>{ Message2 },
+            TWatermarkOr<TString>{ Message3 },
+            TWatermarkOr<TString>{ Message4 },
         };
         PQRead(expected);
     }
@@ -539,10 +523,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         PQCreateStream(topicName);
         InitSource(topicName);
 
-        auto messages = std::vector{Message0, Message1, Message2};
+        auto messages = std::vector{ Message0, Message1, Message2 };
         PQWrite(messages, topicName);
 
-        auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+        auto expected = std::vector{ TWatermarkOr<TString>{ Message0 } };
         PQRead<TString>(expected, UVParser, 1);
 
         UNIT_ASSERT_VALUES_EQUAL(0, SourceRead<TString>(UVParser, 0).size());
@@ -578,10 +562,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             TFixture setup1;
             setup1.InitSource(topicName);
 
-            auto messages = std::vector{Message0};
+            auto messages = std::vector{ Message0 };
             PQWrite(messages, topicName);
 
-            auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+            auto expected = std::vector{ TWatermarkOr<TString>{ Message0 } };
             setup1.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
@@ -594,18 +578,18 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             TFixture setup2;
             setup2.InitSource(topicName);
 
-            auto messages = std::vector{Message1};
+            auto messages = std::vector{ Message1 };
             PQWrite(messages, topicName);
 
             setup2.LoadSource(state);
             Cerr << "State loaded" << Endl;
-            auto expected = std::vector{TWatermarkOr<TString>{Message1}};
+            auto expected = std::vector{ TWatermarkOr<TString>{ Message1 } };
             setup2.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
             setup2.SaveSourceState(checkpoint, state2);
 
-            PQWrite({Message2}, topicName);
+            PQWrite({ Message2 }, topicName);
 
             // Wait for events to be written to topic
             Sleep(TDuration::Seconds(10));
@@ -617,12 +601,12 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup3.InitSource(topicName);
             setup3.LoadSource(state2);
 
-            auto expected = std::vector{TWatermarkOr<TString>{Message2}};
+            auto expected = std::vector{ TWatermarkOr<TString>{ Message2 } };
             setup3.PQRead(expected);
 
             // pq session is still alive
 
-            PQWrite({Message3}, topicName);
+            PQWrite({ Message3 }, topicName);
 
             // Wait for events to be written to topic
             Sleep(TDuration::Seconds(10));
@@ -638,9 +622,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup4.LoadSource(state);
 
             auto expected = std::vector{
-                TWatermarkOr<TString>{Message1},
-                TWatermarkOr<TString>{Message2},
-                TWatermarkOr<TString>{Message3},
+                TWatermarkOr<TString>{ Message1 },
+                TWatermarkOr<TString>{ Message2 },
+                TWatermarkOr<TString>{ Message3 },
             };
             setup4.PQRead(expected);
         }
@@ -652,8 +636,8 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup5.LoadSource(state2);
 
             auto expected = std::vector{
-                TWatermarkOr<TString>{Message2},
-                TWatermarkOr<TString>{Message3},
+                TWatermarkOr<TString>{ Message2 },
+                TWatermarkOr<TString>{ Message3 },
             };
             setup5.PQRead(expected);
         }
@@ -664,14 +648,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup6.InitSource(topicName);
             setup6.LoadSource(state3);
 
-            auto expected = std::vector{TWatermarkOr<TString>{Message3}};
+            auto expected = std::vector{ TWatermarkOr<TString>{ Message3 } };
             setup6.PQRead(expected);
         }
     }
 
     Y_UNIT_TEST(LoadCorruptedState) {
         TSourceState state;
-        const TString topicName = "Invalid"; // We wouldn't read from this topic.
+        const TString topicName = "Invalid";   // We wouldn't read from this topic.
         auto checkpoint = CreateCheckpoint();
 
         {
@@ -701,10 +685,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             TFixture setup;
             setup.InitSource(topicName);
 
-            auto messages = std::vector{Message0};
+            auto messages = std::vector{ Message0 };
             PQWrite(messages, topicName);
 
-            auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+            auto expected = std::vector{ TWatermarkOr<TString>{ Message0 } };
             setup.PQRead(expected);
 
             TSourceState state1;
@@ -712,10 +696,10 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             setup.SaveSourceState(checkpoint1, state1);
             Cerr << "State saved" << Endl;
 
-            messages = {Message1};
+            messages = { Message1 };
             PQWrite(messages, topicName);
 
-            expected = {TWatermarkOr<TString>{Message1}};
+            expected = { TWatermarkOr<TString>{ Message1 } };
             setup.PQRead(expected);
 
             auto checkpoint2 = CreateCheckpoint();
@@ -728,14 +712,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
         TFixture setup2;
         setup2.InitSource(topicName);
-        setup2.LoadSource(state2); // Loads min offset
+        setup2.LoadSource(state2);   // Loads min offset
 
-        auto messages = std::vector{Message2};
+        auto messages = std::vector{ Message2 };
         PQWrite(messages, topicName);
 
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{ Message1 },
+            TWatermarkOr<TString>{ Message2 },
         };
         setup2.PQRead(expected);
     }
@@ -747,15 +731,15 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod);
         InitSource(std::move(settings));
 
-        auto messages = std::vector{Message0, Message1, Message2, Message3};
+        auto messages = std::vector{ Message0, Message1, Message2, Message3 };
         PQWrite(messages, topicName);
 
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message0},
-            TWatermarkOr<TString>{TInstant::Zero()},
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2},
-            TWatermarkOr<TString>{Message3},
+            TWatermarkOr<TString>{ Message0 },
+            TWatermarkOr<TString>{ TInstant::Zero() },
+            TWatermarkOr<TString>{ Message1 },
+            TWatermarkOr<TString>{ Message2 },
+            TWatermarkOr<TString>{ Message3 },
         };
         PQRead(expected);
     }
@@ -767,27 +751,27 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay);
         InitSource(std::move(settings));
 
-        auto messages = std::vector{Message0, Message1};
+        auto messages = std::vector{ Message0, Message1 };
         PQWrite(messages, topicName);
 
         WaitForNextWatermark();
-        messages = {Message2, Message3, Message4};
+        messages = { Message2, Message3, Message4 };
         PQWrite(messages, topicName);
 
         WaitForNextWatermark();
-        messages = {Message5};
+        messages = { Message5 };
         PQWrite(messages, topicName);
 
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message0},
-            TWatermarkOr<TString>{TInstant::Zero()},
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2},
-            TWatermarkOr<TString>{TInstant::Zero()},
-            TWatermarkOr<TString>{Message3},
-            TWatermarkOr<TString>{Message4},
-            TWatermarkOr<TString>{Message5},
-            TWatermarkOr<TString>{TInstant::Zero()},
+            TWatermarkOr<TString>{ Message0 },
+            TWatermarkOr<TString>{ TInstant::Zero() },
+            TWatermarkOr<TString>{ Message1 },
+            TWatermarkOr<TString>{ Message2 },
+            TWatermarkOr<TString>{ TInstant::Zero() },
+            TWatermarkOr<TString>{ Message3 },
+            TWatermarkOr<TString>{ Message4 },
+            TWatermarkOr<TString>{ Message5 },
+            TWatermarkOr<TString>{ TInstant::Zero() },
         };
         PQRead(expected);
     }
@@ -802,21 +786,21 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
             auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod);
             setup.InitSource(std::move(settings));
 
-            auto messages = std::vector{Message0, Message1};
+            auto messages = std::vector{ Message0, Message1 };
             PQWrite(messages, topicName);
 
             auto expected = std::vector{
-                TWatermarkOr<TString>{Message0},
-                TWatermarkOr<TString>{TInstant::Zero()},
+                TWatermarkOr<TString>{ Message0 },
+                TWatermarkOr<TString>{ TInstant::Zero() },
             };
             setup.PQRead(expected);
 
             setup.WaitForNextWatermark();
-            messages = {Message2, Message3};
+            messages = { Message2, Message3 };
             PQWrite(messages, topicName);
 
             // read only watermark (1-st batch), items '3', '4' will stay in ready buffer inside Source actor
-            expected = {TWatermarkOr<TString>{Message1}};
+            expected = { TWatermarkOr<TString>{ Message1 } };
             setup.PQRead(expected);
 
             auto checkpoint = CreateCheckpoint();
@@ -831,9 +815,9 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
 
             // Since items '3', '4' weren't returned from source actor, they should be reread
             auto expected = std::vector{
-                TWatermarkOr<TString>{Message2},
-                TWatermarkOr<TString>{TInstant::Zero()},
-                TWatermarkOr<TString>{Message3},
+                TWatermarkOr<TString>{ Message2 },
+                TWatermarkOr<TString>{ TInstant::Zero() },
+                TWatermarkOr<TString>{ Message3 },
             };
             setup.PQRead(expected);
         }
@@ -842,18 +826,18 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_F(StreamingModeNotReadHistoricalData, TFixture) {
         const TString topicName = "StreamingModeNotReadHistoricalData";
         PQCreateStream(topicName);
-        auto messages = std::vector{Message0, Message1};
+        auto messages = std::vector{ Message0, Message1 };
         PQWrite(messages, topicName);
         Sleep(TDuration::MilliSeconds(100));
 
         auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay, false, true);
         settings.clear_disposition();
         InitSource(std::move(settings));
-        
-        messages = std::vector{Message2};
+
+        messages = std::vector{ Message2 };
         PQWrite(messages, topicName);
         auto expected = std::vector{
-            TWatermarkOr<TString>{Message2},
+            TWatermarkOr<TString>{ Message2 },
         };
         PQRead(expected);
     }
@@ -861,18 +845,14 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     Y_UNIT_TEST_F(TableMode, TFixture) {
         const TString topicName = "TableMode";
         PQCreateStream(topicName);
-        auto messages = std::vector{Message0, Message1, Message2};
+        auto messages = std::vector{ Message0, Message1, Message2 };
         PQWrite(messages, topicName);
 
         Sleep(TDuration::MilliSeconds(1000));
         auto settings = BuildPqTopicSourceSettings(topicName, DefaultWatermarkPeriod, DefaultLateArrivalDelay, false, false);
         InitSource(std::move(settings));
 
-        auto expected = std::vector{
-            TWatermarkOr<TString>{Message0},
-            TWatermarkOr<TString>{Message1},
-            TWatermarkOr<TString>{Message2}
-        };
+        auto expected = std::vector{ TWatermarkOr<TString>{ Message0 }, TWatermarkOr<TString>{ Message1 }, TWatermarkOr<TString>{ Message2 } };
         PQRead(expected);
     }
 
@@ -881,10 +861,12 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         PQCreateStream(topicName);
         InitSource(topicName);
 
-        const std::vector<TString> data = { "1",};
-        auto messages = std::vector{Message0};
+        const std::vector<TString> data = {
+            "1",
+        };
+        auto messages = std::vector{ Message0 };
         PQWrite(messages, topicName);
-        auto expected = std::vector{TWatermarkOr<TString>{Message0}};
+        auto expected = std::vector{ TWatermarkOr<TString>{ Message0 } };
         PQRead(expected);
 
         Sleep(TDuration::MilliSeconds(100));
@@ -907,4 +889,4 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

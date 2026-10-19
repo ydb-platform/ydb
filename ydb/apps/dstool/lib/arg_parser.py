@@ -295,14 +295,16 @@ class Subparsers:
         if self._value is not None:
             self._value.metainfo.add_owner(self)
 
-    def add_parser(self, command, aliases=None, help=None, description=None):
+    def add_parser(self, command, aliases=None, help=None, description=None, hidden=False):
         if aliases is None:
             aliases = [command]
         else:
             aliases = list(aliases)
             aliases.append(command)
         res = ArgumentParser(prog=command, description=description, help=help, aliases=aliases, parent=self.parser)
-        self._subparsers.append(res)
+        # Help walks this list; parsing uses the complete name/alias maps below.
+        if not hidden:
+            self._subparsers.append(res)
         for alias in aliases:
             self._subparser_dict[alias] = res
             self._subparsers_names.append(alias)

@@ -110,6 +110,17 @@ public:
     virtual bool IsBoolInResult() const override;
 };
 
+class TCoalesceKernelLogic: public TSimpleKernelLogic {
+private:
+    const std::shared_ptr<arrow::DataType> OutputType;
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
+        TAccessorsCollection& resources) const override;
+
+public:
+    explicit TCoalesceKernelLogic(const arrow::compute::ScalarKernel& kernel);
+};
+
 class TToStringKernel: public TSimpleKernelLogic {
 private:
     // We are conservative in this field computation for correctness sake and set it only for known good cases.
@@ -156,6 +167,24 @@ public:
     }
 
     static const inline auto Registrator = TFactory::TRegistrator<TToStringKernel>(GetClassNameStatic());
+};
+
+class TJustKernel: public TSimpleKernelLogic {
+public:
+    static TString GetClassNameStatic() {
+        return ToString(NYql::TKernelRequestBuilder::EUnaryOp::Just);
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual std::optional<ui32> GetOriginalAddressFromInput() const override {
+        // Just preserves its input value while adding optionality.
+        return 0;
+    }
+
+    static const inline auto Registrator = TFactory::TRegistrator<TJustKernel>(GetClassNameStatic());
 };
 
 class TLogicMatchString: public IKernelLogic {

@@ -23,4 +23,4 @@ TString TServiceOperator::GetPath() {
     return service->Path;
 }
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

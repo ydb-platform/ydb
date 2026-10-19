@@ -1005,6 +1005,7 @@ public:
                 bool useScanQuery = ShouldUseScanQuery(dataQueryBlocks, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
+                querySettings.IsInternalCall = SessionCtx->Query().IsInternalCall;
                 querySettings.CollectStats = GetStatsMode(settings.StatsMode);
 
                 TFuture<TQueryResult> future;
@@ -1874,6 +1875,7 @@ private:
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScript);
 
+        SessionCtx->Query().IsInternalCall = settings.IsInternalCall;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().StatsMode = settings.StatsMode;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1901,6 +1903,7 @@ private:
     {
         SetupYqlTransformer(EKikimrQueryType::YqlScriptStreaming);
 
+        SessionCtx->Query().IsInternalCall = settings.IsInternalCall;
         SessionCtx->Query().Deadlines = settings.Deadlines;
         SessionCtx->Query().RpcCtx = settings.RpcCtx;
         SessionCtx->Query().StatsMode = settings.StatsMode;

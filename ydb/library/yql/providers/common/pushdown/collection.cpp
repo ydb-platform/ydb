@@ -27,7 +27,8 @@ public:
         : LambdaArg(lambdaArg)
         , Settings(settings)
         , Ctx(ctx)
-    {}
+    {
+    }
 
     void MarkupPredicates(const TExprBase& predicate, TPredicateNode& predicateTree) {
         if (auto coalesce = predicate.Maybe<TCoCoalesce>()) {
@@ -62,7 +63,7 @@ public:
             CollectChildrenPredicates(predicate, predicateTree);
         } else if (auto sqlIn = predicate.Maybe<TCoSqlIn>()) {
             predicateTree.CanBePushed = SqlInCanBePushed(sqlIn.Cast());
-        } else if (predicate.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"})) {
+        } else if (predicate.Ref().IsCallable({ "IsNotDistinctFrom", "IsDistinctFrom" })) {
             predicateTree.CanBePushed = IsDistinctCanBePushed(predicate);
         } else if (auto apply = predicate.Maybe<TCoApply>()) {
             predicateTree.CanBePushed = ApplyCanBePushed(apply.Cast());
@@ -76,7 +77,7 @@ public:
     void CollectChildrenPredicates(const TExprBase& node, TPredicateNode& predicateTree) {
         predicateTree.Children.reserve(node.Ref().ChildrenSize());
         predicateTree.CanBePushed = true;
-        for (const auto& childNodePtr: node.Ref().Children()) {
+        for (const auto& childNodePtr : node.Ref().Children()) {
             TPredicateNode child(childNodePtr);
             MarkupPredicates(TExprBase(childNodePtr), child);
 
@@ -166,9 +167,7 @@ private:
     static bool IsSimpleLikeOperator(const TCoCompare& predicate) {
         // Only cases $A LIKE $B, where $B:
         // "%str", "str%", "%str%"
-        return predicate.Maybe<TCoCmpStringContains>()
-            || predicate.Maybe<TCoCmpStartsWith>()
-            || predicate.Maybe<TCoCmpEndsWith>();
+        return predicate.Maybe<TCoCmpStringContains>() || predicate.Maybe<TCoCmpStartsWith>() || predicate.Maybe<TCoCmpEndsWith>();
     }
 
     static std::vector<TExprBase> GetComparisonNodes(const TExprBase& node) {
@@ -188,16 +187,8 @@ private:
 private:
     // Generic expression checking
     bool IsSupportedDataType(const TCoDataCtor& node) const {
-        if (node.Maybe<TCoBool>() ||
-            node.Maybe<TCoFloat>() ||
-            node.Maybe<TCoDouble>() ||
-            node.Maybe<TCoInt8>() ||
-            node.Maybe<TCoInt16>() ||
-            node.Maybe<TCoInt32>() ||
-            node.Maybe<TCoInt64>() ||
-            node.Maybe<TCoUint8>() ||
-            node.Maybe<TCoUint16>() ||
-            node.Maybe<TCoUint32>() ||
+        if (node.Maybe<TCoBool>() || node.Maybe<TCoFloat>() || node.Maybe<TCoDouble>() || node.Maybe<TCoInt8>() || node.Maybe<TCoInt16>() ||
+            node.Maybe<TCoInt32>() || node.Maybe<TCoInt64>() || node.Maybe<TCoUint8>() || node.Maybe<TCoUint16>() || node.Maybe<TCoUint32>() ||
             node.Maybe<TCoUint64>()) {
             return true;
         }
@@ -256,9 +247,7 @@ private:
         }
 
         const auto targetType = DataSlotFromOptionalDataType(UnwrapExprType(cast.Type().Ref().GetTypeAnn()));
-        if (targetType == EDataSlot::Bool ||
-            IsNumericType(targetType) ||
-            IsStringType(targetType) && Settings.IsEnabled(EFlag::StringTypes) ||
+        if (targetType == EDataSlot::Bool || IsNumericType(targetType) || IsStringType(targetType) && Settings.IsEnabled(EFlag::StringTypes) ||
             IsDateTimeType(targetType) && Settings.IsEnabled(EFlag::DateTimeTypes)) {
             return CheckExpressionNodeForPushdown(cast.Value());
         }
@@ -353,10 +342,10 @@ public:
         if (auto maybeSafeCast = node.Maybe<TCoSafeCast>()) {
             return IsSupportedSafeCast(maybeSafeCast.Cast());
         }
-        if (node.Ref().IsCallable({"ToBytes"})) {
+        if (node.Ref().IsCallable({ "ToBytes" })) {
             return IsSupportedToBytes(node);
         }
-        if (node.Ref().IsCallable({"ToString"})) {
+        if (node.Ref().IsCallable({ "ToString" })) {
             return IsSupportedToString(node);
         }
         if (auto maybeData = node.Maybe<TCoDataCtor>()) {
@@ -403,9 +392,8 @@ public:
             MarkupPredicates(predicate, ifPredicate);
 
             // Check if expressions pushdown
-            return ifPredicate.CanBePushed
-                && CheckExpressionNodeForPushdown(sqlIf.ThenValue())
-                && CheckExpressionNodeForPushdown(sqlIf.ElseValue());
+            return ifPredicate.CanBePushed && CheckExpressionNodeForPushdown(sqlIf.ThenValue()) &&
+                   CheckExpressionNodeForPushdown(sqlIf.ElseValue());
         }
 
         if (auto flatMap = node.Maybe<TCoFlatMap>()) {
@@ -436,7 +424,7 @@ public:
             if (auto exists = node.Maybe<TCoExists>()) {
                 return ExistsCanBePushed(exists.Cast());
             }
-            if (node.Ref().IsCallable({"IsNotDistinctFrom", "IsDistinctFrom"})) {
+            if (node.Ref().IsCallable({ "IsNotDistinctFrom", "IsDistinctFrom" })) {
                 return IsDistinctCanBePushed(node);
             }
         }
@@ -462,14 +450,9 @@ private:
     }
 
     bool IsSupportedCompareOperator(const TCoCompare& compare) const {
-        if (compare.Maybe<TCoCmpLess>() ||
-            compare.Maybe<TCoCmpLessOrEqual>() ||
-            compare.Maybe<TCoCmpGreater>() ||
-            compare.Maybe<TCoCmpGreaterOrEqual>() ||
-            compare.Maybe<TCoCmpEqual>() ||
-            compare.Maybe<TCoCmpNotEqual>() ||
-            compare.Maybe<TCoAggrEqual>() ||
-            compare.Maybe<TCoAggrNotEqual>()) {
+        if (compare.Maybe<TCoCmpLess>() || compare.Maybe<TCoCmpLessOrEqual>() || compare.Maybe<TCoCmpGreater>() ||
+            compare.Maybe<TCoCmpGreaterOrEqual>() || compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() ||
+            compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>()) {
             return true;
         }
         if (IsSupportedLikeOperator(compare)) {
@@ -572,13 +555,16 @@ private:
 
         const auto leftList = GetComparisonNodes(compare.Left());
         const auto rightList = GetComparisonNodes(compare.Right());
-        YQL_ENSURE(leftList.size() == rightList.size(), "Compression parameters should have same size but got " << leftList.size() << " vs " << rightList.size());
+        YQL_ENSURE(leftList.size() == rightList.size(),
+            "Compression parameters should have same size but got " << leftList.size() << " vs " << rightList.size());
 
         for (size_t i = 0; i < leftList.size(); ++i) {
             if (!CheckExpressionNodeForPushdown(leftList[i]) || !CheckExpressionNodeForPushdown(rightList[i])) {
                 return false;
             }
-            if (!IsComparableArguments(leftList[i], rightList[i], compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() || compare.Maybe<TCoAggrNotEqual>())) {
+            if (!IsComparableArguments(leftList[i], rightList[i],
+                    compare.Maybe<TCoCmpEqual>() || compare.Maybe<TCoCmpNotEqual>() || compare.Maybe<TCoAggrEqual>() ||
+                        compare.Maybe<TCoAggrNotEqual>())) {
                 return false;
             }
         }
@@ -784,35 +770,24 @@ private:
     }
 
 private:
-    const TExprBase& LambdaArg;  // Predicate input item, has struct type
+    const TExprBase& LambdaArg;   // Predicate input item, has struct type
     const TSettings& Settings;
-    [[maybe_unused]] TExprContext& Ctx; // To be used for pretty printing
+    [[maybe_unused]] TExprContext& Ctx;   // To be used for pretty printing
 
     std::unordered_set<const TExprNode*> LambdaArguments;
 };
 
-} // anonymous namespace end
+}   // namespace
 
-void CollectPredicates(
-    TExprContext& ctx,
-    const TExprBase& predicate,
-    TPredicateNode& predicateTree,
-    const TExprBase& lambdaArg,
-    const TExprBase& /*lambdaBody*/,
-    const TSettings& settings
-) {
+void CollectPredicates(TExprContext& ctx, const TExprBase& predicate, TPredicateNode& predicateTree, const TExprBase& lambdaArg,
+    const TExprBase& /*lambdaBody*/, const TSettings& settings) {
     TPredicateMarkup markup(lambdaArg, settings, ctx);
     markup.MarkupPredicates(predicate, predicateTree);
 }
 
-[[nodiscard]] bool TestExprForPushdown(
-    TExprContext& ctx,
-    const TExprBase& lambdaArg,
-    const TExprBase& lambdaBody,
-    const TSettings& settings
-) {
+[[nodiscard]] bool TestExprForPushdown(TExprContext& ctx, const TExprBase& lambdaArg, const TExprBase& lambdaBody, const TSettings& settings) {
     TPredicateMarkup markup(lambdaArg, settings, ctx);
     return markup.CheckExpressionNodeForPushdown(lambdaBody);
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

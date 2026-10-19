@@ -5,96 +5,116 @@
 namespace NFq {
 namespace NEvControlPlaneProxy {
 
-template<class RequestProtoMessage>
+template <class RequestProtoMessage>
 struct TResponseProtoMessage;
 
-template<>
+template <>
 struct TResponseProtoMessage<FederatedQuery::CreateQueryRequest> {
     using type = FederatedQuery::CreateQueryResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ListQueriesRequest> {
     using type = FederatedQuery::ListQueriesResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DescribeQueryRequest> {
     using type = FederatedQuery::DescribeQueryResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::GetQueryStatusRequest> {
     using type = FederatedQuery::GetQueryStatusResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ModifyQueryRequest> {
     using type = FederatedQuery::ModifyQueryResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DeleteQueryRequest> {
     using type = FederatedQuery::DeleteQueryResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ControlQueryRequest> {
     using type = FederatedQuery::ControlQueryResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::GetResultDataRequest> {
     using type = FederatedQuery::GetResultDataResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ListJobsRequest> {
     using type = FederatedQuery::ListJobsResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DescribeJobRequest> {
     using type = FederatedQuery::DescribeJobResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::CreateConnectionRequest> {
     using type = FederatedQuery::CreateConnectionResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ListConnectionsRequest> {
     using type = FederatedQuery::ListConnectionsResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DescribeConnectionRequest> {
     using type = FederatedQuery::DescribeConnectionResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ModifyConnectionRequest> {
     using type = FederatedQuery::ModifyConnectionResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DeleteConnectionRequest> {
     using type = FederatedQuery::DeleteConnectionResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::TestConnectionRequest> {
     using type = FederatedQuery::TestConnectionResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::CreateBindingRequest> {
     using type = FederatedQuery::CreateBindingResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ListBindingsRequest> {
     using type = FederatedQuery::ListBindingsResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DescribeBindingRequest> {
     using type = FederatedQuery::DescribeBindingResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::ModifyBindingRequest> {
     using type = FederatedQuery::ModifyBindingResult;
 };
-template<>
+
+template <>
 struct TResponseProtoMessage<FederatedQuery::DeleteBindingRequest> {
     using type = FederatedQuery::DeleteBindingResult;
 };
 
-template<class Request>
+template <class Request>
 struct ResponseSelector;
 
-} // namespace NEvControlPlaneProxy
-} // namespace NFq
+}   // namespace NEvControlPlaneProxy
+}   // namespace NFq

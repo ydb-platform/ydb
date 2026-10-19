@@ -1,8 +1,9 @@
 #include "yql_yt_message_stream.h"
 
-#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_message_stream_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/yt/expr_nodes/yql_yt_message_stream_expr_nodes.h>
+
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -12,11 +13,12 @@ using namespace NNodes;
 
 // Provider phases may run again after KQP resolves an external data source,
 // without rewinding the enclosing compilation pipeline.
-class TYtMessageStreamPipeline final : public TGraphTransformerBase {
+class TYtMessageStreamPipeline final: public TGraphTransformerBase {
 public:
     explicit TYtMessageStreamPipeline(TAutoPtr<IGraphTransformer> pipeline)
         : Pipeline_(std::move(pipeline))
-    {}
+    {
+    }
 
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -27,76 +29,93 @@ private:
         Finished_ = status.Level == TStatus::Ok;
         return status;
     }
+
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
         return Pipeline_->GetAsyncFuture(input);
     }
+
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         const auto status = Pipeline_->ApplyAsyncChanges(input, output, ctx);
         Finished_ = status.Level == TStatus::Ok;
         return status;
     }
+
     void Rewind() override {
         Pipeline_->Rewind();
         Finished_ = false;
     }
+
     TAutoPtr<IGraphTransformer> Pipeline_;
     bool Finished_ = false;
 };
 
-class TYtMessageStreamTransformer final : public TGraphTransformerBase {
+class TYtMessageStreamTransformer final: public TGraphTransformerBase {
 public:
     TYtMessageStreamTransformer(std::shared_ptr<IYtMessageStreamIntegration> streams, TTransformStage stream, TTransformStage table)
-        : Streams_(std::move(streams)), Stream_(std::move(stream)), Table_(std::move(table))
-    {}
+        : Streams_(std::move(streams))
+        , Stream_(std::move(stream))
+        , Table_(std::move(table))
+    {
+    }
 
 private:
     IGraphTransformer& Select(const TExprNode& node) {
-        return Streams_->CanParse(node)
-            ? Stream_.GetTransformer() : Table_.GetTransformer();
+        return Streams_->CanParse(node) ? Stream_.GetTransformer() : Table_.GetTransformer();
     }
+
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         return Select(*input).Transform(input, output, ctx);
     }
+
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) override {
         return Select(input).GetAsyncFuture(input);
     }
+
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         return Select(*input).ApplyAsyncChanges(input, output, ctx);
     }
+
     void Rewind() override {
         Stream_.GetTransformer().Rewind();
         Table_.GetTransformer().Rewind();
     }
+
     std::shared_ptr<IYtMessageStreamIntegration> Streams_;
     TTransformStage Stream_;
     TTransformStage Table_;
 };
 
-class TYtMessageStreamDqIntegrationWrapper final : public IDqIntegration {
+class TYtMessageStreamDqIntegrationWrapper final: public IDqIntegration {
 public:
     TYtMessageStreamDqIntegrationWrapper(IDqIntegration& tables, std::shared_ptr<IYtMessageStreamIntegration> streams)
         : Tables_(tables)
         , Streams_(std::move(streams))
-    {}
+    {
+    }
 
-    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName,
-        TExprContext& ctx, const TPartitionSettings& settings) override {
+    ui64 Partition(const TExprNode& node, TVector<TString>& partitions, TString* clusterName, TExprContext& ctx,
+        const TPartitionSettings& settings) override {
         return Select(node).Partition(node, partitions, clusterName, ctx, settings);
     }
+
     bool CanRead(const TExprNode& read, TExprContext& ctx, bool skipIssues) override {
         return Select(read).CanRead(read, ctx, skipIssues);
     }
+
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) override {
         return Select(*read).WrapRead(read, ctx, settings);
     }
+
     TMaybe<TOptimizerStatistics> ReadStatistics(const TExprNode::TPtr& read, TExprContext& ctx) override {
         return Select(*read).ReadStatistics(read, ctx);
     }
+
     bool CanBlockRead(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& types) override {
         return IsStream(node.Ref()) ? false : Tables_.CanBlockRead(node, ctx, types);
     }
-    TMaybe<ui64> EstimateReadSize(ui64 dataSizePerJob, ui32 maxTasksPerStage,
-        const TVector<const TExprNode*>& nodes, TExprContext& ctx) override {
+
+    TMaybe<ui64> EstimateReadSize(
+        ui64 dataSizePerJob, ui32 maxTasksPerStage, const TVector<const TExprNode*>& nodes, TExprContext& ctx) override {
         TVector<const TExprNode*> tables;
         TVector<const TExprNode*> streams;
         for (const auto* node : nodes) {
@@ -112,16 +131,19 @@ public:
         const auto tableSize = Tables_.EstimateReadSize(dataSizePerJob, maxTasksPerStage, tables, ctx);
         return tableSize ? TMaybe<ui64>(*tableSize + *streamSize) : Nothing();
     }
+
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         // Native YT table callables are registered by the YT sink integration.
         // This wrapper has a distinct IDqIntegration pointer, so registering
         // Tables_ here would add the same callables twice when QYT is enabled.
         Streams_->GetDqIntegration().RegisterMkqlCompiler(compiler);
     }
-    void FillSourceSettings(const TExprNode& node, google::protobuf::Any& settings, TString& sourceType,
-        size_t maxPartitions, TExprContext& ctx) override {
+
+    void FillSourceSettings(
+        const TExprNode& node, google::protobuf::Any& settings, TString& sourceType, size_t maxPartitions, TExprContext& ctx) override {
         Select(node).FillSourceSettings(node, settings, sourceType, maxPartitions, ctx);
     }
+
     bool CheckPragmas(const TExprNode& node, TExprContext& ctx, bool skipIssues) override {
         return Tables_.CheckPragmas(node, ctx, skipIssues);
     }
@@ -142,7 +164,8 @@ public:
         return Tables_.CanFallback();
     }
 
-    TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(const TExprNode& node, const ::google::protobuf::Any& settings, const TString& sourceType) override {
+    TMaybe<TSourceWatermarksSettings> ExtractSourceWatermarksSettings(
+        const TExprNode& node, const ::google::protobuf::Any& settings, const TString& sourceType) override {
         return Tables_.ExtractSourceWatermarksSettings(node, settings, sourceType);
     }
 
@@ -162,11 +185,13 @@ public:
         return Tables_.Annotate(node, params);
     }
 
-    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params, THashMap<TString, TString>& secureParams, const TMaybe<TColumnOrder>& columnOrder) override {
+    bool PrepareFullResultTableParams(const TExprNode& root, TExprContext& ctx, THashMap<TString, TString>& params,
+        THashMap<TString, TString>& secureParams, const TMaybe<TColumnOrder>& columnOrder) override {
         return Tables_.PrepareFullResultTableParams(root, ctx, params, secureParams, columnOrder);
     }
 
-    void WriteFullResultTableRef(NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) override {
+    void WriteFullResultTableRef(
+        NYson::TYsonWriter& writer, const TVector<TString>& columns, const THashMap<TString, TString>& graphParams) override {
         return Tables_.WriteFullResultTableRef(writer, columns, graphParams);
     }
 
@@ -178,13 +203,15 @@ public:
         return Tables_.FillSinkPlanProperties(node, properties);
     }
 
-    void ConfigurePeepholePipeline(bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) override {
+    void ConfigurePeepholePipeline(
+        bool beforeDqTransforms, const THashMap<TString, TString>& params, TTransformationPipeline* pipeline) override {
         return Tables_.ConfigurePeepholePipeline(beforeDqTransforms, params, pipeline);
     }
 
     void NotifyDqTimeout() override {
         return Tables_.NotifyDqTimeout();
     }
+
 private:
     bool IsStream(const TExprNode& node) const {
         if (Streams_->CanParse(node)) {
@@ -201,27 +228,31 @@ private:
         }
         return false;
     }
+
     IDqIntegration& Select(const TExprNode& node) {
         return IsStream(node) ? Streams_->GetDqIntegration() : Tables_;
     }
+
     IDqIntegration& Tables_;
     std::shared_ptr<IYtMessageStreamIntegration> Streams_;
 };
 
 // Keep the native YT provider unchanged. Only MessageStream operations are
 // handled here; the remaining provider and plan interfaces are delegated.
-class TYtMessageStreamDataSourceWrapper final : public IDataProvider, public IPlanFormatter {
+class TYtMessageStreamDataSourceWrapper final: public IDataProvider, public IPlanFormatter {
 public:
     TYtMessageStreamDataSourceWrapper(TIntrusivePtr<IDataProvider> tables, std::shared_ptr<IYtMessageStreamIntegration> streams)
         : Tables_(std::move(tables))
         , Streams_(std::move(streams))
         , Dq_(*Tables_->GetDqIntegration(), Streams_)
-    {}
+    {
+    }
 
     void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
         Streams_->AddCluster(name, properties);
         Tables_->AddCluster(name, properties);
     }
+
     const THashMap<TString, TString>* GetClusterTokens() override {
         Tokens_.clear();
         if (const auto* tokens = Tables_->GetClusterTokens()) {
@@ -232,70 +263,84 @@ public:
         }
         return &Tokens_;
     }
+
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
-        return TYtMessageStreamDataSource::Match(&node)
-            ? Streams_->ValidateParameters(node, ctx, cluster)
-            : Tables_->ValidateParameters(node, ctx, cluster);
+        return TYtMessageStreamDataSource::Match(&node) ? Streams_->ValidateParameters(node, ctx, cluster)
+                                                        : Tables_->ValidateParameters(node, ctx, cluster);
     }
+
     bool CanParse(const TExprNode& node) override {
         return Streams_->CanParse(node) || Tables_->CanParse(node);
     }
+
     bool IsRead(const TExprNode& node) override {
         return Streams_->IsRead(node) || Tables_->IsRead(node);
     }
+
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         if (node->ChildrenSize() && Streams_->CanParse(node->Head())) {
             return Streams_->RewriteIO(node, ctx);
         }
         return Tables_->RewriteIO(node, ctx);
     }
+
     IGraphTransformer& GetIODiscoveryTransformer() override {
         if (!Discovery_) {
             // Lower queue reads before native discovery can interpret them as tables.
-            auto lower = CreateFunctorTransformer([streams = Streams_](TExprNode::TPtr input,
-                TExprNode::TPtr& output, TExprContext& ctx) {
+            auto lower = CreateFunctorTransformer([streams = Streams_](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return OptimizeExpr(input, output, [streams](const TExprNode::TPtr& node, TExprContext& ctx) {
-                    if ((node->IsCallable("Right!") || node->IsCallable("Left!"))
-                        && node->ChildrenSize() && streams->CanParse(node->Head())) {
+                    if ((node->IsCallable("Right!") || node->IsCallable("Left!")) && node->ChildrenSize() && streams->CanParse(node->Head())) {
                         return streams->RewriteIO(node, ctx);
                     }
                     return node;
                 }, ctx, TOptimizeExprSettings(nullptr));
             });
-            Discovery_ = new TYtMessageStreamPipeline(CreateCompositeGraphTransformer({
-                {std::move(lower), "YtMessageStreamDiscovery", TIssuesIds::DEFAULT_ERROR},
-                {Tables_->GetIODiscoveryTransformer(), "YtTableDiscovery", TIssuesIds::DEFAULT_ERROR},
-            }, false));
+            Discovery_ = new TYtMessageStreamPipeline(
+                CreateCompositeGraphTransformer({
+                                                    { std::move(lower), "YtMessageStreamDiscovery", TIssuesIds::DEFAULT_ERROR },
+                                                    { Tables_->GetIODiscoveryTransformer(), "YtTableDiscovery", TIssuesIds::DEFAULT_ERROR },
+                                                }, false));
         }
         return *Discovery_;
     }
+
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         if (!Annotation_) {
             Annotation_ = new TYtMessageStreamTransformer(Streams_,
-                {Streams_->GetTypeAnnotationTransformer(), "YtMessageStreamTypes", TIssuesIds::DEFAULT_ERROR},
-                {Tables_->GetTypeAnnotationTransformer(instantOnly), "YtTableTypes", TIssuesIds::DEFAULT_ERROR});
+                { Streams_->GetTypeAnnotationTransformer(), "YtMessageStreamTypes", TIssuesIds::DEFAULT_ERROR },
+                { Tables_->GetTypeAnnotationTransformer(instantOnly), "YtTableTypes", TIssuesIds::DEFAULT_ERROR });
         }
         return *Annotation_;
     }
+
     IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
         if (!Constraints_) {
             Constraints_ = new TYtMessageStreamTransformer(Streams_,
-                {CreateDefCallableConstraintTransformer(), "YtMessageStreamConstraints", TIssuesIds::DEFAULT_ERROR},
-                {Tables_->GetConstraintTransformer(instantOnly, subGraph), "YtTableConstraints", TIssuesIds::DEFAULT_ERROR});
+                { CreateDefCallableConstraintTransformer(), "YtMessageStreamConstraints", TIssuesIds::DEFAULT_ERROR },
+                { Tables_->GetConstraintTransformer(instantOnly, subGraph), "YtTableConstraints", TIssuesIds::DEFAULT_ERROR });
         }
         return *Constraints_;
     }
+
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         if (!Metadata_) {
-            Metadata_ = new TYtMessageStreamPipeline(CreateCompositeGraphTransformer({
-                {Tables_->GetLoadTableMetadataTransformer(), "YtTableMetadata", TIssuesIds::DEFAULT_ERROR},
-                {Streams_->GetLoadTableMetadataTransformer(), "YtMessageStreamMetadata", TIssuesIds::DEFAULT_ERROR},
-            }, false));
+            Metadata_ = new TYtMessageStreamPipeline(CreateCompositeGraphTransformer(
+                {
+                    { Tables_->GetLoadTableMetadataTransformer(), "YtTableMetadata", TIssuesIds::DEFAULT_ERROR },
+                    { Streams_->GetLoadTableMetadataTransformer(), "YtMessageStreamMetadata", TIssuesIds::DEFAULT_ERROR },
+                }, false));
         }
         return *Metadata_;
     }
-    IDqIntegration* GetDqIntegration() override { return &Dq_; }
-    IPlanFormatter& GetPlanFormatter() override { return *this; }
+
+    IDqIntegration* GetDqIntegration() override {
+        return &Dq_;
+    }
+
+    IPlanFormatter& GetPlanFormatter() override {
+        return *this;
+    }
+
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         if (Streams_->IsRead(node)) {
             children.push_back(node.Child(0));
@@ -303,6 +348,7 @@ public:
         }
         return Tables_->GetPlanFormatter().GetDependencies(node, children, compact);
     }
+
     TStringBuf GetName() const override {
         return Tables_->GetName();
     }
@@ -339,11 +385,11 @@ public:
             // Queue reads do not acquire native YT table intents. Their metadata
             // is loaded by the MessageStream integration after IO discovery.
             Intent_ = new TYtMessageStreamTransformer(Streams_,
-                {CreateFunctorTransformer([](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) {
-                    output = input;
-                    return IGraphTransformer::TStatus::Ok;
-                }), "YtMessageStreamIntent", TIssuesIds::DEFAULT_ERROR},
-                {Tables_->GetIntentDeterminationTransformer(), "YtTableIntent", TIssuesIds::DEFAULT_ERROR});
+                { CreateFunctorTransformer([](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext&) {
+                     output = input;
+                     return IGraphTransformer::TStatus::Ok;
+                 }), "YtMessageStreamIntent", TIssuesIds::DEFAULT_ERROR },
+                { Tables_->GetIntentDeterminationTransformer(), "YtTableIntent", TIssuesIds::DEFAULT_ERROR });
         }
         return *Intent_;
     }
@@ -416,7 +462,8 @@ public:
         return Tables_->CleanupWorld(node, ctx);
     }
 
-    TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx, IOptimizationContext& optCtx) override {
+    TExprNode::TPtr OptimizePull(
+        const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx, IOptimizationContext& optCtx) override {
         return Tables_->OptimizePull(source, fillSettings, ctx, optCtx);
     }
 
@@ -487,6 +534,7 @@ public:
     bool IsFullCaptureReady() override {
         return Tables_->IsFullCaptureReady();
     }
+
     bool HasCustomPlan(const TExprNode& node) override {
         return Tables_->GetPlanFormatter().HasCustomPlan(node);
     }
@@ -538,6 +586,7 @@ public:
     void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) override {
         return Tables_->GetPlanFormatter().WriteTypeDetails(writer, type);
     }
+
 private:
     TIntrusivePtr<IDataProvider> Tables_;
     std::shared_ptr<IYtMessageStreamIntegration> Streams_;
@@ -550,7 +599,7 @@ private:
     THashMap<TString, TString> Tokens_;
 };
 
-} // namespace
+}   // namespace
 
 TIntrusivePtr<IDataProvider> WrapYtDataSourceWithMessageStreams(
     TIntrusivePtr<IDataProvider> tableSource, std::shared_ptr<IYtMessageStreamIntegration> streams)
@@ -560,4 +609,4 @@ TIntrusivePtr<IDataProvider> WrapYtDataSourceWithMessageStreams(
     return MakeIntrusive<TYtMessageStreamDataSourceWrapper>(std::move(tableSource), std::move(streams));
 }
 
-} // namespace NYql
+}   // namespace NYql

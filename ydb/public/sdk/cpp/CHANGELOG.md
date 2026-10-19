@@ -1,3 +1,5 @@
+* Added `TBridgeClient::ConvertToBridge()` to convert a non-bridged cluster into a bridged one with a single pile, and `TGetClusterStateResult::IsConversionInProgress()`.
+
 * Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
 
 * Fixed table and query sessions being reused after commit or rollback errors that require closing the session.

@@ -95,6 +95,18 @@ Y_UNIT_TEST_SUITE(CompositeArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(slice->GetChunkedArray()->ToString()), R"([["c","d"]])");
     }
 
+    Y_UNIT_TEST(EmptySliceAtEndBoundary) {
+        const auto slice = BuildCompositeArray()->ISlice(19, 0);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetRecordsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(slice->GetChunkedArray()->length(), 0);
+    }
+
+    Y_UNIT_TEST(SliceFromBoundaryThroughPartialChunk) {
+        const auto slice = BuildCompositeArray()->ISlice(10, 7);
+        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(slice->GetChunkedArray()->ToString()),
+            R"([[null,"b1","b2","b3",null],["c0",null]])");
+    }
+
     Y_UNIT_TEST(FilterSimple) {
         auto arr = BuildCompositeArray();
         {

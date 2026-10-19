@@ -45,7 +45,7 @@ Block makeTestBlock(size_t num_rows) {
             col.Append(i % 9).ok();
 
         fields.emplace_back(std::move(field));
-        columns.emplace_back(std::move(*col.Finish()));
+        columns.emplace_back(*col.Finish());
     }
 
     {
@@ -57,7 +57,7 @@ Block makeTestBlock(size_t num_rows) {
             col.Append(i % 7).ok();
 
         fields.emplace_back(std::move(field));
-        columns.emplace_back(std::move(*col.Finish()));
+        columns.emplace_back(*col.Finish());
     }
 
     {
@@ -69,7 +69,7 @@ Block makeTestBlock(size_t num_rows) {
             col.Append(strings[i % strings.size()]).ok();
 
         fields.emplace_back(std::move(field));
-        columns.emplace_back(std::move(*col.Finish()));
+        columns.emplace_back(*col.Finish());
     }
 
     {
@@ -81,7 +81,7 @@ Block makeTestBlock(size_t num_rows) {
             col.Append(strings[i % 3]).ok();
 
         fields.emplace_back(std::move(field));
-        columns.emplace_back(std::move(*col.Finish()));
+        columns.emplace_back(*col.Finish());
     }
 
     return arrow::RecordBatch::Make(std::make_shared<arrow::Schema>(fields), num_rows, columns);

@@ -1,7 +1,7 @@
 library("mock") {
   public_deps = [
-    # "//library/cpp/testing/gtest_extensions",
-    # "//yt/yt/client",
+    "//library/cpp/testing/gtest_extensions",
+    "//yt/yt/client",
   ]
 
   sources = [

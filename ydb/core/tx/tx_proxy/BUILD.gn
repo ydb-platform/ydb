@@ -56,7 +56,7 @@ library("tx_proxy") {
   ]
 
   deps = [
-    # "//util/draft",  # peerdir only
+    # "//util",  # peerdir only
     "//ydb/core/actorlib_impl",
     # "//ydb/core/blobstorage/base",  # peerdir only
     "//ydb/core/docapi",

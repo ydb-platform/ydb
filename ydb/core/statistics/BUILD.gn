@@ -23,7 +23,7 @@ library("ut_common") {
     # "//library/cpp/testing/unittest",
     # "//library/cpp/threading/future",
     "//ydb/core/protos",
-    # "//ydb/core/statistics/common",
+    "//ydb/core/statistics/common",
     "//ydb/core/testlib",
     "//ydb/core/tx/columnshard/hooks/testing",
     # "//ydb/library/actors/testlib",

@@ -11,7 +11,7 @@ library("common") {
     # "//ydb/core/base",
     # "//ydb/core/kqp/federated_query",
     "//ydb/core/testlib",
-    # "//ydb/core/tx/columnshard/test_helper",
+    "//ydb/core/tx/columnshard/test_helper",
     # "//ydb/core/tx/scheme_cache",
     # "//ydb/library/accessor",
     "//ydb/library/formats/arrow/simple_builder",
@@ -49,7 +49,7 @@ library("common") {
     "//yql/essentials/udfs/common/datetime2",  # peerdir only
     "//yql/essentials/udfs/common/digest",  # peerdir only
     "//yql/essentials/udfs/common/json2",  # peerdir only
-    # "//yql/essentials/udfs/common/math",  # peerdir only
+    "//yql/essentials/udfs/common/math",  # peerdir only
     "//yql/essentials/udfs/common/re2",  # peerdir only
     "//yql/essentials/udfs/common/string",  # peerdir only
     "//yql/essentials/udfs/common/unicode_base",  # peerdir only

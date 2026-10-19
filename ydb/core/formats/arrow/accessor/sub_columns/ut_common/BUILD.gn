@@ -1,12 +1,12 @@
 library("ut_common") {
   public_deps = [
     # "//contrib/libs/apache/arrow",
-    # "//ydb/core/formats/arrow/accessor/common",
-    # "//ydb/core/formats/arrow/accessor/sub_columns",
+    "//ydb/core/formats/arrow/accessor/common",
+    "//ydb/core/formats/arrow/accessor/sub_columns",
   ]
 
   deps = [
-    # "//ydb/core/formats/arrow",
+    "//ydb/core/formats/arrow",
     # "//ydb/library/actors/core",
     # "//yql/essentials/types/binary_json",
   ]

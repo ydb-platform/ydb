@@ -1,7 +1,7 @@
 unittest_executable("ut") {
   deps = [
     "//library/cpp/testing/unittest",
-    "//util/draft",
+    "//util",  # peerdir only
   ]
 
   sources = [

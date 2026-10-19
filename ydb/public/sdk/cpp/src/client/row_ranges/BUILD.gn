@@ -1,10 +1,10 @@
 library("row_ranges") {
   public_deps = [
-    # "//library/cpp/threading/future",
-    # "//ydb/public/sdk/cpp/src/client/query",
-    # "//ydb/public/sdk/cpp/src/client/result",
-    # "//ydb/public/sdk/cpp/src/client/table",
-    # "//ydb/public/sdk/cpp/src/client/types/status",
+    "//library/cpp/threading/future",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/result",
+    "//ydb/public/sdk/cpp/src/client/table",
+    "//ydb/public/sdk/cpp/src/client/types/status",
   ]
 
   sources = [ "rows.cpp" ]

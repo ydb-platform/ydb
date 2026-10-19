@@ -78,7 +78,7 @@ library("ut_utils") {
     # "//library/cpp/http/misc",
     # "//library/cpp/testing/unittest",
     # "//ydb/core/protos",  # peerdir only
-    # "//ydb/core/testlib",
+    "//ydb/core/testlib",
     # "//ydb/core/testlib/default",  # peerdir only
     # "//ydb/library/security",
   ]

@@ -3,7 +3,8 @@
 # RUN_PYTHON3(build/scripts/cat.py ... STDOUT optimizer_trace.js): the viewer
 # script, the vendored libraries first
 action("optimizer_trace_js") {
-  script = "//build/gn/scripts/concat.py"
+  script = "//build/gn/scripts/run.py"
+  inputs = [ "//build/scripts/cat.py" ]
   sources = [
     "js/vendor/graphlib/graphlib.js",
     "js/vendor/dagre/dagre.js",
@@ -38,7 +39,12 @@ action("optimizer_trace_js") {
     "js/28_bootstrap.js",
   ]
   outputs = [ "$target_gen_dir/optimizer_trace.js" ]
-  args = rebase_path(outputs, root_build_dir) + rebase_path(sources, root_build_dir)
+  args = [
+           "--stdout",
+           rebase_path(outputs[0], root_build_dir),
+           "--python",
+           rebase_path(inputs[0], root_build_dir),
+         ] + rebase_path(sources, root_build_dir)
 }
 
 config("private_config") {

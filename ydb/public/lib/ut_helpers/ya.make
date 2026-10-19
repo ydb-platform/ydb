@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

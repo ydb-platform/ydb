@@ -7,13 +7,13 @@ IF (TSTRING_IS_STD_STRING)
 ENDIF()
 
 SRCS(
-    date.cpp
-    datetime.cpp
-    enum.cpp
-    holder_vector.cpp
-    ip.cpp
-    matrix.cpp
-    memory.cpp
+    date.cpp  # gn: into util
+    datetime.cpp  # gn: into util
+    enum.cpp  # gn: into util
+    holder_vector.cpp  # gn: into util
+    ip.cpp  # gn: into util
+    matrix.cpp  # gn: into util
+    memory.cpp  # gn: into util
 )
 
 END()

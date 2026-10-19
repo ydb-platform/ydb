@@ -504,7 +504,6 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/io_formats/json
 )
-# gn: peerdir ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:upload_rows
 # gn: peerdir ydb/core/tx/schemeshard:find_subdomain_path_id
 
 IF (OS_WINDOWS)

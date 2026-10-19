@@ -1,9 +1,10 @@
 library("unittest_main") {
   testonly = true
 
+  public_deps = [ "//library/cpp/testing/unittest" ]
+
   deps = [
     "//library/cpp/terminate_handler",  # peerdir only
-    "//library/cpp/testing/unittest",
   ]
 
   sources = [ "main.cpp" ]

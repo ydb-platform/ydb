@@ -1,3 +1,7 @@
+config("actorlib_impl_public_config") {
+  cflags = [ "-Wno-deprecated-this-capture" ]
+}
+
 library("actorlib_impl") {
   public_deps = [
     "//ydb/library/actors/core",
@@ -37,4 +41,6 @@ library("actorlib_impl") {
     "read_http_reply_protocol.cpp",
     "send_data_protocol.cpp",
   ]
+
+  public_configs = [ ":actorlib_impl_public_config" ]
 }

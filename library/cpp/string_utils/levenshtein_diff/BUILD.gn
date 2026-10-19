@@ -1,6 +1,6 @@
 library("levenshtein_diff") {
-  public_deps = [
-    # "//util/draft",
+  deps = [
+    # "//util",  # peerdir only
   ]
 
   sources = [ "levenshtein_diff.cpp" ]

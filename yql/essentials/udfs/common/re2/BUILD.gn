@@ -1,10 +1,10 @@
 library("re2") {
   deps = [
-    # "//contrib/libs/re2",
+    "//contrib/libs/re2",
     # "//library/cpp/deprecated/enum_codegen",  # peerdir only
-    # "//yql/essentials/core/langver",  # peerdir only
+    "//yql/essentials/core/langver",
     # "//yql/essentials/public/langver",
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

@@ -1,7 +1,7 @@
 library("lib") {
   public_deps = [
     # "//library/cpp/containers/stack_vector",
-    # "//library/cpp/getopt",
+    "//library/cpp/getopt",
     # "//library/cpp/json",
     "//library/cpp/lwtrace/mon",
     # "//library/cpp/monlib/dynamic_counters/percentile",
@@ -36,6 +36,10 @@ library("lib") {
     "device_test_tool_cli.cpp",
     "device_test_tool_trim_test.cpp",
   ]
+}
+
+config("ydb_stress_tool_private_config") {
+  cflags = [ "-Wno-implicit-const-int-float-conversion" ]
 }
 
 linked_executable("ydb_stress_tool") {
@@ -89,4 +93,6 @@ linked_executable("ydb_stress_tool") {
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",
   ]
+
+  configs = [ ":ydb_stress_tool_private_config" ]
 }

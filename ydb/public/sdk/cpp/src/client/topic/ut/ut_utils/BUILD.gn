@@ -9,7 +9,7 @@ library("test_setup") {
 
   deps = [
     # "//ydb/core/base",
-    # "//ydb/library/testlib/common",
+    "//ydb/library/testlib/common",
   ]
 
   sources = [ "topic_sdk_test_setup.cpp" ]

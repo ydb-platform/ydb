@@ -19,7 +19,6 @@ PEERDIR(
     yql/essentials/types/binary_json
 )
 # gn: peerdir ydb/library/formats/arrow/modifier library/cpp/json
-# gn: peerdir ydb/services/metadata/abstract:request_features
 
 SRCS(
     GLOBAL constructor.cpp

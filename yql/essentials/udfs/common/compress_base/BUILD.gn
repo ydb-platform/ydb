@@ -2,7 +2,7 @@ library("compress_base") {
   deps = [
     # "//yql/essentials/public/udf",  # peerdir only
     # "//yql/essentials/public/udf/support",  # peerdir only
-    # "//yql/essentials/udfs/common/compress_base/lib",
+    "//yql/essentials/udfs/common/compress_base/lib",
   ]
 
   sources = [ "compress_udf.cpp" ]

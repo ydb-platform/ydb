@@ -3,7 +3,7 @@ library("pq_async_io") {
 
   public_deps = [
     # "//library/cpp/testing/unittest",
-    # "//ydb/core/testlib/basics",
+    "//ydb/core/testlib/basics",
     # "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     "//ydb/library/yql/providers/common/ut_helpers",
@@ -15,7 +15,7 @@ library("pq_async_io") {
 
   deps = [
     # "//ydb/core/base",
-    # "//ydb/library/testlib/common",
+    "//ydb/library/testlib/common",
     # "//ydb/library/yql/providers/pq/gateway/dummy",  # peerdir only
     "//ydb/library/yql/providers/pq/gateway/native",
     "//ydb/public/sdk/cpp/src/client/datastreams",

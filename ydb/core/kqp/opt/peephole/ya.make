@@ -15,6 +15,5 @@ PEERDIR(
     ydb/library/yql/dq/opt
     ydb/library/yverify_stream
 )
-# gn: peerdir ydb/core/kqp/host:transform
 
 END()

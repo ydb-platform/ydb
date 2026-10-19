@@ -2,12 +2,12 @@ library("json2") {
   deps = [
     # "//library/cpp/json",
     # "//yql/essentials/core/sql_types",
-    # "//yql/essentials/minikql/dom",
-    # "//yql/essentials/minikql/jsonpath",
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/minikql/dom",
+    "//yql/essentials/minikql/jsonpath",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
-    # "//yql/essentials/types/binary_json",
-    # "//yql/essentials/types/binary_json/dom",  # peerdir only
+    "//yql/essentials/types/binary_json",
+    "//yql/essentials/types/binary_json/dom",  # peerdir only
   ]
 
   sources = [ "json2_udf.cpp" ]

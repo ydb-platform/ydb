@@ -25,7 +25,7 @@ library("combiner_perf") {
     # "//ydb/library/yql/dq/comp_nodes/ut/utils",
     # "//yql/essentials/ast",
     # "//yql/essentials/core",
-    # "//yql/essentials/core/type_ann",
+    "//yql/essentials/core/type_ann",
     "//yql/essentials/minikql",
     # "//yql/essentials/minikql/codegen/llvm16",  # link slot
     "//yql/essentials/minikql/comp_nodes",
@@ -35,9 +35,9 @@ library("combiner_perf") {
     # "//yql/essentials/minikql/invoke_builtins/llvm16",  # link slot
     # "//yql/essentials/minikql/runtime_settings",
     # "//yql/essentials/minikql:terminator",
-    # "//yql/essentials/providers/common/arrow_resolve",
-    # "//yql/essentials/providers/common/mkql",
-    # "//yql/essentials/providers/common/udf_resolve",
+    "//yql/essentials/providers/common/arrow_resolve",
+    "//yql/essentials/providers/common/mkql",
+    "//yql/essentials/providers/common/udf_resolve",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/arrow",  # peerdir only
     # "//yql/essentials/public/udf/service/exception_policy",  # link slot

@@ -1,6 +1,6 @@
 library("mock") {
   public_deps = [
-    # "//ydb/core/blobstorage/dsproxy/mock",
+    "//ydb/core/blobstorage/dsproxy/mock",
     # "//ydb/core/blobstorage/subsystem/interface",
   ]
 

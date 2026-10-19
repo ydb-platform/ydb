@@ -1,6 +1,6 @@
 unittest_executable("without_batching") {
   deps = [
-    # "//ydb/tests/functional/kafka/test_common",  # no target
+    "//ydb/tests/functional/kafka/test_common/suites",  # peerdir only
   ]
 
   data_deps = [ "//ydb/apps/ydbd" ]

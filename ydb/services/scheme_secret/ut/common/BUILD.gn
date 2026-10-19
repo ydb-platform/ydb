@@ -2,8 +2,8 @@ library("common") {
   testonly = true
 
   public_deps = [
-    # "//ydb/core/kqp/common/events",
-    # "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/common/events",
+    "//ydb/core/kqp/ut/common",
     # "//ydb/library/aclib",
     # "//ydb/public/sdk/cpp/src/client/table",
     # "//ydb/services/scheme_secret",

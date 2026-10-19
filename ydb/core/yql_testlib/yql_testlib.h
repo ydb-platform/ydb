@@ -26,7 +26,7 @@ public:
         Initialize();
     }
 
-    TYqlServer& operator=(TYqlServer&& server) = default;
+    TYqlServer& operator=(TYqlServer&& server) = delete;
 
     void ResumeYqlExecutionActor();
 

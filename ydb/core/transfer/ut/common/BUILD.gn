@@ -1,8 +1,12 @@
+config("common_public_config") {
+  cflags = [ "-Wno-deprecated-this-capture" ]
+}
+
 library("common") {
   testonly = true
 
   public_deps = [
-    # "//library/cpp/http/io",
+    "//library/cpp/http/io",
     # "//library/cpp/json",
     "//library/cpp/testing/unittest",
     # "//library/cpp/threading/local_executor",
@@ -22,4 +26,6 @@ library("common") {
     "transfer_common.cpp",
     "utils.cpp",
   ]
+
+  public_configs = [ ":common_public_config" ]
 }

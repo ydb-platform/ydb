@@ -1,6 +1,6 @@
 library("testlib") {
   public_deps = [
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map",
   ]
 
   sources = [ "range_locker_access.cpp" ]

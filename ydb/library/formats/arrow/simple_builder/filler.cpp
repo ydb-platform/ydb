@@ -1,6 +1,5 @@
 #include "filler.h"
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <util/random/random.h>
 
 namespace NKikimr::NArrow::NConstruction {
@@ -10,7 +9,7 @@ TStringPoolFiller::TStringPoolFiller(const ui32 poolSize, const ui32 strLen, con
         if (RandomNumber<double>() < defaultValueFrq) {
             Data.emplace_back(defaultValue);
         } else {
-            Data.emplace_back(NUnitTest::RandomString(strLen, i));
+            Data.emplace_back(RandomString(strLen, i));
         }
     }
 }

@@ -1,7 +1,5 @@
 library("static") {
-  public_deps = [
-    # "//yql/essentials/public/udf",
-  ]
+  public_deps = [ "//yql/essentials/public/udf" ]
 
   sources = [
     "static_udf.cpp",

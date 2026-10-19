@@ -86,7 +86,7 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16  # gn: public dep
     yql/essentials/utils
 )
-# gn: peerdir ydb/core/tx/datashard:range_ops ydb/core/tx/datashard:read_events
+# gn: peerdir ydb/core/tx/datashard:read_events
 
 END()
 

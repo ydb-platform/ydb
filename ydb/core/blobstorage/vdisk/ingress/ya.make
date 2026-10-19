@@ -3,7 +3,6 @@ LIBRARY()
 PEERDIR(
     library/cpp/lwtrace
     ydb/core/base
-    ydb/core/blobstorage/groupinfo
     ydb/core/protos
 )
 

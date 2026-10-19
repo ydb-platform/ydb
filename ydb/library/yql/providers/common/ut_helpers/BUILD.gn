@@ -4,7 +4,7 @@ library("ut_helpers") {
   public_deps = [
     "//library/cpp/retry",
     # "//library/cpp/testing/unittest",
-    # "//ydb/library/actors/testlib",
+    "//ydb/library/actors/testlib",
     # "//ydb/library/yql/dq/actors/compute",
     "//ydb/library/yql/dq/actors/protos",
     # "//yql/essentials/minikql",

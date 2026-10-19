@@ -2033,7 +2033,7 @@ TEST_F(TxUsageQuery, TEST_NAME(TestRetentionOnLongTxAndBigMessages))
         for (std::size_t i = 0; i < sb.capacity(); ++i) {
             sb += RandomNumber<char>();
         }
-        return std::move(sb);
+        return sb;
     };
 
     auto msg = bigMessage();

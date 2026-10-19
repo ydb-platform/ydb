@@ -1,18 +1,18 @@
 library("digest") {
   deps = [
-    # "//contrib/libs/farmhash",
-    # "//contrib/libs/highwayhash",
-    # "//contrib/libs/openssl",
-    # "//contrib/libs/xxhash",
-    # "//library/cpp/digest/argonish",
-    # "//library/cpp/digest/crc32c",
+    "//contrib/libs/farmhash",
+    "//contrib/libs/highwayhash",
+    "//contrib/libs/openssl",
+    "//contrib/libs/xxhash",
+    "//library/cpp/digest/argonish",
+    "//library/cpp/digest/crc32c",
     # "//library/cpp/digest/md5",
     # "//library/cpp/digest/murmur",
-    # "//library/cpp/digest/old_crc",
+    "//library/cpp/digest/old_crc",
     # "//library/cpp/digest/sfh",
-    # "//yql/essentials/core/langver",  # peerdir only
+    "//yql/essentials/core/langver",
     # "//yql/essentials/public/langver",
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

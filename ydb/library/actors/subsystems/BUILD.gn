@@ -1,7 +1,5 @@
 library("subsystems") {
-  public_deps = [
-    # "//ydb/library/actors/core",
-  ]
+  public_deps = [ "//ydb/library/actors/core" ]
 
   deps = [
     # "//ydb/library/actors/protos",  # peerdir only

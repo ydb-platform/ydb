@@ -1,5 +1,7 @@
 LIBRARY()
 
+PROVIDES(wasm)
+
 SRCS(
     builtins.cpp
     GLOBAL compartment.cpp

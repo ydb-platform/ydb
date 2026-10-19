@@ -7,6 +7,11 @@ SRCS(
     function.cpp
     memory_pool.cpp
     type_builder.cpp
+    compartment.h  # gn: slot wasm self
+    data_transfer.h  # gn: slot wasm self
+    function.h  # gn: slot wasm self
+    memory_pool.h  # gn: slot wasm self
+    type_builder.h  # gn: slot wasm self
 )
 
 PEERDIR(

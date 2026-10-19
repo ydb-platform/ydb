@@ -1,15 +1,15 @@
 library("iam_mocks") {
   public_deps = [
     # "//contrib/libs/grpc",
-    # "//library/cpp/http/server",
-    # "//library/cpp/json",
-    # "//library/cpp/testing/common",
+    "//library/cpp/http/server",
+    "//library/cpp/json",
+    "//library/cpp/testing/common",
     "//ydb/public/api/client/yc_public/iam",
     # "//ydb/public/sdk/cpp/src/client/iam:common",
   ]
 
   deps = [
-    # "//library/cpp/http/misc",
+    "//library/cpp/http/misc",
     # "//ydb/public/sdk/cpp/src/client/iam",  # peerdir only
   ]
 

@@ -891,7 +891,6 @@ PEERDIR(
     ydb/services/lib/auth
     ydb/services/persqueue_v1
 )
-# gn: peerdir ydb/core/driver_lib/run:config
 
 YQL_LAST_ABI_VERSION()
 

@@ -8,6 +8,7 @@ library("formats") {
 
   deps = [
     # "//contrib/libs/apache/arrow_next",
+    # "//contrib/libs/apache/arrow_next/cpp/src:generated",
     # "//contrib/libs/protobuf",
     # "//library/cpp/skiff",
     # "//library/cpp/string_utils/base64",

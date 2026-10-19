@@ -18,7 +18,7 @@ library("actors") {
     # "//ydb/core/driver_lib/version",  # peerdir only
     # "//ydb/core/grpc_services",
     "//ydb/core/mon_alloc",
-    # "//ydb/core/persqueue/pqtablet/blob",
+    "//ydb/core/persqueue/pqtablet/blob",
     # "//ydb/core/scheme",  # peerdir only
     # "//ydb/core/testlib",
     # "//ydb/library/actors/core",

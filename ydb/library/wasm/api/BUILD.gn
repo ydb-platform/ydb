@@ -15,4 +15,16 @@ library("api") {
     "memory_pool.cpp",
     "type_builder.cpp",
   ]
+
+  link_slot_interface = "wasm"
+
+  link_slot_headers = [
+    "compartment.h",
+    "data_transfer.h",
+    "function.h",
+    "memory_pool.h",
+    "type_builder.h",
+  ]
+
+  link_slot_self = true
 }

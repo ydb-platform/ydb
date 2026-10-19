@@ -1,7 +1,7 @@
 library("dsv") {
   deps = [
     # "//library/cpp/deprecated/split",
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

@@ -74,7 +74,7 @@ PEERDIR(
     ydb/library/protobuf_printer
     ydb/library/yaml_config
 )
-# gn: peerdir ydb/core/mind/bscontroller:group_mapper ydb/core/mind:nameserver_table_builder ydb/library/keys
+# gn: peerdir ydb/core/mind:nameserver_table_builder
 
 END()
 

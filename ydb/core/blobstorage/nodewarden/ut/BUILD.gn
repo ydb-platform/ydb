@@ -1,10 +1,12 @@
 unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/blobstorage/base",
     "//ydb/core/blobstorage/crypto",
+    "//ydb/core/blobstorage/ddisk",
     "//ydb/core/blobstorage/nodewarden",
     "//ydb/core/blobstorage/pdisk",
     "//ydb/core/blobstorage/vdisk/common",
@@ -18,6 +20,7 @@ unittest_executable("ut") {
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/core/util",
     "//ydb/core/util/actorsys_test",
+    "//ydb/library/actors/async",
     "//ydb/library/actors/core",
     "//ydb/library/pdisk_io",
   ]
@@ -38,6 +41,7 @@ unittest_executable("ut") {
     "minikql_codegen=llvm16",
     "retro_spans=spans",
     "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
     "yt_codegen=llvm16",

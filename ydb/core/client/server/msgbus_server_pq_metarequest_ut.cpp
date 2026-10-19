@@ -539,12 +539,8 @@ public:
     TSchemeCacheNavigate::TResultSet MakeResultSet(bool valid = true) {
         TSchemeCacheNavigate::TResultSet resultSet;
         if (valid) {
-            resultSet.emplace_back(std::move(
-                    MakeEntry(1)
-            ));
-            resultSet.emplace_back(std::move(
-                    MakeEntry(2)
-            ));
+            resultSet.emplace_back(MakeEntry(1));
+            resultSet.emplace_back(MakeEntry(2));
         }
         return resultSet;
     }

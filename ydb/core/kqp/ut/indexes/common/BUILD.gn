@@ -1,13 +1,11 @@
 library("common") {
   testonly = true
 
-  public_deps = [
-    # "//ydb/core/kqp/ut/common",
-  ]
+  public_deps = [ "//ydb/core/kqp/ut/common" ]
 
   deps = [
     # "//contrib/libs/fmt",  # peerdir only
-    # "//ydb/core/base",
+    "//ydb/core/base",
   ]
 
   sources = [

@@ -1,11 +1,9 @@
 library("timezone_conversion") {
-  public_deps = [
-    "//contrib/libs/cctz",
-    # "//util/draft",
-  ]
+  public_deps = [ "//contrib/libs/cctz" ]
 
   deps = [
     # "//contrib/libs/cctz/tzdata",  # peerdir only
+    # "//util",  # peerdir only
   ]
 
   sources = [

@@ -86,7 +86,7 @@ namespace NKikimr::NCertTestUtils {
 
             rsa.release(); // mem is grabbed by pkkey
 
-            return std::move(pkey);
+            return pkey;
         }
 
         int FillNameFromProps(X509_NAME* name, const TProps& props) {
@@ -202,7 +202,7 @@ namespace NKikimr::NCertTestUtils {
             errNo = X509_sign(x509.get(), pkey.get(), EVP_sha256());
             CHECK(errNo, "Error signing certificate.");
 
-            return std::move(x509);
+            return x509;
         }
 
         int GetPasswordCallback(char* buf, int size, int /*rwflag*/, void* userData) {
@@ -254,7 +254,7 @@ namespace NKikimr::NCertTestUtils {
             auto x509 = X509Ptr(PEM_read_bio_X509(bio.get(), NULL, NULL, NULL));
             CHECK(x509, "failed to load certificate");
 
-            return std::move(x509);
+            return x509;
         }
 
         PKeyPtr ReadPrivateKeyAsPEM(const std::string& key) {
@@ -264,7 +264,7 @@ namespace NKikimr::NCertTestUtils {
             auto pkey = PKeyPtr(PEM_read_bio_PrivateKey(bio.get(), NULL, NULL, NULL));
             CHECK(pkey, "failed to private key certificate");
 
-            return std::move(pkey);
+            return pkey;
         }
 
         void add_ext(X509V3_CTX* ctx, STACK_OF(X509_EXTENSION) * exts, int nid, const char* value) {
@@ -353,7 +353,7 @@ namespace NKikimr::NCertTestUtils {
             errNo = X509_REQ_sign(request.get(), pkey.get(), EVP_md5());
             CHECK(errNo, "Error MD5 signing X509_REQ structure.");
 
-            return std::move(request);
+            return request;
         }
 
         X509Ptr SignRequest(X509REQPtr& request, X509Ptr& rootCert, PKeyPtr& rootKey, const TProps& props) {
@@ -411,7 +411,7 @@ namespace NKikimr::NCertTestUtils {
 
             pktmp = nullptr;
 
-            return std::move(x509);
+            return x509;
         }
 
     } // namespace

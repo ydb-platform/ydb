@@ -1,7 +1,5 @@
 library("punycode") {
-  deps = [
-    # "//contrib/libs/libidn",
-  ]
+  deps = [ "//contrib/libs/libidn" ]
 
   sources = [ "punycode.cpp" ]
 }

@@ -1,7 +1,5 @@
 library("distributed_collector") {
-  public_deps = [
-    "//ydb/library/actors/core",
-  ]
+  public_deps = [ "//ydb/library/actors/core" ]
 
   deps = [
     "//ydb/core/base",

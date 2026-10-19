@@ -377,7 +377,7 @@ namespace Tests {
         TServer(TServerSettings::TConstPtr settings, bool defaultInit = true);
 
         TServer(TServer&& server) = default;
-        TServer& operator =(TServer&& server) = default;
+        TServer& operator =(TServer&& server) = delete;
         virtual ~TServer();
 
         void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);

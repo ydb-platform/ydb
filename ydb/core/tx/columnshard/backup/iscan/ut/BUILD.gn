@@ -6,7 +6,7 @@ unittest_executable("ut") {
     "//library/cpp/svnversion",  # peerdir only
     "//library/cpp/testing/hook",
     "//library/cpp/testing/unittest",
-    "//ydb/apps/ydbd:export",
+    "//ydb/apps/ydbd/export",
     "//ydb/core/protos",
     "//ydb/core/testlib",
     "//ydb/core/testlib/basics",
@@ -41,6 +41,7 @@ unittest_executable("ut") {
     "minikql_codegen=llvm16",
     "retro_spans=spans",
     "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
     "yt_codegen=llvm16",

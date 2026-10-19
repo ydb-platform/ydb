@@ -7,13 +7,12 @@ unittest_executable("federation_test") {
     "//ydb/public/sdk/cpp/src/client/federated_topic",  # peerdir only
     "//ydb/public/sdk/cpp/src/client/table",
     "//ydb/public/sdk/cpp/src/client/topic",
-    # "//ydb/tests/functional/kafka/test_common",  # no target
+    "//ydb/tests/functional/kafka/test_common",
   ]
 
   data_deps = [ "//ydb/apps/ydbd" ]
 
   sources = [
-    "//ydb/tests/functional/kafka/test_common/helpers.cpp",
     "cluster_write_close_test.cpp",
     "common_functions.cpp",
     "federation_tests.cpp",

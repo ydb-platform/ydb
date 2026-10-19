@@ -1,7 +1,7 @@
 library("testing") {
   public_deps = [
     # "//ydb/core/testlib/basics",
-    # "//ydb/core/tx/columnshard",
+    "//ydb/core/tx/columnshard",
     "//ydb/core/tx/columnshard/blobs_action/abstract",
     # "//ydb/core/tx/columnshard/common",
     # "//ydb/core/tx/columnshard/engines/writer",
@@ -12,7 +12,7 @@ library("testing") {
   deps = [
     # "//contrib/libs/apache/arrow",
     # "//ydb/core/tx/columnshard/bg_tasks/manager",
-    # "//ydb/core/tx/columnshard/engines",
+    "//ydb/core/tx/columnshard/engines",
     # "//ydb/core/tx/columnshard/engines/portions",
   ]
 

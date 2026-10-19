@@ -190,3 +190,13 @@ config("yql_abi_current") {
 config("no_undefined") {
     ldflags = [ "-Wl,--no-undefined" ]
 }
+
+# The main key of ydb/core/blobstorage/crypto/default.h, defined by the
+# program: see ydb_default_pdisk_sequence_weak.h. The private config of the
+# libraries that refer to it pulls this one in.
+config("ydb_default_pdisk_sequence_weak") {
+    cflags = [
+        "-include",
+        rebase_path("ydb_default_pdisk_sequence_weak.h", root_build_dir),
+    ]
+}

@@ -34,7 +34,6 @@ PEERDIR(
     yql/essentials/public/udf
     ydb/public/api/protos
 )
-# gn: peerdir ydb/core/persqueue/public:utils
 
 GENERATE_ENUM_SERIALIZATION(table_description.h)
 

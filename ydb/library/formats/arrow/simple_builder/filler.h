@@ -7,9 +7,21 @@
 
 #include <util/generic/string.h>
 #include <util/system/types.h>
+#include <util/random/fast.h>
 #include <util/random/random.h>
 
 namespace NKikimr::NArrow::NConstruction {
+
+// the same as NUnitTest::RandomString: the fillers are used outside of tests too
+inline TString RandomString(const size_t len, const ui32 seed) {
+    TReallyFastRng32 rand(seed);
+    TString ret;
+    ret.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+        ret.push_back(char(rand.Uniform(1, 128)));
+    }
+    return ret;
+}
 
 template <class TArrowInt>
 class TIntSeqFiller {
@@ -69,7 +81,7 @@ public:
             if (RandomNumber<double>() < defaultValueFrq) {
                 Data.emplace_back(defaultValue);
             } else {
-                Data.emplace_back(NUnitTest::RandomString(strLen, i));
+                Data.emplace_back(RandomString(strLen, i));
             }
         }
     }

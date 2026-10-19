@@ -1,0 +1,27 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# RUN_PYTHON3(gen_tld.py tlds-alpha-by-domain.txt IN tlds-alpha-by-domain.txt
+# STDOUT tld.inc): tld.cpp includes it as <library/cpp/tld/tld.inc>, found
+# through $root_gen_dir
+action("tld_inc") {
+  script = "//build/gn/scripts/run.py"
+  inputs = [ "gen_tld.py" ]
+  sources = [ "tlds-alpha-by-domain.txt" ]
+  outputs = [ "$target_gen_dir/tld.inc" ]
+  args = [
+    "--stdout",
+    rebase_path(outputs[0], root_build_dir),
+    "--python",
+    rebase_path(inputs[0], root_build_dir),
+    rebase_path(sources[0], root_build_dir),
+  ]
+}
+
+library("tld") {
+  sources = [ "tld.cpp" ]
+
+  deps = [
+    ":tld_inc",
+    "//library/cpp/digest/lower_case",
+  ]
+}

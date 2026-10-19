@@ -255,7 +255,7 @@ public:
             Lock();
         }
 
-        AddEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(std::move(IssueContinuationToken())));
+        AddEvent(NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
     }
 
     //// IReadSession interface implementation

@@ -67,7 +67,6 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/lib/ydb_cli/commands/ydb_discovery
 )
-# gn: peerdir ydb/library/keys
 
 YQL_LAST_ABI_VERSION()
 

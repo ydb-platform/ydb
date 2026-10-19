@@ -9,13 +9,18 @@ using namespace ::google::protobuf;
 
 namespace {
 
-TWhiteboardMergerBase::TMergeFieldsMap FieldMerger;
+// Function-local: TRegistrator instances in other translation units fill it
+// during static initialization, which may run before this one's.
+TWhiteboardMergerBase::TMergeFieldsMap& FieldMerger() {
+    static TWhiteboardMergerBase::TMergeFieldsMap fieldMerger;
+    return fieldMerger;
+}
 
 } // anonymous namespace
 
 TWhiteboardMergerBase::TRegistrator::TRegistrator(TWhiteboardMergerBase::TMergeFieldsMap&& fields) {
     for (auto& [key, value] : fields) {
-        FieldMerger[key] = std::move(value);
+        FieldMerger()[key] = std::move(value);
     }
 }
 
@@ -53,8 +58,8 @@ void TWhiteboardMergerBase::ProtoMerge(google::protobuf::Message& protoTo, const
     int fieldCount = descriptor.field_count();
     for (int index = 0; index < fieldCount; ++index) {
         const FieldDescriptor* field = descriptor.field(index);
-        auto it = FieldMerger.find(field);
-        if (it != FieldMerger.end()) {
+        auto it = FieldMerger().find(field);
+        if (it != FieldMerger().end()) {
             it->second(reflectionTo, reflectionFrom, protoTo, protoFrom, field);
             continue;
         }

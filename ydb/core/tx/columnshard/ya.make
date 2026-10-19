@@ -92,7 +92,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute
     ydb/public/api/protos
 )
-# gn: peerdir ydb/core/tx/columnshard/data_sharing/manager:shared_blobs ydb/core/tx/columnshard/operations/slice_builder ydb/core/tx/schemeshard:find_subdomain_path_id
+# gn: peerdir ydb/core/tx/columnshard/operations/slice_builder ydb/core/tx/schemeshard:find_subdomain_path_id
 
 IF (OS_WINDOWS)
     CFLAGS(

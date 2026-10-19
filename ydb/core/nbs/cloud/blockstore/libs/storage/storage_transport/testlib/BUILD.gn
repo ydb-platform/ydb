@@ -2,12 +2,12 @@ library("testlib") {
   testonly = true
 
   public_deps = [
-    # "//library/cpp/testing/unittest",
-    # "//ydb/core/blobstorage/ddisk",
-    # "//ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport",
-    # "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
-    # "//ydb/core/testlib/actors",
-    # "//ydb/library/actors/core",
+    "//library/cpp/testing/unittest",
+    "//ydb/core/blobstorage/ddisk",
+    "//ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport",
+    "//ydb/core/nbs/cloud/storage/core/libs/coroutine",
+    "//ydb/core/testlib/actors",
+    "//ydb/library/actors/core",
     # "//ydb/library/actors/interconnect",
     # "//ydb/library/actors/util",
   ]

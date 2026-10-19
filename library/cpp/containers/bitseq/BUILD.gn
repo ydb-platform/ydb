@@ -1,6 +1,6 @@
 library("bitseq") {
   deps = [
-    # "//util/draft",  # peerdir only
+    # "//util",  # peerdir only
   ]
 
   sources = [

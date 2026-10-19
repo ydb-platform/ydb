@@ -4,7 +4,7 @@ library("grpc_request") {
   public_deps = [
     # "//contrib/libs/protobuf",
     # "//library/cpp/testing/unittest",
-    # "//ydb/core/grpc_services/base",
+    "//ydb/core/grpc_services/base",
     # "//ydb/library/actors/core",
     # "//ydb/library/ydb_issue",
     "//ydb/public/api/protos",

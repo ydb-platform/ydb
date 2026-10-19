@@ -1,0 +1,37 @@
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
+# arch/avx2 of ya.make (CFLAGS(-mavx2)); arch/sse41 needs no set of its own:
+# -msse4.1 is in //build/gn/config:cpu_baseline. include_dirs, not configs:
+# `configs = ` here would replace the default configs of the source_set
+avx2_source_set("avx2") {
+    sources = [
+        "highwayhash/hh_avx2.cc",
+        "highwayhash/sip_tree_hash.cc",
+    ]
+
+    include_dirs = [ "." ]
+}
+
+contrib_library("highwayhash") {
+    sources = [
+        "highwayhash/arch_specific.cc",
+        "highwayhash/c_bindings.cc",
+        "highwayhash/hh_portable.cc",
+        "highwayhash/instruction_sets.cc",
+        "highwayhash/os_specific.cc",
+        "highwayhash/scalar_sip_tree_hash.cc",
+        "highwayhash/sip_hash.cc",
+    ]
+
+    if (host_cpu == "x64") {
+        sources += [ "highwayhash/hh_sse41.cc" ]
+        deps = [ ":avx2" ]
+    } else {
+        sources += [ "highwayhash/sip_tree_hash.cc" ]
+    }
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":public_config" ]
+}

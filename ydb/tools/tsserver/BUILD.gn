@@ -1,7 +1,8 @@
 linked_executable("tsserver") {
   deps = [
-    "//ydb/core/protos",  # peerdir only
-    "//ydb/library/actors/interconnect",  # peerdir only
+    "//ydb/core/protos",
+    "//ydb/core/test_tablet",
+    "//ydb/library/actors/interconnect",
   ]
 
   sources = [ "main.cpp" ]

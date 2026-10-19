@@ -1,0 +1,13 @@
+library("export") {
+  public_deps = [ "//ydb/core/tx/datashard" ]
+
+  deps = [
+    # "//ydb/core/tx/columnshard/engines/scheme/defaults/protos",  # peerdir only
+    # "//ydb/library/aclib/protos",  # peerdir only
+    # "//ydb/library/formats/arrow/protos",  # peerdir only
+    # "//ydb/library/mkql_proto/protos",  # peerdir only
+    # "//yql/essentials/public/types",  # peerdir only
+  ]
+
+  sources = [ "export.cpp" ]
+}

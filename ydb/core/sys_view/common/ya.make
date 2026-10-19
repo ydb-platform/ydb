@@ -20,6 +20,5 @@ PEERDIR(
     ydb/core/tablet_flat
     library/cpp/deprecated/atomic
 )
-# gn: peerdir ydb/core/mind:tenant_node_enumeration
 
 END()

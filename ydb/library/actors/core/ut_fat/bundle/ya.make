@@ -5,10 +5,6 @@ SRCDIR(
     ydb/library/actors/core/ut_fat
 )
 
-ADDINCL(
-    ydb/library/actors/core
-)
-
 PEERDIR(
     library/cpp/testing/unittest_main
     ydb/library/actors/core

@@ -336,7 +336,7 @@ public:
         if (SetupNodeSubSystems) {
             SetupNodeSubSystems(nodeId, setup.Get());
         }
-        info.AppData = std::move(MakeAppData());
+        info.AppData = MakeAppData();
         info.ActorSystem = std::make_unique<TActorSystem>(setup, info.AppData.get(), LoggerSettings_);
         info.MailboxTable = std::make_unique<TMailboxTable>();
         info.ExecutorThread = std::make_unique<TExecutorThread>(0, info.ActorSystem.get(), pool, "TestExecutor");

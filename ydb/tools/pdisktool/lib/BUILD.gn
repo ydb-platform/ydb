@@ -1,14 +1,18 @@
+config("lib_private_config") {
+  configs = [ "//build/gn/config:ydb_default_pdisk_sequence_weak" ]
+}
+
 library("lib") {
   public_deps = [
     # "//ydb/core/base",
     # "//ydb/core/blobstorage/base",
-    # "//ydb/core/blobstorage/pdisk",
+    "//ydb/core/blobstorage/pdisk",
     # "//ydb/core/blobstorage/vdisk/common",
-    # "//ydb/core/blobstorage/vdisk/hulldb/base",
-    # "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
+    "//ydb/core/blobstorage/vdisk/hulldb/base",
+    "//ydb/core/blobstorage/vdisk/hulldb/base:base_types",
     # "//ydb/core/erasure",
     "//ydb/core/protos",
-    # "//ydb/core/tablet_flat",
+    "//ydb/core/tablet_flat",
     # "//ydb/library/pdisk_io",
     "//ydb/tools/pdisktool/proto",
   ]
@@ -16,7 +20,7 @@ library("lib") {
   deps = [
     # "//contrib/libs/protobuf",
     # "//library/cpp/blockcodecs",
-    # "//library/cpp/getopt",
+    "//library/cpp/getopt",
     # "//library/cpp/protobuf/json",  # peerdir only
     # "//ydb/core/blobstorage/crypto",
     # "//ydb/core/scheme",
@@ -43,4 +47,6 @@ library("lib") {
     "tabletdump.cpp",
     "tabletlog.cpp",
   ]
+
+  configs = [ ":lib_private_config" ]
 }

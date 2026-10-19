@@ -8,7 +8,7 @@ linked_executable("kqprun") {
     "//library/cpp/getopt/small",
     "//library/cpp/lfalloc/alloc_profiler",
     "//library/cpp/monlib/dynamic_counters",
-    "//ydb/apps/ydbd:export",
+    "//ydb/apps/ydbd/export",
     "//ydb/core/blob_depot",
     "//ydb/core/formats/arrow/program/olap_kernels",  # peerdir only
     "//ydb/core/protos",
@@ -40,6 +40,7 @@ linked_executable("kqprun") {
     "minikql_codegen=llvm16",
     "retro_spans=spans",
     "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",

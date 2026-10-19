@@ -1,5 +1,34 @@
 # yamake2gn: keep  -- hand-written, do not regenerate
 
+_gencrc_name = exec_script("//build/gn/scripts/unique_name.py",
+                           [ rebase_path("gencrc", "//") ],
+                           "trim string")
+
+# gencrc/ya.make: the host tool of RUN_PROGRAM below
+executable("gencrc") {
+  output_name = _gencrc_name
+  sources = [ "gencrc/main.cpp" ]
+}
+
+# RUN_PROGRAM(library/cpp/digest/old_crc/gencrc STDOUT crc.inc): crc.cpp
+# includes it as <library/cpp/digest/old_crc/crc.inc>, found through
+# $root_gen_dir
+action("crc_inc") {
+  script = "//build/gn/scripts/run.py"
+  outputs = [ "$target_gen_dir/crc.inc" ]
+
+  _gencrc = ":gencrc($tool_toolchain)"
+  args = [
+    "--stdout",
+    rebase_path(outputs[0], root_build_dir),
+    "./" + rebase_path(get_label_info(_gencrc, "root_out_dir") + "/$_gencrc_name", root_build_dir),
+  ]
+
+  deps = [ _gencrc ]
+}
+
 library("old_crc") {
   sources = [ "crc.cpp" ]
+
+  deps = [ ":crc_inc" ]
 }

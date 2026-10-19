@@ -33,7 +33,7 @@ library("oidc_proxy") {
     # "//library/cpp/json",
     "//library/cpp/protobuf/json",
     "//library/cpp/string_utils/base64",
-    # "//ydb/core/util",
+    "//ydb/core/util",
     # "//ydb/library/actors/interconnect/poller",
     "//ydb/library/actors/protos",
     "//ydb/library/security",

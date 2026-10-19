@@ -2,8 +2,8 @@ library("yson2") {
   deps = [
     # "//library/cpp/containers/stack_vector",  # peerdir only
     # "//library/cpp/yson_pull",
-    # "//yql/essentials/core/langver",  # peerdir only
-    # "//yql/essentials/minikql/dom",
+    "//yql/essentials/core/langver",
+    "//yql/essentials/minikql/dom",
     # "//yql/essentials/public/langver",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only

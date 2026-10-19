@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/nbs_frontend
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
+    library/cpp/unified_agent_client  # Out<grpc::StatusCode>
 )
 
 YQL_LAST_ABI_VERSION()

@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(BSCReadOnlyPDisk) {
         pdisk->SetNodeId(nodeId);
         pdisk->SetPDiskId(pdiskId);
 
-        return std::move(request);
+        return request;
     }
 
     NKikimrBlobStorage::TConfigResponse SetReadOnly(TEnvironmentSetup& env, ui32 nodeId, ui32 pdiskId, bool readOnly, bool ignoreDegraded = false) {

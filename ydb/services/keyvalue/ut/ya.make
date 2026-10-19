@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/wrappers/ut_helpers
     ydb/library/aws_init
     ydb/services/keyvalue
+    library/cpp/unified_agent_client  # Out<grpc::StatusCode>
 )
 
 YQL_LAST_ABI_VERSION()

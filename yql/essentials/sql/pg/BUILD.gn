@@ -14,7 +14,7 @@ library("pg") {
     "//yql/essentials/ast",
     "//yql/essentials/core/cbo",  # peerdir only
     # "//yql/essentials/core/issue",
-    "//yql/essentials/core/langver",  # peerdir only
+    "//yql/essentials/core/langver",
     # "//yql/essentials/core/sql_types",
     "//yql/essentials/minikql",
     "//yql/essentials/parser/pg_catalog",

@@ -1,0 +1,19 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# TODO: LLVM_BC (the bitcode of math_ir.cpp and lib/erfinv.cpp embedded as
+# /llvm_bc/Math, inlined by the MiniKQL codegen) has no GN template yet: built
+# the ya.make way of non-Linux, CFLAGS(-DDISABLE_IR) -- the same functions,
+# called natively
+library("math") {
+  deps = [
+    "//yql/essentials/core/langver",
+    "//yql/essentials/public/langver",
+    "//yql/essentials/public/udf",
+    # "//yql/essentials/public/udf/support",  # peerdir only
+    "//yql/essentials/udfs/common/math/lib",
+  ]
+
+  sources = [ "math_udf.cpp" ]
+
+  defines = [ "DISABLE_IR" ]
+}

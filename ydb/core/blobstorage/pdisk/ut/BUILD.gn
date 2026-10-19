@@ -4,6 +4,7 @@ unittest_executable("ut") {
     "//library/cpp/getopt",  # peerdir only
     "//library/cpp/logger",
     "//library/cpp/svnversion",
+    "//library/cpp/testing/common",
     "//library/cpp/testing/unittest",
     "//ydb/core/base",
     "//ydb/core/base/services",

@@ -2,10 +2,10 @@ library("common") {
   testonly = true
 
   deps = [
-    # "//contrib/libs/fmt",
+    "//contrib/libs/fmt",
     # "//library/cpp/json",
-    # "//ydb/core/base",
-    # "//ydb/core/kqp/ut/common",
+    "//ydb/core/base",
+    "//ydb/core/kqp/ut/common",
     # "//ydb/core/kqp/ut/indexes/common",
     # "//ydb/library/json_index",
   ]

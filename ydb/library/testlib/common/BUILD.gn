@@ -3,15 +3,15 @@ library("common") {
 
   public_deps = [
     "//library/cpp/testing/unittest",
-    # "//ydb/core/testlib/actors",
+    "//ydb/core/testlib/actors",
     # "//ydb/library/actors/core",
     "//ydb/library/services",
   ]
 
   deps = [
     # "//library/cpp/testing/common",
-    # "//ydb/core/base",
-    # "//ydb/core/testlib/basics",
+    "//ydb/core/base",
+    "//ydb/core/testlib/basics",
     # "//ydb/library/actors/testlib",
   ]
 

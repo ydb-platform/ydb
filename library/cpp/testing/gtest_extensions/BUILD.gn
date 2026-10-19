@@ -1,7 +1,7 @@
 library("gtest_extensions") {
   public_deps = [
-    # "//contrib/restricted/googletest/googlemock",
-    # "//contrib/restricted/googletest/googletest",
+    "//contrib/restricted/googletest/googlemock",
+    "//contrib/restricted/googletest/googletest",
     # "//library/cpp/testing/common",
   ]
 

@@ -208,7 +208,6 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
-    ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/kqp/common
     ydb/core/kqp/opt
@@ -266,7 +265,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
         ydb/core/nbs/cloud/storage/core/libs/common
     )
 ENDIF()
-# gn: peerdir ydb/core/fq/libs/control_plane_storage:util ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:read_table ydb/core/tx/tx_proxy:upload_rows
+# gn: peerdir ydb/core/fq/libs/control_plane_storage:util ydb/core/tx/tx_proxy:read_table
 
 END()
 

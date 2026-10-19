@@ -1,8 +1,6 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/testing/unittest
-    ydb/core/testlib
     ydb/core/protos
     ydb/core/formats/arrow
     ydb/core/tx/columnshard/engines/protos

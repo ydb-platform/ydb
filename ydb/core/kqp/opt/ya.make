@@ -45,7 +45,6 @@ PEERDIR(
     yql/essentials/core/services
     yql/essentials/types/uuid
 )
-# gn: peerdir ydb/core/statistics/service:service_id
 
 GENERATE_ENUM_SERIALIZATION(kqp_query_plan.h)
 

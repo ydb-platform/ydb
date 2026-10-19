@@ -1,13 +1,10 @@
 library("lib") {
   public_deps = [
-    # "//library/cpp/ipmath",
-    # "//library/cpp/ipv6_address",
-    # "//yql/essentials/public/langver",
-    # "//yql/essentials/public/udf",
-  ]
-
-  deps = [
-    # "//yql/essentials/core/langver",  # peerdir only
+    "//library/cpp/ipmath",
+    "//library/cpp/ipv6_address",
+    "//yql/essentials/core/langver",
+    "//yql/essentials/public/langver",
+    "//yql/essentials/public/udf",
   ]
 
   sources = [ "ip_base_udf.cpp" ]

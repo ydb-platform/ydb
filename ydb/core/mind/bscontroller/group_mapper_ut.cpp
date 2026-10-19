@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include "layout_helpers.h"
 #include "group_geometry_info.h"
 #include "group_mapper.h"

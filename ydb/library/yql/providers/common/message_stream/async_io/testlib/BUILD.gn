@@ -1,8 +1,8 @@
 group("testlib") {
   testonly = true
 
-  deps = [
-    # "//ydb/library/yql/providers/common/message_stream/async_io",  # peerdir only
-    # "//ydb/library/yql/providers/common/ut_helpers",  # peerdir only
+  public_deps = [
+    "//ydb/library/yql/providers/common/message_stream/async_io",
+    "//ydb/library/yql/providers/common/ut_helpers",
   ]
 }

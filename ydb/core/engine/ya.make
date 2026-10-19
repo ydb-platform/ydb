@@ -26,7 +26,6 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/decimal
 )
-# gn: peerdir ydb/core/kqp/common:types
 
 END()
 

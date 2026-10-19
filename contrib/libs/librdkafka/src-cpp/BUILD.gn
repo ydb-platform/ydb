@@ -1,3 +1,9 @@
+# <rdkafkacpp.h>: the consumers' ADDINCL of ya.make (the contrib exports no
+# include dir of its own)
+config("public_config") {
+    include_dirs = [ "." ]
+}
+
 contrib_library("src-cpp") {
     deps = [ "//contrib/libs/librdkafka" ]
 
@@ -15,4 +21,6 @@ contrib_library("src-cpp") {
         "TopicImpl.cpp",
         "TopicPartitionImpl.cpp",
     ]
+
+    public_configs = [ ":public_config" ]
 }

@@ -2,7 +2,7 @@ library("topfreq") {
   deps = [
     # "//yql/essentials/public/udf",  # peerdir only
     # "//yql/essentials/public/udf/support",  # peerdir only
-    # "//yql/essentials/udfs/common/topfreq/static",
+    "//yql/essentials/udfs/common/topfreq/static",
   ]
 
   sources = [ "topfreq_udf.cpp" ]

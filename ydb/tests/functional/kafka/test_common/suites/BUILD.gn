@@ -1,0 +1,15 @@
+library("suites") {
+  testonly = true
+
+  deps = [ "//ydb/tests/functional/kafka/test_common" ]
+
+  sources = [
+    "admin_ut.cpp",
+    "balance_ut.cpp",
+    "consume_ut.cpp",
+    "groups_offsets_ut.cpp",
+    "produce_ut.cpp",
+    "protocol_ut.cpp",
+    "transactions_ut.cpp",
+  ]
+}

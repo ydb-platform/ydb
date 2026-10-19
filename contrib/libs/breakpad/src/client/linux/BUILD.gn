@@ -1,0 +1,47 @@
+config("public_config") {
+    include_dirs = [ "//contrib/libs/breakpad/src" ]
+}
+
+config("private_config") {
+    include_dirs = [ "//contrib/libs/breakpad" ]
+    defines = [ "HAVE_CONFIG_H" ]
+    cflags = [ "-Wno-macro-redefined" ]
+}
+
+contrib_library("linux") {
+    deps = [
+        "//contrib/libs/libc_compat",
+        "//library/cpp/sanitizer/include",
+    ]
+
+    sources = [
+        "//contrib/libs/breakpad/src/client/linux/crash_generation/crash_generation_client.cc",
+        "//contrib/libs/breakpad/src/client/linux/crash_generation/crash_generation_server.cc",
+        "//contrib/libs/breakpad/src/client/linux/dump_writer_common/thread_info.cc",
+        "//contrib/libs/breakpad/src/client/linux/dump_writer_common/ucontext_reader.cc",
+        "//contrib/libs/breakpad/src/client/linux/handler/exception_handler.cc",
+        "//contrib/libs/breakpad/src/client/linux/handler/exception_trap.cc",
+        "//contrib/libs/breakpad/src/client/linux/handler/minidump_descriptor.cc",
+        "//contrib/libs/breakpad/src/client/linux/log/log.cc",
+        "//contrib/libs/breakpad/src/client/linux/microdump_writer/microdump_writer.cc",
+        "//contrib/libs/breakpad/src/client/linux/minidump_writer/linux_core_dumper.cc",
+        "//contrib/libs/breakpad/src/client/linux/minidump_writer/linux_dumper.cc",
+        "//contrib/libs/breakpad/src/client/linux/minidump_writer/linux_ptrace_dumper.cc",
+        "//contrib/libs/breakpad/src/client/linux/minidump_writer/minidump_writer.cc",
+        "//contrib/libs/breakpad/src/client/linux/minidump_writer/pe_file.cc",
+        "//contrib/libs/breakpad/src/client/minidump_file_writer.cc",
+        "//contrib/libs/breakpad/src/common/convert_UTF.cc",
+        "//contrib/libs/breakpad/src/common/linux/elf_core_dump.cc",
+        "//contrib/libs/breakpad/src/common/linux/elfutils.cc",
+        "//contrib/libs/breakpad/src/common/linux/file_id.cc",
+        "//contrib/libs/breakpad/src/common/linux/guid_creator.cc",
+        "//contrib/libs/breakpad/src/common/linux/linux_libc_support.cc",
+        "//contrib/libs/breakpad/src/common/linux/memory_mapped_file.cc",
+        "//contrib/libs/breakpad/src/common/linux/safe_readlink.cc",
+        "//contrib/libs/breakpad/src/common/md5.cc",
+        "//contrib/libs/breakpad/src/common/string_conversion.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
+}

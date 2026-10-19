@@ -1,8 +1,8 @@
 library("hyperscan") {
   deps = [
-    # "//library/cpp/regex/hyperscan",
-    # "//library/cpp/regex/pcre",
-    # "//yql/essentials/public/udf",
+    "//library/cpp/regex/hyperscan",
+    "//library/cpp/regex/pcre",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

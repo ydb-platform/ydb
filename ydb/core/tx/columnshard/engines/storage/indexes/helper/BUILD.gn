@@ -2,8 +2,8 @@ library("helper") {
   public_deps = [
     # "//contrib/libs/apache/arrow",
     # "//library/cpp/json",
-    # "//ydb/core/formats/arrow",
-    # "//ydb/library/conclusion",
+    "//ydb/core/formats/arrow",
+    "//ydb/library/conclusion",
   ]
 
   deps = [

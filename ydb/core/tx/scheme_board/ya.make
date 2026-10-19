@@ -11,7 +11,7 @@ PEERDIR(
     ydb/core/util
     ydb/library/aclib
 )
-# gn: peerdir ydb/core/persqueue/public:utils ydb/core/persqueue/writer:partition_chooser
+# gn: peerdir ydb/core/persqueue/writer:partition_chooser
 
 SRCS(
     backup.cpp

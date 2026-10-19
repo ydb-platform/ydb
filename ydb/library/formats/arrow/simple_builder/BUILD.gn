@@ -1,3 +1,7 @@
+config("simple_builder_public_config") {
+  cflags = [ "-Wno-implicit-const-int-float-conversion" ]
+}
+
 library("simple_builder") {
   public_deps = [
     "//contrib/libs/apache/arrow",
@@ -10,4 +14,6 @@ library("simple_builder") {
     "batch.cpp",
     "filler.cpp",
   ]
+
+  public_configs = [ ":simple_builder_public_config" ]
 }

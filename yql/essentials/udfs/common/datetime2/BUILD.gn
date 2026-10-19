@@ -1,10 +1,14 @@
+config("datetime2_private_config") {
+  cflags = [ "-Wno-explicit-specialization-storage-class" ]
+}
+
 library("datetime2") {
   deps = [
     # "//library/cpp/type_info/tz",  # peerdir only
-    # "//util/draft",  # peerdir only
-    # "//yql/essentials/core/langver",  # peerdir only
-    # "//yql/essentials/minikql",
-    # "//yql/essentials/minikql/datetime",
+    # "//util",  # peerdir only
+    "//yql/essentials/core/langver",
+    "//yql/essentials/minikql",
+    "//yql/essentials/minikql/datetime",
     # "//yql/essentials/public/langver",
     # "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/arrow",
@@ -12,4 +16,6 @@ library("datetime2") {
   ]
 
   sources = [ "datetime_udf.cpp" ]
+
+  configs = [ ":datetime2_private_config" ]
 }

@@ -1,4 +1,4 @@
-#include "helpers.h"
+#include <ydb/tests/functional/kafka/test_common/helpers.h>
 
 using namespace NKafkaRdkafkaTests;
 

@@ -74,6 +74,8 @@ TRIVIAL_MACROS = MODULE_MACROS | {
     "NO_UTIL",   # LIBRARY -> contrib_library (no default //util dep)
     "GN_DIRECTIVES",   # carrier of standalone `# gn:` lines, see GN_DIRECTIVES
     "DEFAULT",   # TODO: temporary ignore (its variable stays unset in IF conditions)
+    "EXPORTS_SCRIPT", "LINKER_SCRIPT",   # TODO: temporary ignore (ydbd: dynamic exports, debug stripping)
+    "GLOBAL_SRCS",   # SRCS with every file GLOBAL
 }
 # PROTO_LIBRARY macros that are pure noise in GN (python/metadata/tags are
 # irrelevant) -> drop, do not block; but GRPC() -> generate_grpc_services
@@ -483,10 +485,23 @@ YA_VAR_TO_CPP_DEFINE = {
     "YDB_EMBEDDED_NBS_ENABLED": "YDB_EMBEDDED_NBS_ENABLED",
 }
 
+# The compiler's (and util/system/platform.h's) platform macros of the
+# configuration CONDITION_VARS describes: without them `#if defined(__linux__)
+# #include <liburing.h>` counts as dead code and the dependency is lost.
+PLATFORM_CPP_DEFINES = {
+    "OS_LINUX": ("__linux__", "__linux", "_linux_", "__unix__", "__unix", "_unix_"),
+    "ARCH_X86_64": ("__x86_64__", "__x86_64", "__amd64__", "_x86_64_", "_64_"),
+    "CLANG": ("__clang__", "__GNUC__"),
+}
+
 # Preprocessor macros considered "defined" while scanning #include lines.
 CPP_DEFINED = {
     macro for var, macro in YA_VAR_TO_CPP_DEFINE.items()
     if _cond_as_bool(CONDITION_VARS.get(var, ""))
+} | {
+    macro for var, macros in PLATFORM_CPP_DEFINES.items()
+    if _cond_as_bool(CONDITION_VARS.get(var, ""))
+    for macro in macros
 }
 
 
@@ -929,6 +944,9 @@ def parse_yamake(path, directory, root):
         elif name == "SRCS":
             mod.srcs.extend(a for a in args if a != "GLOBAL")
             mod.global_srcs |= "GLOBAL" in args or (mod.yql_udf and bool(args))
+        elif name == "GLOBAL_SRCS":
+            mod.srcs.extend(args)
+            mod.global_srcs |= bool(args)
         elif name == "SRC":
             if args:
                 mod.srcs.append(args[0])  # per-file flags (remaining args) are ignored
@@ -1772,6 +1790,11 @@ class IncludeGraph:
             rel = self.resolver.resolve(inc, m.group(1) == '"', fdir, self.include_dirs.get(f, ()))
             if rel is None and PB_RE.search(inc):
                 rel = self.resolver.resolve(PB_RE.sub(".proto", inc), False, fdir)
+            # a header the module of its directory generates (RUN_PYTHON3, RUN_PROGRAM,
+            # ...): ya puts it at the same path under the build root
+            if rel is None and m.group(1) != '"' and "/" in inc and os.path.isfile(
+                    os.path.join(self.resolver.root, os.path.dirname(inc), "ya.make")):
+                rel = os.path.normpath(inc)
             out.append((inc, rel))
         self._includes[f] = out
         return out

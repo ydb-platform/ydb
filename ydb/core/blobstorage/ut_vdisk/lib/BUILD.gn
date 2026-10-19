@@ -1,3 +1,7 @@
+config("lib_private_config") {
+  configs = [ "//build/gn/config:ydb_default_pdisk_sequence_weak" ]
+}
+
 library("lib") {
   testonly = true
 
@@ -56,4 +60,6 @@ library("lib") {
     "test_synclog.cpp",
     "vdisk_mock.cpp",
   ]
+
+  configs = [ ":lib_private_config" ]
 }

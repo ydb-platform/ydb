@@ -5,7 +5,9 @@ library("device_type") {
 library("pdisk_io") {
   public_deps = [
     ":device_type",
+    "//contrib/libs/liburing",
     "//contrib/libs/lz4",
+    # "//library/cpp/containers/stack_vector",
     # "//library/cpp/deprecated/atomic",
     # "//library/cpp/monlib/dynamic_counters",
     # "//library/cpp/threading/queue",
@@ -19,8 +21,6 @@ library("pdisk_io") {
   deps = [
     ":protos",
     "//contrib/libs/libaio",
-    "//contrib/libs/liburing",  # peerdir only
-    # "//library/cpp/containers/stack_vector",
     # "//ydb/core/util",
     "//ydb/library/actors/core",
   ]

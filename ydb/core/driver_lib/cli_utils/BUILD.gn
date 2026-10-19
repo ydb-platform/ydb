@@ -1,3 +1,7 @@
+config("cli_utils_private_config") {
+  configs = [ "//build/gn/config:ydb_default_pdisk_sequence_weak" ]
+}
+
 library("cli_utils") {
   public_deps = [
     # "//contrib/libs/protobuf",
@@ -13,7 +17,6 @@ library("cli_utils") {
   ]
 
   deps = [
-    "//ydb/library/keys",  # peerdir only
     "//library/cpp/malloc/api",
     # "//library/cpp/protobuf/json",
     # "//library/cpp/yson",  # peerdir only
@@ -86,4 +89,6 @@ library("cli_utils") {
     "cli_scheme_initroot.cpp",
     "melancholic_gopher.cpp",
   ]
+
+  configs = [ ":cli_utils_private_config" ]
 }

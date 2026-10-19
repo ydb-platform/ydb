@@ -2,6 +2,7 @@ unittest_executable("ut") {
   deps = [
     "//library/cpp/retry",
     "//library/cpp/testing/unittest",
+    "//library/cpp/unified_agent_client",  # peerdir only
     "//ydb/core/testlib",
     "//ydb/core/testlib/default",  # peerdir only
     "//ydb/library/actors/core",
@@ -31,6 +32,7 @@ unittest_executable("ut") {
     "minikql_codegen=llvm16",
     "retro_spans=spans",
     "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_dummy",
     "yql_pg_sql_translator=pg_dummy",
     "yt_codegen=llvm16",

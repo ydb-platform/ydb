@@ -10,7 +10,6 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/tx/scheme_cache
 )
-# gn: peerdir ydb/core/persqueue/public:utils
 
 YQL_LAST_ABI_VERSION()
 

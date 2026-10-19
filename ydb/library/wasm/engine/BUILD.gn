@@ -25,4 +25,6 @@ library("engine") {
     "system_libraries.cpp",
     "type_builder.cpp",
   ]
+
+  link_slot_provides = [ "wasm" ]
 }

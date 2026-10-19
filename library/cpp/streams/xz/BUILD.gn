@@ -1,7 +1,5 @@
 library("xz") {
-  deps = [
-    # "//contrib/libs/lzma",
-  ]
+  deps = [ "//contrib/libs/lzma" ]
 
   sources = [ "decompress.cpp" ]
 }

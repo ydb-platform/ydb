@@ -26,6 +26,7 @@ unittest_executable("scheme") {
     "minikql_codegen=llvm16",
     "retro_spans=spans",
     "topic_rpc=persqueue_v1",
+    "wasm=engine",
     "yql_pg_runtime=pg_wrapper",
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",

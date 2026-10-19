@@ -33,12 +33,14 @@ library("no_llvm") {
   sources = [
     "../dq_block_hash_join.cpp",
     "../dq_hash_combine.cpp",
+    "../dq_hash_combine_layout.cpp",
     "../dq_hash_join_table.cpp",
     "../dq_hash_operator_common.cpp",
     "../dq_hash_operator_serdes.cpp",
     "../dq_join_common.cpp",
     "../dq_program_builder.cpp",
     "../dq_scalar_hash_join.cpp",
+    "../dq_watermark_generator.cpp",
     "../type_utils.cpp",
     "../yql_common_dq_factory.cpp",
   ]
@@ -55,9 +57,9 @@ library("no_llvm") {
 
   public_deps = [
     "//ydb/library/actors/core",
-    "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/compute/events",
     "//ydb/library/yql/dq/comp_nodes/hash_join_utils",
-    "//ydb/library/yql/dq/runtime",
+    "//ydb/library/yql/dq/runtime/streaming",
     "//yql/essentials/minikql/codegen/no_llvm",
     "//yql/essentials/minikql/comp_nodes",
     "//yql/essentials/minikql/comp_nodes/no_llvm",

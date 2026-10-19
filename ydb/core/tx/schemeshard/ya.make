@@ -420,7 +420,6 @@ PEERDIR(
     ydb/core/tx/columnshard/bg_tasks/manager
     ydb/core/tx/tiering/tier
 )
-# gn: peerdir ydb/core/tx/tx_proxy:public ydb/core/tx/tx_proxy:upload_rows
 
 IF (OS_WINDOWS)
     SRCS(

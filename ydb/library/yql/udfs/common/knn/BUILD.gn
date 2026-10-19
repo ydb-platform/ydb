@@ -1,13 +1,13 @@
 library("knn") {
   public_deps = [
-    # "//library/cpp/dot_product",
+    "//library/cpp/dot_product",
     # "//library/cpp/l1_distance",
-    # "//library/cpp/l2_distance",
-    # "//ydb/library/vector_distance",
+    "//library/cpp/l2_distance",
+    "//ydb/library/vector_distance",
   ]
 
   deps = [
-    # "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

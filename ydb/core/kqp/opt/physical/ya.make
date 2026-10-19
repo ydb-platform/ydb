@@ -25,6 +25,5 @@ PEERDIR(
     ydb/library/yql/utils/plan
 )
 # gn: helpers peerdir ydb/core/kqp/opt:helpers
-# gn: peerdir ydb/core/kqp/opt:helpers
 
 END()

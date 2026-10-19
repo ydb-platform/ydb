@@ -110,7 +110,6 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
             key.emplace_back(&floatVal, sizeof(float), NScheme::NTypeIds::Pg);
 
             auto it = db->Iterate(tableId, key, tags, ELookup::GreaterThan);
-            size_t count = 0;
             while (it->Next(NTable::ENext::All) == NTable::EReady::Data) {
                 auto key = it->GetKey();
                 auto value = it->GetValues();
@@ -127,7 +126,6 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
                 UNIT_ASSERT(std::memcmp(value.Columns[7].Data(), strText.data(), value.Columns[7].Size()) == 0);
                 UNIT_ASSERT(std::memcmp(value.Columns[8].Data(), strBytea.data(), value.Columns[8].Size()) == 0);
                 UNIT_ASSERT(std::memcmp(value.Columns[9].Data(), strBpchar.data(), value.Columns[9].Size()) == 0);
-                ++count;
             }
 
             db.Commit();
@@ -140,7 +138,7 @@ Y_UNIT_TEST_SUITE(TFlatDatabasePgTest) {
         readDatabase();
 
         db.Replay(NTest::EPlay::Boot);
-        db.Replay(NTest::EPlay::Redo);        
+        db.Replay(NTest::EPlay::Redo);
     }
 }
 

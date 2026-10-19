@@ -1,6 +1,6 @@
 library("provider") {
   public_deps = [
-    # "//ydb/library/yql/providers/common/token_accessor/client",
+    "//ydb/library/yql/providers/common/token_accessor/client",
     "//ydb/public/api/protos",
     "//ydb/public/sdk/cpp/src/client/driver",
     "//ydb/public/sdk/cpp/src/client/table",

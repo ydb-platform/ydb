@@ -3,7 +3,7 @@ library("common") {
 
   public_deps = [
     # "//library/cpp/testing/unittest",
-    # "//ydb/core/kqp/ut/common",
+    "//ydb/core/kqp/ut/common",
     "//ydb/core/protos",
     # "//ydb/core/testlib",
     # "//ydb/core/testlib/actors",
@@ -12,7 +12,7 @@ library("common") {
     # "//ydb/public/sdk/cpp/src/client/query",
     # "//ydb/public/sdk/cpp/src/client/scheme",
     # "//ydb/public/sdk/cpp/src/client/table",
-    # "//ydb/services/workload_manager/common",
+    "//ydb/services/workload_manager/common",
   ]
 
   deps = [

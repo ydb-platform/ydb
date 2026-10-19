@@ -9,19 +9,19 @@ library("compile_controller") {
     ":protos",  # peerdir only
     # "//ydb/core/cms/console",
     "//ydb/core/engine/minikql",
+    "//ydb/core/grpc_services",  # peerdir only
     "//ydb/core/protos",
     # "//ydb/core/scheme",
     "//ydb/core/tablet",
     "//ydb/core/tablet_flat",
     "//ydb/core/tx",
     # "//ydb/library/aclib",
+    "//ydb/library/yql/public/ydb_issue",  # peerdir only
     # "//ydb/services/metadata",
     "//ydb/services/metadata/request",
     "//ydb/services/udf_store",
     "//ydb/services/udf_store/metadata_subscription",
     "//ydb/services/udf_store/wasm",
-    "//ydb/core/grpc_services",  # peerdir only
-    "//ydb/library/yql/public/ydb_issue",  # peerdir only
   ]
 
   sources = [

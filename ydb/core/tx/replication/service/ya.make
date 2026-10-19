@@ -17,7 +17,6 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/services
 )
-# gn: peerdir ydb/core/tx/tx_proxy:public
 
 SRCS(
     base_table_writer.cpp

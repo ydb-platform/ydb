@@ -10,11 +10,11 @@ library("batch_builder") {
   ]
 
   deps = [
-    "//ydb/core/tx/columnshard/engines/predicate",  # peerdir only
     ":slice_builder",
     "//ydb/core/formats/arrow",
     # "//ydb/core/scheme",
     "//ydb/core/tx/columnshard/data_reader",
+    "//ydb/core/tx/columnshard/engines/predicate",  # peerdir only
     "//ydb/core/tx/columnshard/engines/scheme",
     # "//ydb/core/tx/columnshard/engines/writer",
     "//ydb/core/tx/columnshard/engines/writer:buffer",
@@ -93,9 +93,9 @@ library("operations") {
     # "//ydb/core/tx/columnshard/engines/writer",
     # "//ydb/core/tx/conveyor/usage",
     "//ydb/core/tx/conveyor_composite/usage",
+    "//ydb/core/tx/time_cast",  # peerdir only
     # "//ydb/library/actors/struct_log",
     # "//ydb/services/metadata",  # peerdir only
-    "//ydb/core/tx/time_cast",  # peerdir only
   ]
 
   sources = [

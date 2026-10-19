@@ -56,7 +56,7 @@ public:
     {}
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        Client = std::make_shared<NYdb::NTable::TTableClient>(std::move(Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location))));
+        Client = std::make_shared<NYdb::NTable::TTableClient>(Location.GetTableClient(TMVP::GetMetaDatabaseClientSettings(Request, Location)));
 
         NActors::TActorSystem* actorSystem = ctx.ActorSystem();
         NActors::TActorId actorId = ctx.SelfID;
@@ -274,7 +274,7 @@ public:
         NYdb::NTable::TDataQueryResult& result(event->Get()->Result);
         if (result.IsSuccess()) {
             --QueryCount;
-            ClusterListResultSet = std::move(result.GetResultSet(0));
+            ClusterListResultSet = result.GetResultSet(0);
 
             LOG_DEBUG_S(ctx, EService::MVP, "MetaClusters: got cluster list");
 

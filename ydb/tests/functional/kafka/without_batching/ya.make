@@ -4,7 +4,7 @@ ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 ENV(YDB_FEATURE_FLAGS="enable_kafka_native_balancing,enable_kafka_transactions")
 
 PEERDIR(
-    ydb/tests/functional/kafka/test_common
+    ydb/tests/functional/kafka/test_common/suites
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

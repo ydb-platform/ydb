@@ -6,6 +6,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     contrib/libs/grpc
     contrib/libs/librdkafka/src-cpp
+    ydb/tests/functional/kafka/test_common
 )
 
 TIMEOUT(350)
@@ -25,7 +26,6 @@ SRCS(
     federation_tests.cpp
     common_functions.cpp
     cluster_write_close_test.cpp
-    ../kafka/test_common/helpers.cpp
     kafka_compatibility_tests.cpp
 )
 

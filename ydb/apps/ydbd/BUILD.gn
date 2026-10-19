@@ -1,42 +1,69 @@
-# yamake2gn: keep  -- hand-written, do not regenerate
-
-library("export") {
-    public_deps = [
-        "//ydb/core/tx/datashard",
-    ]
-
-    sources = [
-        "export/export.cpp",
-    ]
-}
-
 linked_executable("ydbd") {
-    short_name = true
+  short_name = true
 
-    link_select = [
-        "YqlServicePolicy=exception_policy",
-        "allocator=tcmalloc",
-        "minikql_codegen=llvm16",
-        "retro_spans=spans",
-        "topic_rpc=persqueue_v1",
-        "yql_pg_runtime=pg_wrapper",
-        "yql_pg_sql_translator=pg",
-        "yt_codegen=llvm16",
-    ]
+  deps = [
+    "//ydb/apps/ydbd/export",
+    "//ydb/core/driver_lib/run",  # peerdir only
+    "//ydb/core/driver_lib/run:main",
+    "//ydb/core/driver_lib/version",  # peerdir only
+    "//ydb/core/formats/arrow/program/olap_kernels",  # peerdir only
+    "//ydb/core/protos",  # peerdir only
+    "//ydb/core/security",
+    "//ydb/core/security/token_manager",
+    "//ydb/core/transfer",
+    "//ydb/core/tx/schemeshard",
+    "//ydb/core/ymq/actor",
+    "//ydb/core/ymq/base",
+    "//ydb/library/breakpad",  # peerdir only
+    "//ydb/library/folder_service",
+    "//ydb/library/folder_service/mock",  # peerdir only
+    "//ydb/library/keys",  # peerdir only
+    "//ydb/library/pdisk_io",
+    "//ydb/library/security",  # peerdir only
+    "//ydb/library/superlemmer_stub",  # peerdir only
+    "//ydb/library/yaml_config",
+    "//ydb/library/yql/udfs/common/clickhouse/client",  # peerdir only
+    "//ydb/library/yql/udfs/common/hybrid_search",  # peerdir only
+    "//ydb/library/yql/udfs/common/knn",  # peerdir only
+    "//ydb/library/yql/udfs/common/roaring",  # peerdir only
+    "//ydb/library/yql/udfs/statistics_internal",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper",  # peerdir only
+    "//yql/essentials/parser/pg_wrapper/interface",
+    "//yql/essentials/sql/pg",  # peerdir only
+    "//yql/essentials/udfs/common/compress_base",  # peerdir only
+    "//yql/essentials/udfs/common/datetime2",  # peerdir only
+    "//yql/essentials/udfs/common/digest",  # peerdir only
+    "//yql/essentials/udfs/common/histogram",  # peerdir only
+    "//yql/essentials/udfs/common/hyperloglog",  # peerdir only
+    "//yql/essentials/udfs/common/hyperscan",  # peerdir only
+    "//yql/essentials/udfs/common/ip_base",  # peerdir only
+    "//yql/essentials/udfs/common/json",  # peerdir only
+    "//yql/essentials/udfs/common/json2",  # peerdir only
+    "//yql/essentials/udfs/common/math",  # peerdir only
+    "//yql/essentials/udfs/common/pire",  # peerdir only
+    "//yql/essentials/udfs/common/re2",  # peerdir only
+    "//yql/essentials/udfs/common/set",  # peerdir only
+    "//yql/essentials/udfs/common/stat",  # peerdir only
+    "//yql/essentials/udfs/common/string",  # peerdir only
+    "//yql/essentials/udfs/common/top",  # peerdir only
+    "//yql/essentials/udfs/common/topfreq",  # peerdir only
+    "//yql/essentials/udfs/common/unicode_base",  # peerdir only
+    "//yql/essentials/udfs/common/url_base",  # peerdir only
+    "//yql/essentials/udfs/common/yson2",  # peerdir only
+    "//yql/essentials/udfs/logs/dsv",  # peerdir only
+  ]
 
-    deps = [
-        ":export",
-        "//ydb/core/driver_lib/run",  # TModuleFactories (factories.cpp)
-        "//ydb/core/driver_lib/run:main",
-        "//ydb/core/http_proxy",
-        "//ydb/core/security",
-        "//ydb/core/security/token_manager",
-        "//ydb/core/transfer",
-        "//ydb/core/tx/schemeshard",  # DefaultOperationFactory
-        "//ydb/core/ymq/actor",
-        "//ydb/library/pdisk_io",
-        "//ydb/library/yaml_config",  # CreateDefaultConfigSwissKnife
-    ]
+  sources = [ "main.cpp" ]
 
-    sources = [ "main.cpp" ]
+  link_select = [
+    "YqlServicePolicy=exception_policy",
+    "allocator=tcmalloc",
+    "minikql_codegen=llvm16",
+    "retro_spans=spans",
+    "topic_rpc=persqueue_v1",
+    "wasm=engine",
+    "yql_pg_runtime=pg_wrapper",
+    "yql_pg_sql_translator=pg",
+    "yt_codegen=llvm16",
+  ]
 }

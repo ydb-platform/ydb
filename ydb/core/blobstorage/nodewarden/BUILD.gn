@@ -1,3 +1,7 @@
+config("nodewarden_private_config") {
+  configs = [ "//build/gn/config:ydb_default_pdisk_sequence_weak" ]
+}
+
 library("nodewarden") {
   public_deps = [
     # "//library/cpp/time_provider",
@@ -52,7 +56,6 @@ library("nodewarden") {
     # "//ydb/library/actors/retro_tracing",  # peerdir only
     "//ydb/library/actors/retro_tracing/collector",
     # "//ydb/library/actors/retro_tracing/span",
-    "//ydb/library/keys",  # peerdir only
     "//ydb/library/protobuf_printer",
     "//ydb/library/yaml_config",
     # "//ydb/library/yaml_config/public",
@@ -98,4 +101,6 @@ library("nodewarden") {
     "node_warden_stat_aggr.cpp",
     "node_warden_vdisk.cpp",
   ]
+
+  configs = [ ":nodewarden_private_config" ]
 }

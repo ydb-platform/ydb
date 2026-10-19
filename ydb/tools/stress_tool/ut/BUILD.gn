@@ -1,3 +1,7 @@
+config("ut_private_config") {
+  cflags = [ "-Wno-implicit-const-int-float-conversion" ]
+}
+
 unittest_executable("ut") {
   deps = [
     "//contrib/libs/protobuf",
@@ -32,4 +36,6 @@ unittest_executable("ut") {
     "yql_pg_sql_translator=pg",
     "yt_codegen=llvm16",
   ]
+
+  configs = [ ":ut_private_config" ]
 }

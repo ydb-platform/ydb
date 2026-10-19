@@ -1,15 +1,15 @@
 library("string") {
   deps = [
     # "//library/cpp/deprecated/split",
-    # "//library/cpp/html/pcdata",
-    # "//library/cpp/string_utils/base32",
-    # "//library/cpp/string_utils/base64",
+    "//library/cpp/html/pcdata",
+    "//library/cpp/string_utils/base32",
+    "//library/cpp/string_utils/base64",
     # "//library/cpp/string_utils/levenshtein_diff",
-    # "//library/cpp/string_utils/quote",
-    # "//yql/essentials/core/langver",  # peerdir only
+    "//library/cpp/string_utils/quote",
+    "//yql/essentials/core/langver",
     # "//yql/essentials/public/langver",
-    # "//yql/essentials/public/udf",
-    # "//yql/essentials/public/udf/arrow",
+    "//yql/essentials/public/udf",
+    "//yql/essentials/public/udf/arrow",
     # "//yql/essentials/public/udf/support",  # peerdir only
   ]
 

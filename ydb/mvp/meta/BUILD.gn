@@ -1,3 +1,7 @@
+config("meta_private_config") {
+  cflags = [ "-Wno-unqualified-std-cast-call" ]
+}
+
 library("meta") {
   public_deps = [
     # "//library/cpp/cgiparam",
@@ -14,13 +18,13 @@ library("meta") {
   ]
 
   deps = [
-    # "//contrib/libs/fmt",
+    "//contrib/libs/fmt",
     # "//contrib/libs/yaml-cpp",
     # "//library/cpp/digest/md5",
     "//library/cpp/protobuf/json",  # peerdir only
-    # "//library/cpp/string_utils/quote",
-    # "//library/cpp/string_utils/url",
-    # "//library/cpp/uri",
+    "//library/cpp/string_utils/quote",
+    "//library/cpp/string_utils/url",
+    "//library/cpp/uri",
     # "//ydb/core/ydb_convert",
     # "//ydb/library/aclib/protos",  # peerdir only
     # "//ydb/library/actors/interconnect/poller",
@@ -59,6 +63,8 @@ library("meta") {
     "support_links/url_source.cpp",
     "support_links/url_template.cpp",
   ]
+
+  configs = [ ":meta_private_config" ]
 }
 
 linked_executable("mvp_meta") {

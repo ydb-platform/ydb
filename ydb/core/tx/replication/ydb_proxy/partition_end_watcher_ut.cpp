@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         MockActorOps actorOps;
         TPartitionEndWatcher watcher(&actorOps);
 
-        watcher.SetEvent(std::move(MakeTEndPartitionSessionEvent()), client);
+        watcher.SetEvent(MakeTEndPartitionSessionEvent(), client);
 
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events[0].first, client);
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(PartitionEndWatcher) {
         watcher.SetCommittedOffset(19, client);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 0);
 
-        watcher.SetEvent(std::move(MakeTEndPartitionSessionEvent()), client);
+        watcher.SetEvent(MakeTEndPartitionSessionEvent(), client);
         UNIT_ASSERT_VALUES_EQUAL(actorOps.Events.size(), 0);
 
         watcher.SetCommittedOffset(31, client);

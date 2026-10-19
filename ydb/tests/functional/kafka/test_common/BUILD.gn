@@ -1,0 +1,13 @@
+library("test_common") {
+  testonly = true
+
+  public_deps = [
+    "//contrib/libs/librdkafka",
+    "//contrib/libs/librdkafka/src-cpp",
+    "//library/cpp/testing/unittest",
+    "//ydb/public/sdk/cpp/src/client/driver",
+    "//ydb/public/sdk/cpp/src/client/topic",
+  ]
+
+  sources = [ "helpers.cpp" ]
+}

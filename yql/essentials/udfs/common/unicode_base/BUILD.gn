@@ -2,7 +2,7 @@ library("unicode_base") {
   deps = [
     # "//yql/essentials/public/udf",  # peerdir only
     # "//yql/essentials/public/udf/support",  # peerdir only
-    # "//yql/essentials/udfs/common/unicode_base/lib",
+    "//yql/essentials/udfs/common/unicode_base/lib",
   ]
 
   sources = [ "unicode_base.cpp" ]

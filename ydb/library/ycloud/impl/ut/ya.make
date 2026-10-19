@@ -14,6 +14,7 @@ PEERDIR(
     library/cpp/retry
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
+    library/cpp/unified_agent_client  # Out<grpc::StatusCode>
 )
 
 YQL_LAST_ABI_VERSION()

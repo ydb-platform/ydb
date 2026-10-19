@@ -1,7 +1,5 @@
 library("test_utils") {
-  deps = [
-    # "//contrib/libs/openssl",
-  ]
+  deps = [ "//contrib/libs/openssl" ]
 
   sources = [ "test_cert_auth_utils.cpp" ]
 }

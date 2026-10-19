@@ -130,14 +130,14 @@ log_config:
     - component: "KQP"
       level: 5  # NOTICE
       sampling_level: 7  # DEBUG
-      sampling_rate: 50  # roughly every 50th DEBUG message for KQP
+      sampling_rate: 50  # roughly every 50th message between NOTICE and DEBUG
     - component: "BLOBSTORAGE"
       level: 5
       sampling_level: 8  # TRACE
       sampling_rate: 100
 
   # Lower load when the log pipeline is saturated
-  allow_drop_entries: true  # allow dropping lower-priority records
+  allow_drop_entries: true  # in-memory buffer; lower-priority records are dropped if it overflows
   time_threshold_ms: 1000   # buffer flush period, ms
 
   # Output format

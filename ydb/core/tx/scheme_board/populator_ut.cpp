@@ -12,6 +12,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/digest/city.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
@@ -288,7 +289,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(mainAck->Get()->GetPathId(), pathId, mainAck->ToString());
     }
 
-    void TestPublicationSurvivesReplicaReplacement(bool deletion) {
+    void TestPublicationSurvivesReplicaReplacement(bool deletion, bool deleteAfterPublication = false) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}, {}}, ReplicasInRingGroup));
         const auto edge = runtime.AllocateEdgeActor();
@@ -329,10 +330,14 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         }
         constexpr ui64 cookie = 12345;
         TBlockEvents<TUpdateAck> oldAcks(runtime, [&](const TUpdateAck::TPtr& ev) {
-            return ev->Recipient == populator && ev->Cookie == cookie;
+            return ev->Recipient == populator && (ev->Cookie == cookie || ev->Cookie == cookie + 1);
         });
         publish(cookie, deletion);
         runtime.WaitFor("original publication ACKs", [&] { return oldAcks.size() == 3; }, TDuration::Seconds(10));
+        if (deleteAfterPublication) {
+            publish(cookie + 1, true);
+            runtime.WaitFor("deletion ACKs", [&] { return oldAcks.size() == 6; }, TDuration::Seconds(10));
+        }
         configObserver.Remove();
         TBlockEvents<NInternalEvents::TEvHandshakeResponse> newHandshakes(runtime, [&](const auto& ev) {
             return newReplicaActors.contains(ev->Sender);
@@ -350,7 +355,7 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         });
         newHandshakes.Stop().Unblock();
         runtime.WaitFor("replacement replicas fully synchronized", [&] { return committed == 3; }, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), 1,
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), deleteAfterPublication ? 2 : 1,
             "publication must finish on the new replica configuration without a client retry");
         runtime.Send(new IEventHandle(populator, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
         auto response = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
@@ -363,6 +368,87 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(DeletionSurvivesReplicaReplacement) {
         TestPublicationSurvivesReplicaReplacement(true);
+    }
+
+    Y_UNIT_TEST(UpdateThenDeletionSurvivesReplicaReplacement) {
+        TestPublicationSurvivesReplicaReplacement(false, true);
+    }
+
+    Y_UNIT_TEST(ReplayUsesCurrentDescriptionPath) {
+        TTestBasicRuntime runtime;
+        TStateStorageInfo::TRingGroup group;
+        group.NToSelect = 3;
+        constexpr size_t replicaCount = 7;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({group}, replicaCount));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto info = GetStateStorageInfo(runtime);
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        THashMap<TActorId, TActorId> actorToService;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                actorToService[runtime.GetLocalServiceId(replica)] = replica;
+            }
+        }
+        THashMap<TActorId, TActorId> childToService;
+        auto handshakes = runtime.AddObserver<NInternalEvents::TEvHandshakeResponse>([&](auto& ev) {
+            childToService[ev->Recipient] = actorToService.at(ev->Sender);
+        });
+        size_t committed = 0;
+        auto commits = runtime.AddObserver<NInternalEvents::TEvCommitResponse>([&](auto&) { ++committed; });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("all replica children initialized", [&] { return committed == replicaCount; }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(childToService.size(), replicaCount);
+        auto select = [&](const TString& path) {
+            THashSet<TActorId> selected;
+            TStateStorageInfo::TSelection selection;
+            info->SelectReplicas(CityHash64(path), &selection, 0);
+            selected.insert(selection.begin(), selection.end());
+            info->SelectReplicas(pathId.Hash(), &selection, 0);
+            selected.insert(selection.begin(), selection.end());
+            return selected;
+        };
+        const TString oldPath = "/Root/OldPath";
+        const auto oldSelection = select(oldPath);
+        TString newPath;
+        THashSet<TActorId> newSelection;
+        for (size_t i = 0; i != 100; ++i) {
+            newPath = TStringBuilder() << "/Root/NewPath" << i;
+            newSelection = select(newPath);
+            if (newSelection != oldSelection) {
+                break;
+            }
+        }
+        UNIT_ASSERT_C(newSelection != oldSelection, "test paths must select different replica sets");
+        // Hold all publications on the parent-to-child links in their original
+        // order. No ACK can complete the old publication before replay.
+        TBlockEvents<NInternalEvents::TEvUpdate> updates(runtime, [&](const auto& ev) {
+            return ev->Sender == populator;
+        });
+        auto publish = [&](const TString& path, ui64 version, ui64 cookie) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe(path, pathId, version);
+            desc->Record.SetStatus(NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+        constexpr ui64 oldCookie = 12345;
+        publish(oldPath, 1, oldCookie);
+        runtime.WaitFor("old publication", [&] { return updates.size() == oldSelection.size(); }, TDuration::Seconds(10));
+        publish(newPath, 2, oldCookie + 1);
+        const auto originalCount = oldSelection.size() + newSelection.size();
+        runtime.WaitFor("new publication", [&] { return updates.size() == originalCount; }, TDuration::Seconds(10));
+        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(info)));
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        THashSet<TActorId> replayedTo;
+        for (size_t i = originalCount; i < updates.size(); ++i) {
+            const auto& ev = updates[i];
+            if (ev->Cookie == oldCookie) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPath(), newPath);
+                replayedTo.insert(childToService.at(ev->Recipient));
+            }
+        }
+        UNIT_ASSERT_C(replayedTo == newSelection,
+            "replay of the latest description must use that description's current path for routing");
     }
 
     Y_UNIT_TEST(OneRingGroup) {

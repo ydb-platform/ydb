@@ -535,7 +535,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const auto* desc = Descriptions.FindPtr(pathId);
         Y_ABORT_UNLESS(desc || isDeletion);
 
-        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, path);
+        // Replay sends the latest description, so use its current path too.
+        // The saved publication path is needed only after deletion.
+        TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc ? TStringBuf(desc->Path) : path);
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
@@ -879,6 +881,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         // Full synchronization does not acknowledge publication cookies.
         // Replay unfinished publications to the current selection, including
         // deletions whose descriptions have already been removed.
+        // Include existing children: a ring change can select a child that did
+        // not receive the original publication. Repeated updates and ACKs are
+        // idempotent, so resending to the whole current selection is safe.
         for (const auto& [cookie, info] : UpdateAcks) {
             TPathId previousPath;
             for (const auto& [pathVersion, _] : info.PathAcks) {

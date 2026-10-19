@@ -164,6 +164,7 @@ static NKikimrSchemeOp::TTableDescription GetTableDescription(TSchemeShard* ss, 
             dstColumn.set_type(column.GetType());
             dstColumn.set_typeid_(column.GetTypeId());
             dstColumn.set_id(column.GetId());
+            dstColumn.set_notnull(column.GetNotNull());
             columnIds[column.GetName()] = column.GetId();
         }
 

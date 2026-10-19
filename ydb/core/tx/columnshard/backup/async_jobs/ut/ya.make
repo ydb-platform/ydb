@@ -1,6 +1,8 @@
 UNITTEST_FOR(ydb/core/tx/columnshard/backup/async_jobs)
 
 PEERDIR(
+    contrib/libs/zlib
+    library/cpp/yson/node
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion

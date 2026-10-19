@@ -326,9 +326,11 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
                             "YT import is disabled by feature flag EnableImportFromYt");
                     }
-                    if (settings.destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+                    if (settings.destination_store_type() == Ydb::Table::STORE_TYPE_COLUMN &&
+                        !AppData()->FeatureFlags.GetEnableColumnTablesBackup())
+                    {
                         return Reply(std::move(response), Ydb::StatusIds::PRECONDITION_FAILED,
-                            "YT column import is not supported yet");
+                            "Column import is disabled by feature flag EnableColumnTablesBackup");
                     }
                     if (!settings.source_prefix().empty() || !settings.destination_path().empty() ||
                         settings.has_encryption_settings() || !settings.exclude_regexps().empty() ||

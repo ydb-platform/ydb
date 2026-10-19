@@ -45,7 +45,52 @@ public:
 
     void Bootstrap() {
         Counters.OnActorAlive();
-        auto result = CreateAsyncJobImportDownloader(SelfId(), TabletId, TxId, RestoreTask, TableInfo);
+        if (RestoreTask.HasYtImport() && RestoreTask.GetYtImport().HasPlan()) {
+            YtPlan = RestoreTask.GetYtImport().GetPlan();
+            RestoreTask.MutableYtImport()->ClearPlan();
+            if (YtPlan->GetVersion() != 1) {
+                return Fail("Unsupported YT import plan version");
+            }
+        }
+        StartDownloader();
+    }
+
+    void StartDownloader() {
+        if (YtPlan && PartIndex == YtPlan->PartsSize()) {
+            Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
+            Counters.OnActorDead();
+            PassAway();
+            return;
+        }
+        auto task = RestoreTask;
+        TMaybe<NDataShard::TTableInfo> partTableInfo;
+        if (YtPlan) {
+            const auto& part = YtPlan->GetParts(PartIndex);
+            *task.MutableYtImport()->MutablePart() = part;
+            TSerializedCellVec lower;
+            TSerializedCellVec upper;
+            if (!TSerializedCellVec::TryParse(part.GetFirstKey(), lower)) {
+                return Fail("Invalid YT part first key");
+            }
+            if (PartIndex + 1 < YtPlan->PartsSize() && !TSerializedCellVec::TryParse(YtPlan->GetParts(PartIndex + 1).GetFirstKey(), upper)) {
+                return Fail("Invalid YT next part first key");
+            }
+            const size_t keyCount = task.GetTableDescription().KeyColumnIdsSize();
+            if (lower.GetCells().size() != keyCount || (PartIndex + 1 < YtPlan->PartsSize() && upper.GetCells().size() != keyCount)) {
+                return Fail("Invalid YT part key column count");
+            }
+            // Column restore writes locally. For the single-shard YT destination,
+            // ranges validate the plan's disjoint key intervals without routing.
+            auto userTable = MakeIntrusive<NDataShard::TUserTable>(ui32(0), task.GetTableDescription(), ui32(0));
+            userTable->Range = TSerializedTableRange(lower.GetCells(), true, upper.GetCells(), false);
+            partTableInfo.ConstructInPlace(0, userTable);
+        }
+        // CS import progress is intentionally replayed from the beginning after an
+        // actor/tablet restart. Its existing bulk OPERATION_REPLACE writes replay
+        // identical keys; all descriptors remain pinned to the original objects.
+        LastInfo = {};
+        LastActorId = {};
+        auto result = CreateAsyncJobImportDownloader(SelfId(), TabletId, TxId, task, partTableInfo ? *partTableInfo : TableInfo);
         if (!result) {
             Counters.OnError();
             return Fail(result.GetError().GetErrorMessage());
@@ -97,6 +142,15 @@ public:
         const TInstant processStartTime = TInstant::Now();
 
         const auto& record = ev->Get()->Record;
+        if (RestoreTask.HasYtImport() && !record.RowsSize()) {
+            // Gzip EOF verification can produce a zero-row final checkpoint. No
+            // column write is needed, and the blob splitter expects actual rows.
+            auto response = std::make_unique<NKikimr::TEvDataShard::TEvS3UploadRowsResponse>();
+            response->Info = ev->Get()->Info;
+            Send(ev->Sender, std::move(response));
+            Counters.OnProcessFinished(TInstant::Now() - processStartTime, 0, 0);
+            return;
+        }
         const auto& rowScheme = record.GetRowScheme();
 
         TVector<std::pair<TString, NScheme::TTypeInfo>> rowSchemaOrder;
@@ -174,6 +228,12 @@ public:
             Counters.OnError();
             return Fail(product->Error);
         }
+        if (YtPlan) {
+            DownloaderActorId = {};
+            ++PartIndex;
+            StartDownloader();
+            return;
+        }
         Send(SubscriberActorId, std::make_unique<TEvPrivate::TEvBackupImportRecordBatch>(nullptr, true));
         Counters.OnActorDead();
         PassAway();
@@ -198,6 +258,8 @@ private:
     NKikimr::NDataShard::TTableInfo TableInfo;
     THashMap<ui32, std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     TImportDownloaderCounters Counters;
+    TMaybe<NKikimrSchemeOp::TYtImportPlan> YtPlan;
+    size_t PartIndex = 0;
 };
 
 std::unique_ptr<NActors::IActor> CreateImportDownloader(const NActors::TActorId& subscriberActorId, ui64 tabletId, ui64 txId,

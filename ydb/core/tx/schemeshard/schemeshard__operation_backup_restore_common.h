@@ -719,10 +719,6 @@ public:
         }
 
         if (TxType == TTxState::TxRestore && Transaction.GetRestore().HasYtImport()) {
-            if (path->IsColumnTable()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "YT column restore is not supported yet");
-                return result;
-            }
             const auto& ytImport = Transaction.GetRestore().GetYtImport();
             if (!ytImport.HasPlan() || ytImport.GetPlan().GetVersion() != 1 || ytImport.HasPart()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "YT restore requires a version 1 source plan");

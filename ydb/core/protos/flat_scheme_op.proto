@@ -1603,7 +1603,7 @@ message TRestoreTask {
     optional TEncryptionSettings EncryptionSettings = 8;
 
     message TYtImportContext {
-        optional TYtImportPlan Plan = 1; // Kept on SchemeShard
+        optional TYtImportPlan Plan = 1; // Kept on SchemeShard and sent to ColumnShard
         optional TYtImportPart Part = 2; // DataShard receives only its selected source part
     }
 

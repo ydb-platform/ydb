@@ -15,10 +15,13 @@
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
+#include <aws/s3/model/HeadObjectRequest.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_binary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/result.h>
+#include <contrib/libs/zlib/zlib.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NKikimr {
 
@@ -239,11 +242,127 @@ NKikimrSchemeOp::TRestoreTask MakeRestoreTask3Cols(const TString& bucketName) {
     return restoreTask;
 }
 
+TString MakeYtGzip(TStringBuf text) {
+    const auto rows = NYT::NodeFromYsonString(text, NYson::EYsonType::ListFragment);
+    const auto wrapped = NYT::NodeToYsonString(rows, NYson::EYsonFormat::Binary);
+    const auto input = TStringBuf(wrapped).SubStr(1, wrapped.size() - 2);
+    z_stream stream{};
+    UNIT_ASSERT_VALUES_EQUAL(deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + MAX_WBITS, 8, Z_DEFAULT_STRATEGY), Z_OK);
+    TString output;
+    output.resize(deflateBound(&stream, input.size()));
+    stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(input.data()));
+    stream.avail_in = input.size();
+    stream.next_out = reinterpret_cast<Bytef*>(output.Detach());
+    stream.avail_out = output.size();
+    UNIT_ASSERT_VALUES_EQUAL(deflate(&stream, Z_FINISH), Z_STREAM_END);
+    output.resize(stream.total_out);
+    deflateEnd(&stream);
+    return output;
+}
+
+NKikimrSchemeOp::TRestoreTask MakeYtRestoreTask(const TString& bucket) {
+    auto task = MakeRestoreTask(bucket);
+    task.MutableTableDescription()->MutableColumns(0)->SetNotNull(true);
+    task.MutableYtImport()->MutablePlan()->SetVersion(1);
+    return task;
+}
+
+void AddYtPart(
+    NKikimrSchemeOp::TRestoreTask& task, Aws::S3::S3Client& client, TStringBuf key, TStringBuf firstKey, TStringBuf text, ui64 start, ui64 end) {
+    const auto data = MakeYtGzip(text);
+    NTestUtils::UploadObject(task.GetS3Settings().GetBucket(), TString(key), data, client);
+    const auto head = client.HeadObject(Aws::S3::Model::HeadObjectRequest().WithBucket(task.GetS3Settings().GetBucket()).WithKey(TString(key)));
+    UNIT_ASSERT_C(head.IsSuccess(), head.GetError().GetMessage());
+    auto* part = task.MutableYtImport()->MutablePlan()->AddParts();
+    part->SetObjectKey(TString(key));
+    const auto& etag = head.GetResult().GetETag();
+    part->SetETag(etag.data(), etag.size());
+    part->SetContentLength(data.size());
+    part->SetStartRow(start);
+    part->SetEndRow(end);
+    const TVector<TCell> cells{ TCell(firstKey.data(), firstKey.size()) };
+    part->SetFirstKey(TSerializedCellVec(cells).GetBuffer());
+}
+
+TActorId StartYtWrapper(TTestActorRuntime& runtime, const TActorId& edge, const NKikimrSchemeOp::TRestoreTask& task) {
+    auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), task.GetTableDescription(), ui32(0));
+    auto actor = NColumnShard::NBackup::CreateImportDownloader(edge, 1, 0, task, NDataShard::TTableInfo(0, userTable), MakeYdbSchema());
+    return runtime.Register(actor.release());
+}
+
 }   // namespace
 
 using namespace NColumnShard;
 
 Y_UNIT_TEST_SUITE(AsyncJobs) {
+    Y_UNIT_TEST(YtMultipartAndWholeSourceReplay) {
+        const TString bucket = "column-yt-multipart-replay";
+        auto client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, client);
+        auto task = MakeYtRestoreTask(bucket);
+        AddYtPart(task, client, "part_0_1", "k1", "{key=k1;value=one};{key=k2;value=two};", 0, 1);
+        AddYtPart(task, client, "part_2_2", "k3", "{key=k3;value=three};", 2, 2);
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        // YT must keep using row uploads even when native direct-part mode is on.
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(true);
+        const auto edge = runtime.AllocateEdgeActor();
+        auto actor = StartYtWrapper(runtime, edge, task);
+        TAutoPtr<IEventHandle> handle;
+        auto first = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(!first->IsLast);
+        UNIT_ASSERT_VALUES_EQUAL(first->Data->num_rows(), 2);
+        runtime.Send(new IEventHandle(actor, edge, new TEvPrivate::TEvBackupImportRecordBatchResult()));
+        auto second = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(!second->IsLast);
+        UNIT_ASSERT_VALUES_EQUAL(second->Data->num_rows(), 1);
+        // Lose the wrapper after the first part was acknowledged. Its restart
+        // deliberately replays all objects, matching CS OPERATION_REPLACE recovery.
+        runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPoisonPill()));
+        runtime.DispatchEvents({}, TDuration::Seconds(1));
+        actor = StartYtWrapper(runtime, edge, task);
+        first = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(first->Data->num_rows(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(std::static_pointer_cast<arrow::StringArray>(first->Data->column(0))->GetString(0), "k1");
+        runtime.Send(new IEventHandle(actor, edge, new TEvPrivate::TEvBackupImportRecordBatchResult()));
+        second = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(second->Data->num_rows(), 1);
+        runtime.Send(new IEventHandle(actor, edge, new TEvPrivate::TEvBackupImportRecordBatchResult()));
+        auto final = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(final->IsLast);
+        UNIT_ASSERT(!final->Error);
+        UNIT_ASSERT(!final->Data);
+    }
+
+    Y_UNIT_TEST(YtEmptyPlanDoesNotDownload) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto edge = runtime.AllocateEdgeActor();
+        StartYtWrapper(runtime, edge, MakeYtRestoreTask("bucket-does-not-exist"));
+        TAutoPtr<IEventHandle> handle;
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(result->IsLast);
+        UNIT_ASSERT(!result->Error);
+        UNIT_ASSERT(!result->Data);
+    }
+
+    Y_UNIT_TEST(YtRejectsOverlappingPartTail) {
+        const TString bucket = "column-yt-overlap";
+        auto client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucket, client);
+        auto task = MakeYtRestoreTask(bucket);
+        AddYtPart(task, client, "part_0_1", "k1", "{key=k1;value=one};{key=k4;value=four};", 0, 1);
+        AddYtPart(task, client, "part_2_2", "k3", "{key=k3;value=three};", 2, 2);
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        const auto edge = runtime.AllocateEdgeActor();
+        StartYtWrapper(runtime, edge, task);
+        TAutoPtr<IEventHandle> handle;
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvBackupImportRecordBatch>(handle);
+        UNIT_ASSERT(result->IsLast);
+        UNIT_ASSERT_STRING_CONTAINS(result->Error, "key is out of range");
+    }
+
     void Import(EDataFormat format) {
         const TString bucketName = TStringBuilder() << "test-import-" << FormatName(format);
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();

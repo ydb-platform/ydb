@@ -71,7 +71,7 @@ void DisableQueueSchedules(TTestActorRuntime& runtime, const TIntrusivePtr<TGrou
         bool allConnected = true;
         for (const TGroupQueues::TVDisk *disk : groupQueues->DisksByOrderNumber) {
             disk->Queues.ForEachQueue([&](const auto& queue) {
-                allConnected &= queue.IsConnected.load(std::memory_order_relaxed);
+                allConnected &= queue.IsConnected;
             });
         }
         if (allConnected) {

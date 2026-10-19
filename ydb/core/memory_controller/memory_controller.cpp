@@ -417,8 +417,11 @@ private:
         ui64 budgetBase = processMemoryInfo.AllocatedMemory;
         ui64 rssExcess = 0;
         if (Config.GetRssAwareBudget() && processMemoryInfo.AnonRss.has_value()) {
-            // AnonRss above AllocatedMemory is caches and fragmentation: budget it beyond the slack
-            ui64 rssBudget = SafeDiff(processMemoryInfo.AnonRss.value(), Config.GetRssBudgetSlackBytes());
+            // Free page-heap bytes can be reused or released. Charging them again after
+            // a consumer eviction would repeatedly cut useful caches while RSS stays flat.
+            // Keep charging the non-reclaimable allocator overhead beyond the slack.
+            ui64 rssBudget = SafeDiff(SafeDiff(processMemoryInfo.AnonRss.value(),
+                processMemoryInfo.AllocatorCachesReclaimable), Config.GetRssBudgetSlackBytes());
             rssExcess = SafeDiff(rssBudget, processMemoryInfo.AllocatedMemory);
             budgetBase = Max(budgetBase, rssBudget);
         }

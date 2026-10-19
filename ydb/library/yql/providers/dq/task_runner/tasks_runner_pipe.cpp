@@ -2123,7 +2123,7 @@ class TPipeFactory: public IProxyFactory {
 
         TInstant Process() override {
             if (!StopList.empty()) {
-                YQL_CLOG(DEBUG, ProviderDq) << "Stopping evicted pool processes (Count: " << StopList.size()
+                YQL_CLOG(DEBUG, ProviderDq) << "Stopping queued processes (Count: " << StopList.size()
                     << ", QueueDelayMs: " << (TInstant::Now() - ScheduledAt).MilliSeconds() << ")";
             }
             for (const auto& job : StopList) {
@@ -2172,7 +2172,7 @@ public:
         tmp.GetMeta().UnpackTo(&taskMeta);
         ui64 stageId = taskMeta.GetStageId();
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
-        auto [task, filesHolder] = PrepareTask(tmp, result.Get());
+        auto [task, filesHolder] = PrepareTask(tmp, &result);
         return new TTaskRunner(alloc, task, std::move(filesHolder), std::move(result), stageId, traceId);
     }
 
@@ -2184,7 +2184,7 @@ public:
         tmp.GetMeta().UnpackTo(&taskMeta);
 
         auto result = GetExecutorForTask(taskMeta.GetFiles(), taskMeta.GetSettings());
-        auto [task, filesHolder] = PrepareTask(tmp, result.Get());
+        auto [task, filesHolder] = PrepareTask(tmp, &result);
         return new TDqTaskRunner(alloc, task, std::move(filesHolder), std::move(result), taskMeta.GetStageId(), traceId);
     }
 
@@ -2212,8 +2212,29 @@ private:
     }
 
     void StopJobs(TList<THolder<TChildProcess>>&& stopList) {
-        *Counters->ProcessesPendingStop += stopList.size();
-        Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList), Counters), TInstant()));
+        const auto count = stopList.size();
+        *Counters->ProcessesPendingStop += count;
+        try {
+            Y_ABORT_UNLESS(TaskScheduler.Add(MakeIntrusive<TStopJob>(std::move(stopList), Counters), TInstant()));
+        } catch (...) {
+            *Counters->ProcessesPendingStop -= count;
+            throw;
+        }
+    }
+
+    void StopJobsOnError(THolder<TChildProcess> process, TList<THolder<TChildProcess>> stopList = {}) noexcept {
+        try {
+            if (process) {
+                stopList.push_back(std::move(process));
+            }
+            if (!stopList.empty()) {
+                StopJobs(std::move(stopList));
+            }
+        } catch (...) {
+            try {
+                YQL_CLOG(ERROR, ProviderDq) << "Cannot schedule process cleanup: " << CurrentExceptionMessage();
+            } catch (...) { }
+        }
     }
 
     TString GetKey(const TString& exePath, const TPortoSettings& settings)
@@ -2221,7 +2242,16 @@ private:
         return exePath + "," + settings.ToString();
     }
 
-    std::tuple<NDqProto::TDqTask, TFilesHolder::TPtr> PrepareTask(const NDq::TDqTaskSettings& tmp, TChildProcess* result) {
+    std::tuple<NDqProto::TDqTask, TFilesHolder::TPtr> PrepareTask(const NDq::TDqTaskSettings& tmp, THolder<TChildProcess>* result) {
+        try {
+            return PrepareTaskImpl(tmp, result->Get());
+        } catch (...) {
+            StopJobsOnError(std::move(*result));
+            throw;
+        }
+    }
+
+    std::tuple<NDqProto::TDqTask, TFilesHolder::TPtr> PrepareTaskImpl(const NDq::TDqTaskSettings& tmp, TChildProcess* result) {
         // get files from fileCache
         auto task = tmp.GetSerializedTask();
         auto filesHolder = std::make_unique<TFilesHolder>(FileCache);
@@ -2315,11 +2345,17 @@ private:
 
         auto key = GetKey(exePath, portoSettings);
         TList<THolder<TChildProcess>> stopList;
-        THolder<TChildProcess> result = ProcessHolder.Acquire(key, &stopList);
-        if (!result) {
-            result = StartOne(exePath, portoSettings);
+        THolder<TChildProcess> result;
+        try {
+            result = ProcessHolder.Acquire(key, &stopList);
+            if (!result) {
+                result = StartOne(exePath, portoSettings);
+            }
+            ProcessJobs(exePath, portoSettings);
+        } catch (...) {
+            StopJobsOnError(std::move(result), std::move(stopList));
+            throw;
         }
-        ProcessJobs(exePath, portoSettings);
         StopJobs(std::move(stopList));
         return result;
     }

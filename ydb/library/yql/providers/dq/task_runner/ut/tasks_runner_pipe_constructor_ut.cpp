@@ -146,6 +146,7 @@ void CheckConstructorCleanup(
     options.FileCache = MakeIntrusive<TStartedExecutorFileCache>(directory.Name(), pidFile);
     options.Env["PID_FILE"] = pidFile.GetPath();
     options.MaxProcesses = 0;
+    options.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto factory = CreatePipeFactory(options);
     auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__);
 
@@ -188,7 +189,19 @@ void CheckConstructorCleanup(
             TException,
             errorSubstring);
     } else {
-        UNIT_ASSERT_NO_EXCEPTION(factory->GetOld(alloc, NDq::TDqTaskSettings(&task)));
+        ITaskRunner::TPtr runner;
+        UNIT_ASSERT_NO_EXCEPTION(runner = factory->GetOld(alloc, NDq::TDqTaskSettings(&task)));
+        UNIT_ASSERT_VALUES_EQUAL(options.Counters->GetCounter("ProcessesPendingStop")->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(options.Counters->GetCounter("PoolStopDelayCount", /*derivative*/ true)->Val(), 0);
+        const int pid = WaitForExecutorPid(pidFile);
+        UNIT_ASSERT(pid > 0);
+        int status = 0;
+        int result;
+        do {
+            result = waitpid(pid, &status, WNOHANG);
+        } while (result == -1 && errno == EINTR);
+        UNIT_ASSERT_VALUES_EQUAL_C(result, 0, "Successful runner was stopped before release");
+        runner = nullptr;
     }
     cleanup();
     factory = nullptr;

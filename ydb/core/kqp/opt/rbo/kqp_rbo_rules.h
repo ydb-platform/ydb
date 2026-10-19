@@ -510,7 +510,9 @@ class TInlineCBOTreeRule : public ISimplifiedRule {
  */
 class TAssignStagesStage final: public IRBOStage {
   public:
-    TAssignStagesStage() : IRBOStage("Assign physical stages") {
+    TAssignStagesStage()
+        : IRBOStage("Assign physical stages", ERBOStageTransformationMode::AtomicStageCommit,
+                    "Assign physical stages") {
         Props = ERuleProperties::RequireParents | ERuleProperties::RequireMetadata | ERuleProperties::RequireTypes;
     }
     void RunStage(TOpRoot& root, TRBOContext& ctx) override;

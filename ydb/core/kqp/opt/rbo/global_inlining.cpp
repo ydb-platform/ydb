@@ -77,7 +77,8 @@ void EliminateCopies(TOpRoot& root, TExprContext& ctx) {
 } // anonymous namespace
 
 TGlobalInliningStage::TGlobalInliningStage(TString stageName)
-    : IRBOStage(std::move(stageName))
+    : IRBOStage(std::move(stageName), ERBOStageTransformationMode::AtomicStageCommit,
+                "Inline shared definitions")
 {
     Props = ERuleProperties::RequireOutputIUs;
 }

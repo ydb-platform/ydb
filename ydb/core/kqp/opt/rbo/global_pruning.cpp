@@ -42,7 +42,8 @@ bool TOpUnionAll::PruneOutputs(const TUnorderedIUs& liveOut, TExprContext&) {
 }
 
 TGlobalPruningStage::TGlobalPruningStage(TString stageName, bool pruneKeyColumns, EPruningScope scope)
-    : IRBOStage(std::move(stageName))
+    : IRBOStage(std::move(stageName), ERBOStageTransformationMode::AtomicStageCommit,
+                "Prune unused definitions")
     , PruneKeyColumns(pruneKeyColumns)
     , Scope(scope)
 {

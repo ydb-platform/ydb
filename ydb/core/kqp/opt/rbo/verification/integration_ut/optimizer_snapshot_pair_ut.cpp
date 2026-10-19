@@ -1703,6 +1703,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(!complete[1].TransformationEvents.empty());
         UNIT_ASSERT(ParseSnapshot(complete[1])["stage_graph"].IsMap());
 
+        std::optional<ui64> stageAssignmentOrdinal;
         std::optional<ui64> constantFoldingOrdinal;
         std::optional<ui64> hashPropagationOrdinal;
         const auto& events = complete[1].TransformationEvents;
@@ -1712,7 +1713,12 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             UNIT_ASSERT(!event.Stage.empty());
             UNIT_ASSERT(!event.Name.empty());
 
-            if (event.Stage == "Constant folding stage") {
+            if (event.Stage == "Assign physical stages") {
+                UNIT_ASSERT(!stageAssignmentOrdinal);
+                UNIT_ASSERT(event.Kind == ERBOTransformationEventKindV1::AtomicStageCommit);
+                UNIT_ASSERT_VALUES_EQUAL(event.Name, "Assign physical stages");
+                stageAssignmentOrdinal = event.Ordinal;
+            } else if (event.Stage == "Constant folding stage") {
                 UNIT_ASSERT(!constantFoldingOrdinal);
                 UNIT_ASSERT(
                     event.Kind ==
@@ -1729,8 +1735,10 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             }
         }
 
+        UNIT_ASSERT(stageAssignmentOrdinal);
         UNIT_ASSERT(constantFoldingOrdinal);
         UNIT_ASSERT(hashPropagationOrdinal);
+        UNIT_ASSERT(*stageAssignmentOrdinal < *hashPropagationOrdinal);
         UNIT_ASSERT(*constantFoldingOrdinal < *hashPropagationOrdinal);
         UNIT_ASSERT_VALUES_EQUAL(*hashPropagationOrdinal, events.size());
 

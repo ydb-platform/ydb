@@ -412,7 +412,7 @@ Y_UNIT_TEST(RssAwareBudget) {
     server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
     server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 28_MB);
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(28_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(rssExcess->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
 
@@ -579,7 +579,8 @@ Y_UNIT_TEST(RssAwareBudget_BudgetOnly) {
     server->ProcessMemoryInfo->AllocatorCachesMemory = 50_MB;
     server->ProcessMemoryInfo->AllocatorCachesReclaimable = 50_MB;
     runtime.SimulateSleep(TDuration::Seconds(2));
-    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), 28_MB);
+    UNIT_ASSERT_DOUBLES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(),
+        static_cast<i64>(28_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/AllocatorCachesReleaseRequested")->Val(), 0);
 }
@@ -833,7 +834,8 @@ Y_UNIT_TEST(RssAwareBudget_ConfigHotReload) {
     };
 
     updateConfig(true);
-    UNIT_ASSERT_VALUES_EQUAL(sharedCacheLimit->Val(), 28_MB);
+    // The live server's own memtable usage adds a small offset to the cache ceiling.
+    UNIT_ASSERT_DOUBLES_EQUAL(sharedCacheLimit->Val(), static_cast<i64>(28_MB), static_cast<i64>(1_MB));
     UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/RssExcess")->Val(), 90_MB);
     UNIT_ASSERT_VALUES_EQUAL(releaseRequested->Val(), 30_MB);
 

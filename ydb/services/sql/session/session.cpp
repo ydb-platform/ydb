@@ -299,6 +299,11 @@ private:
             return;
         }
         if (parsed.Select) {
+            const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
+            if (!parsed.Select->Order.empty() && (catalog || parsed.Select->Join)) {
+                Fail("0A000", "not supported");
+                return;
+            }
             if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "schemata") {
                 Register(CreateSchemataActor(SelfId(), Database, *parsed.Select));
             } else if (parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema" && parsed.Select->From.Name == "tables") {

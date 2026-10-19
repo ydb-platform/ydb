@@ -1,7 +1,7 @@
 # FULL JOIN
 
-status: pending
-commit:
+status: done
+commit: 95b06c42b4a0fc5bf482c1552f967ce35aa87a3b
 id: join-full
 depends: join-right
 

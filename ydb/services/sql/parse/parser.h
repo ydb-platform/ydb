@@ -58,6 +58,12 @@ struct TJoin {
     TIdentifier RightColumn;
 };
 
+struct TOrderKey {
+    TIdentifier Column;
+    bool Desc = false;
+    bool NullsFirst = false;
+};
+
 struct TSelectStmt {
     bool Star = false;
     TVector<TIdentifier> Columns;
@@ -66,6 +72,7 @@ struct TSelectStmt {
     TString Alias;
     std::optional<TJoin> Join;
     TVector<TComparison> Where;
+    TVector<TOrderKey> Order;
     std::optional<ui64> Limit;
 };
 

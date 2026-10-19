@@ -128,6 +128,16 @@ Y_UNIT_TEST_SUITE(ParseSelect) {
         UNIT_ASSERT(parsed.Select->Join->Kind == EJoinKind::Full);
     }
 
+    Y_UNIT_TEST(OrderByKeepsDirectionAndNulls) {
+        const TParseResult parsed = Parse("SELECT note FROM items ORDER BY id DESC NULLS LAST, note ASC");
+        UNIT_ASSERT(parsed.Select);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.Select->Order.size(), 2u);
+        UNIT_ASSERT(parsed.Select->Order[0].Desc);
+        UNIT_ASSERT(!parsed.Select->Order[0].NullsFirst);
+        UNIT_ASSERT(!parsed.Select->Order[1].Desc);
+        UNIT_ASSERT(!parsed.Select->Order[1].NullsFirst);
+    }
+
     Y_UNIT_TEST(OrIsUnsupported) {
         const TParseResult parsed = Parse("SELECT a FROM t WHERE a = 1 OR b = 2");
         UNIT_ASSERT(!parsed.Select);

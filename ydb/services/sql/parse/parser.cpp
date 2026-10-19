@@ -522,7 +522,12 @@ public:
         if (IsKeyword("group") || IsKeyword("having") || IsKeyword("window")) {
             return Unsupported(Current.Text);
         }
-        if (IsKeyword("union") || IsKeyword("intersect") || IsKeyword("except") || IsKeyword("order") || IsKeyword("for")) {
+        if (IsKeyword("order")) {
+            if (auto error = OrderByClause(select)) {
+                return *error;
+            }
+        }
+        if (IsKeyword("union") || IsKeyword("intersect") || IsKeyword("except") || IsKeyword("for")) {
             return Unsupported(Current.Text);
         }
         if (IsKeyword("limit")) {
@@ -1346,6 +1351,45 @@ private:
             }
             Advance();
         }
+    }
+
+    std::optional<TParseResult> OrderByClause(TSelectStmt& select) {
+        Advance();
+        if (!IsKeyword("by")) {
+            return Unsupported(Current.Text);
+        }
+        Advance();
+        for (;;) {
+            TOrderKey key;
+            if (auto error = ColumnRef(key.Column)) {
+                return error;
+            }
+            if (IsKeyword("asc")) {
+                Advance();
+            } else if (IsKeyword("desc")) {
+                key.Desc = true;
+                Advance();
+            }
+            if (IsKeyword("nulls")) {
+                Advance();
+                if (IsKeyword("first")) {
+                    key.NullsFirst = true;
+                } else if (IsKeyword("last")) {
+                    key.NullsFirst = false;
+                } else {
+                    return Unsupported(Current.Text);
+                }
+                Advance();
+            } else {
+                key.NullsFirst = key.Desc;
+            }
+            select.Order.push_back(std::move(key));
+            if (Current.Kind != ETokenKind::Comma) {
+                break;
+            }
+            Advance();
+        }
+        return std::nullopt;
     }
 
     std::optional<TParseResult> LimitClause(TSelectStmt& select) {

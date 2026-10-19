@@ -157,6 +157,24 @@ private:
             return;
         }
         Replied = true;
+        if (!SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
+            TVector<size_t> order(Rows.size());
+            for (size_t i = 0; i < order.size(); ++i) {
+                order[i] = i;
+            }
+            std::sort(order.begin(), order.end(), [&](size_t left, size_t right) {
+                return Less(SortKeys[left], SortKeys[right]);
+            });
+            TVector<TVector<TQueryCell>> sorted;
+            sorted.reserve(Rows.size());
+            for (size_t index : order) {
+                sorted.push_back(std::move(Rows[index]));
+            }
+            Rows = std::move(sorted);
+        }
+        if (ReverseRead && !ReadingIndex) {
+            AccessPath = "Reverse";
+        }
         if (Statement.Limit && Rows.size() > *Statement.Limit) {
             Rows.resize(*Statement.Limit);
         }
@@ -214,6 +232,18 @@ private:
         ECompareOp Op = ECompareOp::Eq;
         size_t CellIndex = 0;
         TString Literal;
+    };
+
+    struct TSortSlot {
+        size_t Index = 0;
+        bool Desc = false;
+        bool NullsFirst = false;
+        NScheme::TTypeInfo Type;
+    };
+
+    struct TSortBytes {
+        TVector<TString> Bytes;
+        TVector<bool> Nulls;
     };
 
     void Unlink() {
@@ -447,6 +477,55 @@ private:
         for (const TFilter& filter : Filters) {
             FilterCells.emplace_back(filter.Literal.data(), filter.Literal.size());
         }
+        return BindOrder(entry);
+    }
+
+    bool BindOrder(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        SortSlots.clear();
+        PkOrdered = false;
+        ReverseRead = false;
+        if (Statement.Order.empty()) {
+            return true;
+        }
+        for (const TOrderKey& key : Statement.Order) {
+            if (!key.Column.Qualifier.empty() && key.Column.Qualifier != Statement.From.Name && key.Column.Qualifier != Statement.Alias) {
+                Fail("42703", key.Column.Qualifier);
+                return false;
+            }
+            const auto* info = FindColumn(entry, key.Column.Name);
+            if (!info) {
+                Fail("42703", key.Column.Name);
+                return false;
+            }
+            TColumn prepared;
+            if (!PrepareColumn(*info, prepared)) {
+                Fail("0A000", "not supported");
+                return false;
+            }
+            size_t index = ReadColumns.size();
+            for (size_t i = 0; i < ReadColumns.size(); ++i) {
+                if (ReadColumns[i].Name == prepared.Name) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index == ReadColumns.size()) {
+                ReadColumns.push_back(prepared);
+            }
+            TSortSlot slot;
+            slot.Index = index;
+            slot.Desc = key.Desc;
+            slot.NullsFirst = key.NullsFirst;
+            slot.Type = prepared.Type;
+            SortSlots.push_back(slot);
+        }
+        PkOrdered = SortSlots.size() == AllKeyNames.size();
+        for (size_t i = 0; i < SortSlots.size() && PkOrdered; ++i) {
+            if (ReadColumns[SortSlots[i].Index].Name != AllKeyNames[i] || SortSlots[i].Desc != SortSlots[0].Desc) {
+                PkOrdered = false;
+            }
+        }
+        ReverseRead = PkOrdered && !SortSlots.empty() && SortSlots[0].Desc;
         return true;
     }
 
@@ -662,6 +741,9 @@ private:
             record.SetLockTxId(LockTxId);
             record.SetLockNodeId(SelfId().NodeId());
         }
+        if (ReverseRead && !ReadingIndex && !MainLookup) {
+            record.SetReverse(true);
+        }
         for (const TColumn& column : ReadColumns) {
             record.AddColumns(column.Id);
         }
@@ -788,9 +870,42 @@ private:
                 }
                 line.push_back({encoded.Null, encoded.Bytes});
             }
+            if (!SortSlots.empty() && !(PkOrdered && !ReadingIndex)) {
+                TSortBytes held;
+                held.Bytes.reserve(SortSlots.size());
+                held.Nulls.reserve(SortSlots.size());
+                for (const TSortSlot& slot : SortSlots) {
+                    const TCell& cell = cells[slot.Index];
+                    held.Nulls.push_back(cell.IsNull());
+                    held.Bytes.push_back(cell.IsNull() ? TString() : TString(cell.AsBuf()));
+                }
+                SortKeys.push_back(std::move(held));
+            }
             Rows.push_back(std::move(line));
         }
         return true;
+    }
+
+    bool Less(const TSortBytes& left, const TSortBytes& right) const {
+        for (size_t i = 0; i < SortSlots.size(); ++i) {
+            if (left.Nulls[i] || right.Nulls[i]) {
+                if (left.Nulls[i] && right.Nulls[i]) {
+                    continue;
+                }
+                if (SortSlots[i].NullsFirst) {
+                    return left.Nulls[i];
+                }
+                return right.Nulls[i];
+            }
+            const TCell leftCell(left.Bytes[i].data(), left.Bytes[i].size());
+            const TCell rightCell(right.Bytes[i].data(), right.Bytes[i].size());
+            const int compared = CompareTypedCells(leftCell, rightCell, NScheme::TTypeInfoOrder(SortSlots[i].Type));
+            if (compared == 0) {
+                continue;
+            }
+            return SortSlots[i].Desc ? compared > 0 : compared < 0;
+        }
+        return false;
     }
 
     void FinishShard(TShard& shard) {
@@ -1370,6 +1485,10 @@ private:
     TVector<TCell> FilterCells;
     TVector<TShard> Shards;
     TVector<TVector<TQueryCell>> Rows;
+    TVector<TSortSlot> SortSlots;
+    TVector<TSortBytes> SortKeys;
+    bool PkOrdered = false;
+    bool ReverseRead = false;
     TVector<NKikimrDataEvents::TLock> Locks;
     TVector<ui64> WakeTablets;
     ui64 ReadId = 0;

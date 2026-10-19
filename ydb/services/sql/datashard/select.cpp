@@ -8,6 +8,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_order.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -351,9 +352,11 @@ private:
             return false;
         }
         AllKeyNames.clear();
+        AllKeyIds.clear();
         AllKeyTypes.clear();
         for (const auto* info : keys) {
             AllKeyNames.push_back(info->Name);
+            AllKeyIds.push_back(info->Id);
             TColumn prepared;
             if (!PrepareColumn(*info, prepared)) {
                 Fail("0A000", "not supported");
@@ -1303,6 +1306,10 @@ private:
             Fail("0A000", "not supported");
             return;
         }
+        if (Statement.Lock != ERowLock::None && !LockTxId) {
+            Fail("0A000", "not supported");
+            return;
+        }
         if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindTable) {
             Fail("42P01", Path);
             return;
@@ -1528,7 +1535,7 @@ private:
             record.MutableSnapshot()->SetStep(Snapshot->first);
             record.MutableSnapshot()->SetTxId(Snapshot->second);
         }
-        if (LockTxId) {
+        if (LockTxId && Statement.Lock == ERowLock::None) {
             record.SetLockTxId(LockTxId);
             record.SetLockNodeId(SelfId().NodeId());
         }
@@ -1548,6 +1555,10 @@ private:
     }
 
     void SendAll() {
+        if (Statement.Lock != ERowLock::None && !RowLocksSent) {
+            SendRowLocks();
+            return;
+        }
         Pending = Shards.size();
         for (TShard& shard : Shards) {
             shard.Done = false;
@@ -1727,6 +1738,73 @@ private:
                 return;
             }
             Succeed();
+        }
+    }
+
+    NKikimrDataEvents::ELockMode LockMode() const {
+        switch (Statement.Lock) {
+            case ERowLock::NoKeyUpdate:
+                return NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE_NO_KEY;
+            case ERowLock::Share:
+                return NKikimrDataEvents::PESSIMISTIC_SHARED;
+            case ERowLock::KeyShare:
+                return NKikimrDataEvents::PESSIMISTIC_SHARED_KEY;
+            case ERowLock::Update:
+            case ERowLock::None:
+                return NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE;
+        }
+    }
+
+    void SendRowLocks() {
+        RowLocksSent = true;
+        if (!Point || FromCells.size() != AllKeyIds.size() || Shards.empty()) {
+            Fail("0A000", "not supported");
+            return;
+        }
+        Pending = 0;
+        Become(&TSelectActor::StateRead);
+        for (const TShard& shard : Shards) {
+            auto request = MakeHolder<NEvents::TDataEvents::TEvLockRows>(++ReadId);
+            request->SetTableId(Table);
+            request->Record.SetLockId(LockTxId);
+            request->Record.SetLockNodeId(SelfId().NodeId());
+            request->Record.SetLockMode(LockMode());
+            if (Statement.SkipLocked) {
+                request->Record.SetSkipLocked(true);
+            }
+            for (ui32 id : AllKeyIds) {
+                request->Record.AddColumnIds(id);
+            }
+            request->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TSerializedCellMatrix matrix(FromCells, 1, static_cast<ui16>(AllKeyIds.size()));
+            request->SetCellMatrix(matrix.ReleaseBuffer());
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), shard.TabletId, true));
+            ++Pending;
+        }
+        if (Pending == 0) {
+            Succeed();
+        }
+    }
+
+    void HandleLock(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS) {
+            const TString message = record.IssuesSize() > 0 ? record.GetIssues(0).message() : TString("could not obtain lock");
+            Fail("40001", message);
+            return;
+        }
+        for (const auto& lock : record.GetLocks()) {
+            Locks.push_back(lock);
+        }
+        if (Pending > 0) {
+            --Pending;
+        }
+        if (Pending == 0) {
+            if (Statement.SkipLocked && record.SkippedLockedKeysSize() > 0) {
+                Succeed();
+                return;
+            }
+            SendAll();
         }
     }
 
@@ -2254,6 +2332,7 @@ private:
     STATEFN(StateRead) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvReadResult, HandleRead);
+            hFunc(NEvents::TDataEvents::TEvLockRowsResult, HandleLock);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandleDelivery);
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
@@ -2332,6 +2411,8 @@ private:
     TTableId MainTable;
     TVector<TColumn> MainReadColumns;
     TVector<TString> AllKeyNames;
+    TVector<ui32> AllKeyIds;
+    bool RowLocksSent = false;
     TVector<NScheme::TTypeInfo> AllKeyTypes;
     TVector<TIndexCand> Indexes;
     std::optional<TPlan> SavedPk;

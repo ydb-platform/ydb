@@ -1,5 +1,6 @@
 #include "events.h"
 
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/services/sql/ddl/events.h>
 #include <ydb/services/sql/ischema/columns.h>
@@ -16,6 +17,8 @@
 
 #include <util/generic/mapfindptr.h>
 #include <util/string/cast.h>
+
+#include <optional>
 
 namespace NKikimr::NSql {
 
@@ -189,6 +192,12 @@ private:
             || parsed.CreateSchema || parsed.Drop || parsed.AlterSequence;
     }
 
+    void CloseTx() {
+        LockOwner.reset();
+        TxId = 0;
+        Tx = ETx::Idle;
+    }
+
     void RunTx(const TTxStmt& tx) {
         if (tx.Kind == ETxKind::Begin) {
             if (Tx != ETx::Idle) {
@@ -207,8 +216,7 @@ private:
             }
             Pending.clear();
             Locks.clear();
-            TxId = 0;
-            Tx = ETx::Idle;
+            CloseTx();
             Succeed("ROLLBACK", {}, {});
             return;
         }
@@ -217,8 +225,7 @@ private:
             return;
         }
         if (Pending.empty() && Locks.empty()) {
-            Tx = ETx::Idle;
-            TxId = 0;
+            CloseTx();
             Succeed("COMMIT", {}, {});
             return;
         }
@@ -238,6 +245,7 @@ private:
         }
         TxId = txId;
         Tx = ETx::Open;
+        LockOwner.emplace(TxId, TActivationContext::ActorSystem());
         Succeed("BEGIN", {}, {});
     }
 
@@ -299,6 +307,13 @@ private:
             Register(CreateAlterSequenceActor(SelfId(), Database, *parsed.AlterSequence));
             return;
         }
+        if (parsed.Select && parsed.Select->Lock != ERowLock::None) {
+            const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
+            if (parsed.Cte || parsed.FromSubquery || !parsed.Scalars.empty() || parsed.Combine != ECombine::None || parsed.Select->Join || catalog) {
+                Fail("0A000", "not supported");
+                return;
+            }
+        }
         if (parsed.Select && parsed.Select->Offset) {
             const bool catalog = parsed.Select->Schema && parsed.Select->Schema->Name == "information_schema";
             if (parsed.Cte || parsed.FromSubquery || !parsed.Scalars.empty() || parsed.Combine != ECombine::None || parsed.Select->Join || catalog) {
@@ -354,11 +369,11 @@ private:
             return;
         }
         if (parsed.Delete) {
-            Register(CreateDeleteActor(SelfId(), Database, *parsed.Delete, InternalErrorRetries, Tx == ETx::Open));
+            Register(CreateDeleteActor(SelfId(), Database, *parsed.Delete, InternalErrorRetries, Tx == ETx::Open, Tx == ETx::Open ? TxId : 0));
             return;
         }
         if (parsed.Update) {
-            Register(CreateUpdateActor(SelfId(), Database, *parsed.Update, InternalErrorRetries, Tx == ETx::Open));
+            Register(CreateUpdateActor(SelfId(), Database, *parsed.Update, InternalErrorRetries, Tx == ETx::Open, Tx == ETx::Open ? TxId : 0));
             return;
         }
         if (parsed.Insert) {
@@ -411,8 +426,12 @@ private:
             Rolling = false;
             Pending.clear();
             Locks.clear();
-            TxId = 0;
-            Tx = ETx::Idle;
+            CloseTx();
+            if (!result.Ok) {
+                Fail(result.SqlState.empty() ? TString("40001") : result.SqlState,
+                    result.Message.empty() ? TString("could not release locks") : result.Message, false);
+                return;
+            }
             Succeed("ROLLBACK", {}, {});
             return;
         }
@@ -420,14 +439,14 @@ private:
             Committing = false;
             Pending.clear();
             Locks.clear();
-            TxId = 0;
             if (!result.Ok) {
+                CloseTx();
                 Tx = ETx::Failed;
                 Fail(result.SqlState.empty() ? TString("XX000") : result.SqlState,
                     result.Message.empty() ? TString("internal error") : result.Message, false);
                 return;
             }
-            Tx = ETx::Idle;
+            CloseTx();
             Succeed("COMMIT", {}, {});
             return;
         }
@@ -499,6 +518,7 @@ private:
     NActors::TActorId Client;
     ETx Tx = ETx::Idle;
     ui64 TxId = 0;
+    std::optional<NLongTxService::TLockHandle> LockOwner;
     bool Busy = false;
     bool Committing = false;
     bool Rolling = false;

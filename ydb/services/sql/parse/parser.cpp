@@ -669,9 +669,6 @@ public:
             PendingFrom = std::move(savedFrom);
             return result;
         }
-        if (IsKeyword("for")) {
-            return Unsupported(Current.Text);
-        }
         if (IsKeyword("limit")) {
             Advance();
             if (auto error = LimitClause(select)) {
@@ -679,6 +676,9 @@ public:
             }
         }
         if (auto error = OffsetFetch(select)) {
+            return *error;
+        }
+        if (auto error = ForLock(select)) {
             return *error;
         }
         if (!nested) {
@@ -1778,6 +1778,52 @@ private:
             if (!IsKeyword("only")) {
                 return Unsupported(Current.Text);
             }
+            Advance();
+        }
+        return std::nullopt;
+    }
+
+    std::optional<TParseResult> ForLock(TSelectStmt& select) {
+        if (!IsKeyword("for")) {
+            return std::nullopt;
+        }
+        Advance();
+        if (IsKeyword("update")) {
+            select.Lock = ERowLock::Update;
+            Advance();
+        } else if (IsKeyword("no")) {
+            Advance();
+            if (!IsKeyword("key")) {
+                return Unsupported(Current.Text);
+            }
+            Advance();
+            if (!IsKeyword("update")) {
+                return Unsupported(Current.Text);
+            }
+            select.Lock = ERowLock::NoKeyUpdate;
+            Advance();
+        } else if (IsKeyword("share")) {
+            select.Lock = ERowLock::Share;
+            Advance();
+        } else if (IsKeyword("key")) {
+            Advance();
+            if (!IsKeyword("share")) {
+                return Unsupported(Current.Text);
+            }
+            select.Lock = ERowLock::KeyShare;
+            Advance();
+        } else {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("nowait")) {
+            return Unsupported(Current.Text);
+        }
+        if (IsKeyword("skip")) {
+            Advance();
+            if (!IsKeyword("locked")) {
+                return Unsupported(Current.Text);
+            }
+            select.SkipLocked = true;
             Advance();
         }
         return std::nullopt;

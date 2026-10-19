@@ -64,6 +64,14 @@ struct TOrderKey {
     bool NullsFirst = false;
 };
 
+enum class ERowLock {
+    None,
+    Update,
+    NoKeyUpdate,
+    Share,
+    KeyShare,
+};
+
 enum class EAggFunc {
     Count,
     Sum,
@@ -109,6 +117,8 @@ struct TSelectStmt {
     bool FromQuery = false;
     std::optional<ui64> Limit;
     std::optional<ui64> Offset;
+    ERowLock Lock = ERowLock::None;
+    bool SkipLocked = false;
     // Added to the single selected column of a recursive step. Zero means the column is copied.
     i64 Addend = 0;
 };

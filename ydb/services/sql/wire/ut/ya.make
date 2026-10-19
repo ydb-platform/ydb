@@ -29,6 +29,7 @@ SRCS(
     offset_ut.cpp
     order_ut.cpp
     listener_ut.cpp
+    lock_ut.cpp
     schemata_ut.cpp
     sequences_ut.cpp
     subquery_ut.cpp

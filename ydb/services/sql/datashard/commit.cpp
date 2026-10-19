@@ -167,7 +167,10 @@ public:
     }
 
     void SendImmediate(TParticipant& participant) {
-        auto event = std::make_unique<NEvents::TDataEvents::TEvWrite>(TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        // A lock id used as the write id makes the shard keep that lock while erasing it.
+        std::unique_ptr<NEvents::TDataEvents::TEvWrite> event = participant.Writes.empty()
+            ? std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE)
+            : std::make_unique<NEvents::TDataEvents::TEvWrite>(TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
         AddWrites(*event, participant);
         FillCommitLocks(*event, participant);
         SendTo(participant.TabletId, std::move(event));
@@ -530,7 +533,7 @@ public:
         }
         Pending = shards.size();
         for (const ui64 shard : shards) {
-            auto event = std::make_unique<NEvents::TDataEvents::TEvWrite>(TxId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto event = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
             auto* locks = event->Record.MutableLocks();
             locks->SetOp(NKikimrDataEvents::TKqpLocks::Rollback);
             for (const auto& lock : Locks) {
@@ -559,21 +562,53 @@ public:
         PassAway();
     }
 
-    void HandleWrite(NEvents::TDataEvents::TEvWriteResult::TPtr&) {
+    void Finish() {
+        if (!Error.empty()) {
+            Fail();
+            return;
+        }
+        Succeed();
+    }
+
+    void Fail() {
+        if (Replied) {
+            return;
+        }
+        Replied = true;
+        for (const ui64 tabletId : Linked) {
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(tabletId));
+        }
+        auto result = MakeHolder<TEvQueryResult>();
+        result->SqlState = "40001";
+        result->Message = Error.empty() ? TString("could not release locks") : Error;
+        Send(ReplyTo, result.Release());
+        PassAway();
+    }
+
+    void HandleWrite(NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED && Error.empty()) {
+            Error = record.IssuesSize() > 0 && !record.GetIssues(0).message().empty()
+                ? record.GetIssues(0).message()
+                : TString("rollback write failed");
+        }
         if (Pending > 0) {
             --Pending;
         }
         if (Pending == 0) {
-            Succeed();
+            Finish();
         }
     }
 
     void HandleDelivery(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        if (Error.empty()) {
+            Error = "connection failure";
+        }
         if (Pending > 0) {
             --Pending;
         }
         if (Pending == 0) {
-            Succeed();
+            Finish();
         }
     }
 
@@ -591,6 +626,7 @@ public:
     TVector<ui64> Linked;
     ui32 Pending = 0;
     bool Replied = false;
+    TString Error;
 };
 
 } // namespace

@@ -8,6 +8,7 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_order.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -96,12 +97,13 @@ TString TablePath(const TString& database, const TDeleteStmt& statement) {
 
 class TDeleteActor : public NActors::TActorBootstrapped<TDeleteActor> {
 public:
-    TDeleteActor(const NActors::TActorId& replyTo, TString database, TDeleteStmt statement, ui32 internalErrorRetries, bool defer)
+    TDeleteActor(const NActors::TActorId& replyTo, TString database, TDeleteStmt statement, ui32 internalErrorRetries, bool defer, ui64 lockTxId)
         : ReplyTo(replyTo)
         , Database(std::move(database))
         , Statement(std::move(statement))
         , InternalErrorRetries(internalErrorRetries)
         , Defer(defer)
+        , LockTxId(lockTxId)
     {
     }
 
@@ -181,6 +183,7 @@ private:
             result->Rows = ResultRows;
         }
         result->Deferred = std::move(writes);
+        result->Locks = std::move(Locks);
         Send(ReplyTo, result.Release());
         PassAway();
     }
@@ -937,12 +940,68 @@ private:
             MainWrites.push_back(std::move(op.Write));
         }
         if (Defer || MainWrites.empty()) {
+            if (Defer && LockTxId && !Rows.empty() && !RowLocksSent) {
+                SendRowLocks();
+                return;
+            }
             Succeed(count, std::move(MainWrites));
             return;
         }
         PendingWrites = count;
         Register(CreateCommitActor(SelfId(), 0, std::move(MainWrites), {}, InternalErrorRetries));
         Become(&TDeleteActor::StateCommit);
+    }
+
+    void SendRowLocks() {
+        RowLocksSent = true;
+        const size_t keyCount = KeyNames.size();
+        absl::flat_hash_map<ui64, TVector<size_t>> groups;
+        for (size_t i = 0; i < Rows.size(); ++i) {
+            groups[Rows[i].TabletId].push_back(i);
+        }
+        Pending = 0;
+        Become(&TDeleteActor::StateRead);
+        for (const auto& [tablet, indexes] : groups) {
+            TVector<TCell> cells;
+            cells.reserve(indexes.size() * keyCount);
+            for (const size_t index : indexes) {
+                cells.insert(cells.end(), Rows[index].Cells.begin(), Rows[index].Cells.end());
+            }
+            auto request = MakeHolder<NEvents::TDataEvents::TEvLockRows>(++ReadId);
+            request->SetTableId(Table);
+            request->Record.SetLockId(LockTxId);
+            request->Record.SetLockNodeId(SelfId().NodeId());
+            request->Record.SetLockMode(NKikimrDataEvents::PESSIMISTIC_EXCLUSIVE);
+            for (size_t column = 0; column < keyCount; ++column) {
+                request->Record.AddColumnIds(WriteColumns[column].Id);
+            }
+            request->Record.SetPayloadFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            TSerializedCellMatrix matrix(cells, indexes.size(), static_cast<ui16>(keyCount));
+            request->SetCellMatrix(matrix.ReleaseBuffer());
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(request.Release(), tablet, true));
+            ++Pending;
+        }
+        if (Pending == 0) {
+            Succeed(static_cast<ui32>(Rows.size()), std::move(MainWrites));
+        }
+    }
+
+    void HandleLock(NEvents::TDataEvents::TEvLockRowsResult::TPtr& ev) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS) {
+            const TString message = record.IssuesSize() > 0 ? record.GetIssues(0).message() : TString("could not obtain lock");
+            Fail("40001", message);
+            return;
+        }
+        for (const auto& lock : record.GetLocks()) {
+            Locks.push_back(lock);
+        }
+        if (Pending > 0) {
+            --Pending;
+        }
+        if (Pending == 0) {
+            Succeed(static_cast<ui32>(Rows.size()), std::move(MainWrites));
+        }
     }
 
     void HandleCommit(TEvQueryResult::TPtr& ev) {
@@ -1063,6 +1122,7 @@ private:
     STATEFN(StateRead) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvReadResult, HandleRead);
+            hFunc(NEvents::TDataEvents::TEvLockRowsResult, HandleLock);
             hFunc(TEvPipeCache::TEvDeliveryProblem, HandleDelivery);
             hFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
@@ -1081,6 +1141,7 @@ private:
     const TDeleteStmt Statement;
     const ui32 InternalErrorRetries;
     const bool Defer;
+    const ui64 LockTxId;
     TString Path;
     TTableId Table;
     TVector<TColumn> ReadColumns;
@@ -1115,12 +1176,14 @@ private:
     TVector<TIndexPlan> IndexPlans;
     TVector<TIndexOp> IndexOps;
     TVector<TDeferredWrite> MainWrites;
+    TVector<NKikimrDataEvents::TLock> Locks;
+    bool RowLocksSent = false;
 };
 
 } // namespace
 
-NActors::IActor* CreateDeleteActor(const NActors::TActorId& replyTo, TString database, TDeleteStmt statement, ui32 internalErrorRetries, bool defer) {
-    return new TDeleteActor(replyTo, std::move(database), std::move(statement), internalErrorRetries, defer);
+NActors::IActor* CreateDeleteActor(const NActors::TActorId& replyTo, TString database, TDeleteStmt statement, ui32 internalErrorRetries, bool defer, ui64 lockTxId) {
+    return new TDeleteActor(replyTo, std::move(database), std::move(statement), internalErrorRetries, defer, lockTxId);
 }
 
 } // namespace NKikimr::NSql

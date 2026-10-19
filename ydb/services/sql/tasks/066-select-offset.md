@@ -1,7 +1,7 @@
 # OFFSET и FETCH
 
-status: pending
-commit:
+status: done
+commit: 3be7b80c7cbf2213ae170bff36179918376cedce
 id: select-offset
 depends: select-where-limit
 

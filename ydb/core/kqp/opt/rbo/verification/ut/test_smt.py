@@ -1,7 +1,7 @@
 import os
 import subprocess
 import unittest
-from itertools import combinations
+from itertools import combinations, product
 from unittest import mock
 
 try:
@@ -672,7 +672,7 @@ class SmtTest(unittest.TestCase):
         first = smt.symbol("first", smt.BOOL)
         second = smt.symbol("second", smt.BOOL)
         equal_copy = smt.symbol("first", smt.BOOL)
-        repeated = (first,) * smt._BOOLEAN_COMPACTION_WIDTH
+        repeated = (first,) * 4096
         for connective, neutral, terminal in (
             (smt.and_, smt.TRUE, smt.FALSE),
             (smt.or_, smt.FALSE, smt.TRUE),
@@ -681,7 +681,7 @@ class SmtTest(unittest.TestCase):
                 self.assertIs(connective(), neutral)
                 self.assertIs(connective(first, neutral), first)
                 self.assertIs(connective(first, terminal), terminal)
-                self.assertEqual(len(connective(*repeated).arguments), len(repeated))
+                self.assertIs(connective(*repeated), first)
                 self.assertIs(connective(*repeated, first), first)
                 result = connective(
                     *repeated, connective(second, first), second, equal_copy,
@@ -695,6 +695,45 @@ class SmtTest(unittest.TestCase):
                     for args in ((invalid,), (first, invalid), (invalid, terminal)):
                         with self.assertRaises(smt.SmtError):
                             connective(*args)  # type: ignore[arg-type]
+
+    def test_boolean_complements_and_shared_junctions(self):
+        first = smt.symbol("first", smt.BOOL)
+        second = smt.symbol("second", smt.BOOL)
+        for connective, terminal in ((smt.and_, smt.FALSE), (smt.or_, smt.TRUE)):
+            for terms in ((first, smt.not_(first)), (smt.not_(first), first)):
+                self.assertIs(connective(*terms), terminal)
+            nested = connective(first, second)
+            self.assertEqual(connective(nested, nested).arguments, (first, second))
+            self.assertIs(connective(nested, smt.not_(first)), terminal)
+
+    def test_boolean_compaction_preserves_truth_tables(self):
+        a, b, c = (smt.symbol(name, smt.BOOL) for name in "abc")
+        def evaluate(term, values):
+            if term.operation == "bool":
+                return term.atom
+            if term.operation == "symbol":
+                return values[term.atom]
+            if term.operation == "not":
+                return not evaluate(term.arguments[0], values)
+            arguments = (evaluate(arg, values) for arg in term.arguments)
+            return all(arguments) if term.operation == "and" else any(arguments)
+
+        for operation, connective in (("and", smt.and_), ("or", smt.or_)):
+            nested = connective(a, b)
+            for terms in ((a, a, b), (nested, nested, c),
+                          (a, smt.not_(a), b), (smt.not_(a), b, a),
+                          (nested, c, smt.not_(b))):
+                raw = smt.Term(smt.BOOL, operation, terms)
+                compact = connective(*terms)
+                for assignment in product((False, True), repeat=3):
+                    values = dict(zip("abc", assignment))
+                    self.assertEqual(evaluate(raw, values), evaluate(compact, values))
+
+    def test_boolean_compaction_preserves_distinct_function_owners(self):
+        left = smt.Script().fresh_function("p", (), smt.BOOL)()
+        right = smt.Script().fresh_function("p", (), smt.BOOL)()
+        self.assertIsNot(smt.and_(left, smt.not_(right)), smt.FALSE)
+        self.assertIsNot(smt.or_(left, smt.not_(right)), smt.TRUE)
 
     def test_integer_modulo_is_typed_and_constant_folded(self):
         value = smt.symbol("value", smt.INT)

@@ -609,10 +609,6 @@ FALSE = bool_value(False)
 ZERO = int_value(0)
 ONE = int_value(1)
 
-# Flattening can give shared predicates enormous fan-in. Compact only wide
-# junctions: even equivalent rewrites can disturb quantified solver heuristics.
-_BOOLEAN_COMPACTION_WIDTH = 4096
-
 
 def not_(term: Term) -> Term:
     _require(term, BOOL)
@@ -625,48 +621,53 @@ def not_(term: Term) -> Term:
     return Term(BOOL, "not", (term,))
 
 
-def and_(*terms: Term) -> Term:
-    flat: list[Term] = []
+def _junction(operation: str, neutral: Term, terminal: Term, terms: tuple[Term, ...]) -> Term:
+    # Identity keys avoid structural equality walks over large shared DAGs.
+    # Compact while flattening, so repeated wide junctions are visited once.
+    flat: dict[int, Term] = {}
+    expanded: set[int] = set()
+    positive: set[int] = set()
+    negative: set[int] = set()
     for term in terms:
         _require(term, BOOL)
-        if term == FALSE:
-            return FALSE
-        if term == TRUE:
+        if term == terminal:
+            return terminal
+        if term == neutral:
             continue
-        if term.operation == "and":
-            flat.extend(term.arguments)
+        if term.operation == operation:
+            if id(term) in expanded:
+                continue
+            expanded.add(id(term))
+            arguments = term.arguments
         else:
-            flat.append(term)
-    if len(flat) > _BOOLEAN_COMPACTION_WIDTH:
-        # A AND A = A; identity avoids hashing whole subexpressions.
-        flat = list({id(term): term for term in flat}.values())
+            arguments = (term,)
+        for argument in arguments:
+            identity = id(argument)
+            if identity in flat:
+                continue
+            if argument.operation == "not":
+                source = id(argument.arguments[0])
+                if source in positive:
+                    return terminal
+                negative.add(source)
+            else:
+                if identity in negative:
+                    return terminal
+                positive.add(identity)
+            flat[identity] = argument
     if not flat:
-        return TRUE
+        return neutral
     if len(flat) == 1:
-        return flat[0]
-    return Term(BOOL, "and", tuple(flat))
+        return next(iter(flat.values()))
+    return Term(BOOL, operation, tuple(flat.values()))
+
+
+def and_(*terms: Term) -> Term:
+    return _junction("and", TRUE, FALSE, terms)
 
 
 def or_(*terms: Term) -> Term:
-    flat: list[Term] = []
-    for term in terms:
-        _require(term, BOOL)
-        if term == TRUE:
-            return TRUE
-        if term == FALSE:
-            continue
-        if term.operation == "or":
-            flat.extend(term.arguments)
-        else:
-            flat.append(term)
-    if len(flat) > _BOOLEAN_COMPACTION_WIDTH:
-        # A OR A = A; identity avoids hashing whole subexpressions.
-        flat = list({id(term): term for term in flat}.values())
-    if not flat:
-        return FALSE
-    if len(flat) == 1:
-        return flat[0]
-    return Term(BOOL, "or", tuple(flat))
+    return _junction("or", FALSE, TRUE, terms)
 
 
 def eq(left: Term, right: Term) -> Term:

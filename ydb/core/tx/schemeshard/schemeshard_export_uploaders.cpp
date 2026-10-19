@@ -469,7 +469,7 @@ public:
         ui64 exportId,
         ui32 itemIdx,
         const TSettings& settings,
-        TExportTableSchemeContext&& context,
+        TString scheme,
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
     )
@@ -477,25 +477,13 @@ public:
         , SchemeShard(schemeShard)
         , ExportId(exportId)
         , ItemIdx(itemIdx)
-        , Context(std::move(context))
         , EnableChecksums(enableChecksums)
         , IV(iv)
+        , Scheme(std::move(scheme))
     {
     }
 
     void Bootstrap() {
-        TString error;
-        if (!BuildCreateTableScheme(Context, Scheme, error)) {
-            YDB_LOG_WARN("Failed to build CREATE TABLE SQL, export will continue without it",
-                {"self", this->SelfId()},
-                {"exportId", ExportId},
-                {"itemIdx", ItemIdx},
-                {"tablePath", Context.TablePath},
-                {"error", error},
-            );
-            return Finish(true, {});
-        }
-
         const TString createTableFileName = NYdb::NDump::NFiles::CreateTable().FileName;
 
         TMaybe<NBackup::TEncryptionIV> schemeIV;
@@ -541,7 +529,6 @@ private:
     TActorId SchemeShard;
     ui64 ExportId;
     ui32 ItemIdx;
-    TExportTableSchemeContext Context;
     const bool EnableChecksums;
     TMaybe<NBackup::TEncryptionIV> IV;
     TString Scheme;
@@ -675,11 +662,11 @@ IActor* CreateTableSchemeUploader(
     ui64 exportId,
     ui32 itemIdx,
     const TSettings& settings,
-    TExportTableSchemeContext&& context,
+    TString scheme,
     bool enableChecksums,
     const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
-    return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(context), enableChecksums, iv);
+    return new TTableSchemeUploader<TSettings>(schemeShard, exportId, itemIdx, settings, std::move(scheme), enableChecksums, iv);
 }
 
 template <typename TSettings>
@@ -704,13 +691,13 @@ template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
 
 template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToS3Settings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx,
-    const Ydb::Export::ExportToS3Settings& settings, TExportTableSchemeContext&& context,
+    const Ydb::Export::ExportToS3Settings& settings, TString scheme,
     bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx,
-    const Ydb::Export::ExportToFsSettings& settings, TExportTableSchemeContext&& context,
+    const Ydb::Export::ExportToFsSettings& settings, TString scheme,
     bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

@@ -24,6 +24,7 @@
 #include <ydb/core/tx/tx_allocator_client/actor_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_scheme_builders.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
@@ -2537,6 +2538,47 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT(HasS3File("/sql/data_00.csv.sha256"));
     }
 
+    Y_UNIT_TEST(TableBackupAsSqlEncryptedRetryPreservesSqlAfterFormattingChange) {
+        Env();
+        auto& flags = Runtime().GetAppData().FeatureFlags;
+        flags.SetEnableColumnTablesBackup(true);
+        flags.SetEnableChecksumsExport(true);
+        flags.SetEnableTableBackupAsSql(true);
+        flags.SetEnableEncryptedExport(true);
+        flags.SetEnableLocalIndexAsSchemeObject(false);
+        ui64 txId = 100;
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("Table"));
+        Env().TestWaitNotification(Runtime(), txId);
+        const auto expected = DescribeTableAsSql();
+        const ui64 exportId = txId + 1;
+        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(
+            Runtime(), [exportId](const auto& ev) {
+                return ev->Get()->ExportId == exportId && ev->Get()->Success;
+            });
+        UNIT_ASSERT_VALUES_EQUAL(StartTableSqlExport(txId, "sql", R"(
+            destination_prefix: "encrypted"
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+        )"), exportId);
+        Runtime().WaitFor("successful encrypted SQL upload", [&] { return !results.empty(); });
+        const auto ciphertext = GetS3FileContent("/encrypted/sql/create_table.sql.enc");
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/encrypted/sql/create_table.sql.sha256"),
+            NBackup::ComputeChecksum(expected) + " create_table.sql");
+
+        results.Stop();
+        results.clear();
+        flags.SetEnableLocalIndexAsSchemeObject(true);
+        UNIT_ASSERT_C(DescribeTableAsSql() != expected, "configuration change must alter SQL formatting");
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        WaitTableSqlExport(exportId);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/encrypted/sql/create_table.sql.enc"), ciphertext);
+        CheckSqlBackup("/encrypted/sql", expected, true);
+    }
+
     Y_UNIT_TEST_TWIN(TableBackupAsSqlRetriesEncryptedUpload, Checksum) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, false);
@@ -2964,9 +3006,19 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> sqlUploads(Runtime(), [&](const auto& ev) {
             return ev->Get()->Request.GetKey() == prefix + "/create_table.sql";
         });
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> copyProposal(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
+        });
         const auto exportId = StartTableSqlExport(txId, prefix);
-        Runtime().WaitFor("SQL stage before reboot", [&] { return !sqlUploads.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(GetPersistedExportItemState(exportId), 6u);
+        Runtime().WaitFor("consistent copy proposal", [&] { return !copyProposal.empty(); });
+        const ui64 copyTxId = copyProposal.front()->Get()->Record.GetTxId();
+        TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyCompletion(Runtime(), [copyTxId](const auto& ev) {
+            return ev->Get()->Record.GetTxId() == copyTxId;
+        });
+        copyProposal.Stop().Unblock();
+        Runtime().WaitFor("consistent copy before SQL preparation", [&] { return !copyCompletion.empty(); });
 
         // This path is unusable only for SQL. The copied PathId and schema snapshot stay valid.
         LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"(
@@ -2979,8 +3031,10 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
             return ev->Get()->ExportId == exportId;
         });
-        sqlUploads.clear();
+        copyCompletion.clear();
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        Runtime().WaitFor("consistent copy completion after reboot", [&] { return !copyCompletion.empty(); });
+        copyCompletion.Stop().Unblock();
         Runtime().WaitFor("SQL preparation result after reboot", [&] { return !results.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
         UNIT_ASSERT(!results.front()->Get()->Success);
@@ -2997,42 +3051,16 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
     }
 
-    Y_UNIT_TEST_TWIN(TableBackupAsSqlFormatterFailureContinuesBackup, IsColumn) {
+    Y_UNIT_TEST_TWIN(TableBackupAsSqlFormatterRejectsMissingPath, IsColumn) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, IsColumn);
-        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
-        TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> sqlUploads(Runtime(), [](const auto& ev) {
-            return ev->Get()->Request.GetKey() == "sql/create_table.sql";
-        });
-        const auto exportId = StartTableSqlExport(txId, "sql");
-        Runtime().WaitFor("SQL stage before formatter failure", [&] { return !sqlUploads.empty(); });
-        const auto originalUploader = sqlUploads.front()->Sender;
-        Runtime().Send(new IEventHandle(originalUploader, Runtime().AllocateEdgeActor(), new TEvents::TEvPoisonPill()), 0, true);
-        sqlUploads.clear();
-        const auto schemeShard = ResolveTablet(Runtime(), TTestTxConfig::SchemeShard);
-        Ydb::Export::ExportToS3Settings settings;
-        settings.set_endpoint(Sprintf("localhost:%d", S3Port()));
-        settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
-        settings.add_items()->set_destination_prefix("sql");
         NSchemeShard::TExportTableSchemeContext context;
         context.PathDescription = DescribePath(Runtime(), "/MyRoot/Table").GetPathDescription();
-        // Keep TablePath empty so the actual SQL formatter reports an error.
-        TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
-            return ev->Get()->ExportId == exportId;
-        });
-        Runtime().Register(new TLaunchTableSchemeUploader([&] {
-            return NSchemeShard::CreateTableSchemeUploader(schemeShard, exportId, 0, settings, std::move(context), true, Nothing());
-        }));
-        Runtime().WaitFor("SQL formatter fallback result", [&] { return !results.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);
-        // Inject the replacement uploader's result as the uploader SchemeShard registered.
-        results.front()->Sender = originalUploader;
-        results.Stop().Unblock();
-        WaitTableSqlExport(exportId);
-        UNIT_ASSERT(sqlUploads.empty());
-        UNIT_ASSERT(!HasS3File("/sql/create_table.sql"));
-        VerifyS3ExportHasData("sql", EBackupTestDataFormat::Csv);
-        ImportSqlBackupAndCheckData(txId, "sql", IsColumn);
+        TString scheme;
+        TString error;
+        UNIT_ASSERT(!NSchemeShard::BuildCreateTableScheme(context, scheme, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "Missing table path");
+        UNIT_ASSERT(scheme.empty());
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlUploaderEncryptionFailure, InvalidIV) {
@@ -3065,15 +3093,13 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         auto& encryption = *settings.mutable_encryption_settings();
         encryption.set_encryption_algorithm("AES-128-GCM");
         encryption.mutable_symmetric_key()->set_key(InvalidIV ? "0123456789012345" : "short");
-        NSchemeShard::TExportTableSchemeContext context;
-        context.TablePath = "Table";
-        context.PathDescription = DescribePath(Runtime(), "/MyRoot/Table").GetPathDescription();
+        const auto scheme = DescribeTableAsSql();
         const auto iv = InvalidIV ? NBackup::TEncryptionIV::FromBinaryString("short") : NBackup::TEncryptionIV::Generate();
         TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
             return ev->Get()->ExportId == exportId;
         });
         Runtime().Register(new TLaunchTableSchemeUploader([&] {
-            return NSchemeShard::CreateTableSchemeUploader(schemeShard, exportId, 0, settings, std::move(context), true, iv);
+            return NSchemeShard::CreateTableSchemeUploader(schemeShard, exportId, 0, settings, scheme, true, iv);
         }));
         Runtime().WaitFor("SQL encryption failure result", [&] { return !results.empty(); });
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 1u);

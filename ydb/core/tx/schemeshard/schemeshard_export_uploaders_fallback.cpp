@@ -122,11 +122,11 @@ IActor* CreateTableSchemeUploader(
     ui64 exportId,
     ui32 itemIdx,
     const TSettings& settings,
-    TExportTableSchemeContext&& context,
+    TString scheme,
     bool enableChecksums,
     const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
-    Y_UNUSED(settings, context, enableChecksums, iv);
+    Y_UNUSED(settings, scheme, enableChecksums, iv);
     return new TSchemeUploaderFallback<TSettings>(schemeShard, exportId, itemIdx);
 }
 
@@ -153,13 +153,13 @@ template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
 
 template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToS3Settings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx,
-    const Ydb::Export::ExportToS3Settings& settings, TExportTableSchemeContext&& context,
+    const Ydb::Export::ExportToS3Settings& settings, TString scheme,
     bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template IActor* CreateTableSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx,
-    const Ydb::Export::ExportToFsSettings& settings, TExportTableSchemeContext&& context,
+    const Ydb::Export::ExportToFsSettings& settings, TString scheme,
     bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

@@ -37,7 +37,7 @@ NActors::IActor* CreateTableSchemeUploader(
     ui64 exportId,
     ui32 itemIdx,
     const TSettings& settings,
-    TExportTableSchemeContext&& context,
+    TString scheme,
     bool enableChecksums,
     const TMaybe<NBackup::TEncryptionIV>& iv
 );

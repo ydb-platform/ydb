@@ -3820,6 +3820,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeUploader;
         TString Issue;
+        TString TableSchemeSql; // Immutable plaintext for retries with the same encryption IV.
 
         TItem() = default;
 

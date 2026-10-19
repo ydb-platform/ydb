@@ -5270,6 +5270,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.State = static_cast<TExportInfo::EState>(rowset.GetValue<Schema::ExportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ExportItems::BackupTxId>(InvalidTxId);
                     item.Issue = rowset.GetValueOrDefault<Schema::ExportItems::Issue>(TString());
+                    item.TableSchemeSql = rowset.GetValueOrDefault<Schema::ExportItems::TableSchemeSql>(TString());
 
                     if (item.State <= TExportInfo::EState::Transferring && item.WaitTxId == InvalidTxId) {
                         exportInfo->PendingItems.push_back(itemIdx);

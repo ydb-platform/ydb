@@ -4,6 +4,7 @@
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_scheme_builders.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
@@ -418,6 +419,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvPrivate::TEvExportUploadMetadataResult::TPtr UploadMetadataResult = nullptr;
     TEvPrivate::TEvExportCompletionUploadResult::TPtr CompletionUploadResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
+    TVector<std::pair<TExportInfo::TPtr, ui32>> TableSchemeUploads;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -487,8 +489,14 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         return true;
     }
 
-    void DoComplete(const TActorContext&) override {
+    void DoComplete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TExport::TTxProgress: DoComplete");
+        // Encryption must not start until the exact plaintext is durable.
+        for (const auto& [exportInfo, itemIdx] : TableSchemeUploads) {
+            if (exportInfo->State == EState::Transferring) {
+                UploadTableScheme(*exportInfo, itemIdx, ctx);
+            }
+        }
     }
 
 private:
@@ -574,25 +582,12 @@ private:
         }, exportInfo);
     }
 
-    template <typename TSettings>
-    void UploadTableSchemeWithSettings(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
-        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
-        auto& item = exportInfo.Items[itemIdx];
-
-        auto fail = [&](const TString& error) {
-            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
-        };
-
-        TSettings exportSettings;
-        if (!exportSettings.ParseFromString(exportInfo.Settings)) {
-            return fail("Cannot parse settings for SQL scheme upload");
-        }
-
+    bool PrepareTableSchemeSql(TExportInfo& exportInfo, ui32 itemIdx, TString& error) {
+        auto& item = exportInfo.Items.at(itemIdx);
         const TPath sourcePath = TPath::Init(item.SourcePathId, Self);
         const TPath exportItemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
 
         TExportTableSchemeContext context;
-        TString error;
 
         const NKikimrSchemeOp::TBackupTask* backupTask = nullptr;
         if (exportItemPath.IsResolved()) {
@@ -611,10 +606,27 @@ private:
             : PrepareExportTableSchemeContext(Self, sourcePath, exportItemPath, context, error);
 
         if (!prepared || !FillExportTableSchemePaths(Self, item.SourcePathName, context, error)) {
-            return fail(error);
+            return false;
         }
 
         context.IncludeIndexData = exportInfo.IncludeIndexData;
+
+        return BuildCreateTableScheme(context, item.TableSchemeSql, error);
+    }
+
+    template <typename TSettings>
+    void UploadTableSchemeWithSettings(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
+        auto& item = exportInfo.Items[itemIdx];
+
+        auto fail = [&](const TString& error) {
+            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
+        };
+
+        TSettings exportSettings;
+        if (!exportSettings.ParseFromString(exportInfo.Settings)) {
+            return fail("Cannot parse settings for SQL scheme upload");
+        }
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (exportSettings.has_encryption_settings()) {
@@ -625,7 +637,7 @@ private:
         }
 
         item.SchemeUploader = ctx.Register(CreateTableSchemeUploader(Self->SelfId(), exportInfo.Id, itemIdx, exportSettings,
-            std::move(context), exportInfo.EnableChecksums, iv));
+            item.TableSchemeSql, exportInfo.EnableChecksums, iv));
         Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
     }
 
@@ -634,6 +646,14 @@ private:
         const auto& item = exportInfo.Items[itemIdx];
 
         if (!NeedsTableSchemeUpload(exportInfo, item) || item.State != EState::UploadTableSchemeSql || item.SchemeUploader) {
+            return;
+        }
+
+        // An older binary may have uploaded SQL without persisting its bytes.
+        // Never regenerate it with an IV that might already have been used.
+        if (item.TableSchemeSql.empty()) {
+            Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(
+                exportInfo.Id, itemIdx, false, "Missing persisted CREATE TABLE SQL"));
             return;
         }
 
@@ -1215,7 +1235,7 @@ private:
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.State == EState::UploadTableSchemeSql) {
-                    UploadTableScheme(*exportInfo, itemIdx, ctx);
+                    TableSchemeUploads.emplace_back(exportInfo, itemIdx);
                     continue;
                 }
 
@@ -1854,9 +1874,16 @@ private:
                 auto& item = exportInfo->Items[itemIdx];
 
                 if (NeedsTableSchemeUpload(*exportInfo, item)) {
+                    TString error;
+                    const bool prepared = PrepareTableSchemeSql(*exportInfo, itemIdx, error);
                     item.State = EState::UploadTableSchemeSql;
                     Self->PersistExportItemState(db, *exportInfo, itemIdx);
-                    UploadTableScheme(*exportInfo, itemIdx, ctx);
+                    if (prepared) {
+                        TableSchemeUploads.emplace_back(exportInfo, itemIdx);
+                    } else {
+                        Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(
+                            exportInfo->Id, itemIdx, false, error));
+                    }
                     continue;
                 }
 

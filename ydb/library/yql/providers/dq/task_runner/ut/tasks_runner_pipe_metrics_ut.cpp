@@ -21,11 +21,13 @@
 namespace NYql::NTaskRunnerProxy {
 namespace {
 
-void WaitUntil(const std::function<bool()>& ready)
+void WaitUntil(const std::function<bool()>& ready, const char* error = "Timed out waiting for runner metrics")
 {
     const auto deadline = TInstant::Now() + TDuration::Seconds(10);
     while (!ready()) {
-        UNIT_ASSERT_C(TInstant::Now() < deadline, "Timed out waiting for runner metrics");
+        if (TInstant::Now() >= deadline) {
+            throw std::runtime_error(error);
+        }
         Sleep(TDuration::MilliSeconds(10));
     }
 }
@@ -173,7 +175,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(error, ECHILD);
     }
 
-    void FailTaskPreparation(bool changeKey = false, bool useNewApi = false)
+    void PrepareTaskWithMissingFile(bool changeKey = false, bool useNewApi = false)
     {
         Yql::DqsProto::TTaskMeta meta;
         auto* setting = meta.AddSettings();
@@ -189,15 +191,17 @@ public:
         file->SetObjectId("missing");
         NDqProto::TDqTask task;
         task.MutableMeta()->PackFrom(meta);
-        auto createTask = [&] {
-            if (useNewApi) {
-                Factory_->Get(/*alloc*/ nullptr, NDq::TDqTaskSettings(&task), NDqProto::DQ_STATS_MODE_NONE);
-            } else {
-                Factory_->GetOld(nullptr, NDq::TDqTaskSettings(&task));
-            }
-        };
+        if (useNewApi) {
+            Factory_->Get(/*alloc*/ nullptr, NDq::TDqTaskSettings(&task), NDqProto::DQ_STATS_MODE_NONE);
+        } else {
+            Factory_->GetOld(nullptr, NDq::TDqTaskSettings(&task));
+        }
+    }
+
+    void FailTaskPreparation(bool changeKey = false, bool useNewApi = false)
+    {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
-            createTask(),
+            PrepareTaskWithMissingFile(changeKey, useNewApi),
             std::runtime_error,
             FileCache_->FailGetDir.load() ? "Cannot get executor directory" : "Cannot find object `missing` in cache");
     }
@@ -205,7 +209,9 @@ public:
     i64 Count(const TString& name) const
     {
         const auto counter = Counters->FindCounter(name);
-        UNIT_ASSERT_C(counter, name);
+        if (!counter) {
+            throw std::runtime_error(("Missing runner counter: " + name).c_str());
+        }
         return counter->Val();
     }
 
@@ -226,7 +232,7 @@ private:
                 }
             }
             return true;
-        });
+        }, "Timed out waiting for executor PIDs");
     }
 };
 
@@ -328,12 +334,15 @@ Y_UNIT_TEST_SUITE(TPipeMetricsTest) {
     Y_UNIT_TEST(FailedPreparationReturnsBeforeCleanupFinishes)
     {
         TPipeMetricsFixture fixture(/*poolSize*/ 0, /*destroyExitCode*/ 0, /*blockDestroy*/ true);
-        auto failedTask = std::async(std::launch::async, [&] { fixture.FailTaskPreparation(); });
+        auto failedTask = std::async(std::launch::async, [&] { fixture.PrepareTaskWithMissingFile(); });
         const bool returned = failedTask.wait_for(std::chrono::seconds(10)) == std::future_status::ready;
         if (!returned) {
             fixture.ReleaseDestroy();
         }
-        failedTask.get();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            failedTask.get(),
+            std::runtime_error,
+            "Cannot find object `missing` in cache");
         UNIT_ASSERT_C(returned, "Task preparation waited for cleanup");
         fixture.WaitForDestroy();
         UNIT_ASSERT_VALUES_EQUAL(fixture.Count("ProcessesPendingStop"), 1);

@@ -8822,7 +8822,7 @@ private:
     {
         std::optional<TExpression> correlation;
         TString innerColumn;
-        for (const auto& conjunct : predicate.SplitConjunct()) {
+        for (const auto& conjunct : SnapshotBooleanTerms(predicate, "And")) {
             const auto columns = ExpressionColumns(conjunct);
             if (!columns.contains(dependency)) {
                 for (const auto& column : columns) {
@@ -8906,7 +8906,7 @@ private:
                 dependencies);
         }
 
-        const auto branches = predicate.SplitDisjunct();
+        const auto branches = SnapshotBooleanTerms(predicate, "Or");
         if (branches.size() < 2) {
             Unsupported(TStringBuilder()
                 << "Scalar subplan binding " << binding
@@ -8916,7 +8916,7 @@ private:
         std::optional<TExpression> commonCorrelation;
         for (const auto& branch : branches) {
             std::optional<TExpression> branchCorrelation;
-            for (const auto& conjunct : branch.SplitConjunct()) {
+            for (const auto& conjunct : SnapshotBooleanTerms(branch, "And")) {
                 const auto columns = ExpressionColumns(conjunct);
                 if (columns.contains(dependency)) {
                     if (branchCorrelation) {
@@ -9002,7 +9002,7 @@ private:
         THashSet<TString> innerColumns;
         size_t equalityCount = 0;
         size_t inequalityCount = 0;
-        for (const auto& conjunct : predicate.SplitConjunct()) {
+        for (const auto& conjunct : SnapshotBooleanTerms(predicate, "And")) {
             const auto columns = ExpressionColumns(conjunct);
             TVector<TString> referencedDependencies;
             for (const auto& dependency : dependencies) {
@@ -10165,7 +10165,7 @@ private:
         const TOpFilter& consumer)
     {
         bool found = false;
-        for (const auto& conjunct : consumer.GetFilterExpression().SplitConjunct()) {
+        for (const auto& conjunct : SnapshotBooleanTerms(consumer.GetFilterExpression(), "And")) {
             if (!ExpressionColumns(conjunct).contains(binding)) {
                 continue;
             }
@@ -11722,7 +11722,6 @@ private:
 
                 auto keys = JsonArray();
                 THashSet<TString> expectedOutputs;
-                TVector<TString> expectedOutputOrder;
                 THashSet<TString> seenKeys;
                 for (const auto& key : keyColumns) {
                     const TString name = key.GetFullName();
@@ -11732,7 +11731,6 @@ private:
                     keys.AppendValue(name);
                     if (!aggregate.IsDistinctAll()) {
                         expectedOutputs.insert(name);
-                        expectedOutputOrder.push_back(name);
                         bool inputNullable = false;
                         bool outputNullable = false;
                         const TString inputType = TypeName(
@@ -11759,7 +11757,6 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Aggregate trait " << output);
                     }
-                    expectedOutputOrder.push_back(output);
                     bool outputNullable = false;
                     const auto* outputAnnotation =
                         OutputType(aggregate, output);
@@ -11931,15 +11928,6 @@ private:
                     }
                     aggregates.AppendValue(std::move(item));
                 }
-                const auto& actualOutputIUs = SnapshotOutputIUs(aggregate);
-                if (actualOutputIUs.size() != expectedOutputOrder.size()) {
-                    Unsupported("Aggregate output IU count does not match keys and traits");
-                }
-                for (size_t index = 0; index < expectedOutputOrder.size(); ++index) {
-                    if (actualOutputIUs[index].GetFullName() != expectedOutputOrder[index]) {
-                        Unsupported("Aggregate output IU order does not match keys and traits");
-                    }
-                }
                 const auto* outputStruct = OutputStructType(aggregate);
                 if (outputStruct->GetItems().size() != expectedOutputs.size()) {
                     Unsupported("Aggregate output type field count does not match output IUs");
@@ -11962,7 +11950,9 @@ private:
                         TypeName(item->GetItemType(), nullptr, Binary64Mode);
                     }
                 }
-                if (expectedOutputs.size() != outputNames.size()) {
+                // Native output membership is unordered; only the explicit root
+                // projection defines externally observable column positions.
+                if (expectedOutputs != outputNames) {
                     Unsupported("Aggregate output IUs do not match keys and traits");
                 }
 

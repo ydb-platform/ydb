@@ -177,7 +177,9 @@ struct TFixture {
         graph.Connect(source, sink, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(source)));
     }
 
-    TSemanticSnapshotExportResult CorrelatedExists(TInfoUnitId captured, bool wrongType = false) {
+    TSemanticSnapshotExportResult CorrelatedExists(
+        TInfoUnitId captured, bool wrongType = false, bool withResidual = false)
+    {
         const auto pos = TPositionHandle();
         const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
         const auto* boolean = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
@@ -200,6 +202,13 @@ struct TFixture {
         localMember->SetTypeAnn(int32);
         auto equals = Expr.NewCallable(pos, "==", {innerMember, localMember});
         equals->SetTypeAnn(boolean);
+        const auto typedComparison = equals;
+        if (withResidual) {
+            auto residual = Expr.NewCallable(pos, "Bool", {Expr.NewAtom(pos, "true")});
+            residual->SetTypeAnn(boolean);
+            equals = Expr.NewCallable(pos, "And", {equals, residual});
+            equals->SetTypeAnn(boolean);
+        }
         auto predicate = Expr.NewLambda(pos, Expr.NewArguments(pos, {row}), std::move(equals));
         auto filtered = MakeIntrusive<TOpFilter>(capture, pos,
             TExpression(predicate, &Expr, &ExpressionProps));
@@ -216,6 +225,8 @@ struct TFixture {
         consumer->BindExpressionPlanProps(&root.PlanProps);
         auto exported = Export(root);
         UNIT_ASSERT_VALUES_EQUAL(localMember->Child(1)->Content(), ToString(local));
+        UNIT_ASSERT(typedComparison->GetTypeAnn() == boolean);
+        UNIT_ASSERT(localMember->GetTypeAnn() == int32);
         return exported;
     }
 
@@ -427,6 +438,16 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         // prefix theorem, without relaxing the normal Final-stage requirement.
         UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, before.Json, true), "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, true), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeCorrelationAuditPreservesTypedConjuncts) {
+        TFixture fixture;
+        const auto plain = fixture.CorrelatedExists(fixture.Key);
+        Parse(plain);
+        TFixture residualFixture;
+        const auto conjunction = residualFixture.CorrelatedExists(residualFixture.Key, false, true);
+        Parse(conjunction);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(plain.Json, conjunction.Json, true), "VERIFIED_BOUNDED");
     }
 
     Y_UNIT_TEST(NativeCorrelatedExistsRejectsInconsistentCaptureTypes) {

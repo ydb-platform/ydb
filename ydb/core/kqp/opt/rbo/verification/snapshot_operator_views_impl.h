@@ -138,6 +138,29 @@ TVector<TInfoUnit> SnapshotSubplanIUs(const IOperator& op, const TPlanProps& pro
     return SnapshotIUs(calls);
 }
 
+TVector<TExpression> SnapshotBooleanTerms(const TExpression& expression, TStringBuf operation) {
+    // Main's optimizer splitters rebind row arguments and invalidate annotations.
+    // An audit must retain the original typed bodies instead of rewriting them.
+    const auto original = expression.GetLambda();
+    TVector<TExprNode::TPtr> pending{expression.GetExpressionBody()};
+    TVector<TExpression> result;
+    while (!pending.empty()) {
+        auto body = std::move(pending.back());
+        pending.pop_back();
+        if (body->IsCallable(operation)) {
+            for (size_t index = body->ChildrenSize(); index > 0; --index) {
+                pending.push_back(body->ChildPtr(index - 1));
+            }
+        } else if (body.Get() == expression.GetExpressionBody().Get()) {
+            result.push_back(expression);
+        } else {
+            auto lambda = expression.Ctx->NewLambda(body->Pos(), original->ChildPtr(0), std::move(body));
+            result.emplace_back(std::move(lambda), expression.Ctx, expression.PlanProps);
+        }
+    }
+    return result;
+}
+
 // Old expression-carried window metadata is absent on main. Such matchers
 // cannot admit a plan; dedicated Window operators require their own export.
 struct TSnapshotWindowMetadata {

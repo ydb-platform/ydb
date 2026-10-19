@@ -12480,7 +12480,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
-    Y_UNIT_TEST(ExportsStringUtf8ScalarComparisonsWithoutWideningStaticSqlIn) {
+    Y_UNIT_TEST(ExportsStringUtf8ScalarComparisonsAndStaticSqlIn) {
         for (const auto& [callable, kind] : TVector<std::pair<TString, TString>>{
             {"==", "eq"},
             {"<", "lt"},
@@ -12599,10 +12599,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     TypedLiteral(ctx, "Utf8", "a", utf8Type),
                     SqlInOptions(ctx, {}),
                     ScalarType(ctx, NUdf::EDataSlot::Bool)));
-            UNIT_ASSERT(!result.IsSupported());
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.UnsupportedReason,
-                "not equality-compatible");
+            const auto snapshot = ParseSupported(result);
+            const auto& expression = FindNode(snapshot, "project")["columns"].GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "in");
+            UNIT_ASSERT_VALUES_EQUAL(expression["lookup"]["type"].GetStringSafe(), "Utf8");
+            UNIT_ASSERT_VALUES_EQUAL(expression["items"][0]["type"].GetStringSafe(), "String");
         }
     }
 

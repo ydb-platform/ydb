@@ -30,7 +30,7 @@ namespace {
 using namespace NYql;
 
 struct TFixture {
-    TFixture()
+    explicit TFixture(TString groupType = "String", bool groupNotNull = false)
         : Functions(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()))
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , Query(MakeIntrusive<TKikimrQueryContext>(
@@ -49,7 +49,7 @@ struct TFixture {
         table.Metadata->KeyColumnNames = {"k"};
         table.Metadata->Columns.emplace("k", TKikimrColumnMetadata("k", 1, "Int32", true));
         table.Metadata->Columns.emplace("x", TKikimrColumnMetadata("x", 2, "Int32", true));
-        table.Metadata->Columns.emplace("g", TKikimrColumnMetadata("g", 3, "String", false));
+        table.Metadata->Columns.emplace("g", TKikimrColumnMetadata("g", 3, groupType, groupNotNull));
         TKikimrColumnMetadata price("price", 4, "Decimal", false);
         price.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(15, 2));
         table.Metadata->Columns.emplace("price", std::move(price));
@@ -532,6 +532,78 @@ void CheckNativeInitialScalarTypes(bool predicate) {
     UNIT_ASSERT_VALUES_EQUAL(Verify(sink.Results.front().Json, sink.Results.back().Json), "VERIFIED_BOUNDED");
 }
 
+TString CheckNativeTextMembership(const TString& sourceType, const TString& itemType,
+    bool nullable, bool negate, bool changeLastItem = false)
+{
+    TFixture beforeFixture(sourceType, !nullable);
+    TFixture afterFixture(sourceType, !nullable);
+    const auto build = [&](TFixture& fixture, bool rewrite, bool change) {
+        const auto pos = TPositionHandle();
+        auto read = fixture.Read();
+        read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+        const auto slot = sourceType == "String" ? NUdf::EDataSlot::String : NUdf::EDataSlot::Utf8;
+        const TTypeAnnotationNode* textType = fixture.Expr.MakeType<TDataExprType>(slot);
+        if (nullable) {
+            textType = fixture.Expr.MakeType<TOptionalExprType>(textType);
+        }
+        fixture.SetType(*read, {{fixture.Key, fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)},
+            {fixture.Group, textType}});
+        auto row = fixture.Expr.NewArgument(pos, "row");
+        auto member = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, "g")});
+        TExprNode::TListType items;
+        for (const TString& value : TVector<TString>{"red", "Ж", change ? "changed" : ""}) {
+            items.push_back(fixture.Expr.NewCallable(pos, itemType, {fixture.Expr.NewAtom(pos, value)}));
+        }
+        TExprNode::TPtr body;
+        if (rewrite) {
+            TExprNode::TListType comparisons;
+            for (const auto& item : items) {
+                comparisons.push_back(fixture.Expr.NewCallable(pos, "==", {member, item}));
+            }
+            body = fixture.Expr.NewCallable(pos, "Or", std::move(comparisons));
+        } else {
+            body = fixture.Expr.NewCallable(pos, "SqlIn", {
+                fixture.Expr.NewList(pos, std::move(items)), member,
+                fixture.Expr.NewList(pos, {fixture.Expr.NewList(pos, {fixture.Expr.NewAtom(pos, "ansi")})})});
+        }
+        if (negate) {
+            body = fixture.Expr.NewCallable(pos, "Not", {body});
+        }
+        auto lambda = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+        auto expression = TExpression::FromExpr(std::move(lambda), {{"g", fixture.Group}},
+            fixture.Expr, fixture.ExpressionProps);
+        const auto result = fixture.Registry.Add(TInfoUnit("", "membership"));
+        auto map = MakeIntrusive<TOpMap>(read, pos, TMapIUs{{result, TMapElement(expression)}});
+        return std::pair{map, result};
+    };
+    auto [before, beforeResult] = build(beforeFixture, false, false);
+    auto [after, afterResult] = build(afterFixture, true, changeLastItem);
+    TOpRoot beforeRoot(before, TPositionHandle(), {{beforeFixture.Key, "key"}, {beforeResult, "membership"}});
+    TOpRoot afterRoot(after, TPositionHandle(), {{afterFixture.Key, "key"}, {afterResult, "membership"}});
+    beforeRoot.PlanProps.InfoUnitRegistry = beforeFixture.Registry;
+    afterRoot.PlanProps.InfoUnitRegistry = afterFixture.Registry;
+    auto beforeAnnotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(beforeFixture.Types), beforeFixture.Types);
+    auto afterAnnotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(afterFixture.Types), afterFixture.Types);
+    TRBOContext beforeRbo(beforeFixture.Optimize, beforeFixture.Expr, beforeFixture.Types,
+        *beforeAnnotation, *beforeFixture.Functions);
+    TRBOContext afterRbo(afterFixture.Optimize, afterFixture.Expr, afterFixture.Types,
+        *afterAnnotation, *afterFixture.Functions);
+    TNativeCaptureSink sink;
+    TSemanticSnapshotPairCaptureV1 capture(&sink);
+    capture.CaptureInitial(beforeRoot, beforeRbo);
+    UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+    UNIT_ASSERT_C(sink.Results.front().IsSupported(), sink.Results.front().UnsupportedReason);
+    afterRoot.RecomputeOutputIUsSubtree();
+    UNIT_ASSERT(afterRoot.ComputeTypes(afterRbo) == IGraphTransformer::TStatus::Ok);
+    afterFixture.StageSerial(afterRoot);
+    capture.CaptureFinal(afterRoot, afterRbo);
+    UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+    UNIT_ASSERT_C(sink.Results.back().IsSupported(), sink.Results.back().UnsupportedReason);
+    return Verify(sink.Results.front().Json, sink.Results.back().Json);
+}
+
 void CheckNativeSortNullPlacement(bool merge) {
     for (bool ascending : {false, true}) {
         // This is the optional-value comparator used by WideSort and DQ Merge.
@@ -629,6 +701,26 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
 
     Y_UNIT_TEST(InitialBoundaryMaterializesNativeComputedMapTypes) {
         CheckNativeInitialScalarTypes(false);
+    }
+
+    Y_UNIT_TEST(NativeStaticTextMembershipMatchesItsEqualityExpansion) {
+        for (const TString& sourceType : {TString("String"), TString("Utf8")}) {
+            for (const TString& itemType : {TString("String"), TString("Utf8")}) {
+                for (bool nullable : {false, true}) {
+                    for (bool negate : {false, true}) {
+                        UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership(sourceType, itemType, nullable, negate),
+                            "VERIFIED_BOUNDED");
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeStaticTextMembershipDetectsAChangedLiteral) {
+        for (bool negate : {false, true}) {
+            UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership("Utf8", "String", true, negate, true),
+                "COUNTEREXAMPLE");
+        }
     }
 
     Y_UNIT_TEST(NullSinkSkipsNativeTypeMaterialization) {

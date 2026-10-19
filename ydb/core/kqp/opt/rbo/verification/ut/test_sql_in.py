@@ -98,7 +98,7 @@ def _reference(lookup, items):
 
 
 def _encoded_atom(script, scalar_type, value):
-    if scalar_type == "String":
+    if scalar_type in {"String", "Utf8"}:
         return script.string_atom(value)
     return smt.int_value(value)
 
@@ -225,6 +225,32 @@ class StaticSqlInTest(unittest.TestCase):
                     if expected is not None:
                         self.assertEqual(_ground(actual.value), expected)
 
+    def test_mixed_text_types_match_independent_byte_membership(self):
+        for lookup_type, item_type in itertools.product(("String", "Utf8"), repeat=2):
+            for items in (("", "Ж"), ("é", "é"), ("a\0b", "é")):
+                for negate in (False, True):
+                    raw = _in({"kind": "column", "column": "x"},
+                              [_literal(item_type, item) for item in items])
+                    if negate:
+                        raw = {"kind": "not", "arg": raw}
+                    _, expression = _expression(_snapshot(raw, scalar_type=lookup_type, nullable=True))
+                    for lookup in (None, "", "Ж", "é", "e\u0301", "red", "a\0b"):
+                        script = smt.Script()
+                        encoder = Encoder(script)
+                        row = encoder.null(lookup_type) if lookup is None else Value(
+                            lookup_type, smt.FALSE, script.string_atom(lookup))
+                        actual = encoder.evaluate(expression, {"x": row})
+                        expected = None if lookup is None else (
+                            lookup.encode("utf-8") in [item.encode("utf-8") for item in items])
+                        if negate and expected is not None:
+                            expected = not expected
+                        constants = _sealed_literal_constants(script)
+                        with self.subTest(lookup_type=lookup_type, item_type=item_type,
+                                          items=items, lookup=lookup, negate=negate):
+                            self.assertEqual(_ground(actual.is_null, constants), expected is None)
+                            if expected is not None:
+                                self.assertEqual(_ground(actual.value, constants), expected)
+
     def test_argument_position_and_literal_mutations_are_observable(self):
         column = {"kind": "column", "column": "x"}
         one = _literal("Int64", 1)
@@ -292,14 +318,14 @@ class StaticSqlInTest(unittest.TestCase):
         ]
         mutations.append((lossy_integer, "not equality-compatible"))
 
-        cross_string = _snapshot(
+        mixed_text_items = _snapshot(
             _in(
                 {"kind": "column", "column": "x"},
-                [_literal("Utf8", "same bytes")],
+                [_literal("Utf8", "same bytes"), _literal("String", "same bytes")],
             ),
             scalar_type="String",
         )
-        mutations.append((cross_string, "not equality-compatible"))
+        mutations.append((mixed_text_items, "IN items must have one type"))
 
         unknown = copy.deepcopy(base)
         unknown["plan"]["nodes"][1]["columns"][0]["expression"]["null_safe"] = False

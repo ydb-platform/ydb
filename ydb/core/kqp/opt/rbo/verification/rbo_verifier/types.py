@@ -94,11 +94,15 @@ def equality_comparison_compatible(left: str, right: str) -> bool:
 
 
 def static_in_comparison_compatible(left: str, right: str) -> bool:
-    """The deliberately narrower v1 static-IN common-type gate."""
+    """Static IN admits lossless integers and raw-byte String/Utf8 equality."""
 
     if DOUBLE in {left, right}:
         return False
-    return left == right or integer_comparison_compatible(left, right)
+    return (
+        left == right
+        or integer_comparison_compatible(left, right)
+        or string_comparison_compatible(left, right)
+    )
 
 
 def string_comparison_compatible(left: str, right: str) -> bool:

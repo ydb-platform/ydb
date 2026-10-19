@@ -1005,10 +1005,12 @@ bool LosslessIntegerComparisonCompatible(TStringBuf left, TStringBuf right) {
 }
 
 bool StaticSqlInEqualityCompatible(TStringBuf left, TStringBuf right) {
-    // Static SQL IN has a separate, deliberately narrow audit surface.  Do
-    // not add broader scalar Decimal or cross String/Utf8 compatibility here.
+    // ExpandSqlIn lowers a nonempty literal tuple to ordinary equality tests.
+    // String/Utf8 equality uses the same raw bytes; integer conversions retain
+    // their lossless gate, and Decimal membership remains outside this audit.
     return (!IsCanonicalDecimalType(left) && !IsCanonicalDecimalType(right)) &&
-        (left == right || LosslessIntegerComparisonCompatible(left, right));
+        (left == right || LosslessIntegerComparisonCompatible(left, right) ||
+         StringComparisonCompatible(left, right));
 }
 
 bool DecimalScaleAlignmentSupported(

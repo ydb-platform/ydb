@@ -142,6 +142,19 @@ eager evaluation harmless regardless of downstream demand. The unmarked form
 retains its existing physical-storage and result-root/private-keyed-LeftSemi
 error-demand contract. Neither form is admitted inside a relational subplan.
 
+A projection marked `require_at_most_one` carries the name of a physical,
+non-null `Uint64` input column. Its value is a direct physical input column.
+The exporter admits only the exact native shape
+`Ensure(value, count <= Uint64(1), literal-String-message)`, with matching value
+and result types. The separate exclusion asks whether any enabled, successful,
+routed input contains a present row with count greater than one. It binds all
+carried choices and is checked before result equality, even when a downstream
+operator discards that row. Only a discharged exclusion permits the value-only
+projection; reachable failure or a solver timeout yields `UNKNOWN`, never a
+proof or counterexample. The marker is not allowed inside a relational subplan
+or combined with another error marker. It adds no unbounded cardinality premise
+and does not model the general error behavior of `Ensure`.
+
 Cardinality-certified integral `AVG` excludes reachable successful non-NULL
 completed states with count greater than two. In default mode it uses one shared
 `(count,min,max) -> result` uninterpreted function. It is exact for an

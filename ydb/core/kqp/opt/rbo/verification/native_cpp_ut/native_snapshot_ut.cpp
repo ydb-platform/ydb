@@ -339,6 +339,53 @@ struct TFixture {
         return Export(root);
     }
 
+    TSemanticSnapshotExportResult GuardedKeyCount(
+        bool guarded, bool staged, bool uniqueKey = true, TString threshold = "1")
+    {
+        const auto pos = TPositionHandle();
+        const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+        const auto* uint64 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+        const auto* boolean = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+        const auto* string = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String);
+        if (!uniqueKey) {
+            Table->Metadata->KeyColumnNames.clear();
+        }
+        auto read = Read();
+        const auto count = Registry.Add(TInfoUnit("", "count"));
+        const auto checked = Registry.Add(TInfoUnit("", "checked"));
+        auto aggregate = MakeIntrusive<TOpAggregate>(read,
+            TAggregationIUs{{count, {Other, "count", false, false}}},
+            TOrderedIUs<>{Key}, EOpPhase::Undefined, false, pos);
+        SetType(*aggregate, {{Key, int32}, {count, uint64}});
+        TIntrusivePtr<IOperator> input = aggregate;
+        auto result = count;
+        if (guarded) {
+            auto row = Expr.NewArgument(pos, "row");
+            row->SetTypeAnn(aggregate->Type->Cast<TListExprType>()->GetItemType());
+            auto value = Expr.NewCallable(pos, "Member", {row, Expr.NewAtom(pos, ToString(count))});
+            value->SetTypeAnn(uint64);
+            auto one = Expr.NewCallable(pos, "Uint64", {Expr.NewAtom(pos, threshold)});
+            one->SetTypeAnn(uint64);
+            auto predicate = Expr.NewCallable(pos, "<=", {value, one});
+            predicate->SetTypeAnn(boolean);
+            auto message = Expr.NewCallable(pos, "String", {Expr.NewAtom(pos, "Scalar subquery returned more than one row")});
+            message->SetTypeAnn(string);
+            auto ensure = Expr.NewCallable(pos, "Ensure", {value, predicate, message});
+            ensure->SetTypeAnn(uint64);
+            auto lambda = Expr.NewLambda(pos, Expr.NewArguments(pos, {row}), std::move(ensure));
+            auto map = MakeIntrusive<TOpMap>(aggregate, pos, TMapIUs{{checked,
+                TMapElement(TExpression(lambda, &Expr, &ExpressionProps))}});
+            SetType(*map, {{Key, int32}, {count, uint64}, {checked, uint64}});
+            input = map;
+            result = checked;
+        }
+        TOpRoot root(input, pos, {{Key, "key"}, {result, "count"}});
+        if (staged) {
+            StageSerial(root);
+        }
+        return Export(root);
+    }
+
     TExprContext Expr;
     TTypeAnnotationContext Types;
     TNullTransformer TypeAnnotation;
@@ -389,7 +436,8 @@ TString Verify(const TString& before, const TString& after, bool diagnosticPrefi
     }
     const TString status = verdict["status"].GetStringSafe();
     UNIT_ASSERT(command.GetExitCode().Defined());
-    UNIT_ASSERT_VALUES_EQUAL_C(command.GetExitCode().GetRef(), status == "VERIFIED_BOUNDED" ? 0 : 1,
+    const int expectedExit = status == "VERIFIED_BOUNDED" ? 0 : status == "UNKNOWN" ? 2 : 1;
+    UNIT_ASSERT_VALUES_EQUAL_C(command.GetExitCode().GetRef(), expectedExit,
         command.GetError() << command.GetOutput());
     return status;
 }
@@ -641,6 +689,27 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         const auto staged = stagedFixture.SharedReadJoin(true, true);
         UNIT_ASSERT(!staged.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(staged.UnsupportedReason, "routing audit");
+    }
+
+    Y_UNIT_TEST(NativeCardinalityGuardRequiresAProofOfTotality) {
+        for (bool uniqueKey : {true, false}) {
+            TFixture plainFixture;
+            const auto before = plainFixture.GuardedKeyCount(false, false, uniqueKey);
+            Parse(before);
+            TFixture guardedFixture;
+            const auto after = guardedFixture.GuardedKeyCount(true, true, uniqueKey);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), uniqueKey ? "VERIFIED_BOUNDED" : "UNKNOWN");
+        }
+    }
+
+    Y_UNIT_TEST(NativeCardinalityGuardRejectsDifferentThresholds) {
+        for (const auto& threshold : {TString("0"), TString("2")}) {
+            TFixture fixture;
+            const auto exported = fixture.GuardedKeyCount(true, false, true, threshold);
+            UNIT_ASSERT(!exported.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(exported.UnsupportedReason, "cardinality Ensure");
+        }
     }
 
     Y_UNIT_TEST(NativeWindowRejectsUnmodeledFramesAndFunctions) {

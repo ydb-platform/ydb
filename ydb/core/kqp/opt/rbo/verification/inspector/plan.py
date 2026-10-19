@@ -388,7 +388,9 @@ def render_node(node: ir.PlanNode) -> str:
                 f"{{output={_quote(item.output)}, "
                 f"expression={render_expression(item.expression)}, "
                 f"error_on_null={_boolean(item.error_on_null)}, "
-                f"require_total={_boolean(item.require_total)}}}"
+                f"require_total={_boolean(item.require_total)}"
+                + (f", require_at_most_one={_quote(item.require_at_most_one)}"
+                   if item.require_at_most_one is not None else "") + "}"
             ),
         )
         return (

@@ -91,8 +91,10 @@ The verdict includes the row bound and fixed task bound of two. Without
 `--solver`, successful construction returns `FORMULA_EMITTED`, not a proof.
 `--emit-smt` writes the canonical obligation, not the actual internal solver
 portfolio. See the [theorem and solver protocol](contracts/THEOREM.md), especially
-the mandatory model-domain exclusions for checked-String totality and integral
-AVG: standalone `SAT` of the raw disjunction is not a counterexample.
+the mandatory model-domain exclusions for checked-String totality, exact native
+scalar cardinality guards, and integral AVG: standalone `SAT` of the raw
+disjunction is not a counterexample. A scalar guard is projected away only after
+proving its physical count cannot exceed one on any reachable input at the bound.
 
 For multiple buffered results, pass `--bundle bundle.json` instead of the two
 snapshot paths. Its strict manifest lists result slots in client-visible order:

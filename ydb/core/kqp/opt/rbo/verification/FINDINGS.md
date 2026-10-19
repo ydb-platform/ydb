@@ -25,32 +25,30 @@ range tests, 2.60 GiB for capacity, and 2.68 GiB for padding. Local logs are
 `/tmp/rbo-required-key-main-tests.log`, `/tmp/rbo-string-capacity-main-tests.log`
 and `/tmp/rbo-string-padding-main-tests.log`.
 
-The rebased verifier's focused native target also passed all 12 tests at
-`9a9a7e6f25b`, with peak aggregate RSS 10.37 GiB. Normal Initial/Final checks
-cover repeated result positions, stored-String copies and whole-partition
-Decimal SUM/AVG; deliberate output/window changes produce counterexamples.
-Correlated EXISTS is checked under the explicitly diagnostic logical-prefix
-scope, including a changed caller binding and preserved typed conjuncts.
-The raw log is `/tmp/rbo-native-focused-main.log`. This does not replace a
-fresh real-host corpus census or migration of the older `cpp_ut` fixtures.
+The rebased verifier's focused native target passed all **20 tests**. Normal
+Initial/Final proofs cover repeated result positions, stored-String copies,
+whole-partition Decimal SUM/AVG, and one shared logical read expanded into two
+final scans. Deliberate output, window-function, and join-key changes produce
+counterexamples. Correlated EXISTS and scalar COUNT captures are checked under
+the explicitly diagnostic logical-prefix scope, including changed caller
+bindings, passive projections, preserved annotations, and rejected type/scope
+mismatches. Replicate ports surviving into a StageGraph remain unsupported
+pending a separate multi-output routing audit.
 
-The subsequent native scalar-capture port passed all 15 tests, with peak
-aggregate RSS 10.36 GiB (`/tmp/rbo-native-scalar-after.log`). Before the port,
-the new valid COUNT fixtures were rejected because local capture IDs were
-compared to caller IDs. Export now audits the native capture types and renames
-only the serialized correlation Filter and passive Maps below the keyless
-Aggregate. The diagnostic logical-prefix checks prove an inserted passive Map
-equivalent and detect a changed caller binding; negative tests reject bad types
-and capture uses outside the correlation Filter. These are exporter/model
-regressions, not fresh optimizer or distributed-runtime results.
+Native scalar `Ensure(value, count <= Uint64(1), literal-message)` projections
+now carry a mandatory totality obligation. The native tests prove a safe guard,
+return `UNKNOWN` when a guard can fail, and reject different thresholds. They
+exercise the [documented model-domain gate](contracts/THEOREM.md), without
+assuming the guard succeeds or modeling general Ensure errors.
 
-Logical native Replicate ports are now exported as typed passive projections
-of one shared producer. The full native target passed all 18 tests at peak
-aggregate RSS 10.37 GiB (`/tmp/rbo-native-replicate-after.log`). A normal
-Initial/Final proof compares a shared read used on both sides of a join with
-two explicit final scans; changing a join key produces a counterexample.
-Incorrect port types are rejected. Replicate ports that survive into a
-StageGraph remain unsupported pending a separate multi-output routing audit.
+All 861 verifier tests passed with pinned Z3 in the standalone run. The hermetic
+run passed the 853 pre-existing verifier tests, the native target, inspector,
+and supporting checks; after correcting the new test module's package imports,
+its eight tests and lint check also passed in the hermetic runner. Peak aggregate
+RSS for the combined build/test run was 10.54 GiB. Logs are
+`/tmp/rbo-cardinality-python-full.log`, `/tmp/rbo-cardinality-hermetic.log`, and
+`/tmp/rbo-cardinality-hermetic-focused.log`. This does not replace a fresh
+real-host corpus census or migration of the older `cpp_ut` fixtures.
 
 ## Current runtime check
 

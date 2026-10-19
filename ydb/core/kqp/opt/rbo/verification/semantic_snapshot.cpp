@@ -419,7 +419,7 @@ bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
             if (expression &&
                 expression->IsLambda() &&
                 expression->ChildrenSize() == 2 &&
-                expression->Child(1)->IsCallable("Unwrap"))
+                (expression->Child(1)->IsCallable("Unwrap") || expression->Child(1)->IsCallable("Ensure")))
             {
                 result = true;
                 return;
@@ -9516,6 +9516,82 @@ private:
         };
     }
 
+    std::optional<std::pair<TString, TString>> TryExportCardinalityGuard(
+        TOpMap& map,
+        const TSnapshotMapElement& element,
+        const THashSet<TString>& physicalInputs)
+    {
+        const auto& expression = element.GetExpression();
+        if (!expression.Node || !expression.Node->IsLambda() || expression.Node->ChildrenSize() != 2) {
+            return std::nullopt;
+        }
+        const auto* body = expression.Node->Child(1);
+        if (!body->IsCallable("Ensure")) {
+            return std::nullopt;
+        }
+        const auto fail = [] {
+            Unsupported("Native scalar cardinality Ensure requires direct typed members, count <= Uint64(1), and a literal message");
+        };
+        const auto* arguments = expression.Node->Child(0);
+        if (!arguments->IsArguments() || arguments->ChildrenSize() != 1 ||
+            !arguments->Child(0)->IsArgument() || body->ChildrenSize() != 3)
+        {
+            fail();
+        }
+        const auto* row = arguments->Child(0);
+        const auto memberName = [&](const TExprNode& member) -> TString {
+            if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
+                member.Child(0) != row || !member.Child(1)->IsAtom() ||
+                !physicalInputs.contains(TString(member.Child(1)->Content())))
+            {
+                fail();
+            }
+            return TString(member.Child(1)->Content());
+        };
+        const auto* predicate = body->Child(1);
+        const auto* message = body->Child(2);
+        if (!predicate->IsCallable("<=") || predicate->ChildrenSize() != 2 ||
+            !message->IsCallable("String") || message->ChildrenSize() != 1 || !message->Child(0)->IsAtom())
+        {
+            fail();
+        }
+        const auto value = memberName(*body->Child(0));
+        const auto count = memberName(*predicate->Child(0));
+        const auto* one = predicate->Child(1);
+        if (!one->IsCallable("Uint64") || one->ChildrenSize() != 1 ||
+            !one->Child(0)->IsAtom() || one->Child(0)->Content() != "1" ||
+            !SameType(ExactType(one->GetTypeAnn()), {"Uint64", false}) ||
+            !SameType(ExactType(predicate->GetTypeAnn()), {"Bool", false}) ||
+            !SameType(ExactType(message->GetTypeAnn()), {"String", false}) ||
+            !SameType(ExactType(predicate->Child(0)->GetTypeAnn()), {"Uint64", false}) ||
+            !SameType(ExactType(OutputType(*map.GetInput(), count)), {"Uint64", false}))
+        {
+            fail();
+        }
+        const auto valueType = ExactType(OutputType(*map.GetInput(), value));
+        if (!SameType(ExactType(body->Child(0)->GetTypeAnn()), valueType) ||
+            !SameType(ExactType(body->GetTypeAnn()), valueType) ||
+            !SameType(ExactType(OutputType(map, element.GetElementName().GetFullName())), valueType))
+        {
+            fail();
+        }
+        TVector<const TExprNode*> pending{expression.Node.Get()};
+        THashSet<const TExprNode*> visited;
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            if (visited.insert(node).second) {
+                CheckScalarSafetyMetadata(*node);
+                for (const auto& child : node->Children()) {
+                    pending.push_back(child.Get());
+                }
+            }
+        }
+        // The verifier must prove the count guard total on every reachable
+        // routed input before this value projection can support a verdict.
+        return std::make_pair(value, count);
+    }
+
     std::optional<NJson::TJsonValue>
     TryExportErrorOnNullStringProjection(
         TOpMap& map,
@@ -11597,6 +11673,9 @@ private:
                         WindowProjectionOutputs[&map].insert(output);
                         column["expression"] =
                             std::move(window.Expression);
+                    } else if (auto cardinality = TryExportCardinalityGuard(map, element, physicalInputNames)) {
+                        column["expression"] = ColumnExpr(cardinality->first);
+                        column["require_at_most_one"] = cardinality->second;
                     } else if (auto exactUnwrap =
                             TryExportErrorOnNullStringProjection(
                                 map,

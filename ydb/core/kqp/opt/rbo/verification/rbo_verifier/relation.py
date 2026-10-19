@@ -704,9 +704,9 @@ class Evaluator:
             effects = self._context.project_effects[node.id]
             if effects.require_totality:
                 if self.project_input_observer is None:
-                    raise RelationError("require_total Project needs a mandatory totality observer")
-                # Observe the actual routed input before Unwrap changes NULLs
-                # or errors, including inputs supplied across stage edges.
+                    raise RelationError("guarded Project needs a mandatory totality observer")
+                # Observe actual routed inputs before projecting a value or
+                # erasing an audited guard, including inputs across stage edges.
                 self.project_input_observer(self.choice_scope, node.id, source)
             columns = self._columns(node.id)
             window, ranks, row_windows = effects.partition_window, effects.ranks, effects.row_windows

@@ -604,6 +604,21 @@ class OperatorRendererTest(unittest.TestCase):
             snapshot_digest(replace(snapshot, plan=replace(snapshot.plan, nodes=(scan, changed)))),
         )
 
+    def test_cardinality_guard_is_rendered_and_digest_bound(self):
+        node = ir.Project("checked", "scan", (
+            ir.Projection("out", _column("a.n"), require_at_most_one="a.n"),), True)
+        self.assertIn('require_at_most_one="a.n"', render_node(node))
+        scan = ir.Scan("scan", "A", (ir.ScanColumn("n", "a.n"),), None, None)
+        snapshot = ir.Snapshot(
+            (ir.Table("A", (ir.Column("n", "Uint64", False),), ()),),
+            ir.Plan((scan, node), "checked", ("out",), ()),
+        )
+        changed = replace(node, columns=(replace(node.columns[0], require_at_most_one=None),))
+        self.assertNotEqual(
+            snapshot_digest(snapshot),
+            snapshot_digest(replace(snapshot, plan=replace(snapshot.plan, nodes=(scan, changed)))),
+        )
+
     def test_variance_state_is_explicit_and_unknown_kind_fails_closed(self):
         state = ir.VarianceStateType("Int64", True)
         trait = ir.AggregateTrait("x", "stddev_samp", "s", "Double", True, False, False, state)

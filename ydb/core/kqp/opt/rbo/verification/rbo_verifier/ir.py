@@ -171,6 +171,9 @@ class Projection:
     error_on_null: bool = False
     # A mandatory bounded-totality obligation, never an assumed non-NULL fact.
     require_total: bool = False
+    # A physical Uint64 count that must be proved <= 1 on every reachable input
+    # before an exact native Ensure(value, count <= 1, literal-message) is erased.
+    require_at_most_one: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1213,7 +1216,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 column,
                 {"output", "expression"},
                 column_path,
-                {"error_on_null", "require_total"},
+                {"error_on_null", "require_total", "require_at_most_one"},
             )
             columns.append(
                 Projection(
@@ -1226,6 +1229,10 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     require_total=_bool(
                         column.get("require_total", False),
                         f"{column_path}.require_total",
+                    ),
+                    require_at_most_one=(
+                        _string(column["require_at_most_one"], f"{column_path}.require_at_most_one")
+                        if "require_at_most_one" in column else None
                     ),
                 )
             )
@@ -2795,6 +2802,8 @@ def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
     for node in snapshot.plan.nodes:
         if not isinstance(node, Project):
             continue
+        if node.id in subplan_nodes and any(column.require_at_most_one is not None for column in node.columns):
+            _fail(f"node {node.id!r}", "required cardinality guards inside subplans are not modeled")
         marked = tuple(
             column.output
             for column in node.columns
@@ -3665,6 +3674,9 @@ def _node_expression_columns(node: PlanNode) -> frozenset[str]:
     result = frozenset()
     for expression in _node_expressions(node):
         result |= expression_columns(expression)
+    if isinstance(node, Project):
+        result |= frozenset(column.require_at_most_one for column in node.columns
+                            if column.require_at_most_one is not None)
     return result
 
 
@@ -3888,6 +3900,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(expression_path, "require_total must be a Boolean")
                 if column.require_total and not column.error_on_null:
                     _fail(expression_path, "require_total requires error_on_null")
+                if column.require_at_most_one is not None:
+                    guard_name = _string(column.require_at_most_one, expression_path + ".require_at_most_one")
+                    guard = input_schema.get(guard_name)
+                    if guard is None or guard.type != "Uint64" or guard.nullable:
+                        _fail(expression_path, "require_at_most_one needs one physical non-null Uint64 input column")
+                    if (column.expression.kind != "column" or column.expression.column not in input_schema
+                            or column.error_on_null or column.require_total):
+                        _fail(expression_path, "require_at_most_one needs a direct physical value column and no other error marker")
                 if column.expression.kind == "checked_concat":
                     for argument_index, argument in enumerate(
                         column.expression.args

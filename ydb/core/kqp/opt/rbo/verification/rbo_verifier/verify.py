@@ -456,30 +456,47 @@ def _required_totality_observer(
     script: smt.Script,
     exclusions: list[MismatchBranch],
 ) -> NodeObserver | None:
-    """Exclude a reachable NULL before a required-total Project evaluates it.
+    """Rule out each guarded failure on actual routed Project inputs.
 
     This does not constrain the database or assume the projection is total.
     The solver must discharge every such obligation before comparing results.
     """
     checked = {
-        node.id: tuple(column for column in node.columns if column.require_total)
+        node.id: tuple(column for column in node.columns
+                       if column.require_total or column.require_at_most_one is not None)
         for node in snapshot.plan.nodes
-        if isinstance(node, Project) and any(column.require_total for column in node.columns)
+        if isinstance(node, Project) and any(
+            column.require_total or column.require_at_most_one is not None for column in node.columns)
     }
     if not checked:
         return None
 
     def observe(scope: str, node_id: str, source: RelationFamily) -> None:
         columns = checked[node_id]
-        name = f"{side}:string_unwrap_non_total:{scope}:{node_id}"
-        predicate = successful_family_reachable(
-            source, script, name,
-            lambda relation: smt.or_(*(
-                smt.and_(row.present, row.values[column.expression.column].is_null)
-                for row in relation.rows for column in columns
-            )),
-        )
-        exclusions.append(MismatchBranch(name, predicate))
+        unwraps = tuple(column for column in columns if column.require_total)
+        if unwraps:
+            name = f"{side}:string_unwrap_non_total:{scope}:{node_id}"
+            predicate = successful_family_reachable(
+                source, script, name,
+                lambda relation: smt.or_(*(
+                    smt.and_(row.present, row.values[column.expression.column].is_null)
+                    for row in relation.rows for column in unwraps
+                )),
+            )
+            exclusions.append(MismatchBranch(name, predicate))
+        guards = tuple(sorted({column.require_at_most_one for column in columns
+                               if column.require_at_most_one is not None}))
+        if guards:
+            name = f"{side}:scalar_cardinality_non_total:{scope}:{node_id}"
+            predicate = successful_family_reachable(
+                source, script, name,
+                lambda relation: smt.or_(*(
+                    smt.and_(row.present, smt.or_(row.values[guard].is_null,
+                                                  smt.lt(smt.ONE, row.values[guard].value)))
+                    for row in relation.rows for guard in guards
+                )),
+            )
+            exclusions.append(MismatchBranch(name, predicate))
 
     return observe
 

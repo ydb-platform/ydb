@@ -96,6 +96,7 @@ The emitted canonical SMT formula is not a transcript of the internal branch
 portfolio. A proof requires the mandatory model-domain exclusions and either
 canonical UNSAT or every required exact branch UNSAT under one deadline.
 Unknown/untried branches never establish a proof. Checked-String totality,
+native scalar cardinality-guard totality,
 integral-AVG domain/abstract-value restrictions and explicit binary64
 SAT-to-UNKNOWN rules apply to standalone SMT as well.
 

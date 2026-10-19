@@ -130,7 +130,7 @@ def _project_effects(node: Project) -> ProjectEffects:
         _partition_window(expressions),
         tuple(expression for expression in expressions if expression.kind == "window_rank"),
         tuple(expression for expression in expressions if expression.kind in WINDOW_ROWS_KINDS),
-        any(column.require_total for column in node.columns),
+        any(column.require_total or column.require_at_most_one is not None for column in node.columns),
         tuple(column.expression.column for column in node.columns if column.error_on_null),
         tuple(expression for expression in expressions if expression.kind == "checked_concat"),
     )

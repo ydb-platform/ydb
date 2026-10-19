@@ -105,7 +105,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
     std::shared_ptr<TAtomicCounter> Aborted = std::make_shared<TAtomicCounter>(0);
     size_t Position = 0;
     TInstant Started;
-    NMonitoring::TDynamicCounters::TCounterPtr BlobGroupMismatches;
+    TCSCounters Counters;
 
     void Finish(bool aborted = false) {
         TEmptyHistoryIntervalsScanResult result;
@@ -154,7 +154,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
 
     void ExcludeBlob(const NOlap::TUnifiedBlobId& blob) {
         if (const auto group = Filter.Exclude(blob.GetLogoBlobId()); group && *group != blob.GetDsGroup()) {
-            BlobGroupMismatches->Inc();
+            Counters.OnCutHistoryBlobGroupMismatch();
         }
     }
 
@@ -185,8 +185,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
 
 public:
     TFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context, TActorId resourceSubscriber, const TTaskContext& taskContext,
-        const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config,
-        const NMonitoring::TDynamicCounters::TCounterPtr& blobGroupMismatches, TInstant started)
+        const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config, const TCSCounters& counters, TInstant started)
         : Owner(context.TabletActorId)
         , ResourceSubscriber(resourceSubscriber)
         , TaskContext(taskContext)
@@ -194,7 +193,7 @@ public:
         , Portions(std::move(context.Portions))
         , Filter(context.TabletId, std::move(context.Intervals))
         , Started(started)
-        , BlobGroupMismatches(blobGroupMismatches)
+        , Counters(counters)
     {
     }
 
@@ -368,8 +367,8 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
 
 IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context, TActorId resourceSubscriber,
     const TTaskContext& taskContext, const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config,
-    const NMonitoring::TDynamicCounters::TCounterPtr& blobGroupMismatches, TInstant started) {
-    return new TFindEmptyHistoryIntervalsActor(std::move(context), resourceSubscriber, taskContext, config, blobGroupMismatches, started);
+    const TCSCounters& counters, TInstant started) {
+    return new TFindEmptyHistoryIntervalsActor(std::move(context), resourceSubscriber, taskContext, config, counters, started);
 }
 
 bool TColumnShard::CanCutHistory() const {
@@ -393,7 +392,7 @@ TActorId TFindEmptyHistoryIntervals::Start(ui32 completedBarrierGeneration, cons
     }
     const TTaskContext taskContext("CUT_HISTORY", context.SubscribeCounters);
     ScanActor = ctx.Register(CreateFindEmptyHistoryIntervalsActor(std::move(scanContext), context.ResourceSubscriber, taskContext,
-                                 context.Config, context.BlobGroupMismatches, ctx.Now()), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
+                                 context.Config, context.Counters, ctx.Now()), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
     return ScanActor;
 }
 
@@ -418,7 +417,7 @@ std::optional<TEmptyHistoryIntervalsScanResult> TFindEmptyHistoryIntervals::Hand
 void TColumnShard::StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx) {
     const TFindEmptyHistoryIntervals::TStartContext context{ *Info(), Generation(),
         HasIndex() ? &GetIndexAs<NOlap::TColumnEngineForLogs>() : nullptr, SelfId(), ResourceSubscribeActor, Counters.GetSubscribeCounters(),
-        ColumnShardConfig->GetCutHistory(), Counters.GetCSCounters().GetCutHistoryBlobGroupMismatches(), CanCutHistory() };
+        ColumnShardConfig->GetCutHistory(), Counters.GetCSCounters(), CanCutHistory() };
     if (const auto actorId = FindEmptyHistoryIntervals.Start(completedBarrierGeneration, context, ctx)) {
         ActorsToStop.push_back(actorId);
     }

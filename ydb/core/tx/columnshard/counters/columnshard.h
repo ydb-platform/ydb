@@ -105,7 +105,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryRequestsSent;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryCuttableIntervals;
     NMonitoring::TDynamicCounters::TCounterPtr CutHistoryScansAborted;
-    YDB_READONLY_DEF(NMonitoring::TDynamicCounters::TCounterPtr, CutHistoryBlobGroupMismatches);
+    NMonitoring::TDynamicCounters::TCounterPtr CutHistoryBlobGroupMismatches;
     NMonitoring::THistogramPtr CutHistoryScanDurationMs;
     NMonitoring::THistogramPtr CutHistoryWaitDurationMs;
     NMonitoring::TDynamicCounters::TCounterPtr IndexMetadataLimitBytes;

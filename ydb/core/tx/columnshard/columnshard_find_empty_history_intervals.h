@@ -9,8 +9,6 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
 #include <util/datetime/base.h>
 
 #include <memory>
@@ -61,7 +59,7 @@ TFindEmptyHistoryIntervalsContext BuildFindEmptyHistoryIntervalsContext(const TT
 
 NActors::IActor* CreateFindEmptyHistoryIntervalsActor(TFindEmptyHistoryIntervalsContext&& context, NActors::TActorId resourceSubscriber,
     const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext, const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config,
-    const NMonitoring::TDynamicCounters::TCounterPtr& blobGroupMismatches, TInstant started);
+    const TCSCounters& counters, TInstant started);
 
 struct TEmptyHistoryIntervalsScanResult {
     NFindEmptyHistoryIntervals::TIntervals Intervals;
@@ -96,7 +94,7 @@ public:
         NActors::TActorId ResourceSubscriber;
         const std::shared_ptr<NOlap::NResourceBroker::NSubscribe::TSubscriberCounters>& SubscribeCounters;
         const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& Config;
-        NMonitoring::TDynamicCounters::TCounterPtr BlobGroupMismatches;
+        const TCSCounters& Counters;
         bool CanCutHistory;
     };
 

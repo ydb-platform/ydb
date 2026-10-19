@@ -458,4 +458,8 @@ message TFeatureFlags {
     optional bool EnableClientModifications = 368 [default = true];
     // Tablets report their memory through Local to the memory controller and get a zone and a share back
     optional bool EnableTabletMemoryHost = 369 [default = false];
+    // The memory of the KQP queries is accounted and limited by the compute scheduler (the limit comes from the memory
+    // controller) instead of the resource manager. Read on the node start, only with EnableResourcePoolsScheduler: the
+    // memory is never scheduled without the CPU, so the scheduler is not disabled at runtime then.
+    optional bool EnableComputeSchedulerMemory = 370 [default = true];
 }

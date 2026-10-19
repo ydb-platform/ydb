@@ -17,6 +17,11 @@ using namespace NYdb::NTable;
 
 using namespace NResourceBroker;
 
+// With FeatureFlags.EnableComputeSchedulerMemory the memory of the queries is limited by the compute scheduler. Without
+// the memory controller (it doesn't run in these tests) its limit is QueryMemoryLimit: far less than a 1 MiB growth step
+// of the MKQL allocator
+constexpr ui64 KqpQueryExecutionTestLimit = 100'000;
+
 NKikimrResourceBroker::TResourceBrokerConfig MakeResourceBrokerTestConfig(ui32 multiplier = 1) {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
@@ -288,10 +293,20 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(ComputeActorMemoryAllocationFailure) {
+    Y_UNIT_TEST_TWIN(ComputeActorMemoryAllocationFailure, EnableComputeSchedulerMemory) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        if (EnableComputeSchedulerMemory) {
+            settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(KqpQueryExecutionTestLimit);
+            // the tasks start within the limit, their first growth step doesn't fit
+            settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetExecutionUnitMemory(0);
+            // the planner runs the query locally only if its estimation (mostly the channel buffers) fits into the free
+            // memory of the queries on the node - the same small limit
+            settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(10_KB);
+        } else {
+            settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        }
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheMaxSizeBytes(1000);
         settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetKqpLevelCacheIncreaseBatchSizeBytes(1000);
         auto cfg = MakeResourceBrokerTestConfig();
@@ -315,10 +330,17 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_C(result.GetIssues().ToString().contains("Mkql memory limit exceeded"), result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(ComputeActorMemoryAllocationFailureQueryService) {
+    Y_UNIT_TEST_TWIN(ComputeActorMemoryAllocationFailureQueryService, EnableComputeSchedulerMemory) {
         auto app = NKikimrConfig::TAppConfig();
+        app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        if (EnableComputeSchedulerMemory) {
+            app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(KqpQueryExecutionTestLimit);
+            // the tasks start within the limit, their first growth step doesn't fit
+            app.MutableTableServiceConfig()->MutableResourceManager()->SetExecutionUnitMemory(0);
+        } else {
+            app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        }
         app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
         app.MutableTableServiceConfig()->SetExtractPredicateParameterListSizeLimit(10000);
         app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms(true);
@@ -1040,6 +1062,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(QueryExecTimeout) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10'000'000'000);
+        // every task starts with the whole MKQL limit, which the memory limit of the queries in the compute scheduler
+        // must hold (the memory controller doesn't run in these tests) - the test is about the timeout, not the memory
+        appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(1024_GB);
         appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(300000);
 
         TKikimrRunner kikimr(appConfig);

@@ -153,7 +153,7 @@ TDuration TSchedulableBase::CalculateDelay(TMonotonic) const {
 
     const auto query = SchedulableTask->Query;
     const auto snapshot = query->GetSnapshot();
-    const auto share = snapshot ? snapshot->FairShare : 1; // TODO: check if each query is allowed minimum fair-share?
+    const auto share = snapshot ? snapshot->CpuFairShare : 1; // TODO: check if each query is allowed minimum fair-share?
 
     TDuration delayDuration;
     if (share < 1e-9) {

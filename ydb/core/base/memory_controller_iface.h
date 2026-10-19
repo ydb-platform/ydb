@@ -20,6 +20,7 @@ enum class EMemoryConsumerKind {
 
     Tablets, // the tablets' state, what they cannot give back
     TabletsElastic, // the part of the tablets' memory they report as Reclaimable
+    QueryExecution,
 };
 
 // Node memory pressure as the tablets see it: Green admits, Yellow forbids growth, Red admits one at a time

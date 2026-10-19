@@ -101,6 +101,14 @@ bool IsResourcePoolInfoValid(const THolder<TProposeResponse>& result, const TRes
         result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Invalid resource pool settings: " << error);
         return false;
     }
+    // the memory of a pool is limited only by the compute scheduler
+    const auto& featureFlags = AppData()->FeatureFlags;
+    const bool memoryScheduled = featureFlags.GetEnableResourcePoolsScheduler() && featureFlags.GetEnableComputeSchedulerMemory();
+    if (!memoryScheduled && settings.TotalMemoryLimitPercentPerNode != -1) {
+        result->SetError(NKikimrScheme::StatusSchemeError, "Invalid resource pool settings: "
+            "Invalid resource pool configuration, total_memory_limit_percent_per_node is not supported");
+        return false;
+    }
     return true;
 }
 

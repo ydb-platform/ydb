@@ -248,6 +248,53 @@ void WaitForNodeWardenGroupGeneration(TTestBasicRuntime& runtime, ui32 nodeIndex
 
 Y_UNIT_TEST_SUITE(NodeWardenDsProxyConfigRetrieval) {
 
+    Y_UNIT_TEST(InvalidGroupReplyCanBeCorrected) {
+        TTestBasicRuntime runtime(1);
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        const ui32 nodeId = runtime.GetNodeId(0);
+        const ui32 groupId = 0x80000000;
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(nodeId), edge);
+
+        auto config = MakeIntrusive<TNodeWardenConfig>();
+        NStorage::TNodeWarden warden(config);
+        const auto resolver = runtime.Register(warden.CreateGroupResolverActor(groupId));
+        runtime.EnableScheduleForActor(resolver);
+
+        NKikimrBlobStorage::TGroupInfo valid;
+        valid.SetGroupID(groupId);
+        valid.SetGroupGeneration(2);
+        valid.SetErasureSpecies(TErasureType::ErasureNone);
+        auto* location = valid.AddRings()->AddFailDomains()->AddVDiskLocations();
+        location->SetNodeID(nodeId);
+        location->SetPDiskID(1);
+        location->SetVDiskSlotID(0);
+
+        for (ui32 attempt = 0; attempt < 4; ++attempt) {
+            auto query = runtime.GrabEdgeEventRethrow<TEvNodeWardenQueryGroupInfo>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT(query);
+            UNIT_ASSERT_VALUES_EQUAL(query->Sender, resolver);
+            auto reply = std::make_unique<TEvNodeWardenGroupInfo>();
+            reply->Record.AddStartedGroupIds(groupId);
+            auto* group = reply->Record.MutableGroup();
+            group->CopyFrom(valid);
+            if (attempt == 0) {
+                group->MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+            } else if (attempt == 1) {
+                group->SetGroupGeneration(1); // Do not roll back below the rejected generation.
+            } else if (attempt == 2) {
+                group->MutableWritePolicy();
+            }
+            runtime.Send(new IEventHandle(resolver, edge, reply.release(), 0, query->Cookie));
+        }
+        auto result = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvUpdateGroupInfo>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Sender, resolver);
+        UNIT_ASSERT(result->Get()->GroupInfo);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GroupInfo->SerializeAsString(), valid.SerializeAsString());
+    }
+
     Y_UNIT_TEST(DelayedPlacementSubscribesWithoutProxy) {
         TTestBasicRuntime runtime(3);
         const ui32 groupId = 0x80000000;

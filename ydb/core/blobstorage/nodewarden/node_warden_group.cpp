@@ -233,10 +233,6 @@ namespace NKikimr::NStorage {
             const bool success = currentGroup->SerializeToString(&after);
             Y_ABORT_UNLESS(success);
             groupChanged = before != after;
-
-            if (groupChanged && Cfg->IsCacheEnabled() && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-                EnqueueSyncOp(WrapCacheOp(UpdateGroupInCache(*currentGroup)));
-            }
         }
 
         if (const auto& currentGroup = group.Group; !currentGroup) {
@@ -259,6 +255,26 @@ namespace NKikimr::NStorage {
             auto& mainKey = GetGroupMainKey(groupId);
             TStringStream err;
             group.Info = TBlobStorageGroupInfo::Parse(*currentGroup, &mainKey, &err);
+            if (!group.Info) {
+                YDB_LOG_ERROR("Rejected invalid group configuration",
+                    {"marker", "NWInvalidGroupConfig"},
+                    {"groupId", groupId},
+                    {"groupGeneration", currentGroup->GetGroupGeneration()},
+                    {"err", err.Str()});
+                // Allow a corrected configuration with the same generation to be applied.
+                group.Group.reset();
+                group.NodeLayoutInfo.Reset();
+                // Keep an outstanding lookup alive so it can supply a corrected configuration.
+                group.GetGroupRequestPending = bool(group.GroupResolver);
+                if (group.ProxyId) {
+                    Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr, nullptr));
+                }
+                return;
+            }
+            if (Cfg->IsCacheEnabled() && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                EnqueueSyncOp(WrapCacheOp(UpdateGroupInCache(*currentGroup)));
+            }
+            group.NodeLayoutInfo.Reset();
             if (group.Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 group.NodeLayoutInfo = MakeIntrusive<TNodeLayoutInfo>(NodeLocationMap[LocalNodeId], group.Info, NodeLocationMap);
             }

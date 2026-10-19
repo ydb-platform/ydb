@@ -1701,7 +1701,13 @@ namespace NKikimr {
                     }
                     if (vdiskId != SelfVDiskId) {
                         if (SelfVDiskId.GroupGeneration < vdiskId.GroupGeneration && record.HasRecentGroup()) {
-                            auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, nullptr);
+                            TStringStream error;
+                            auto newInfo = TBlobStorageGroupInfo::Parse(record.GetRecentGroup(), nullptr, &error);
+                            if (!newInfo) {
+                                return Reply(ev, ctx, NKikimrProto::ERROR,
+                                    TStringBuilder() << "Invalid recent group configuration: " << error.Str(),
+                                    TAppData::TimeProvider->Now());
+                            }
                             ChangeGeneration(vdiskId, newInfo, ctx);
                             Y_VERIFY_S(vdiskId == SelfVDiskId, VCtx->VDiskLogPrefix);
                             const TGroupId groupId = newInfo->GroupID;

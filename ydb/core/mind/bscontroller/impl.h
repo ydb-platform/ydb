@@ -2713,8 +2713,11 @@ public:
         TStaticGroupInfo(const NKikimrBlobStorage::TGroupInfo& group, const std::map<TGroupId, TStaticGroupInfo>& prev) {
             TStringStream err;
             Info = TBlobStorageGroupInfo::Parse(group, nullptr, &err);
-            Y_VERIFY_DEBUG_S(Info, "failed to parse static group, error# " << err.Str());
             if (!Info) {
+                YDB_LOG_ERROR_COMP(BS_CONTROLLER, "Rejected invalid static group configuration",
+                    {"marker", "BSCInvalidStaticGroup"},
+                    {"groupId", group.GetGroupID()},
+                    {"err", err.Str()});
                 return;
             }
             if (const auto it = prev.find(Info->GroupID); it != prev.end()) {

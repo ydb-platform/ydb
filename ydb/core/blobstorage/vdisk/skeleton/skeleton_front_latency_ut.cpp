@@ -347,6 +347,46 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TSkeletonFrontLatency) {
 
+        Y_UNIT_TEST(InvalidRecentGroupDoesNotChangeGeneration) {
+            TTestEnv env(0);
+            const auto oldVDiskId = env.GetVDiskId();
+            const TVDiskID newVDiskId(oldVDiskId.GroupID, oldVDiskId.GroupGeneration + 1, oldVDiskId);
+            NKikimrBlobStorage::TGroupInfo valid;
+            valid.SetGroupID(newVDiskId.GroupID.GetRawId());
+            valid.SetGroupGeneration(newVDiskId.GroupGeneration);
+            valid.SetErasureSpecies(TErasureType::ErasureNone);
+            auto* location = valid.AddRings()->AddFailDomains()->AddVDiskLocations();
+            location->SetNodeID(NodeId);
+            location->SetPDiskID(PDiskId);
+            location->SetVDiskSlotID(VDiskSlotId);
+
+            const auto checkReadiness = [&](const TVDiskID& vdiskId,
+                    const NKikimrBlobStorage::TGroupInfo* recentGroup) {
+                auto request = std::make_unique<TEvBlobStorage::TEvVCheckReadiness>(false);
+                VDiskIDFromVDiskID(vdiskId, request->Record.MutableVDiskID());
+                if (recentGroup) {
+                    request->Record.MutableRecentGroup()->CopyFrom(*recentGroup);
+                }
+                env.Runtime.Send(new IEventHandle(env.SkeletonFrontId, env.EdgeActor, request.release()));
+                auto result = env.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVCheckReadinessResult>(
+                    env.EdgeActor, TDuration::Seconds(1));
+                return result->Get()->Record.GetStatus();
+            };
+
+            for (bool invalidPolicy : {false, true}) {
+                auto invalid = valid;
+                if (invalidPolicy) {
+                    invalid.MutableWritePolicy();
+                } else {
+                    invalid.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(checkReadiness(newVDiskId, &invalid), NKikimrProto::ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(checkReadiness(oldVDiskId, nullptr), NKikimrProto::OK);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(checkReadiness(newVDiskId, &valid), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(checkReadiness(oldVDiskId, nullptr), NKikimrProto::RACE);
+        }
+
         Y_UNIT_TEST(AsyncCountersAreRemovedWhenSkeletonFrontStops) {
             TTestEnv env(0);
             for (const TString& handleClass : {"GetAsync", "GetDiscover", "GetLow", "PutAsyncBlob",

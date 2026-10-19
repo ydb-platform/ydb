@@ -217,7 +217,11 @@ namespace NKikimr::NStorage {
             }
 
             if (trustworthy && record.HasGroup()) { // remember group info
-                GroupInfoReceived.emplace(nodeId, record.GetGroup());
+                const auto it = GroupInfoReceived.find(nodeId);
+                if (it == GroupInfoReceived.end()
+                        || it->second.GetGroupGeneration() <= record.GetGroup().GetGroupGeneration()) {
+                    GroupInfoReceived.insert_or_assign(nodeId, record.GetGroup());
+                }
             }
 
             QueriesInFlight.erase(nodeId);
@@ -250,7 +254,15 @@ namespace NKikimr::NStorage {
                 }
             }
             if (result) {
-                TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(*result, nullptr, nullptr);
+                TStringStream err;
+                TIntrusivePtr<TBlobStorageGroupInfo> info = TBlobStorageGroupInfo::Parse(*result, nullptr, &err);
+                if (!info) {
+                    YDB_LOG_ERROR("Resolver received invalid group configuration",
+                        {"marker", "NWInvalidResolvedGroup"},
+                        {"groupId", GroupId},
+                        {"err", err.Str()});
+                    return nullptr;
+                }
                 TBlobStorageGroupInfo::TGroupVDisks received(&info->GetTopology());
                 for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
                     const TActorId& actorId = info->GetActorId(i);

@@ -921,8 +921,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
                     break;
                 }
                 if (err) {
-                    *err << "LifeCyclePhase# " << lcp << " Key.Id# \"" << EscapeC(key->Id)
-                        << "\" Key.Version# " << key->Version << " MainKey.Id# \"" << EscapeC(mainKeyId)
+                    *err << "LifeCyclePhase# " << lcp << " Key.Id# \"" << EscapeC(key ? key->Id : TString())
+                        << "\" Key.Version# " << (key ? key->Version : 0) << " MainKey.Id# \"" << EscapeC(mainKeyId)
                         << "\" MainKey.Version# " << mainKeyVersion << " GroupKeyNonce# " << groupKeyNonce;
                 }
                 break;

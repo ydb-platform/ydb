@@ -160,7 +160,14 @@ namespace NKikimr::NStorage {
                 groupInfo = group.Info;
             } else {
                 TStringStream err;
-                groupInfo = TBlobStorageGroupInfo::Parse(*group.Group, nullptr, nullptr);
+                groupInfo = TBlobStorageGroupInfo::Parse(*group.Group, nullptr, &err);
+                if (!groupInfo) {
+                    YDB_LOG_ERROR("Cannot start VDisk with invalid group configuration",
+                        {"marker", "NWInvalidVDiskGroup"},
+                        {"VDiskId", vdiskId},
+                        {"err", err.Str()});
+                    return;
+                }
             }
 
             ddisk = groupInfo->Group && groupInfo->Group->GetDDisk();

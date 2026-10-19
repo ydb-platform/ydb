@@ -87,6 +87,25 @@ std::vector<ui64> GetOutputValue(const TStringBuf& html, const TStringBuf& param
 }
 
 Y_UNIT_TEST_SUITE(GroupWriteTest) {
+    Y_UNIT_TEST(InvalidVDiskLoadGroupConfiguration) {
+        NKikimr::TEvLoadTestRequest::TVDiskLoad command;
+        auto* group = command.MutableGroupInfo();
+        group->SetGroupID(0);
+        group->SetGroupGeneration(1);
+        group->SetErasureSpecies(TErasureType::ErasureNone);
+        group->AddRings()->AddFailDomains()->AddVDiskLocations();
+        for (bool invalidPolicy : {false, true}) {
+            group->ClearWritePolicy();
+            group->ClearExcludedVDisks();
+            if (invalidPolicy) {
+                group->MutableWritePolicy();
+            } else {
+                group->MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+            }
+            UNIT_ASSERT_EXCEPTION(CreateVDiskWriterLoadTest(command, TActorId(), 1), TLoadActorException);
+        }
+    }
+
     Y_UNIT_TEST(Simple) {
         TTetsEnv env;
 

@@ -330,13 +330,23 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const bool isFirstStorageConfig = !StorageConfig;
     Y_DEBUG_ABORT_UNLESS(!isFirstStorageConfig || CurrentStateFunc() == &TThis::StateInit);
 
+    // Validate all static groups before replacing any part of the active configuration.
+    std::map<TGroupId, TStaticGroupInfo> staticGroups;
+    for (const auto& group : ev->Get()->Config->GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+        const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+        const auto it = staticGroups.try_emplace(groupId, group, StaticGroups).first;
+        if (!it->second.Info) {
+            return;
+        }
+    }
+
     auto prevStorageConfig = std::exchange(StorageConfig, std::move(ev->Get()->Config));
     auto prevBridgeInfo = std::exchange(BridgeInfo, std::move(ev->Get()->BridgeInfo));
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
-    auto prevStaticGroups = std::exchange(StaticGroups, {});
+    auto prevStaticGroups = std::exchange(StaticGroups, std::move(staticGroups));
     StaticVDiskMap.clear();
 
     // static entities may go away (e.g. along with the pile removed), so that they are deleted from system views
@@ -375,7 +385,6 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             }
             for (const auto& group : ss.GetGroups()) {
                 const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
-                StaticGroups.try_emplace(groupId, group, prevStaticGroups);
                 SysViewChangedGroups.insert(groupId);
             }
 

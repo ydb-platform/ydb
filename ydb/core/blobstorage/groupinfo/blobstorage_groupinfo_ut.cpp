@@ -12,6 +12,21 @@ namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
+    Y_UNIT_TEST(ParseEncryptedGroupWithoutKeyReportsError) {
+        NKikimrBlobStorage::TGroupInfo group;
+        group.SetGroupID(0);
+        group.SetGroupGeneration(1);
+        group.SetErasureSpecies(TBlobStorageGroupType::ErasureNone);
+        group.AddRings()->AddFailDomains()->AddVDiskLocations();
+        group.SetEncryptionMode(TBlobStorageGroupInfo::EEM_ENC_V1);
+        group.SetLifeCyclePhase(TBlobStorageGroupInfo::ELCP_IN_USE);
+        TStringStream error;
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, &error);
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->GetLifeCyclePhase(), TBlobStorageGroupInfo::ELCP_KEY_NOT_LOADED);
+        UNIT_ASSERT(!error.Str().empty());
+    }
+
     Y_UNIT_TEST(ExcludedVDisks) {
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(0);

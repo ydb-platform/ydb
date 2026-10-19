@@ -86,7 +86,9 @@ void TNodeWardenMockActor::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpd
         {"record", record});
 
     for (const auto& group : services.GetGroups()) {
-        auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr); // TODO(alexvru): group encryption?
+        TStringStream error;
+        auto info = TBlobStorageGroupInfo::Parse(group, nullptr, &error); // TODO(alexvru): group encryption?
+        Y_ABORT_UNLESS(info, "Invalid mock group configuration: %s", error.Str().c_str());
         auto&& [it, inserted] = Groups.try_emplace(group.GetGroupID(), std::make_unique<TGroupState>(info));
         if (!inserted && it->second->Info->GroupGeneration < info->GroupGeneration) {
             it->second->UpdateGroup(info);

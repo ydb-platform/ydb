@@ -77,10 +77,10 @@ namespace NKikimr {
             }
 
             TVDiskLoadActor(const NKikimr::TEvLoadTestRequest::TVDiskLoad& cmd,
-                    const NActors::TActorId& parent, ui64 tag)
+                    const NActors::TActorId& parent, ui64 tag, TIntrusivePtr<TBlobStorageGroupInfo> info)
                 : ParentActorId(parent)
                 , Tag(tag)
-                , Info(TBlobStorageGroupInfo::Parse(cmd.GetGroupInfo(), nullptr, nullptr))
+                , Info(std::move(info))
                 , VDiskId(VDiskIDFromVDiskID(cmd.GetVDiskId()))
                 , VDiskActorId(Info->GetActorId(VDiskId))
                 , GType(Info->Type)
@@ -347,7 +347,12 @@ namespace NKikimr {
 
     IActor *CreateVDiskWriterLoadTest(const NKikimr::TEvLoadTestRequest::TVDiskLoad& cmd,
             const NActors::TActorId& parent, ui64 tag) {
-        return new TVDiskLoadActor(cmd, parent, tag);
+        TStringStream error;
+        auto info = TBlobStorageGroupInfo::Parse(cmd.GetGroupInfo(), nullptr, &error);
+        if (!info) {
+            ythrow TLoadActorException() << "Invalid group configuration: " << error.Str();
+        }
+        return new TVDiskLoadActor(cmd, parent, tag, std::move(info));
     }
 
 } // NKikimr

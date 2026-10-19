@@ -1,5 +1,10 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+# Keep the compiled objects cached while avoiding resident debug sections at link time.
+IF (OS_LINUX AND RBO_LOW_MEMORY_LINK)
+    LDFLAGS(-Wl,--no-gdb-index -Wl,--strip-debug)
+ENDIF()
+
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)

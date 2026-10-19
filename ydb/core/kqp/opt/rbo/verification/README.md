@@ -34,6 +34,11 @@ Virtual address space is capped separately at 64 GiB so the linker can map
 read-only archives and debug sections; those mappings still count toward the
 aggregate RSS guard when resident. Use `RBO_BUILD_CPUS=1` and `--threads=1`
 for a conservative link retry that reuses the existing compilation cache.
+For the server-sized `integration_ut`, `benchmark_ut`, and `ydb/core/kqp/ut/rbo`
+executables on Linux, add `-DRBO_LOW_MEMORY_LINK=yes`. This opt-in setting strips
+debug sections only when linking these test executables and disables their GDB
+index. It reuses the `relwithdebinfo` objects; the resulting test executables have
+no source-level debug information. Normal builds retain their debug information.
 After measuring memory headroom, `RBO_BUILD_CPUS=4` and `--threads=4` permit
 four workers with the same memory limits. The guard rejects CPU counts above four.
 It also kills tracked descendants when the build driver exits, including children
@@ -58,6 +63,7 @@ python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
 python3 ydb/core/kqp/opt/rbo/verification/tools/run_limited.py \
   ./ya make --build relwithdebinfo --threads=2 --link-threads=1 \
   --test-threads=1 --dist-store-threads=2 --memory-limit=48GB -tA \
+  -DRBO_LOW_MEMORY_LINK=yes \
   ydb/core/kqp/opt/rbo/verification/integration_ut 2>&1 | tail -n 100
 ```
 

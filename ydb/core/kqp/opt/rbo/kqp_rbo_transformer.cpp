@@ -146,6 +146,11 @@ void TKqpRewriteSelectTransformer::Rewind() {
 }
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    // OptimizeExpr can restart the pipeline without calling Rewind(). The roots
+    // have already been optimized in that case; only finish replacing the AST.
+    if (OptimizedPlan) {
+        return ContinueOptimizations(input, output, ctx);
+    }
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
     settings.VisitTuples = true;
@@ -517,13 +522,15 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
                     return node;
                 }
 
-                TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
-                rboCtx.EmptyPreamble = emptyPreamble;
-                TRBOTraceOutput traceOutput(rboCtx);
-                auto output = RBO.Optimize(Roots, rboCtx);
-                traceOutput.Flush();
-                AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
-                return output;
+                if (!OptimizedPlan) {
+                    TRBOContext rboCtx(KqpCtx, ctx, TypeCtx, *RBOTypeAnnTransformer.Get(), FuncRegistry);
+                    rboCtx.EmptyPreamble = emptyPreamble;
+                    TRBOTraceOutput traceOutput(rboCtx);
+                    OptimizedPlan = RBO.Optimize(Roots, rboCtx);
+                    traceOutput.Flush();
+                    AddPlans(rboCtx.ExecutionJson, rboCtx.ExplainJson);
+                }
+                return OptimizedPlan;
             } else {
                 return node;
             }
@@ -570,6 +577,20 @@ void TKqpNewRBOTransformer::AddPlans(std::optional<NJson::TJsonValue> execPlan, 
 }
 
 void TKqpNewRBOTransformer::Rewind() {
+    Roots.clear();
+    OptimizedPlan.Reset();
+    ResetTypes = false;
+
+    // Reset per-query output stored in the shared contexts as well.
+    TransformCtx->PlanJson.reset();
+    KqpCtx.CBOStats = {};
+
+    SharedState.reset();
+    ColumnStatisticsReadiness = {};
+    CMColumnsByTableName.clear();
+    HistColumnsByTableName.clear();
+    EqHeightHistTuplesByTableName.clear();
+    RBOTypeAnnTransformer->Rewind();
 }
 
 IGraphTransformer::TStatus TKqpRBOCleanupTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) {

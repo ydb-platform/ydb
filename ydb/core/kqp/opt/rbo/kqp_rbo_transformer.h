@@ -91,9 +91,6 @@ private:
     const NMiniKQL::IFunctionRegistry& FuncRegistry;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
 
-    // Explain plan holder
-    std::optional<NJson::TJsonValue> PlanJson;
-
     // Special fields to request column statistics.
     NYql::TKikimrTablesData& Tables;
     TString Cluster;
@@ -109,6 +106,7 @@ private:
     bool ResetTypes = false;
 
     TVector<TIntrusivePtr<TOpRoot>> Roots;
+    NYql::TExprNode::TPtr OptimizedPlan;
     TRuleBasedOptimizer RBO;
 };
 

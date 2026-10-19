@@ -10773,6 +10773,7 @@ private:
                                 (*catalogTable)->MaximumStoredStringCellBytes});
                     }
                 }
+                const auto outputIUs = SnapshotOutputIUs(read);
                 // A scan's serialized semantics come from this captured catalog
                 // and its source/output mapping.  The initial RBO boundary can
                 // legitimately precede operator type annotation; the Concat
@@ -10780,7 +10781,7 @@ private:
                 // catalog nullability carried here.
                 for (size_t index = 0; index < SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size(); ++index) {
                     const auto* provenance = stringColumns.FindPtr(SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index]);
-                    const TString output = SnapshotOutputIUs(read)[index].GetFullName();
+                    const TString output = outputIUs[index].GetFullName();
                     if (provenance) {
                         result.emplace(output, *provenance);
                     }
@@ -11225,6 +11226,7 @@ private:
                     Unsupported("Read unexpectedly has children");
                 }
                 auto& read = static_cast<TOpRead&>(base);
+                const auto outputIUs = SnapshotOutputIUs(read);
                 if (read.SortDir != ESortDir::None) {
                     Unsupported("Read has range or ordering semantics absent from logical snapshot v1");
                 }
@@ -11250,7 +11252,7 @@ private:
                 if (read.Limit && !StageGraphPresent) {
                     Unsupported("Read pushed limit requires a StageGraph source boundary");
                 }
-                if (SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).empty() || SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size() != SnapshotOutputIUs(read).size()) {
+                if (SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).empty() || SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size() != outputIUs.size()) {
                     Unsupported("Read has an empty or inconsistent column mapping");
                 }
                 const auto table = TableReference(read, Cluster);
@@ -11275,7 +11277,7 @@ private:
                 TOlapColumnMap olapColumns;
                 auto columns = JsonArray();
                 for (size_t index = 0; index < SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry).size(); ++index) {
-                    const TString output = SnapshotOutputIUs(read)[index].GetFullName();
+                    const TString output = outputIUs[index].GetFullName();
                     const auto* catalogColumn =
                         catalogColumns.FindPtr(SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index]);
                     if (!catalogColumn ||
@@ -11295,11 +11297,11 @@ private:
                         olapColumn);
                     AddOlapColumnReference(
                         olapColumns,
-                        SnapshotOutputIUs(read)[index].GetFullName(),
+                        outputIUs[index].GetFullName(),
                         olapColumn);
                     AddOlapColumnReference(
                         olapColumns,
-                        SnapshotOutputIUs(read)[index].GetColumnName(),
+                        outputIUs[index].GetColumnName(),
                         olapColumn);
                     auto column = JsonMap();
                     column["source"] = SnapshotReadColumns(read, Root.PlanProps.InfoUnitRegistry)[index];

@@ -1579,7 +1579,7 @@ Y_UNIT_TEST(ConsumerZoneFollowsRssBudgetConfiguration) {
             if (expected == EMemoryZone::Red) {
                 UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 0);
             } else {
-                UNIT_ASSERT_GT(fixture.Counter("Consumer/SharedCache/Limit"), 40_MB);
+                UNIT_ASSERT_GT(fixture.Counter("Consumer/SharedCache/Limit"), static_cast<i64>(40_MB));
             }
         }
     }

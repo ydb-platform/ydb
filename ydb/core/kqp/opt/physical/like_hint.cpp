@@ -29,26 +29,65 @@ bool IsRe2Udf(const NYql::TExprNode& node, const std::string_view name) {
     return udf.IsCallable("Udf") && udf.ChildrenSize() >= 1 && udf.Head().Content().StartsWith(name);
 }
 
-std::optional<bool> ReadCaseSensitive(const NYql::TExprNode& node) {
-    const auto* current = UnwrapQuote(&node);
-    if (!current) {
+std::optional<bool> ReadBool(const NYql::TExprNode* node) {
+    node = SkipJust(UnwrapQuote(node));
+    if (!node || !node->IsCallable("Bool") || node->ChildrenSize() < 1 || !node->Head().IsAtom()) {
         return std::nullopt;
+    }
+    if (node->Head().Content() == "true") {
+        return true;
+    }
+    if (node->Head().Content() == "false") {
+        return false;
+    }
+    return std::nullopt;
+}
+
+// SQL LIKE/ILIKE sets only CaseSensitive. Any other Re2 option can change what a match means
+// (Literal=true matches the pattern text), so the LIKE implication no longer holds.
+bool IsRe2OptionName(const std::string_view name) {
+    return name == "CaseSensitive" || name == "DotNl" || name == "Literal" || name == "LogErrors" ||
+        name == "LongestMatch" || name == "MaxMem" || name == "NeverCapture" || name == "NeverNl" ||
+        name == "OneLine" || name == "PerlClasses" || name == "PosixSyntax" || name == "Utf8" ||
+        name == "WordBoundary";
+}
+
+struct TOptionScan {
+    std::optional<bool> CaseSensitive;
+    bool Unsupported = false;
+};
+
+void ScanOptions(const NYql::TExprNode& node, TOptionScan& scan) {
+    const auto* current = UnwrapQuote(&node);
+    if (!current || scan.Unsupported) {
+        return;
     }
     if (current->ChildrenSize() >= 2) {
         const auto* name = UnwrapQuote(current->Child(0));
-        if (name && name->IsAtom("CaseSensitive")) {
-            const auto* value = SkipJust(UnwrapQuote(current->Child(1)));
-            if (value && value->IsCallable("Bool") && value->ChildrenSize() >= 1 && value->Head().IsAtom()) {
-                return value->Head().Content() == "true";
+        const auto* valueNode = SkipJust(UnwrapQuote(current->Child(1)));
+        // Type nodes mention every option name. A setting is a bool or an integer value.
+        const bool isSetting = valueNode && (valueNode->IsCallable("Bool") || valueNode->IsCallable("Uint64") ||
+            valueNode->IsCallable("Int64") || valueNode->IsCallable("Ui64"));
+        if (name && name->IsAtom() && isSetting && IsRe2OptionName(name->Content())) {
+            if (name->Content() != "CaseSensitive") {
+                scan.Unsupported = true;
+                return;
             }
+            const auto value = ReadBool(valueNode);
+            if (!value || (scan.CaseSensitive && *scan.CaseSensitive != *value)) {
+                scan.Unsupported = true;
+                return;
+            }
+            scan.CaseSensitive = *value;
+            return;
         }
     }
     for (const auto& child : current->Children()) {
-        if (const auto found = ReadCaseSensitive(*child)) {
-            return found;
+        ScanOptions(*child, scan);
+        if (scan.Unsupported) {
+            return;
         }
     }
-    return std::nullopt;
 }
 
 bool ExtractLiteral(const NYql::TExprNode& node, TString& value) {
@@ -139,11 +178,12 @@ std::optional<TLikeHint> TryParseLikeHint(const NYql::TExprNode& predicate) {
             return std::nullopt;
         }
     }
-    const auto caseSensitive = ReadCaseSensitive(*runConfig->Child(1));
-    if (!caseSensitive) {
+    TOptionScan options;
+    ScanOptions(*runConfig->Child(1), options);
+    if (options.Unsupported || !options.CaseSensitive) {
         return std::nullopt;
     }
-    hint.CaseSensitive = *caseSensitive;
+    hint.CaseSensitive = *options.CaseSensitive;
     return hint;
 }
 

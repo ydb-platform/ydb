@@ -1587,6 +1587,39 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
         const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", &params);
         UNIT_ASSERT_C(!parameterized.Contains("PatternHint"), parameterized);
+
+        // Literal=true matches the pattern text, not the LIKE. A hint must not be attached.
+        TStreamExecScanQuerySettings literalSettings;
+        literalSettings.Explain(true);
+        auto literalIt = tableClient.StreamExecuteScanQuery(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, true AS Literal))(message);
+        )", literalSettings).GetValueSync();
+        UNIT_ASSERT_C(literalIt.IsSuccess(), literalIt.GetIssues().ToString());
+        const auto literal = CollectStreamResult(literalIt);
+        UNIT_ASSERT_C(literal.Ast && literal.Ast->Contains("KqpOlapApply"), literal.Ast.GetOrElse(""));
+        TString literalSsa;
+        if (literal.PlanJson) {
+            NJson::TJsonValue literalPlan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*literal.PlanJson, &literalPlan, true));
+            std::function<void(const NJson::TJsonValue&)> walkLiteral = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram") {
+                            literalSsa += value.GetStringRobust();
+                        }
+                        walkLiteral(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walkLiteral(value);
+                    }
+                }
+            };
+            walkLiteral(literalPlan);
+        }
+        UNIT_ASSERT_C(!literalSsa.Contains("PatternHint"), literalSsa);
     }
 
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {

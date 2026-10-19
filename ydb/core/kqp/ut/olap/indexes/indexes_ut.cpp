@@ -4155,20 +4155,15 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     // Complex LIKE/ILIKE stay one Re2 match. With the shard flag the bloom-ngram index skips portions
     // that cannot contain the literal runs; results stay the same as with the flag off.
+    // Index blobs are written by REPLACE, so the test does not wait for compaction.
     Y_UNIT_TEST(ComplexLikeNgramSkip) {
         auto run = [](const bool hintsEnabled, const bool caseSensitiveIndex) {
-            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
             settings.AppConfig.MutableFeatureFlags()->SetEnableCsPatternIndexHints(hintsEnabled);
             settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
             settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
             TKikimrRunner kikimr(settings);
             auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-            // The default wakeup is 60s and is scheduled when the shard starts. Set it before CREATE,
-            // or a 30s wait ends before the first compaction check.
-            csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
-            csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
-            csController->SetOverrideMemoryLimitForPortionReading(1e+10);
-            csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
             ExecQuery(kikimr, true, R"(
                 CREATE TABLE `/Root/complexLike` (
@@ -4185,33 +4180,34 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     ON (value)
                     WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = )"
                 << (caseSensitiveIndex ? "true" : "false") << ");");
+            ExecQuery(kikimr, true, R"(
+                ALTER OBJECT `/Root/complexLike` (TYPE TABLE) SET (
+                    ACTION = UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`
+                );
+            )");
 
             auto runDml = [&](const TString& query) {
                 auto result = kikimr.GetQueryClient().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             };
-            // Inserted portions have no ngram blobs until compaction rebuilds them.
-            if (hintsEnabled) {
-                const auto compactionsBefore = csController->GetCompactionStartedCounter().Val();
-                for (int pass = 0; pass < 2; ++pass) {
-                    runDml(TStringBuilder() << R"(
-                        $rows = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-                        UPSERT INTO `/Root/complexLike` (key, value)
-                        SELECT CAST(item AS Int32) + )" << (pass * 10) << R"( AS key,
-                               "noise_" || CAST(item AS String) AS value
-                        FROM AS_TABLE($rows);
-                    )");
-                }
-                // WaitCompactions only counts compactions that start during the wait. A 1.5M upsert
-                // can finish compaction before that wait begins.
-                if (csController->GetCompactionStartedCounter().Val() == compactionsBefore) {
-                    UNIT_ASSERT_C(csController->WaitCompactions(TDuration::Seconds(30)), "ngram portions were not compacted");
-                }
-            }
             runDml(R"(
-                UPSERT INTO `/Root/complexLike` (key, value) VALUES
+                $rows = ListMap(ListFromRange(1, 201), ($x) -> { RETURN AsStruct($x AS item); });
+                REPLACE INTO `/Root/complexLike` (key, value)
+                SELECT CAST(item AS Int32) AS key,
+                       "noise_" || CAST(item AS String) AS value
+                FROM AS_TABLE($rows);
+            )");
+            // U+212A folds to k and U+017F folds to s in Re2. The bytes are not ASCII k/s.
+            const TString kelvin("\xE2\x84\xAA\xE2\x84\xAA\xE2\x84\xAA", 9);
+            const TString longS("\xC5\xBF\xC5\xBF\xC5\xBF", 6);
+            runDml(TStringBuilder() << R"(
+                REPLACE INTO `/Root/complexLike` (key, value) VALUES
                     (1001, "xx aaabbb yy"),
-                    (1002, "bbb aaa");
+                    (1002, "bbb aaa"),
+                    (1003, ")" << kelvin << R"("),
+                    (1004, ")" << longS << R"("),
+                    (1005, "(?s)qqq.*zzz");
             )");
 
             auto runScan = [&](const TString& query) {
@@ -4225,6 +4221,24 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             CompareYson(R"([[1001]])",
                 runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%AAA%bbb%' ORDER BY key)"),
                 "ILIKE rows");
+            // A k/s probe must not drop the folded characters. LIKE stays byte-exact.
+            CompareYson(R"([[1003]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%kkk%' ORDER BY key)"),
+                "Kelvin ILIKE");
+            CompareYson(R"([[1004]])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value ILIKE '%sss%' ORDER BY key)"),
+                "long-s ILIKE");
+            CompareYson(R"([])",
+                runScan(R"(SELECT key FROM `/Root/complexLike` WHERE value LIKE '%kkk%' ORDER BY key)"),
+                "Kelvin LIKE");
+            CompareYson(R"([[1005]])",
+                runScan(R"(
+                    $pattern = Udf(Re2::PatternFromLike)("qqq%zzz");
+                    SELECT key FROM `/Root/complexLike`
+                    WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, true AS Literal))(value)
+                    ORDER BY key;
+                )"),
+                "literal Re2 options");
 
             const ui64 skipBefore = csController->GetIndexesSkippingOnSelect().Val();
             CompareYson(R"([[0u]])",

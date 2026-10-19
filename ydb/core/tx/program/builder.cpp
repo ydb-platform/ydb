@@ -64,7 +64,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         }
         if (PatternIndexHintsEnabled && func.HasPatternHint() && func.GetPatternHint().HasLike()) {
             const auto& hint = func.GetPatternHint();
-            if (hint.GetArgumentIndex() < arguments.size()) {
+            if (hint.HasArgumentIndex() && hint.GetArgumentIndex() < arguments.size()) {
                 const auto ngramSize = ColumnResolver.GetBloomNgramSize(arguments[hint.GetArgumentIndex()].GetColumnId(), hint.GetCaseSensitive());
                 if (ngramSize) {
                     TPatternHintPolicy policy;

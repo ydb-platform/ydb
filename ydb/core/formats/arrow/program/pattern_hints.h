@@ -29,8 +29,8 @@ struct TPatternHintPolicy {
 };
 
 // Literal runs of a SQL LIKE pattern that every matching string must contain.
-// ILIKE keeps only ASCII pieces of a run: the case-insensitive bloom folds ASCII, while Re2 folds Unicode.
-// Residual deviation, same as OptimizeSimpleILIKE: Re2 folds U+212A to 'k' and U+017F to 's'.
+// ILIKE keeps ASCII pieces, and drops k/K/s/S. Re2 folds U+212A to 'k' and U+017F to 's'.
+// The bloom folds ASCII only, so a probe that contains those letters can skip a matching portion.
 std::vector<TPatternIndexHint> BuildLikeIndexHints(const TStringBuf pattern, const TStringBuf escape, const bool caseSensitive,
     const ui32 inputIndex, const TPatternHintPolicy& policy);
 

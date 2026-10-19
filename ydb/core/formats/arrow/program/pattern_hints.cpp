@@ -58,8 +58,13 @@ struct TPiece {
     bool AtEnd = false;
 };
 
-// Case-sensitive: the whole run. Case-insensitive: ASCII pieces only. A piece keeps an anchor only when
-// it is the corresponding end of the run, so a leading ASCII prefix of an ILIKE run is still StartsWith.
+// Re2's case fold maps these ASCII letters onto bytes the bloom does not fold.
+bool BreaksCaseInsensitiveProbe(const unsigned char c) {
+    return c >= 128 || c == 'k' || c == 'K' || c == 's' || c == 'S';
+}
+
+// Case-sensitive: the whole run. Case-insensitive: ASCII pieces, split where a probe would not be
+// implied. A piece keeps an anchor only when it is the corresponding end of the run.
 std::vector<TPiece> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
     if (caseSensitive) {
         return {TPiece{run.Bytes, run.AtStart, run.AtEnd}};
@@ -68,7 +73,7 @@ std::vector<TPiece> PiecesOf(const TLiteralRun& run, const bool caseSensitive) {
     TString current;
     bool atStart = run.AtStart;
     for (const char c : run.Bytes) {
-        if (static_cast<unsigned char>(c) >= 128) {
+        if (BreaksCaseInsensitiveProbe(static_cast<unsigned char>(c))) {
             if (!current.empty()) {
                 pieces.push_back(TPiece{std::move(current), atStart, false});
                 current.clear();

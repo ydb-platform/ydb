@@ -54,6 +54,16 @@ Y_UNIT_TEST_SUITE(PatternHints) {
 
     Y_UNIT_TEST(CaseAndEscape) {
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%Err%", false), "Contains:Err:ci");
+        // k/K/s/S are not implied: Re2 folds U+212A to k and U+017F to s, the bloom does not.
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kkk%bbb%", false), "Contains:bbb:ci");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kkk%", false), "");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%sss%", false), "");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("xxxk%", false), "StartsWith:xxx:ci");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kxxx", false), "EndsWith:xxx:ci");
+        // The piece left of k is not anchored, and two bytes are below the contains minimum.
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%xxk", false), "");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%xxxk", false), "Contains:xxx:ci");
+        UNIT_ASSERT_VALUES_EQUAL(JoinHints("%kkk%bbb%", true), "Contains:kkk:cs,Contains:bbb:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%Ошибка%", false), "");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%Ошибка%", true), "Contains:Ошибка:cs");
         UNIT_ASSERT_VALUES_EQUAL(JoinHints("%ошибка timeout%", false), "Contains: timeout:ci");

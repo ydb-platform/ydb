@@ -11,6 +11,7 @@
 #include "schemeshard_operation_registry.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -214,6 +215,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
         response.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusAccepted, ui64(txId), ui64(selfId)));
         response->SetError(NKikimrScheme::StatusAccepted, "An operation with the same txId is already in flight. This should not happen. Note that the transaction body is not guaranteed to be identical — StatusAccepted is simply returned for retries.");
         return response;
+    }
+
+    if (!AppData(context.Ctx)->FeatureFlags.GetEnableClientModifications()
+        && context.UserToken
+        && !context.UserToken->IsSystemUser()
+        && !IsAdministrator(AppData(context.Ctx), context.UserToken.Get()))
+    {
+        return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+            NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+            "Client schema modifications are disabled for non-administrators");
     }
 
     TOperation::TPtr operation = new TOperation(txId);

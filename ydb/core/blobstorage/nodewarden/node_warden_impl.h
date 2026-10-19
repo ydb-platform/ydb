@@ -684,6 +684,7 @@ namespace NKikimr::NStorage {
             TActorId ProxyId; // actor id of running DS proxy or agent
             bool MustSubscribe = false; // keep RegisterNode subscription for this group even when proxy is not running
             bool AgentProxy = false; // was the group started as an BlobDepot agent proxy?
+            bool InlinePileProxy = false; // is the bridge proxy put in front of the DS proxy of the inline pile?
             bool GetGroupRequestPending = false; // if true, then we are waiting for GetGroup response for this group
             bool ProposeRequestPending = false; // if true, then we have sent ProposeKey request and waiting for the group
             TActorId GroupResolver; // resolver actor id

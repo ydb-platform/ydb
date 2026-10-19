@@ -616,6 +616,25 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
     }
 
+    Y_UNIT_TEST_TWIN(ClientDataWritesDisabled, directParts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        runtime.GetAppData().AdministrationAllowedSIDs = {"admin@builtin"};
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directParts);
+
+        const auto data = GenerateTestData("", 3);
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data});
+
+        const auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
 

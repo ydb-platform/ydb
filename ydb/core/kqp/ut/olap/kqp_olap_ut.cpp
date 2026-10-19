@@ -8,9 +8,11 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -1806,32 +1808,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         run("", false);
     }
 
-    Y_UNIT_TEST(PredicatePushdown_IgnoreCaseUdfHandleBothStringAndUtf8) {
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfDifferentStringTypes, Utf8Column, NotNullColumn) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
         auto schemeSession = tableClient.CreateSession().GetValueSync().GetSession();
-        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(R"(
+        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(Sprintf(R"(
             CREATE TABLE `/Root/foo` (
                 id Int64 NOT NULL,
-                str String,
-                u_str Utf8,
+                field %s%s,
                 PRIMARY KEY(id)
             )
             WITH (STORE = COLUMN);
-        )").GetValueSync().IsSuccess());
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : ""))
+                        .GetValueSync()
+                        .IsSuccess());
 
         auto queryClient = kikimr.GetQueryClient();
         auto session = queryClient.GetSession().GetValueSync().GetSession();
-        const auto insertResult = session.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, str, u_str) VALUES
-                (1, "foobar", "foobar"),
-                (2, "barfoo", "barfoo"),
-                (3, "foo", "foo"),
-                (4, NULL, NULL)
-        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        const auto insertResult = session.ExecuteQuery(Sprintf(R"(
+            INSERT INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo"),
+                (3, "foo"),
+                (4, %s)
+        )", NotNullColumn ? "\"baz\"" : "NULL"), NYdb::NQuery::TTxControl::NoTx())
+                                      .GetValueSync();
         UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues());
 
         const THashMap<TString, std::pair<TString, TString>> patterns = {
@@ -1842,29 +1846,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
         UNIT_ASSERT_VALUES_EQUAL(patterns.size(), NOpt::IgnoreCaseSubstringMatchFunctions.size());
 
-        const std::vector<TString> inputColumns = {"str", "u_str"};
         const TString directUdfNode = "KqpOlapUdf";
 
         auto run = [&](const TString& expectedKernel, const TString& pattern, const TString& expectedResult,
                        const TString& extraPragma) {
-            for (const auto& column : inputColumns) {
-                const auto query = Sprintf(R"(
-                    PRAGMA OptimizeSimpleILike;
-                    PRAGMA AnsiLike;
-                    %s
-                    SELECT id FROM `/Root/foo` WHERE %s ILIKE "%s" ORDER BY id;
-                )", extraPragma.c_str(), column.c_str(), pattern.c_str());
-                const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
-                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
-                CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
+            const auto query = Sprintf(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                %s
+                SELECT id FROM `/Root/foo` WHERE field ILIKE "%s" ORDER BY id;
+            )", extraPragma.c_str(), pattern.c_str());
+            const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                                  NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
 
-                const auto ast = res.GetStats()->GetAst();
-                UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
-                    TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
-                UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
-                    TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
-            }
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
+                          TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
+            UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
+                          TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
         };
 
         for (const auto& [functionName, kernelName] : NOpt::IgnoreCaseSubstringMatchFunctions) {
@@ -1877,6 +1879,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(containsTest);
         run("OlapKernels._yql_AsciiContainsIgnoreCase", containsTest->first, containsTest->second,
             "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";");
+    }
+
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfUsesIndex, Utf8Column, NotNullColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        const TString script = Sprintf(R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                field %s%s,
+                PRIMARY KEY(id),
+                INDEX idx_field LOCAL USING bloom_ngram_filter ON (field)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = false)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/foo` (TYPE TABLE) SET
+                (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (3, "foo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (4, %s);
+            ------
+            ONE_COMPACTION
+            ------
+            READ: SELECT COUNT(*) > 0u FROM `/Root/foo/.sys/primary_index_stats` WHERE EntityName = "idx_field";
+            EXPECTED: [[%%true]]
+            ------
+            READ:
+            PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+            SELECT id FROM `/Root/foo` WHERE field ILIKE "%%FOO%%" ORDER BY id;
+            EXPECTED: [[1];[2];[3]]
+            IDX_ND_SKIP_APPROVE: 0, 0, 1
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : "", NotNullColumn ? "\"baz\"" : "NULL");
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
     }
 
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {

@@ -300,8 +300,11 @@ namespace NKikimr::NStorage {
                         return "incorrect referenced group generation";
                     }
                 }
-                continue;
-            } else if (!group.HasErasureSpecies()) {
+                if (!group.HasBridgeProxyGroupId() || group.GetBridgeProxyGroupId() != group.GetGroupID()) {
+                    continue; // bridge proxy group has no VDisks of its own; inline pile has them and is validated below
+                }
+            }
+            if (!group.HasErasureSpecies()) {
                 return "ErasureSpecies field missing";
             }
 
@@ -418,6 +421,12 @@ namespace NKikimr::NStorage {
             if (auto error = ValidateConfig(config.GetBlobStorageConfig(), nodeIds)) {
                 return error;
             }
+        }
+
+        if (config.GetClusterStateDetails().GetBscConversionPending() &&
+                config.GetClusterState().PerPileStateSize() != 1) {
+            // piles can't be added until BSC converts its groups into bridged ones
+            return "BscConversionPending is set while ClusterState doesn't contain exactly one pile";
         }
 
         return {};

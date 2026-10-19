@@ -310,7 +310,7 @@ namespace NKikimr::NStorage {
         THashMap<ui32, TNodeIdentifier> AllNodeIds;
         THashSet<ui32> NodesFromSamePile;
         TNodeIdentifier SelfNode;
-        std::optional<TString> SelfNodeBridgePileName;
+        TBridgePileId SelfNodeBridgePileId;
         THashSet<std::tuple<TString, ui32>> Hosts;
 
         // scatter tasks
@@ -434,6 +434,8 @@ namespace NKikimr::NStorage {
         void ApplyNewNodeList(std::span<std::tuple<TNodeIdentifier, TNodeLocation>> newNodeList);
 
         TBridgePileId ResolveNodePileId(const TNodeLocation& location);
+        TBridgePileId ResolveNodePileIdForConfig(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeLocation& location);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Binding to peer nodes
@@ -549,6 +551,8 @@ namespace NKikimr::NStorage {
         void Perform(TEvGather::TCollectConfigs *response, const TEvScatter::TCollectConfigs& request, TScatterTask& task);
         void Perform(TEvGather::TProposeStorageConfig *response, const TEvScatter::TProposeStorageConfig& request, TScatterTask& task);
         void Perform(TEvGather::TDemandRetroTrace *response, const TEvScatter::TDemandRetroTrace& request, TScatterTask& task);
+        void Perform(TEvGather::TCollectBridgeCapability *response, const TEvScatter::TCollectBridgeCapability& request,
+            TScatterTask& task);
 
         void SwitchToError(const TString& reason);
         void StopRootActivities(const TString& reason);
@@ -657,6 +661,7 @@ namespace NKikimr::NStorage {
         TActorId StaticNodeSessionId;
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
+        THashSet<ui32> BridgeCapableDynamicNodes; // subset of ConnectedDynamicNodes running with BridgeConfig
         ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
@@ -670,7 +675,7 @@ namespace NKikimr::NStorage {
         // these are used on the static nodes
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
-        void HandleDynamicConfigSubscribe(STATEFN_SIG);
+        void Handle(TEvNodeWardenDynamicConfigSubscribe::TPtr ev);
         void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -805,6 +810,10 @@ namespace NKikimr::NStorage {
     std::optional<TString> GetStorageYaml(const NKikimrBlobStorage::TStorageConfig& config);
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState);
+
+    // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
+    // and make every static group an inline pile of itself.
+    std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config);
 
 } // NKikimr::NStorage
 

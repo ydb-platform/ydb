@@ -14,6 +14,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/library/formats/arrow/helpers
 )
 
 ADDINCL(

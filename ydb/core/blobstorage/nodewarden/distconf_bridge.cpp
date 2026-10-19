@@ -107,6 +107,7 @@ namespace NKikimr::NStorage {
 
     std::optional<TString> TDistributedConfigKeeper::UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config) {
         if (config->HasClusterState() && (!config->GetPrevConfig().GetGeneration() ||
+                !config->GetPrevConfig().HasClusterState() || // conversion from non-bridged cluster
                 !NBridge::IsSameClusterState(config->GetClusterState(), config->GetPrevConfig().GetClusterState()))) {
             // update cluster state generation if something has changed
             auto *clusterState = config->MutableClusterState();
@@ -231,6 +232,62 @@ namespace NKikimr::NStorage {
                 error = fillInBridge(config->MutableSchemeBoardConfig());
             }
             return error;
+        }
+
+        return std::nullopt;
+    }
+
+    std::optional<TString> ConvertStorageConfigToBridge(NKikimrBlobStorage::TStorageConfig *config) {
+        if (config->HasClusterState()) {
+            return "cluster is already bridged one";
+        }
+
+        // the cluster has the only pile which is the primary one; generation and history are filled in when committing
+        config->MutableClusterState()->CopyFrom(NBridge::MakeImplicitSinglePileClusterState());
+        config->MutableClusterStateDetails()->SetBscConversionPending(true);
+
+        // make every static group an inline pile of itself; this requires generation change to make proxies and VDisks
+        // pick up new group info
+        auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
+        THashMap<TGroupId, ui32> prevGenerations;
+        for (auto& group : *ss->MutableGroups()) {
+            if (group.HasBridgeGroupState() || group.HasBridgeProxyGroupId() || group.HasBridgePileId()) {
+                return "static group already has bridge settings";
+            }
+            const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            prevGenerations.emplace(groupId, group.GetGroupGeneration());
+            group.SetGroupGeneration(group.GetGroupGeneration() + 1);
+            NBridge::MakeInlinePile(&group);
+        }
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (const auto it = prevGenerations.find(vdiskId.GroupID); it != prevGenerations.end() &&
+                    it->second == vdiskId.GroupGeneration) { // donors keep their generations
+                ++vdiskId.GroupGeneration;
+                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
+            }
+        }
+
+        // bridged cluster requires every ring group to be bound to some pile; legacy Ring is turned into the ring group
+        // with the same replica actor ids
+        auto convertRings = [](NKikimrConfig::TStateStorageConfig *pb) {
+            if (pb->HasRing()) {
+                pb->AddRingGroups()->Swap(pb->MutableRing());
+                pb->ClearRing();
+            }
+            for (auto& ringGroup : *pb->MutableRingGroups()) {
+                TBridgePileId::FromPileIndex(0).CopyToProto(&ringGroup,
+                    &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
+            }
+        };
+        if (config->HasStateStorageConfig()) {
+            convertRings(config->MutableStateStorageConfig());
+        }
+        if (config->HasStateStorageBoardConfig()) {
+            convertRings(config->MutableStateStorageBoardConfig());
+        }
+        if (config->HasSchemeBoardConfig()) {
+            convertRings(config->MutableSchemeBoardConfig());
         }
 
         return std::nullopt;

@@ -1,13 +1,14 @@
 #include <ydb/core/testlib/basics/appdata.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/testlib/common/test_with_actor_system.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
-#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor_base.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <atomic>
@@ -21,8 +22,9 @@ using namespace NActors;
 using namespace NYdb::NTopic;
 using TEvResult = TPqControlPlaneEvents::TEvDescribeConsumerResult;
 
-struct TEvDescribeCalled : TEventLocal<TEvDescribeCalled, EventSpaceBegin(TEvents::ES_PRIVATE) + 130> {};
-struct TEvCommitCalled : TEventLocal<TEvCommitCalled, EventSpaceBegin(TEvents::ES_PRIVATE) + 131> {};
+struct TEvDescribeCalled: TEventLocal<TEvDescribeCalled, EventSpaceBegin(TEvents::ES_PRIVATE) + 130> {};
+
+struct TEvCommitCalled: TEventLocal<TEvCommitCalled, EventSpaceBegin(TEvents::ES_PRIVATE) + 131> {};
 
 void InitializeRuntime(TTestActorRuntime& runtime) {
     runtime.SetDispatchTimeout(TDuration::Seconds(10));
@@ -31,8 +33,8 @@ void InitializeRuntime(TTestActorRuntime& runtime) {
         names->StaticNodeTable[runtime.GetNodeId(i)] = std::make_pair(TString("localhost"), 10000u + i);
     }
     for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
-        runtime.AddLocalService(GetNameserviceActorId(),
-            TActorSetupCmd(CreateNameserverTable(names), TMailboxType::ReadAsFilled, runtime.InterconnectPoolId()), i);
+        runtime.AddLocalService(
+            GetNameserviceActorId(), TActorSetupCmd(CreateNameserverTable(names), TMailboxType::ReadAsFilled, runtime.InterconnectPoolId()), i);
     }
     NKikimr::TAppPrepare app;
     runtime.Initialize(app.Unwrap());
@@ -77,7 +79,8 @@ public:
         });
     }
 
-    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(const TString&, NFq::TMessageStreamPartitionId) {
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(
+        const TString&, NFq::TMessageStreamPartitionId) {
         Y_ABORT("Unexpected DescribePartition");
     }
 
@@ -100,12 +103,13 @@ public:
 };
 
 // Each facade is bound to one stream; test counters/promises can be shared.
-class TBoundTopicClient final : public NFq::IMessageStreamClient {
+class TBoundTopicClient final: public NFq::IMessageStreamClient {
 public:
     TBoundTopicClient(TString stream, std::shared_ptr<TTopicClient> state)
         : Stream(std::move(stream))
         , State(std::move(state))
-    {}
+    {
+    }
 
     const TString& GetStream() const override {
         return Stream;
@@ -114,20 +118,23 @@ public:
     NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamDescription>> DescribeStream() override {
         return State->DescribeStream(Stream);
     }
+
     NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> DescribeConsumer(
-        const TString& consumer, const NFq::TMessageStreamDescribeConsumerSettings& settings) override
-    {
+        const TString& consumer, const NFq::TMessageStreamDescribeConsumerSettings& settings) override {
         return State->DescribeConsumer(Stream, consumer, settings);
     }
-    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(NFq::TMessageStreamPartitionId id) override {
+
+    NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamPartitionDescription>> DescribePartition(
+        NFq::TMessageStreamPartitionId id) override {
         return State->DescribePartition(Stream, id);
     }
+
     std::shared_ptr<NFq::IMessageStreamReadSession> CreateReadSession(const NFq::TMessageStreamReadSessionSettings& settings) override {
         return State->CreateReadSession(Stream, settings);
     }
+
     NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerPosition>> CommitPosition(
-        NFq::TMessageStreamPartitionId id, const TString& consumer, ui64 offset) override
-    {
+        NFq::TMessageStreamPartitionId id, const TString& consumer, ui64 offset) override {
         return State->CommitPosition(Stream, id, consumer, offset);
     }
 
@@ -136,24 +143,31 @@ private:
     const std::shared_ptr<TTopicClient> State;
 };
 
-class TGateway final : public IPqStaticGateway {
+class TGateway final: public IPqStaticGateway {
 public:
     explicit TGateway(std::shared_ptr<TTopicClient> client)
         : Client(std::move(client))
-    {}
+    {
+    }
 
-    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(const TString& stream, const NYdb::TDriver&, const TTopicClientSettings&) override {
+    std::shared_ptr<NFq::IMessageStreamClient> GetTopicClient(
+        const TString& stream, const NYdb::TDriver&, const TTopicClientSettings&) override {
         return std::make_shared<TBoundTopicClient>(stream, Client);
     }
+
     TTopicClientSettings GetTopicClientSettings() const override {
         return {};
     }
-    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings&) override {
+
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(
+        const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings&) override {
         Y_ABORT("Unexpected GetFederatedTopicClient");
     }
+
     IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver&, const NYdb::TCommonClientSettings&) override {
         Y_ABORT("Unexpected GetDeferredPublishClient");
     }
+
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override {
         Y_ABORT("Unexpected GetFederatedTopicClientSettings");
     }
@@ -162,7 +176,7 @@ private:
     const std::shared_ptr<TTopicClient> Client;
 };
 
-class TCredentialsFactory final : public IStructuredTokenCredentialsFactory {
+class TCredentialsFactory final: public IStructuredTokenCredentialsFactory {
 public:
     TString LastToken;
     bool LastAddBearerToToken = false;
@@ -174,7 +188,7 @@ public:
     }
 };
 
-class TFixture : public NTestUtils::TTestWithActorSystemFixture {
+class TFixture: public NTestUtils::TTestWithActorSystemFixture {
 public:
     void SetUp(NUnitTest::TTestContext& ctx) override {
         TTestWithActorSystemFixture::SetUp(ctx);
@@ -182,8 +196,8 @@ public:
         TDqAsyncIoFactory factory;
         RegisterDqPqControlPlaneActorFactory(factory, Driver, CredentialsFactory, MakeIntrusive<TGateway>(Client));
         const THashMap<TString, TString> secureParams = {
-            {"token-name", "secret-token"},
-            {"another-token-name", "another-secret-token"},
+            { "token-name", "secret-token" },
+            { "another-token-name", "another-secret-token" },
         };
         ControlPlaneId = Runtime.Register(factory.CreateDqControlPlane({
             .Type = PqControlPlaneActorType,
@@ -227,8 +241,7 @@ protected:
             partition->mutable_partition_stats()->mutable_partition_offsets()->set_start(id + 10);
             partition->mutable_partition_consumer_stats()->set_committed_offset(id + 20);
         }
-        return TDescribeConsumerResult(
-            NYdb::TStatus(status, {NYdb::NIssue::TIssue("describe details")}), std::move(result));
+        return TDescribeConsumerResult(NYdb::TStatus(status, { NYdb::NIssue::TIssue("describe details") }), std::move(result));
     }
 
     void CompleteDescription(NYdb::EStatus status = NYdb::EStatus::SUCCESS) {
@@ -248,19 +261,20 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(offsets.GetCommittedOffset(), partitionId + 20);
     }
 
-    const NYdb::TDriver Driver{NYdb::TDriverConfig()};
+    const NYdb::TDriver Driver{ NYdb::TDriverConfig() };
     const std::shared_ptr<TTopicClient> Client = std::make_shared<TTopicClient>();
     const std::shared_ptr<TCredentialsFactory> CredentialsFactory = std::make_shared<TCredentialsFactory>();
     TActorId ControlPlaneId;
 };
 
 // Exercises the shared startup implementation without a data-plane session.
-class TReader final : public TActorBootstrapped<TReader>, public NInternal::TDqPqReadActorBase {
+class TReader final: public TActorBootstrapped<TReader>, public NInternal::TDqPqReadActorBase {
 public:
     TReader(TActorId compute, TActorId controlPlane, std::shared_ptr<TTopicClient> topicClient)
         : TDqPqReadActorBase(0, 0, {}, "test", Source(), ReadTaskParams(), compute, controlPlane)
         , TopicClient(std::make_shared<TBoundTopicClient>("topic", std::move(topicClient)))
-    {}
+    {
+    }
 
     void Bootstrap() {
         Become(&TThis::StateFunc);
@@ -291,7 +305,7 @@ private:
             case TEvents::TEvPing::EventType:
                 Send(ev->Sender, new TEvents::TEvPong(), 0, ConsumerOffsetsInitialized());
                 break;
-            hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
+                hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
             default:
                 Y_ABORT("Unexpected event %s", ev->GetTypeName().data());
         }
@@ -300,10 +314,14 @@ private:
     void OnConsumerOffsetsInitialized() override {
         Send(ComputeActorId, new TEvents::TEvWakeup());
     }
-    void CommitState(const NDqProto::TCheckpoint&) override {}
+
+    void CommitState(const NDqProto::TCheckpoint&) override {
+    }
+
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch&, TMaybe<TInstant>&, bool&, i64) override {
         return 0;
     }
+
     void PassAway() override {
         StopConsumerOffsetInitialization();
         TActorBootstrapped<TReader>::PassAway();
@@ -312,7 +330,7 @@ private:
     const std::shared_ptr<NFq::IMessageStreamClient> TopicClient;
 };
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
     Y_UNIT_TEST_F(ResolvesTokenFromSecureParams, TFixture) {
@@ -350,13 +368,27 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
             auto request = MakeRequest();
             auto& connection = *request.MutableConnection();
             switch (field) {
-                case 0: connection.SetEndpoint("another-endpoint"); break;
-                case 1: connection.SetDatabase("another-database"); break;
-                case 2: connection.SetTopicPath("another-topic"); break;
-                case 3: connection.SetConsumerName("another-consumer"); break;
-                case 4: connection.SetUseSsl(true); break;
-                case 5: connection.SetAddBearerToToken(true); break;
-                case 6: connection.SetTokenName("another-token-name"); break;
+                case 0:
+                    connection.SetEndpoint("another-endpoint");
+                    break;
+                case 1:
+                    connection.SetDatabase("another-database");
+                    break;
+                case 2:
+                    connection.SetTopicPath("another-topic");
+                    break;
+                case 3:
+                    connection.SetConsumerName("another-consumer");
+                    break;
+                case 4:
+                    connection.SetUseSsl(true);
+                    break;
+                case 5:
+                    connection.SetAddBearerToToken(true);
+                    break;
+                case 6:
+                    connection.SetTokenName("another-token-name");
+                    break;
             }
             CheckResponse(Request(request), 0);
             UNIT_ASSERT_VALUES_EQUAL(CredentialsFactory->LastToken, field == 6 ? "another-secret-token" : "secret-token");
@@ -371,8 +403,8 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         for (ui32 i = 0; i < 2; ++i) {
             const auto response = Runtime.GrabEdgeEvent<TEvResult>(Request(MakeRequest()));
             UNIT_ASSERT(response);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
-                TransportError ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(
+                response->Get()->Record.GetStatus(), TransportError ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::UNAUTHORIZED);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetIssues(0).message(), "describe details");
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.PartitionsSize(), 0);
         }
@@ -465,19 +497,18 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         const auto reader = Request(MakeRequest(), 71);
         auto response = Runtime.GrabEdgeEvent<TEvResult>(reader);
         UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(),
-            InitiallySuccessful ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(
+            response->Get()->Record.GetStatus(), InitiallySuccessful ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::INTERNAL_ERROR);
 
         TString fatalError;
         for (ui32 attempt = 0; attempt < 3; ++attempt) {
-            Runtime.Send(new IEventHandle(ControlPlaneId, reader,
-                new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+            Runtime.Send(new IEventHandle(
+                ControlPlaneId, reader, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
             response = Runtime.GrabEdgeEvent<TEvResult>(reader);
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Cookie, 71);
             const auto& record = response->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(),
-                InitiallySuccessful ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::INTERNAL_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), InitiallySuccessful ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::INTERNAL_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(record.IssuesSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(record.PartitionsSize(), 0);
             if (attempt == 0) {
@@ -503,9 +534,9 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         UNIT_ASSERT(second);
         UNIT_ASSERT_VALUES_EQUAL(second->Cookie, 72);
 
-        for (ui64 cookie : {71, 72}) {
-            Runtime.Send(new IEventHandle(ControlPlaneId, reader,
-                new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, cookie));
+        for (ui64 cookie : { 71, 72 }) {
+            Runtime.Send(new IEventHandle(
+                ControlPlaneId, reader, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, cookie));
         }
         THashSet<ui64> cookies;
         for (ui32 i = 0; i < 2; ++i) {
@@ -526,14 +557,14 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         CheckResponse(first, 0, 71);
         CheckResponse(second, 0, 72);
 
-        Runtime.Send(new IEventHandle(ControlPlaneId, first,
-            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+        Runtime.Send(new IEventHandle(
+            ControlPlaneId, first, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
         const auto firstError = Runtime.GrabEdgeEvent<TEvResult>(first);
         UNIT_ASSERT(firstError);
         UNIT_ASSERT_VALUES_EQUAL(firstError->Get()->Record.GetStatus(), Ydb::StatusIds::UNAVAILABLE);
 
-        Runtime.Send(new IEventHandle(ControlPlaneId, second,
-            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 72));
+        Runtime.Send(new IEventHandle(
+            ControlPlaneId, second, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 72));
         const auto secondError = Runtime.GrabEdgeEvent<TEvResult>(second);
         UNIT_ASSERT(secondError);
         UNIT_ASSERT_VALUES_EQUAL(secondError->Cookie, 72);
@@ -544,12 +575,12 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
     Y_UNIT_TEST(FatalErrorRetriesAreCoalescedAndContinueUntilPoison) {
         TTestActorRuntime runtime;
         InitializeRuntime(runtime);
-        const NYdb::TDriver driver{NYdb::TDriverConfig()};
+        const NYdb::TDriver driver{ NYdb::TDriverConfig() };
         const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor();
         client->ThrowOnDescribe = true;
-        const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
-            driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
+        const auto controlPlane =
+            runtime.Register(CreateDqPqControlPlaneActor(driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
         const auto reader = runtime.AllocateEdgeActor();
         const auto barrier = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(controlPlane, reader, new TPqControlPlaneEvents::TEvDescribeConsumer(), 0, 71));
@@ -571,8 +602,8 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
 
         for (ui32 attempt = 0; attempt < 20; ++attempt) {
             for (ui32 duplicate = 0; duplicate < 2; ++duplicate) {
-                runtime.Send(new IEventHandle(controlPlane, reader,
-                    new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+                runtime.Send(new IEventHandle(
+                    controlPlane, reader, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
             }
             runtime.Send(new IEventHandle(controlPlane, barrier, new TPqControlPlaneEvents::TEvDescribeConsumer()));
             UNIT_ASSERT(runtime.GrabEdgeEvent<TEvResult>(barrier));
@@ -585,8 +616,8 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.SerializeAsString(), original->Get()->Record.SerializeAsString());
         }
 
-        runtime.Send(new IEventHandle(controlPlane, reader,
-            new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
+        runtime.Send(new IEventHandle(
+            controlPlane, reader, new TEvents::TEvUndelivered(TEvResult::EventType, TEvents::TEvUndelivered::Disconnected), 0, 71));
         runtime.Send(new IEventHandle(controlPlane, barrier, new TPqControlPlaneEvents::TEvDescribeConsumer()));
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvResult>(barrier));
         UNIT_ASSERT_VALUES_EQUAL(retries.size(), 1);
@@ -595,8 +626,8 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         runtime.Send(new IEventHandle(controlPlane, reader, new TEvents::TEvPoison()));
         runtime.Send(retries.back().Release());
         retries.clear();
-        runtime.Send(new IEventHandle(controlPlane, reader, new TPqControlPlaneEvents::TEvDescribeConsumer(),
-            IEventHandle::FlagTrackDelivery, 72));
+        runtime.Send(
+            new IEventHandle(controlPlane, reader, new TPqControlPlaneEvents::TEvDescribeConsumer(), IEventHandle::FlagTrackDelivery, 72));
         const auto undelivered = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(reader);
         UNIT_ASSERT(undelivered);
         UNIT_ASSERT_VALUES_EQUAL(undelivered->Cookie, 72);
@@ -608,13 +639,13 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
     Y_UNIT_TEST(DisconnectedReaderFailsPendingAndFutureRequests) {
         TTestActorRuntime runtime(2, true);
         InitializeRuntime(runtime);
-        const NYdb::TDriver driver{NYdb::TDriverConfig()};
+        const NYdb::TDriver driver{ NYdb::TDriverConfig() };
         const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor();
-        client->DescriptionResults.emplace("ready-topic", NThreading::MakeFuture(TDescribeConsumerResult(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{})));
-        const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
-            driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
+        client->DescriptionResults.emplace("ready-topic",
+            NThreading::MakeFuture(TDescribeConsumerResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{})));
+        const auto controlPlane =
+            runtime.Register(CreateDqPqControlPlaneActor(driver, std::make_shared<TCredentialsFactory>(), MakeIntrusive<TGateway>(client), {}));
         const auto request = [&](const TString& topic, ui64 cookie, ui32 nodeIndex = 0) {
             const auto reader = runtime.AllocateEdgeActor(nodeIndex);
             auto event = MakeHolder<TPqControlPlaneEvents::TEvDescribeConsumer>();
@@ -640,8 +671,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         CheckUnavailableResponse(runtime, pendingReader, 11, error);
         // The fatal reply can reach the waiting reader through a new session.
         CheckUnavailableResponse(runtime, remotePendingReader, 13, error);
-        client->Description.SetValue(TDescribeConsumerResult(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{}));
+        client->Description.SetValue(TDescribeConsumerResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Ydb::Topic::DescribeConsumerResult{}));
         CheckUnavailableResponse(runtime, request("pending-topic", 14), 14, error);
         CheckUnavailableResponse(runtime, request("ready-topic", 15), 15, error);
         const auto newRemoteReader = request("new-topic", 16, 1);
@@ -705,7 +735,7 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
     Y_UNIT_TEST(RemoteDescriptionInitializesReader) {
         TTestActorRuntime runtime(2, true);
         InitializeRuntime(runtime);
-        const NYdb::TDriver driver{NYdb::TDriverConfig()};
+        const NYdb::TDriver driver{ NYdb::TDriverConfig() };
         const auto client = std::make_shared<TTopicClient>();
         client->Observer = runtime.AllocateEdgeActor(1);
         Ydb::Topic::DescribeConsumerResult description;
@@ -713,11 +743,10 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
         partition->set_partition_id(0);
         partition->mutable_partition_stats()->mutable_partition_offsets()->set_start(0);
         partition->mutable_partition_consumer_stats()->set_committed_offset(0);
-        client->Description.SetValue(TDescribeConsumerResult(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(description)));
+        client->Description.SetValue(TDescribeConsumerResult(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(description)));
         const auto credentialsFactory = std::make_shared<TCredentialsFactory>();
-        const auto controlPlane = runtime.Register(CreateDqPqControlPlaneActor(
-            driver, credentialsFactory, MakeIntrusive<TGateway>(client), {{"token-name", "secret-token"}}), 1);
+        const auto controlPlane = runtime.Register(
+            CreateDqPqControlPlaneActor(driver, credentialsFactory, MakeIntrusive<TGateway>(client), { { "token-name", "secret-token" } }), 1);
         const auto compute = runtime.AllocateEdgeActor();
         runtime.Register(new TReader(compute, controlPlane, client));
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(compute));
@@ -754,4 +783,4 @@ Y_UNIT_TEST_SUITE(TDqPqControlPlaneTest) {
     }
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

@@ -8,16 +8,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Temporary: same branches as stable_tests_branches.json, relw + release.
         build_preset: ["release", "relwithdebinfo"]
-        branch: ["main", "stable-26-3-1", "stable-26-4-1"]
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
-    name: Build and test ${{ matrix.build_preset }} on ${{ matrix.branch }}
+    name: Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
       with:
-        ref: ${{ matrix.branch }}
+        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials

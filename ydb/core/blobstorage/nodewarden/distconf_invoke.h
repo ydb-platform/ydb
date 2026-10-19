@@ -185,6 +185,12 @@ namespace NKikimr::NStorage {
         void NotifyBridgeSuspended(const TQuery::TNotifyBridgeSuspended& cmd);
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
+
+        // check that every node runs with BridgeConfig (and with support of changes of the list of piles, when
+        // pileListChange is set), then invoke the callback; every static node listed in requiredNodeIds must report it,
+        // while nodes listed in ignoredNodeIds may not report anything (they are leaving the cluster)
+        void RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+            THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
         void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -564,11 +564,11 @@ namespace NKikimr::NStorage {
 
         void CheckForConfigUpdate();
 
-        std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config);
-        std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
-        std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
-        std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
-        std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> TransformConfigBeforeCommit(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Generate state storage config
@@ -594,6 +594,8 @@ namespace NKikimr::NStorage {
         static void GenerateBridgeInitialState(const TNodeWardenConfig& cfg, NKikimrBlobStorage::TStorageConfig *config);
 
         TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config);
+        static TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
+            const TNodeWardenConfig& cfg, ui32 selfNodeId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Scatter/gather logic
@@ -664,6 +666,7 @@ namespace NKikimr::NStorage {
         bool ReconnectScheduled = false;
         THashSet<ui32> ConnectedDynamicNodes;
         THashSet<ui32> BridgeCapableDynamicNodes; // subset of ConnectedDynamicNodes running with BridgeConfig
+        THashSet<ui32> PileListChangeCapableDynamicNodes; // subset of the above supporting changes of the list of piles
         ui64 StaticNodeSubscriptionCookie = 0;
 
         // these are used on the dynamic nodes
@@ -830,9 +833,13 @@ namespace NKikimr::NStorage {
         const NJson::TJsonValue *storageConfig, bool allowUnknownFields);
 
     // Assign pile ids to the piles of the bridge config provided with new cluster configuration and store the resulting
-    // pile registry in this configuration; localBridgeConfig is the one this node runs with.
+    // pile registry in this configuration, along with the states of the piles (new ones are INACTIVE, and only INACTIVE
+    // ones may be dropped); localBridgeConfig is the one this node runs with, currentBridgeConfig is the one of the
+    // config being replaced (if known). pileListChanged is set when piles are added, dropped or moved to other
+    // positions in BridgeConfig, which is allowed only when every node supports it.
     std::optional<TString> UpdatePileRegistry(const NKikimrConfig::TBridgeConfig& bridgeConfig,
-        NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig);
+        NKikimrBlobStorage::TStorageConfig *config, const NKikimrConfig::TBridgeConfig *localBridgeConfig,
+        const NKikimrConfig::TBridgeConfig *currentBridgeConfig, bool *pileListChanged);
 
     // Turn the config of ordinary (not bridged) cluster into the config of the single-pile bridged one: add ClusterState
     // and make every static group an inline pile of itself.

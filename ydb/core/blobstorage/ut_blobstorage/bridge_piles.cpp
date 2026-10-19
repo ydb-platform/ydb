@@ -17,6 +17,72 @@ namespace {
         };
     }
 
+    // two-pile cluster which may get the third pile of nodes 17-24 added to its config
+    TEnvironmentSetup::TSettings MakeExpandableSettings() {
+        return {
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+            .InitialConfiguredNodeCount = 16,
+        };
+    }
+
+    constexpr ui32 FirstThirdPileNodeId = 17;
+    constexpr ui32 LastThirdPileNodeId = 24;
+
+    // add the third pile (named as GetBridgedLocation does) with its nodes to the main config of the cluster
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult AddThirdPileToConfig(TEnvironmentSetup& env) {
+        return ReplaceMainConfig(env, [](YAML::Node& config) {
+            YAML::Node pile;
+            pile["name"] = "pile_3";
+            config["bridge_config"]["piles"].push_back(pile);
+            for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
+                YAML::Node host;
+                host["host"] = "host_" + std::to_string(nodeId);
+                YAML::Node location = host["location"];
+                location["data_center"] = "my_dc";
+                location["rack"] = "rack_" + std::to_string(nodeId);
+                location["unit"] = "unit_" + std::to_string(nodeId);
+                location["bridge_pile_name"] = "pile_3";
+                config["hosts"].push_back(host);
+            }
+        });
+    }
+
+    // remove the pile along with its nodes from the main config of the cluster
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult RemovePileFromConfig(TEnvironmentSetup& env, TString name) {
+        return ReplaceMainConfig(env, [&](YAML::Node& config) {
+            YAML::Node piles(YAML::NodeType::Sequence);
+            for (const YAML::Node& pile : config["bridge_config"]["piles"]) {
+                if (pile["name"].as<TString>() != name) {
+                    piles.push_back(pile);
+                }
+            }
+            config["bridge_config"]["piles"] = piles;
+            YAML::Node hosts(YAML::NodeType::Sequence);
+            for (const YAML::Node& host : config["hosts"]) {
+                if (host["location"]["bridge_pile_name"].as<TString>() != name) {
+                    hosts.push_back(host);
+                }
+            }
+            config["hosts"] = hosts;
+        });
+    }
+
+    // pile names and states as recorded in the storage config
+    TString GetPileStates(const NKikimrBlobStorage::TStorageConfig& config) {
+        TStringBuilder res;
+        const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+        for (size_t i = 0; i < registry.PilesSize(); ++i) {
+            res << (res.empty() ? "" : " ") << (registry.GetPiles(i).HasName() ? registry.GetPiles(i).GetName() : "-")
+                << ':' << NKikimrBridge::TClusterState::EPileState_Name(config.GetClusterState().GetPerPileState(i));
+        }
+        return res;
+    }
+
     NKikimrBlobStorage::TConfigResponse UpdateBridgeGroupInfo(TEnvironmentSetup& env,
             const NKikimrBlobStorage::TGroupInfo& group, const NKikimrBridge::TGroupState& state) {
         NKikimrBlobStorage::TConfigRequest request;
@@ -43,12 +109,14 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         UNIT_ASSERT(!registry.GetImplicitPileId());
     }
 
-    // pile ids are bound to the list of piles of the bridged cluster, so the list can't be changed arbitrarily
+    // pile ids are bound to piles, wherever they are listed in BridgeConfig; piles being part of the cluster can't be
+    // removed from the config
     Y_UNIT_TEST(PileListChangeRejected) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.Sim(TDuration::Seconds(30));
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
+        const auto before = QueryStorageConfig(env);
         auto res = ReplaceMainConfig(env, [](YAML::Node& config) {
             YAML::Node piles = config["bridge_config"]["piles"];
             YAML::Node reordered(YAML::NodeType::Sequence);
@@ -56,11 +124,20 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             reordered.push_back(piles[0]);
             config["bridge_config"]["piles"] = reordered;
         });
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "order of bridge piles can't be changed");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        const auto after = QueryStorageConfig(env);
+        UNIT_ASSERT_LT(before.GetGeneration(), after.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetClusterStateDetails().GetPileRegistry().DebugString(),
+            before.GetClusterStateDetails().GetPileRegistry().DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetClusterState().GetGeneration(), before.GetClusterState().GetGeneration());
 
         res = ReplaceMainConfig(env, [](YAML::Node& config) {
-            config["bridge_config"]["piles"][1]["name"] = "pile_3";
+            for (YAML::Node pile : config["bridge_config"]["piles"]) {
+                if (pile["name"].as<TString>() == "pile_2") {
+                    pile["name"] = "pile_3";
+                }
+            }
             for (YAML::Node host : config["hosts"]) {
                 if (host["location"]["bridge_pile_name"].as<TString>() == "pile_2") {
                     host["location"]["bridge_pile_name"] = "pile_3";
@@ -68,7 +145,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             }
         });
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "list of bridge piles can't be changed");
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "pile 'pile_2' in state SYNCHRONIZED can't be removed");
 
         // bridged cluster can't lose its bridge config, its nodes would run without one after restart
         res = ReplaceMainConfig(env, [](YAML::Node& config) {
@@ -78,7 +155,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             }
         });
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
-        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "list of bridge piles can't be changed");
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "bridged cluster can't run without bridge config");
 
         // node of unknown pile would make every node fail to build its bridge info
         res = ReplaceMainConfig(env, [](YAML::Node& config) {
@@ -86,6 +163,158 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         });
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
         UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "unknown pile name 'pile_3' for node");
+    }
+
+    // pile added to BridgeConfig is INACTIVE: it has no resources and takes no part in the cluster, which keeps
+    // working, even being restarted with the new config; such pile can be removed from the config, and the next one
+    // added takes its slot, so adding and removing the same pile many times doesn't grow any structures
+    Y_UNIT_TEST(InactivePileRegistration) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        TGroupInfoTracker tracker;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            return tracker.Filter(nodeId, ev);
+        };
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        // INACTIVE pile has no part in static groups and state storage, and the nodes of active piles keep all VDisks
+        auto checkInactivePile = [&] {
+            const auto config = QueryStorageConfig(env);
+            for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+                if (group.HasBridgeGroupState()) {
+                    UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeGroupState().PileSize(), 2);
+                }
+            }
+            for (const auto *ss : {&config.GetStateStorageConfig(), &config.GetStateStorageBoardConfig(),
+                    &config.GetSchemeBoardConfig()}) {
+                for (const auto& ringGroup : ss->GetRingGroups()) {
+                    UNIT_ASSERT_LT(TBridgePileId::FromProto(&ringGroup,
+                        &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId).GetPileIndex(), 2);
+                }
+            }
+            const auto baseConfig = env.FetchBaseConfig();
+            for (const auto& vslot : baseConfig.GetVSlot()) {
+                UNIT_ASSERT_LT(vslot.GetVSlotId().GetNodeId(), FirstThirdPileNodeId);
+            }
+        };
+
+        for (ui32 cycle = 0; cycle < 3; ++cycle) {
+            Cerr << "*** cycle " << cycle << Endl;
+
+            // the pile is added to the config of running cluster
+            auto res = AddThirdPileToConfig(env);
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            env.Sim(TDuration::Seconds(10));
+            const auto added = QueryStorageConfig(env);
+            UNIT_ASSERT_VALUES_EQUAL(GetPileStates(added), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED pile_3:INACTIVE");
+            checkInactivePile();
+            checker.Write(groupId);
+            checker.CheckAll();
+
+            // its state can't be changed, the pile has to be added to the cluster first
+            res = InvokeDistconf(env, [&](auto& record) {
+                auto *next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                next->CopyFrom(added.GetClusterState());
+                next->SetPerPileState(2, NKikimrBridge::TClusterState::DISCONNECTED);
+                next->SetGeneration(next->GetGeneration() + 1);
+            });
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+            UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "is not added to the cluster");
+
+            // nodes of the pile start with the new config, the nodes of other piles get restarted with it
+            env.Runtime->GetAppDataBridgeConfig().AddPiles()->SetName("pile_3");
+            env.ConfiguredNodeCount = LastThirdPileNodeId;
+            for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
+                env.StartNode(nodeId);
+            }
+            env.Sim(TDuration::Seconds(30));
+            for (ui32 nodeId : {1u, 2u, 9u, 10u}) {
+                Cerr << "*** restarting node " << nodeId << " with three-pile config" << Endl;
+                env.RestartNode(nodeId);
+                env.Sim(TDuration::Seconds(30));
+                checker.Write(groupId);
+                checker.CheckAll();
+            }
+
+            // new groups are created in active piles only
+            const ui64 storagePoolId = 2 + cycle;
+            CreateAnotherPool(env, storagePoolId);
+            env.Sim(TDuration::Seconds(30));
+            const auto baseConfig = env.FetchBaseConfig();
+            for (const auto *group : GetPoolGroups(baseConfig, storagePoolId)) {
+                if (group->GetIsProxyGroup()) {
+                    checker.Write(group->GetGroupId()); // nodes get the info of bridge proxy group when using it
+                    const auto& info = tracker.Get(group->GetGroupId());
+                    UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeGroupState().PileSize(), 2);
+                }
+            }
+            checkInactivePile();
+            checker.CheckAll();
+
+            // INACTIVE pile is removed from the config along with its nodes; active piles can't be removed
+            res = RemovePileFromConfig(env, "pile_2");
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+            UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "pile 'pile_2' in state SYNCHRONIZED can't be removed");
+            for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
+                env.StopNode(nodeId);
+            }
+            res = RemovePileFromConfig(env, "pile_3");
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+            env.Sim(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(GetPileStates(QueryStorageConfig(env)), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
+            env.Runtime->GetAppDataBridgeConfig().MutablePiles()->RemoveLast();
+            env.ConfiguredNodeCount = FirstThirdPileNodeId - 1;
+            for (ui32 nodeId : {1u, 9u}) {
+                env.RestartNode(nodeId);
+                env.Sim(TDuration::Seconds(30));
+            }
+            checker.Write(groupId);
+            checker.CheckAll();
+        }
+    }
+
+    // nodes running older versions take pile ids from positions of piles in their BridgeConfig, so the list of piles
+    // can be changed only when every node reports it supports that
+    Y_UNIT_TEST(PileListChangeRequiresEveryNode) {
+        TEnvironmentSetup env(MakeExpandableSettings());
+        env.Sim(TDuration::Seconds(30));
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+
+        env.StopNode(16);
+        env.Sim(TDuration::Seconds(10));
+        auto res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "Some static nodes did not report their BridgeConfig");
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "NodeIds# 16");
+        UNIT_ASSERT_VALUES_EQUAL(GetPileStates(QueryStorageConfig(env)), "pile_1:SYNCHRONIZED pile_2:SYNCHRONIZED");
+
+        env.StartNode(16);
+        env.Sim(TDuration::Seconds(30));
+        res = AddThirdPileToConfig(env);
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+
+        // replacement of the config not touching the list of piles doesn't require that, even when positions of piles
+        // in BridgeConfig don't match their ids anymore
+        res = ReplaceMainConfig(env, [](YAML::Node& config) {
+            YAML::Node piles = config["bridge_config"]["piles"];
+            YAML::Node reordered(YAML::NodeType::Sequence);
+            for (size_t i = piles.size(); i--; ) {
+                reordered.push_back(piles[i]);
+            }
+            config["bridge_config"]["piles"] = reordered;
+        });
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+        env.StopNode(16);
+        env.Sim(TDuration::Seconds(10));
+        res = ReplaceMainConfig(env, [](YAML::Node& /*config*/) {});
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
+        res = RemovePileFromConfig(env, "pile_3");
+        UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
+        UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "NodeIds# 16");
     }
 
     // UpdateBridgeGroupInfo command must validate the new state against the current one and distribute the change

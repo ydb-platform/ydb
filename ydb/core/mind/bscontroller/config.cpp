@@ -415,12 +415,13 @@ namespace NKikimr::NBsController {
             updates.clear();
             for (TGroupId groupId : state.GroupContentChanged) {
                 if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                         if (!state.GroupContentChanged.contains(groupId)) {
                             updates.insert(groupId);
                         }
-                    }
+                    });
                 }
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
@@ -450,14 +451,15 @@ namespace NKikimr::NBsController {
                 Y_ABORT_UNLESS(group->BridgeGroupInfo);
 
                 // set correct generations for bridge groups
-                for (auto& pile : *group->BridgeGroupInfo->MutableBridgeGroupState()->MutablePile()) {
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
                     const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     Y_ABORT_UNLESS(state.GroupContentChanged.contains(groupId));
                     const TGroupInfo *referenced = state.Groups.Find(groupId);
                     Y_ABORT_UNLESS(referenced);
                     Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
                     pile.SetGroupGeneration(referenced->Generation);
-                }
+                });
             }
 
             bool errors = false;

@@ -210,6 +210,8 @@ EPileState TEndpointPool::GetPileState(const Ydb::Bridge::PileState::State& stat
             return EPileState::SUSPENDED;
         case Ydb::Bridge::PileState::DISCONNECTED:
             return EPileState::DISCONNECTED;
+        case Ydb::Bridge::PileState::INACTIVE:
+            return EPileState::INACTIVE;
         case Ydb::Bridge::PileState::UNSPECIFIED:
         case Ydb::Bridge::PileState_State_PileState_State_INT_MIN_SENTINEL_DO_NOT_USE_:
         case Ydb::Bridge::PileState_State_PileState_State_INT_MAX_SENTINEL_DO_NOT_USE_:

@@ -24,13 +24,13 @@ namespace NKikimr::NStorage {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
-                for (auto& pile : *group.MutableBridgeGroupState()->MutablePile()) {
-                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) != groupId) {
-                        continue;
+                NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        pile.SetGroupGeneration(*generation);
+                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
                     }
-                    pile.SetGroupGeneration(*generation);
-                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
-                }
+                });
             }
         }
 

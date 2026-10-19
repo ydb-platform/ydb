@@ -50,6 +50,7 @@ namespace {
             case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
             case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
             case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
+            case NYdb::NBridge::EPileState::INACTIVE: return "INACTIVE";
         }
         return "UNKNOWN";
     }

@@ -80,10 +80,14 @@ namespace NKikimr::NStorage {
                         NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
                     continue;
                 }
-                if (pile.BridgePileId == SelfBridgePileId) {
+                if (pile.BridgePileId == SelfBridgePileId &&
+                        NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile) {
                     continue; // do not disconnect from the same pile
                 }
                 for (const ui32 nodeId : pile.StaticNodeIds) {
+                    if (nodeId == SelfId().NodeId()) {
+                        continue;
+                    }
                     YDB_LOG_DEBUG("Disconnecting",
                         {"marker", "NWDCC00"},
                         {"peerNodeId", nodeId},
@@ -160,7 +164,8 @@ namespace NKikimr::NStorage {
                 const auto *pile = BridgeInfo->GetPileForNode(peerNodeId);
                 if (!pile) {
                     // peer node is a dynamic node
-                } else if (pile == BridgeInfo->SelfNodePile && IsSelfStatic && peerNodeId <= MaxStaticNodeId) {
+                } else if (pile == BridgeInfo->SelfNodePile && IsSelfStatic && peerNodeId <= MaxStaticNodeId &&
+                        NBridge::PileStateTraits(pile->State).AllowsConnectionWithinPile) {
                     // allow connecting static nodes within the same pile, even disconnected
                 } else if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
                     error = "can't establish connection to node belonging to disconnected pile";
@@ -358,8 +363,18 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
 
+            const NKikimrBlobStorage::TStorageConfig& newerConfig =
+                StorageConfig->GetGeneration() < config.GetGeneration()
+                    ? config
+                    : *StorageConfig;
+            const auto& cs = newerConfig.GetClusterState();
+
             const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
-            if (peerPile != BridgeInfo->SelfNodePile) { // extra checks when connecting between different piles
+            if (peerPile == BridgeInfo->SelfNodePile) {
+                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnectionWithinPile) {
+                    error = "nodes of the pile not added to the cluster can't connect to each other";
+                }
+            } else { // extra checks when connecting between different piles
                 if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
                     // histories are incompatible, connection won't ever be possible
                     return error;
@@ -369,16 +384,9 @@ namespace NKikimr::NStorage {
                     return "config fingerprint mismatch";
                 }
 
-                const NKikimrBlobStorage::TStorageConfig& newerConfig =
-                    StorageConfig->GetGeneration() < config.GetGeneration()
-                        ? config
-                        : *StorageConfig;
-
-                const auto& cs = newerConfig.GetClusterState();
-
-                if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
+                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, peerBridgePileId)).AllowsConnection) {
                     error = "peer is not allowed to connect";
-                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
+                } else if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnection) {
                     error = "local node is not allowed to accept peer";
                 }
 

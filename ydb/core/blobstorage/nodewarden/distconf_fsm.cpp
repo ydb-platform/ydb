@@ -767,17 +767,21 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Perform(TEvGather::TCollectBridgeCapability *response,
             const TEvScatter::TCollectBridgeCapability& /*request*/, TScatterTask& task) {
-        auto add = [&](ui32 nodeId, bool capable) {
+        auto add = [&](ui32 nodeId, bool capable, bool pileListChangeCapable) {
             if (capable) {
                 response->AddCapableNodeIds(nodeId);
+                if (pileListChangeCapable) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
+                }
             } else {
                 response->AddNotCapableNodeIds(nodeId);
             }
         };
 
-        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig));
+        // this version supports changes of the list of piles
+        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig), true);
         for (const ui32 nodeId : ConnectedDynamicNodes) {
-            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId));
+            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId), PileListChangeCapableDynamicNodes.contains(nodeId));
         }
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasCollectBridgeCapability()) {
@@ -787,6 +791,9 @@ namespace NKikimr::NStorage {
                 }
                 for (const ui32 nodeId : item.GetNotCapableNodeIds()) {
                     response->AddNotCapableNodeIds(nodeId);
+                }
+                for (const ui32 nodeId : item.GetPileListChangeCapableNodeIds()) {
+                    response->AddPileListChangeCapableNodeIds(nodeId);
                 }
             }
         }

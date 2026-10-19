@@ -700,7 +700,7 @@ private:
         // Check if callable is a UDF and can be pushed
         auto udf = apply.Callable().Maybe<TCoUdf>();
         if (!udf || !UdfCanBePushed(udf.Cast(), apply.Ref().ChildrenList())) {
-            if (Settings.IsEnabled(EFlag::LikeOperator)) {
+            if (Settings.IsEnabled(EFlag::LikeOperatorComplex)) {
                 auto settings = ExtractLikeSettings(apply);
                 if (settings) {
                     if (!CheckExpressionNodeForPushdown(TExprBase(settings->Pattern))) {

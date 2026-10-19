@@ -12312,11 +12312,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             Controller->InitialZone = initialZone;
             Probe->Report = report;
             DropInitialOwnerReport = dropInitialOwnerReport;
-            // Boot reports must be emitted, rather than throttled at the synthetic epoch.
-            Runtime.UpdateCurrentTime(TInstant::Seconds(10));
             Setup(Runtime, false, 1, [hostEnabled](TAppPrepare& app) {
                 app.FeatureFlags.SetEnableTabletMemoryHost(hostEnabled);
             });
+            // Advance the initialized clock so boot reports are not throttled at the synthetic epoch.
+            Runtime.AdvanceCurrentTime(TDuration::Seconds(2));
             const ui64 hiveTablet = MakeDefaultHiveID();
             const ui64 testerTablet = MakeTabletID(false, 1);
             const TActorId hiveActor = CreateTestBootstrapper(Runtime,
@@ -12418,10 +12418,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestTabletMemoryFollowerPromotionWithdrawsShare) {
         constexpr ui32 Nodes = 2;
         TTestBasicRuntime runtime(Nodes, false);
-        runtime.UpdateCurrentTime(TInstant::Seconds(10));
         Setup(runtime, false, 1, [](TAppPrepare& app) {
             app.FeatureFlags.SetEnableTabletMemoryHost(true);
         });
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2));
         std::array<TIntrusivePtr<TMemoryProbeState>, Nodes> probes;
         std::array<TIntrusivePtr<TStubMemoryControllerState>, Nodes> controllers;
         for (ui32 node = 0; node != Nodes; ++node) {

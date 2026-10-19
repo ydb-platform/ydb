@@ -494,6 +494,9 @@ private:
     const TFailDomain& GetFailDomain(const TVDiskID& vdisk) const;
     const TFailDomain& GetFailDomain(ui32 failDomainOrderNumber) const;
 
+    // inline pile view copies the fields one by one, as the group info can't be copied as a whole (that would copy its
+    // reference counter); a field added to this class must be added there too, unless it is a bridge proxy one (like
+    // BridgeGroupIds) that the view must not have
     struct TInlinePileViewTag {};
     TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag);
 

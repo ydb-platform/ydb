@@ -160,11 +160,12 @@ namespace NKikimr::NStorage {
         // build node location map
         THashMap<ui32, TNodeLocation> nodeLocations;
         THashSet<ui32> allowedNodeIds;
+        const auto pileRegistry = GetConfigPileRegistry(*config);
         const auto placementPileId = NBridge::GetPlacementPileId(bridgePileId, BridgeInfo.get());
         for (const auto& node : config->GetAllNodes()) {
             TNodeLocation location(node.GetLocation());
             nodeLocations.try_emplace(node.GetNodeId(), location);
-            if (placementPileId == ResolveNodePileId(location)) {
+            if (placementPileId == ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId())) {
                 allowedNodeIds.insert(node.GetNodeId());
             }
         }
@@ -644,12 +645,14 @@ namespace NKikimr::NStorage {
         }
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
+        // piles are taken into account only when the config is bridged one
+        const auto pileRegistry = baseConfig.HasClusterState() ? GetConfigPileRegistry(baseConfig) : std::nullopt;
         for (const auto& node : baseConfig.GetAllNodes()) {
             if (!nodesToUse.empty() && !nodesToUse.contains(node.GetNodeId())) {
                 continue;
             }
             TNodeLocation location(node.GetLocation());
-            TBridgePileId pileId = ResolveNodePileIdForConfig(baseConfig, location);
+            TBridgePileId pileId = ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId());
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

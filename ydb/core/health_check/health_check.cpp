@@ -3320,8 +3320,11 @@ public:
             auto getStatus = [&](const TGroupState* group) {
                 TGroupChecker checker(group->ErasureSpecies, group->LayoutCorrect, ETags::BridgeGroupState);
                 TSelfCheckContext pileContext(&context, "BRIDGE_GROUP");
-                if (group->BridgePileId.GetPileIndex() < AppData()->BridgeConfig.PilesSize()) {
-                    const auto& pileName = AppData()->BridgeConfig.GetPiles(group->BridgePileId.GetPileIndex()).GetName();
+                const TBridgeInfo *bridgeInfo = NodeWardenStorageConfig && NodeWardenStorageConfig->IsOk()
+                    ? NodeWardenStorageConfig->Get()->BridgeInfo.get()
+                    : nullptr;
+                if (bridgeInfo && group->BridgePileId && group->BridgePileId.GetPileIndex() < bridgeInfo->Piles.size()) {
+                    const auto& pileName = bridgeInfo->GetPile(group->BridgePileId)->Name;
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(pileName);
                 } else { // this fallback should not ever happen - but is used in tests
                     pileContext.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(group->BridgePileId.ToString());

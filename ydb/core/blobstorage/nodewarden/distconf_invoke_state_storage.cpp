@@ -327,9 +327,7 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
-        ui32 pilesCnt = Self->BridgePileNameMap.size();
-        if (pilesCnt == 0)
-            pilesCnt = 1;
+        const ui32 pilesCnt = Self->BridgeInfo ? Self->BridgeInfo->Piles.size() : 1;
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
         Finish(TResult::OK, std::nullopt);
@@ -364,7 +362,8 @@ namespace NKikimr::NStorage {
             }
 
             auto* ssConfig = (config.*configMutableFunc)();
-            if (newSSConfig.RingGroupsSize() == 1) {
+            if (newSSConfig.RingGroupsSize() == 1 && !config.HasClusterState()) {
+                // single ring group is stored in legacy form for compatibility, but bridged config requires RingGroups
                 ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
                 ssConfig->ClearRingGroups();
             } else {

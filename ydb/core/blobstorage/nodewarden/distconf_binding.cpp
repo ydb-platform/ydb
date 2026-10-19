@@ -77,6 +77,11 @@ namespace NKikimr::NStorage {
             {"marker", "NWDC13"},
             {"newNodeList", newNodeList});
 
+        const auto registry = GetCurrentPileRegistry();
+        auto resolvePileId = [&](const TNodeLocation& location) {
+            return ResolveNodePileId(registry, location).value_or(TBridgePileId());
+        };
+
         // do not start configuration negotiation for dynamic nodes
         if (!IsSelfStatic) {
             TBridgePileId expectedBridgePileId;
@@ -84,12 +89,12 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(Cfg->DynamicNodeConfig && Cfg->DynamicNodeConfig->HasNodeInfo());
                 const auto& nodeInfo = Cfg->DynamicNodeConfig->GetNodeInfo();
                 Y_ABORT_UNLESS(nodeInfo.HasLocation());
-                expectedBridgePileId = ResolveNodePileId(TNodeLocation(nodeInfo.GetLocation()));
+                expectedBridgePileId = resolvePileId(TNodeLocation(nodeInfo.GetLocation()));
             }
 
             std::vector<ui32> nodeIds;
             for (const auto& [item, location] : newNodeList) {
-                if (ResolveNodePileId(location) == expectedBridgePileId) {
+                if (resolvePileId(location) == expectedBridgePileId) {
                     nodeIds.push_back(item.NodeId());
                 }
             }
@@ -103,7 +108,7 @@ namespace NKikimr::NStorage {
         for (const auto& [item, location] : newNodeList) {
             if (item.NodeId() == selfNodeId) {
                 SelfNode = item;
-                SelfNodeBridgePileId = ResolveNodePileId(location);
+                SelfNodeBridgePileId = resolvePileId(location);
                 found = true;
                 break;
             }
@@ -126,7 +131,7 @@ namespace NKikimr::NStorage {
             Hosts.emplace(std::get<0>(item), std::get<1>(item));
 
             // check if node is from the same pile (as this one)
-            const TBridgePileId bridgePileId = ResolveNodePileId(location);
+            const TBridgePileId bridgePileId = resolvePileId(location);
             if (bridgePileId == SelfNodeBridgePileId) {
                 NodesFromSamePile.insert(item.NodeId());
                 if (nodeId < selfNodeId) {
@@ -189,21 +194,27 @@ namespace NKikimr::NStorage {
         }
     }
 
-    TBridgePileId TDistributedConfigKeeper::ResolveNodePileId(const TNodeLocation& location) {
-        if (!Cfg || !Cfg->BridgeConfig) {
-            return TBridgePileId(); // this node is not bridge-capable, all nodes are in default pile
-        } else if (const auto index = NBridge::ResolvePileIndex(*Cfg->BridgeConfig, location.GetBridgePileName())) {
-            return TBridgePileId::FromPileIndex(*index);
-        } else {
-            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
-            return TBridgePileId();
-        }
+    std::optional<NKikimrBridge::TPileRegistry> TDistributedConfigKeeper::GetConfigPileRegistry(
+            const NKikimrBlobStorage::TStorageConfig& config) const {
+        return GetPileRegistry(config, Cfg && Cfg->BridgeConfig ? &*Cfg->BridgeConfig : nullptr);
     }
 
-    TBridgePileId TDistributedConfigKeeper::ResolveNodePileIdForConfig(const NKikimrBlobStorage::TStorageConfig& config,
+    std::optional<NKikimrBridge::TPileRegistry> TDistributedConfigKeeper::GetCurrentPileRegistry() const {
+        return GetConfigPileRegistry(StorageConfig ? *StorageConfig
+            : BaseConfig ? *BaseConfig
+            : NKikimrBlobStorage::TStorageConfig::default_instance());
+    }
+
+    std::optional<TBridgePileId> ResolveNodePileId(const std::optional<NKikimrBridge::TPileRegistry>& registry,
             const TNodeLocation& location) {
-        // piles are taken into account only when the config is bridged one
-        return config.HasClusterState() ? ResolveNodePileId(location) : TBridgePileId();
+        if (!registry) {
+            return TBridgePileId(); // this node is not bridge-capable (or the config is not bridged one)
+        } else if (const auto bridgePileId = NBridge::ResolvePileId(*registry, location.GetBridgePileName())) {
+            return bridgePileId;
+        } else {
+            Y_DEBUG_ABORT_S("can't resolve bridge pile for node Location# " << location.ToString());
+            return std::nullopt;
+        }
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {

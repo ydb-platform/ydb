@@ -3,7 +3,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
-#include <ydb/core/base/auth.h>
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
@@ -95,9 +94,7 @@ public:
     }
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        if (!IsAdministrator(AppData(), Request_->GetSerializedToken())) {
-            status = Ydb::StatusIds::UNAUTHORIZED;
-            issues.AddIssue("Bridge operations require administrator privileges");
+        if (!CheckAdministrator(status, issues)) {
             return false;
         }
 
@@ -391,12 +388,7 @@ public:
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        if (!IsAdministrator(AppData(), Request_->GetSerializedToken())) {
-            status = Ydb::StatusIds::UNAUTHORIZED;
-            issues.AddIssue("Bridge operations require administrator privileges");
-            return false;
-        }
-        return true;
+        return CheckAdministrator(status, issues);
     }
 
     void SendRequest(const TActorContext& ctx) {

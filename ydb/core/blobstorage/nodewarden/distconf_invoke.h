@@ -173,6 +173,7 @@ namespace NKikimr::NStorage {
         // Bridge mode
 
         void NeedBridgeMode();
+        void CheckPileNotification(TBridgePileId bridgePileId, ui64 generation);
 
         void SwitchBridgeClusterState(const TQuery::TSwitchBridgeClusterState& cmd);
 

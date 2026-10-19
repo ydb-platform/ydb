@@ -406,6 +406,14 @@ namespace NKikimr::NStorage {
             }
         }
 
+        if (const auto& details = config.GetClusterStateDetails(); details.HasPileRegistry()) {
+            if (!config.HasClusterState()) {
+                return "PileRegistry is set for not bridged cluster";
+            } else if (auto error = NBridge::ValidatePileRegistry(details.GetPileRegistry(), config.GetClusterState())) {
+                return *error;
+            }
+        }
+
         if (config.GetClusterStateDetails().GetBscConversionPending() &&
                 config.GetClusterState().PerPileStateSize() != 1) {
             // piles can't be added until BSC converts its groups into bridged ones

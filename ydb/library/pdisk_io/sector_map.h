@@ -7,6 +7,7 @@
 #include <util/datetime/cputimer.h>
 #include <util/generic/guid.h>
 #include <util/generic/hash.h>
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/file.h>
 #include <util/stream/format.h>
@@ -15,7 +16,6 @@
 #include <util/system/hp_timer.h>
 
 #include <contrib/libs/lz4/lz4.h>
-#include <contrib/libs/snappy/snappy.h>
 
 #include <array>
 #include <atomic>
@@ -28,6 +28,10 @@
 #include <util/random/random.h>
 
 #include "device_type.h"
+
+namespace snappy {
+class CompressionContext;
+}
 
 namespace NKikimr {
 namespace NPDisk {
@@ -236,7 +240,7 @@ private:
     LZ4_stream_t CompressionState;
 
     const NSectorMap::ECompression Compression;
-    std::optional<snappy::CompressionContext> SnappyState;
+    THolder<snappy::CompressionContext> SnappyState;
 
     TString CompressSector(const char* data);
     void DecompressSector(const TString& value, char* data) const;
@@ -245,32 +249,8 @@ private:
 
 public:
     TSectorMap(ui64 deviceSize = 0, NSectorMap::EDiskMode diskMode = NSectorMap::DM_NONE,
-        NSectorMap::ECompression compression = NSectorMap::ECompression::Lz4)
-      : DeviceSize(deviceSize)
-      , IsLocked(false)
-      , IoErrorEveryNthRequests(0)
-      , ReadIoErrorEveryNthRequests(0)
-      , AllocatedBytes(0)
-      , DiskMode(diskMode)
-      , Compression(compression)
-    {
-        if (Compression == NSectorMap::ECompression::Lz4) {
-            Y_ABORT_UNLESS(LZ4_initStream(&CompressionState, sizeof(CompressionState)));
-        } else if (Compression == NSectorMap::ECompression::Snappy) {
-            SnappyState.emplace();
-        } else {
-            Y_ABORT_UNLESS(Compression == NSectorMap::ECompression::None);
-        }
-        FailureProbabilities.WriteErrorProbability = 0.0;
-        FailureProbabilities.ReadErrorProbability = 0.0;
-        FailureProbabilities.SilentWriteFailProbability = 0.0;
-        FailureProbabilities.ReadReplayProbability = 0.0;
-        EmulatedWriteErrors = 0;
-        EmulatedReadErrors = 0;
-        EmulatedSilentWriteFails = 0;
-        EmulatedReadReplays = 0;
-        InitSectorOperationThrottler();
-    }
+        NSectorMap::ECompression compression = NSectorMap::ECompression::Lz4);
+    ~TSectorMap() override;
 
     bool Lock() {
         return !IsLocked.exchange(true);

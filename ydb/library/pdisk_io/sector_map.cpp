@@ -1,9 +1,40 @@
 #include "sector_map.h"
 
+#include <contrib/libs/snappy/snappy.h>
+
 #include <ydb/library/pdisk_io/protos/sector_map.pb.h>
 #include <util/string/split.h>
 
 namespace NKikimr::NPDisk {
+
+TSectorMap::TSectorMap(ui64 deviceSize, NSectorMap::EDiskMode diskMode, NSectorMap::ECompression compression)
+  : DeviceSize(deviceSize)
+  , IsLocked(false)
+  , IoErrorEveryNthRequests(0)
+  , ReadIoErrorEveryNthRequests(0)
+  , AllocatedBytes(0)
+  , DiskMode(diskMode)
+  , Compression(compression)
+{
+    if (Compression == NSectorMap::ECompression::Lz4) {
+        Y_ABORT_UNLESS(LZ4_initStream(&CompressionState, sizeof(CompressionState)));
+    } else if (Compression == NSectorMap::ECompression::Snappy) {
+        SnappyState = MakeHolder<snappy::CompressionContext>();
+    } else {
+        Y_ABORT_UNLESS(Compression == NSectorMap::ECompression::None);
+    }
+    FailureProbabilities.WriteErrorProbability = 0.0;
+    FailureProbabilities.ReadErrorProbability = 0.0;
+    FailureProbabilities.SilentWriteFailProbability = 0.0;
+    FailureProbabilities.ReadReplayProbability = 0.0;
+    EmulatedWriteErrors = 0;
+    EmulatedReadErrors = 0;
+    EmulatedSilentWriteFails = 0;
+    EmulatedReadReplays = 0;
+    InitSectorOperationThrottler();
+}
+
+TSectorMap::~TSectorMap() = default;
 
 std::optional<NSectorMap::ECompression> NSectorMap::TryGetCompressionFromPath(const TString& path) {
     if (!path.StartsWith("SectorMap:")) {
@@ -47,7 +78,7 @@ TString TSectorMap::CompressSector(const char* data) {
         written = result;
     } else {
         Y_ABORT_UNLESS(snappy::MaxCompressedLength(NSectorMap::SECTOR_SIZE) <= sizeof(tmp));
-        snappy::RawCompress(data, NSectorMap::SECTOR_SIZE, tmp, &written, snappy::CompressionOptions(), &*SnappyState);
+        snappy::RawCompress(data, NSectorMap::SECTOR_SIZE, tmp, &written, snappy::CompressionOptions(), SnappyState.Get());
     }
     Y_ABORT_UNLESS(written > 0 && written <= sizeof(tmp));
     return TString(tmp, written);

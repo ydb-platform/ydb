@@ -32,6 +32,7 @@ from github_actions.export_runner_capacity import (
     quota_headroom,
     snapshot_summary,
     target_branch,
+    unique_name,
 )
 
 
@@ -421,6 +422,28 @@ class SnapshotRowsTest(unittest.TestCase):
         states = [row["state"] for row in rows if row["kind"] == "runner"]
         self.assertEqual(states, ["unknown"])
         self.assertFalse(any(row["kind"] == "queue" for row in rows))
+
+    def test_queue_survives_empty_footprint(self):
+        rows = queue_jobs(
+            [({"id": 1, "name": "PR-check"}, {"id": 11, "status": "queued", "name": "Build"})],
+            NOW,
+            specs={},
+            default={},
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["cores"], 0.0)
+        self.assertEqual(rows[0]["ram"], 0.0)
+        self.assertEqual(rows[0]["nrd"], 0.0)
+
+    def test_unique_name_does_not_collide(self):
+        used = set()
+        first = unique_name({"name": "unnamed", "_folder_id": "f1"}, used)
+        second = unique_name({"name": "unnamed", "_folder_id": "f1"}, used)
+        third = unique_name({"name": "unnamed", "_folder_id": "f1"}, used)
+        self.assertEqual(first, "unnamed")
+        self.assertEqual(second, "unnamed@f1")
+        self.assertEqual(third, "unnamed@f1.3")
+        self.assertEqual(len({first, second, third}), 3)
 
 
 if __name__ == "__main__":

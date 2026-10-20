@@ -391,9 +391,9 @@ def queue_jobs(pairs: List[tuple], now: datetime, specs=None, default=None) -> L
             "run_url": job.get("html_url") or run.get("html_url") or None,
             "pr_number": number,
             "pr_title": title,
-            "cores": size["vcpu"],
-            "ram": size["ram_gb"],
-            "nrd": size["nrd_ssd_gb"],
+            "cores": size.get("vcpu") or 0.0,
+            "ram": size.get("ram_gb") or 0.0,
+            "nrd": size.get("nrd_ssd_gb") or 0.0,
             "created_at": created,
             "age": age_sec(now, created),
         })
@@ -427,10 +427,13 @@ def runner_state(name: str, jobs: Optional[Dict[str, Dict[str, Any]]], github_ok
 
 def unique_name(instance: Dict[str, Any], used: set) -> str:
     name = instance.get("name") or instance.get("id") or "unnamed"
-    if name in used:
-        name = "%s@%s" % (name, instance.get("_folder_id") or "folder")
-    used.add(name)
-    return name
+    alt, n = name, 1
+    while alt in used:
+        n += 1
+        folder = instance.get("_folder_id") or "folder"
+        alt = "%s@%s" % (name, folder) if n == 2 else "%s@%s.%s" % (name, folder, n)
+    used.add(alt)
+    return alt
 
 
 def quota_and_fit_rows(sampled_at, headroom, footprints, zone: str) -> List[Dict[str, Any]]:
@@ -602,8 +605,12 @@ def open_yc(cloud_id: str):
     env = os.environ.copy()
     env["HOME"] = home
     env.pop("YC_TOKEN", None)
-    for args in (["yc", "config", "set", "service-account-key", key], ["yc", "config", "set", "cloud-id", cloud_id]):
-        subprocess.check_call(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for args in (["yc", "config", "set", "service-account-key", key], ["yc", "config", "set", "cloud-id", cloud_id]):
+            subprocess.check_call(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        shutil.rmtree(home, ignore_errors=True)
+        raise
     return env, home, cloud_id
 
 

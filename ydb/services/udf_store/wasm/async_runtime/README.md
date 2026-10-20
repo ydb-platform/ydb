@@ -43,6 +43,19 @@ using the remaining call/CPU budget; cleanup gets its own bounded entry budget.
 These local limits are not distributed query quotas. Transport-owned buffers
 after physical cancellation and guest heap quotas require further integration.
 
+## Standard clocks
+
+Guest code reads time with `time()`, `std::chrono::system_clock::now()` or
+`std::chrono::steady_clock::now()`. The common host implements WASI
+`clock_time_get` for realtime and monotonic clocks, including during module
+constructors. Reads are immediate and do not depend
+on an active async invocation. Realtime is Unix epoch time and may jump; use
+monotonic time for elapsed durations. This does not change runtime deadlines or
+async/auth ABI v1. Other system calls keep their existing restrictions.
+
+Compiled standard-library and memory-boundary regressions live in
+`ydb/library/wasm/unittests/clock_ut.cpp`.
+
 ## Fixture and Tests
 
 The guest fixture is built with the existing `clang20-emscripten-wasm64`

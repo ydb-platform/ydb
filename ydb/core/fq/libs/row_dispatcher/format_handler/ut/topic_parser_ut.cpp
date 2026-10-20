@@ -705,20 +705,103 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         PushToParser(FIRST_OFFSET, data);
     }
 
-    Y_UNIT_TEST_F(EmptyMessagesAreErrors, TJsonParserFixture) {
-        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
-        for (const TString data : { "", " ", "\n\r\t" }) {
-            CheckBatchError(data, EStatusId::BAD_REQUEST, "expected at least one json object, got empty message");
-        }
+    // Same names, payloads, String column and offsets as ClickHouse's test_parse_format.py.
+    // SkipErrors recovery is RD-specific; ClickHouse has its own expected results.
+    Y_UNIT_TEST_F(BatchOffsetsWithWhitespaceAndEmptyArrays, TJsonParserFixture) {
+        CheckStringMessages({
+                                GetRecord(FIRST_OFFSET, " \r\n"
+                                                        R"({"col":"first"}{"col":"second"})"
+                                                        " \t"),
+                                GetRecord(FIRST_OFFSET + 2, " [ \t ] "),
+                                GetRecord(FIRST_OFFSET + 5, R"([{"col":"third"},{"col":"fourth"}])"),
+                                GetRecord(FIRST_OFFSET + 6, "[]"),
+                                GetRecord(FIRST_OFFSET + 9, " \n"
+                                                            R"({"col":"fifth"})"
+                                                            " "),
+                            },
+            { "first", "second", "third", "fourth", "fifth" },
+            { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 5, FIRST_OFFSET + 5, FIRST_OFFSET + 9 });
     }
 
-    Y_UNIT_TEST_F(EmptyMessageBetweenObjectsIsError, TJsonParserFixture) {
+    Y_UNIT_TEST_F(BatchFallbackClearsParsedStrings, TJsonParserFixtureSkipErrors) {
+        const TString first(128, 'a');
+        const TString second(128, 'b');
+        const TString third(128, 'c');
+        CheckStringMessages({
+                                GetRecord(FIRST_OFFSET, TStringBuilder() << R"({"col":")" << first << R"("})"),
+                                GetRecord(FIRST_OFFSET + 1, TStringBuilder() << R"({"col":")" << second << R"("}{)"),
+                                GetRecord(FIRST_OFFSET + 2, TStringBuilder() << R"({"col":")" << third << R"("})"),
+                            },
+            { first, second, third }, { FIRST_OFFSET, FIRST_OFFSET + 1, FIRST_OFFSET + 2 });
+    }
+
+    Y_UNIT_TEST_F(BatchFallbackAfterSkippedColumnAndArrayError, TJsonParserFixtureSkipErrors) {
+        CheckStringMessages(
+            {
+                GetRecord(FIRST_OFFSET, R"({"col":"first"})"), GetRecord(FIRST_OFFSET + 1, R"({"col":123})"),
+                GetRecord(FIRST_OFFSET + 2, R"([{"col":"second"},null,{"col":"ignored"}])"), GetRecord(FIRST_OFFSET + 3, R"({"col":"third"})"),
+            },
+            { "first", "second", "third" }, { FIRST_OFFSET, FIRST_OFFSET + 2, FIRST_OFFSET + 3 });
+    }
+
+    Y_UNIT_TEST_F(BatchInvalidUtf8KeepsOtherMessageOffsets, TJsonParserFixtureSkipErrors) {
+        CheckStringMessages({
+                                GetRecord(FIRST_OFFSET, R"({"col":"first"})"),
+                                GetRecord(FIRST_OFFSET + 1, TStringBuilder() << R"({"col":")" << char(0xff) << R"("})"),
+                                GetRecord(FIRST_OFFSET + 2, R"({"col":"second"})"),
+                            },
+            { "first", "second" }, { FIRST_OFFSET, FIRST_OFFSET + 2 });
+    }
+
+    Y_UNIT_TEST_F(BatchArrayCannotCrossMessageBoundary, TJsonParserFixture) {
         CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
         ExpectedBatches = 1;
         ParserHandler->ExpectCommonError(
             EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1);
-        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 1, ""),
-            GetRecord(FIRST_OFFSET + 2, R"({"col":"third"})") });
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"col":"first"})"), GetRecord(FIRST_OFFSET + 1, R"([{"col":"second"},)"),
+            GetRecord(FIRST_OFFSET + 2, R"({"col":"third"}])"),
+        });
+    }
+
+    Y_UNIT_TEST_F(BatchFallbackReportsOriginalMessageOffset, TJsonParserFixture) {
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]"));
+        ExpectedBatches = 1;
+        ParserHandler->ExpectCommonError(
+            EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1);
+        Parser->ParseRecords({
+            GetRecord(FIRST_OFFSET, R"({"col":"first"})"), GetRecord(FIRST_OFFSET + 1, R"({"col":"second"}{)"),
+            GetRecord(FIRST_OFFSET + 2, R"({"col":"third"})"),
+        });
+    }
+
+    Y_UNIT_TEST_F(EmptyMessagesProduceNoRows, TJsonParserFixture) {
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, ""), GetRecord(FIRST_OFFSET + 1, " "), GetRecord(FIRST_OFFSET + 2, "\n\r\t") }, {}, {});
+    }
+
+    Y_UNIT_TEST_F(EmptyMessagesBetweenObjectsKeepOffsets, TJsonParserFixture) {
+        CheckStringMessages({ GetRecord(FIRST_OFFSET, R"({"col":"first"}{"col":"second"})"), GetRecord(FIRST_OFFSET + 1, ""),
+                                GetRecord(FIRST_OFFSET + 2, R"({"col":"third"})") },
+            { "first", "second", "third" }, { FIRST_OFFSET, FIRST_OFFSET, FIRST_OFFSET + 2 });
+    }
+
+    Y_UNIT_TEST_F(EmptyBatchThenValidMessage, TJsonParserFixture) {
+        ExpectedBatches = 2;
+        CheckSuccess(MakeParser({ "col" }, "[DataType; String]", [&](ui64 rows, auto result) {
+            if (ParserHandler->NumberBatches == 1) {
+                UNIT_ASSERT_VALUES_EQUAL(rows, 0);
+                UNIT_ASSERT(Parser->GetOffsets().empty());
+                UNIT_ASSERT(result[0].empty());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(rows, 2);
+                UNIT_ASSERT_VALUES_EQUAL(TString(result[0][0].AsStringRef()), "first");
+                UNIT_ASSERT_VALUES_EQUAL(TString(result[0][1].AsStringRef()), "second");
+                UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[0], FIRST_OFFSET + 2);
+                UNIT_ASSERT_VALUES_EQUAL(Parser->GetOffsets()[1], FIRST_OFFSET + 2);
+            }
+        }, false));
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET, ""), GetRecord(FIRST_OFFSET + 1, " \n") });
+        Parser->ParseRecords({ GetRecord(FIRST_OFFSET + 2, R"({"col":"first"}{"col":"second"})") });
     }
 
     Y_UNIT_TEST_F(SkipEmptyMessagesKeepsOffsets, TJsonParserFixtureSkipErrors) {

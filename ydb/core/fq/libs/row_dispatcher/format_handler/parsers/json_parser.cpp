@@ -1058,11 +1058,16 @@ protected:
         auto [values, size] = Buffer.Finish();
         OutputOffsets.clear();
         ParsingFailedRowCount = 0;
-        for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
-            const size_t begin = Buffer.MessageOffsets[messageId];
-            const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
-            if (auto status = ParseMessage(values + begin, end - begin, Buffer.Offsets[messageId]); status.IsFail()) {
-                return status;
+        // Keep the common path to one SIMD scan. Nothing is delivered to the
+        // consumer until the whole batch succeeds, so a failed attempt can be retried.
+        if (Buffer.NumberValues == 1 || ParseDocuments(values, size, Buffer.Offsets.front(), true).IsFail()) {
+            ClearParsedData();
+            for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
+                const size_t begin = Buffer.MessageOffsets[messageId];
+                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                if (auto status = ParseDocuments(values + begin, end - begin, Buffer.Offsets[messageId]); status.IsFail()) {
+                    return status;
+                }
             }
         }
 
@@ -1077,6 +1082,13 @@ protected:
     }
 
     void ClearBuffer() override {
+        ClearParsedData();
+        Buffer.Clear();
+    }
+
+private:
+    // Unlike ClearBuffer(), preserve the input for a per-message retry.
+    void ClearParsedData() {
         for (size_t i = 0; i < Columns.size(); ++i) {
             auto& parsedColumn = ParsedValues[i];
 
@@ -1091,23 +1103,22 @@ protected:
             column.ClearParsedRows();
         }
 
-        Buffer.Clear();
         OutputOffsets.clear();
         ParsingFailedRowCount = 0;
     }
 
 private:
-    // A message is parsed in isolation: documents cannot cross topic record boundaries.
-    // All its output rows are delivered together so the consumer cannot commit its
-    // offset before receiving the remaining documents.
-    TStatus ParseMessage(const char* values, size_t size, ui64 offset) {
+    // In batch mode every document must fit within its original message.
+    // The isolated mode is also the fallback for malformed batches, preserving
+    // error diagnostics and SkipErrors recovery at topic message boundaries.
+    TStatus ParseDocuments(const char* values, size_t size, ui64 offset, bool batch = false) {
         auto parsingError = [&](const TString& message) {
             return TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder()
                                                              << "Failed to parse json message for offset " << offset << ", " << message
                                                              << " Current data batch: " << TruncateString(std::string_view(values, size)));
         };
         auto handleError = [&](TStatus status) {
-            if (Config.SkipErrors) {
+            if (!batch && Config.SkipErrors) {
                 ++ParsingFailedRowCount;
                 return TStatus::Success();
             }
@@ -1117,8 +1128,21 @@ private:
         const auto isJsonWhitespace = [](char c) {
             return c == ' ' || c == '\t' || c == '\r' || c == '\n';
         };
+        // Empty and whitespace-only messages are valid inputs with no rows.
+        // They must not increment parsing error counters, even with SkipErrors.
         if (std::all_of(values, values + size, isJsonWhitespace)) {
-            return handleError(parsingError("expected at least one json object, got empty message"));
+            return TStatus::Success();
+        }
+
+        size_t expectedMessages = 0;
+        if (batch) {
+            for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
+                const size_t begin = Buffer.MessageOffsets[messageId];
+                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                if (!std::all_of(values + begin, values + end, isJsonWhitespace)) {
+                    ++expectedMessages;
+                }
+            }
         }
 
         simdjson::ondemand::document_stream documents;
@@ -1127,9 +1151,48 @@ private:
         }
 
         size_t numberDocuments = 0;
-        for (auto document : documents) {
+        size_t messageId = 0;
+        size_t numberMessages = 0;
+        size_t lastMessageId = Buffer.NumberValues;
+        for (auto it = documents.begin(); it != documents.end(); ++it) {
+            auto document = *it;
             CHECK_JSON_ERROR(document.error()) {
                 return handleError(parsingError(TStringBuilder() << "json document was corrupted: " << simdjson::error_message(error)));
+            }
+            simdjson::ondemand::json_type type;
+            {
+                CHECK_JSON_ERROR(document.type().get(type)) {
+                    return handleError(parsingError(simdjson::error_message(error)));
+                }
+            }
+            if (batch && type != simdjson::ondemand::json_type::object && type != simdjson::ondemand::json_type::array) {
+                return parsingError("expected json object or array");
+            }
+            if (batch) {
+                const char* location = nullptr;
+                {
+                    CHECK_JSON_ERROR(document.current_location().get(location)) {
+                        return parsingError(simdjson::error_message(error));
+                    }
+                }
+                const size_t start = location - values;
+                while (messageId + 1 < Buffer.NumberValues && start >= Buffer.MessageOffsets[messageId + 1]) {
+                    ++messageId;
+                }
+                offset = Buffer.Offsets[messageId];
+                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                // source() includes the closing brace/bracket; inspect it before
+                // consuming any fields. current_index() alone is insufficient:
+                // the first document's index may include leading whitespace.
+                const auto source = it.source();
+                const size_t sourceBegin = source.data() - values;
+                if (start < Buffer.MessageOffsets[messageId] || start >= end || sourceBegin > end || source.size() > end - sourceBegin) {
+                    return parsingError("json document crosses message boundary");
+                }
+                if (lastMessageId != messageId) {
+                    ++numberMessages;
+                    lastMessageId = messageId;
+                }
             }
             ++numberDocuments;
             bool stopMessage = false;
@@ -1187,12 +1250,6 @@ private:
                 return TStatus::Success();
             };
 
-            simdjson::ondemand::json_type type;
-            {
-                CHECK_JSON_ERROR(document.type().get(type)) {
-                    return handleError(parsingError(simdjson::error_message(error)));
-                }
-            }
             if (type == simdjson::ondemand::json_type::array) {
                 for (auto element : document.get_array()) {
                     CHECK_JSON_ERROR(element.error()) {
@@ -1200,12 +1257,18 @@ private:
                     }
                     auto status = parseObject(element.get_object());
                     if (status.IsFail() || stopMessage) {
+                        if (batch && stopMessage) {
+                            return parsingError("json iterator was abandoned");
+                        }
                         return status;
                     }
                 }
             } else {
                 auto status = parseObject(document.get_object());
                 if (status.IsFail() || stopMessage) {
+                    if (batch && stopMessage) {
+                        return parsingError("json iterator was abandoned");
+                    }
                     return status;
                 }
             }
@@ -1213,6 +1276,9 @@ private:
 
         if (const auto truncatedBytes = documents.truncated_bytes()) {
             return handleError(parsingError(TStringBuilder() << "json batch truncated bytes: " << truncatedBytes));
+        }
+        if (batch && numberMessages != expectedMessages) {
+            return parsingError("message without a complete json document");
         }
         if (!numberDocuments) {
             return handleError(parsingError("expected at least one json object, got empty message"));

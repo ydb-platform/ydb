@@ -15,10 +15,11 @@ import pytest
 from udf_test_common import facade_runner
 
 
-def _case(name, messages, expected=(), error_contains=(), metadata=False, nullable=False):
+def _case(name, messages, expected=(), error_contains=(), metadata=False, nullable=False,
+          column="a", data_type="Int32"):
     return pytest.param(
         dict(name=name, messages=messages, expected=expected, error_contains=error_contains,
-             metadata=metadata, nullable=nullable),
+             metadata=metadata, nullable=nullable, column=column, data_type=data_type),
         id=name,
     )
 
@@ -73,6 +74,67 @@ SCENARIOS = [
     _case('RepeatedMessageMetadata', (('{"a":1}{"a":2}', 42), ('{"a":3}', 43)), ((1, 42), (2, 42), (3, 43)), metadata=True),
     _case('EmptyMessagesDoNotShiftMetadata', (('', 41), ('[{"a":1},{"a":2}]', 42), (' \n', 43), ('{"a":3}', 44)), ((1, 42), (2, 42), (3, 44)), metadata=True),
     _case('NullableFieldAndMissingField', ('{"a":1}{"a":null}{}',), (1, None, None), nullable=True),
+
+    # Same payloads, schemas and topic offsets as the additional
+    # RowDispatcherJsonCompatibility tests. SkipErrors recovery is RD-specific.
+    _case('ArraysAndObjectsAcrossMessages', (
+        ('[][{"a":1},{"a":2}]{"a":3}', 42),
+        ('[{"a":4}][]', 43),
+    ), error_contains=("Cannot parse input: expected 'eof'",), metadata=True),
+    _case('ScalarAfterObjectInArray', (('[{"a":1},null]', 42),),
+          error_contains=("Cannot parse input: expected '{'",), metadata=True),
+    _case('TrailingCommaInArray', (('[{"a":1},]', 42),),
+          error_contains=("Cannot parse input: expected '{'",), metadata=True),
+    _case('NullableArrayElements', (('[{"a":1},{"a":null},{}]', 42),),
+          ((1, 42), (None, 42), (None, 42)), metadata=True, nullable=True),
+    _case('SkipBadArrayRow', (('[{"a":1},{"a":"bad"},{},{"a":2}]', 42),),
+          error_contains=('Cannot parse',), metadata=True),
+    _case('SkipMalformedArrayKeepsNextOffset', (
+        ('[{"a":1},null,{"a":2}]', 42),
+        ('[{"a":3}]', 43),
+    ), error_contains=("Cannot parse input: expected '{'",), metadata=True),
+    _case('LargeArray', ((json.dumps([{'a': i} for i in range(2001)], separators=(',', ':')), 42),),
+          tuple((i, 42) for i in range(2001)), metadata=True),
+
+    # Same names, payloads, String column and offsets as TestJsonParser in topic_parser_ut.cpp.
+    # RD's SkipErrors tests recover; ClickHouse.ParseFormat terminates on malformed JSON.
+    _case('BatchOffsetsWithWhitespaceAndEmptyArrays', (
+        (' \r\n{"col":"first"}{"col":"second"} \t', 42),
+        (' [ \t ] ', 44),
+        ('[{"col":"third"},{"col":"fourth"}]', 47),
+        ('[]', 48),
+        (' \n{"col":"fifth"} ', 51),
+    ), (('first', 42), ('second', 42), ('third', 47), ('fourth', 47), ('fifth', 51)),
+        metadata=True, column="col", data_type="String"),
+    _case('BatchFallbackClearsParsedStrings', (
+        ('{"col":"' + 'a' * 128 + '"}', 42),
+        ('{"col":"' + 'b' * 128 + '"}{', 43),
+        ('{"col":"' + 'c' * 128 + '"}', 44),
+    ), error_contains=('Unexpected end of stream',), metadata=True, column="col", data_type="String"),
+    _case('BatchFallbackAfterSkippedColumnAndArrayError', (
+        ('{"col":"first"}', 42),
+        ('{"col":123}', 43),
+        ('[{"col":"second"},null,{"col":"ignored"}]', 44),
+        ('{"col":"third"}', 45),
+    ), error_contains=('Cannot parse',), metadata=True, column="col", data_type="String"),
+    # String is binary in ClickHouse: preserve the raw 0xff byte, rather than U+00FF.
+    _case('BatchInvalidUtf8KeepsOtherMessageOffsets', (
+        ('{"col":"first"}', 42),
+        (b'{"col":"\xff"}', 43),
+        ('{"col":"second"}', 44),
+    ), (('first', 42), (b'\xff', 43), ('second', 44)),
+        metadata=True, column="col", data_type="String"),
+    _case('BatchArrayCannotCrossMessageBoundary', (
+        ('{"col":"first"}', 42),
+        ('[{"col":"second"},', 43),
+        ('{"col":"third"}]', 44),
+    ), error_contains=("Cannot parse input: expected ']'",), metadata=True, column="col", data_type="String"),
+    # Same damaged message as RD; the UDF diagnostic does not include topic offsets.
+    _case('BatchFallbackReportsOriginalMessageOffset', (
+        ('{"col":"first"}', 42),
+        ('{"col":"second"}{', 43),
+        ('{"col":"third"}', 44),
+    ), error_contains=('Unexpected end of stream',), metadata=True, column="col", data_type="String"),
 ]
 
 
@@ -86,26 +148,37 @@ def _sql_list(items, empty_item):
     return "AsList(" + ", ".join(items) + ")" if items else "ListTake(AsList(" + empty_item + "), 0)"
 
 
+def _sql_literal(value):
+    if isinstance(value, bytes):
+        # Emit binary YQL string escapes, without UTF-8 decoding or JSON transcoding.
+        return '"' + ''.join('\\x%02x' % byte for byte in value) + '"'
+    return json.dumps(value)
+
+
 def _build_program(scenario):
-    schema = "Struct<'a':Int32?>" if scenario["nullable"] else "Struct<'a':Int32>"
+    column = scenario["column"]
+    data_type = scenario["data_type"]
+    schema = f"Struct<'{column}':{data_type}{'?' if scenario['nullable'] else ''}>"
+
+    def expected_value(value):
+        if scenario["nullable"]:
+            return f"Nothing(OptionalType({data_type}))" if value is None else "Just(" + _sql_literal(value) + ")"
+        return _sql_literal(value)
+
     if scenario["metadata"]:
         schema = "TupleType(" + schema + ", Uint64)"
-        messages = ["AsTuple(" + json.dumps(payload) + ", " + str(offset) + "ul)"
+        messages = ["AsTuple(" + _sql_literal(payload) + ", " + str(offset) + "ul)"
                     for payload, offset in scenario["messages"]]
-        expected = ["AsTuple(" + str(value) + ", " + str(offset) + "ul)"
+        expected = ["AsTuple(" + expected_value(value) + ", " + str(offset) + "ul)"
                     for value, offset in scenario["expected"]]
         projection = """($row) -> {
     $data = $row.0;
-    RETURN AsTuple($data.a, $row.1);
-}"""
+    RETURN AsTuple($data.%s, $row.1);
+}""" % column
     else:
-        messages = [json.dumps(payload) for payload in scenario["messages"]]
-        if scenario["nullable"]:
-            expected = ["Nothing(OptionalType(Int32))" if value is None else "Just(" + str(value) + ")"
-                        for value in scenario["expected"]]
-        else:
-            expected = [str(value) for value in scenario["expected"]]
-        projection = "($row) -> ($row.a)"
+        messages = [_sql_literal(payload) for payload in scenario["messages"]]
+        expected = [expected_value(value) for value in scenario["expected"]]
+        projection = "($row) -> ($row." + column + ")"
 
     program = f"""use plato;
 $messages = {_sql_list(messages, '""')};

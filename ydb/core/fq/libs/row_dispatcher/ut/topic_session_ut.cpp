@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         }
         UNIT_ASSERT(!memoryCounters->FindCounter("JsonParserAlloc"));
         PassAway();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
             for (const auto& sensor : sensors) {
                 if (sensor->Val()) {
                     return false;
@@ -528,7 +528,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         UNIT_ASSERT(!RowDispatcherCounters->FindSubgroup("component", "MemoryQuota"));
 
         PassAway();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "memory quota sensors released", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "memory quota sensors released", [&] {
             for (const auto& sensor : sensors) {
                 if (sensor->Val()) {
                     return false;
@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const auto baseline = manager->GetCurrentQuota();
         PQWrite({ TString(MAX_BATCH_SIZE + 1, 'x') });
         // The large row finishes packing before the read actor requests it.
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "input, packer and completed batch reservations", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "input, packer and completed batch reservations", [&] {
             return manager->GetCurrentQuota() >= baseline + 3 * MAX_BATCH_SIZE;
         });
         {
@@ -572,7 +572,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
             UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), "bytes for InFlightMemory");
         }
         PassAway();
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "topic session quota release", [&] {
             return manager->GetCurrentQuota() == 0;
         });
     }
@@ -586,7 +586,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         const TString large(MAX_BATCH_SIZE + 1, 'x');
         PQWrite({ TStringBuilder() << R"({"dt":100,"value":")" << large << R"("})", R"({"dt":200,"value":"skip"})" }, 42);
         // Wait until both rows, including the filtered one, have been parsed.
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "trailing watermark parsed", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "trailing watermark parsed", [&] {
             auto stat = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
             return stat && stat->Get()->Stat.Clients.size() == 1 && stat->Get()->Stat.Clients.front().ReadLagMessages == 0;
         });
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         PQWrite({ Json1 }, 42);
         ExpectNewDataArrived({ ReadActorId1 });
 
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "watermark-only row parsed", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "watermark-only row parsed", [&] {
             auto stat = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
             if (!stat || stat->Get()->Stat.Clients.size() != 1) {
                 return false;
@@ -834,7 +834,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         auto jsonSource = BuildSource(true);
         StartSession(ReadActorId1, jsonSource);
         PQWrite({ Json1, Json2, Json3 });
-        NTestUtils::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
+        NTests::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
             auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
             return event && event->Get()->Stat.Common.LastReadedOffset == 2;
         });

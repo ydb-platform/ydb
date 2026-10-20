@@ -614,9 +614,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const bool standalone
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { columnToRead }));
         // The misconfigured S3 endpoint fails in the real DNS/HTTP client.
         // Let that response arrive before exhausting simulated events.
-        std::optional<bool> wasFast = expectedReadResult == EExpectedResult::ERROR
-            ? std::optional<bool>(runtime.SetFastSimulatedTime(false))
-            : std::nullopt;
+        std::optional<bool> wasFast =
+            expectedReadResult == EExpectedResult::ERROR ? std::optional<bool>(runtime.SetFastSimulatedTime(false)) : std::nullopt;
         std::shared_ptr<arrow::RecordBatch> rb;
         {
             Y_DEFER {

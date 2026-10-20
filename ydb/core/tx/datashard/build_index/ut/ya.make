@@ -35,6 +35,7 @@ SRCS(
     ut_helpers.cpp
     ut_local_kmeans.cpp
     ut_table_range_reader.cpp
+    ut_vector_resolve_actor.cpp
     ut_prefix_kmeans.cpp
     ut_recompute_kmeans.cpp
     ut_reshuffle_kmeans.cpp

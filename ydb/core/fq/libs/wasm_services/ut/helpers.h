@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/fq/libs/wasm_services/manifest/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/transport.h>
 #include <ydb/core/fq/libs/wasm_services/ut/protos/mock.grpc.pb.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
@@ -14,6 +15,10 @@
 #include <ydb/services/udf_store/wasm/host.h>
 #include <ydb/services/udf_store/wasm/invocation_context.h>
 #include <ydb/services/udf_store/wasm/registry_helpers.h>
+#include <ydb/udfs/wasm/echo/contract/service_methods.h>
+#include <ydb/udfs/wasm/profile/contract/service_methods.h>
+#include <ydb/udfs/wasm/profile/profile.h>
+#include <ydb/udfs/wasm/profile/proto/schema/profile.pb.h>
 
 #include <google/protobuf/util/json_util.h>
 #include <grpcpp/grpcpp.h>
@@ -37,8 +42,10 @@
 #include <mutex>
 
 using namespace NFq::NWasmServices;
+using namespace NYdb::NWasm::NServices::NProfile;
 using namespace NAsync;
 
+static constexpr TStringBuf ProfileTransformType = "WASM_PROFILE";
 using namespace NKikimr::NUdfStore::NWasm;
 using namespace NYdb::NWasm;
 
@@ -397,6 +404,44 @@ public:
         response->set_value(exchange->Reply.data(), exchange->Reply.size());
         return grpc::Status::OK;
     }
+
+    grpc::Status Lookup(grpc::ServerContext* context, const NFq::NWasmServices::NTest::ProfileRequest* request,
+        NFq::NWasmServices::NTest::ProfileReply* response) override {
+        TVector<std::pair<TString, TString>> headers;
+        for (const auto& [name, value] : context->client_metadata()) {
+            headers.emplace_back(TString(name.data(), name.size()), TString(value.data(), value.size()));
+        }
+        auto exchange = State->Record(request->SerializeAsString(), "/NFq.NWasmServices.NTest.MockService/Lookup", std::move(headers));
+        if (!State->AwaitReply(exchange, [context] {
+                return context->IsCancelled();
+            })) {
+            return grpc::Status(grpc::StatusCode::CANCELLED, "Mock stopped or client cancelled");
+        }
+        if (exchange->Code) {
+            return grpc::Status(static_cast<grpc::StatusCode>(exchange->Code), "Controlled mock error");
+        }
+        response->set_payload(exchange->Reply.data(), exchange->Reply.size());
+        return grpc::Status::OK;
+    }
+
+    grpc::Status LookupBatch(grpc::ServerContext* context, const NFq::NWasmServices::NTest::ProfileBatchRequest* request,
+        NFq::NWasmServices::NTest::ProfileBatchReply* response) override {
+        TVector<std::pair<TString, TString>> headers;
+        for (const auto& [name, value] : context->client_metadata()) {
+            headers.emplace_back(TString(name.data(), name.size()), TString(value.data(), value.size()));
+        }
+        auto exchange = State->Record(request->SerializeAsString(), "/NFq.NWasmServices.NTest.MockService/LookupBatch", std::move(headers));
+        if (!State->AwaitReply(exchange, [context] {
+                return context->IsCancelled();
+            })) {
+            return grpc::Status(grpc::StatusCode::CANCELLED, "Mock stopped or client cancelled");
+        }
+        if (exchange->Code) {
+            return grpc::Status(static_cast<grpc::StatusCode>(exchange->Code), "Controlled mock error");
+        }
+        response->set_payload(exchange->Reply.data(), exchange->Reply.size());
+        return grpc::Status::OK;
+    }
 };
 
 inline TVector<TBinding> Bindings(const THttpMock& http, const TGrpcMock& grpc,
@@ -409,7 +454,10 @@ inline TVector<TBinding> Bindings(const THttpMock& http, const TGrpcMock& grpc,
     rpc.Endpoint = grpc.Endpoint();
     rpc.Headers = { { "authorization", "Bearer host-secret" } };
     rpc.GrpcCredentials = grpcCredentials;
-    return { std::move(rest), std::move(rpc) };
+    TBinding profileHttp = rest;
+    profileHttp.Headers = { { "Content-Type", "application/json" }, { "Authorization", "Bearer host-secret" } };
+    TBinding profileGrpc = rpc;
+    return { std::move(rest), std::move(rpc), std::move(profileHttp), std::move(profileGrpc) };
 }
 
 struct TWakeup {
@@ -441,7 +489,7 @@ struct TEnv {
     TVector<THandle> Ready;
 
     explicit TEnv(TVector<TBinding> bindings, TTransportLimits limits = {}, TStringBuf resource = "/fq_transport_coroutine.wasm",
-        std::shared_ptr<TTransportExecutor> executor = TestExecutor()) {
+        std::shared_ptr<TTransportExecutor> executor = TestExecutor(), TLimits runtimeLimits = {}) {
         Transport = std::make_shared<TTransport>(std::move(bindings), std::move(executor), limits);
         EnsureUdfHostIntrinsicsRegistered();
         KeepAsyncHostIntrinsicsLinked();
@@ -454,13 +502,19 @@ struct TEnv {
         AddPrecompiledModule(query->Compartment.get(), MakeModuleBytecode(bytes, object, EBytecodeFormat::Binary), "FqTransportFixture");
         query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
         Query = query.get();
-        Runtime = std::make_unique<TRuntime>(std::move(query), Alloc, Transport, TLimits{}, [wakeup = Wakeup] {
+        Runtime = std::make_unique<TRuntime>(std::move(query), Alloc, Transport, runtimeLimits, [wakeup = Wakeup] {
             wakeup->Notify();
         });
     }
 
     THandle Start(ui64 mode, ui32 a, ui32 b = 1, TString body = Proto("input"), TInstant deadline = TInstant::Now() + TDuration::Seconds(30)) {
         auto bytes = Encode(TArgumentsHeader{ mode, a, b, body.size() }, View(body));
+        return Runtime->Start(TStringBuf(bytes.data(), bytes.size()), deadline);
+    }
+
+    THandle StartProfile(EProfileMode mode, ui64 id = 42, ui32 a = 2, ui32 b = 3, TInstant deadline = TInstant::Now() + TDuration::Seconds(30)) {
+        auto bytes = Encode(
+            TArgumentsHeader{ static_cast<ui64>(mode), a, b, sizeof(id) }, std::string_view(reinterpret_cast<const char*>(&id), sizeof(id)));
         return Runtime->Start(TStringBuf(bytes.data(), bytes.size()), deadline);
     }
 
@@ -544,6 +598,49 @@ inline TResponseHeader ReplyHeader(const TCallResult& result, size_t index) {
     TStringBuf payload;
     UNIT_ASSERT(ParseResponse(TStringBuf(bytes.data(), bytes.size()), response, payload));
     return response;
+}
+
+inline TProfileResults ProfileResult(const TCallResult& result) {
+    UNIT_ASSERT_VALUES_EQUAL(result.Data.size(), sizeof(TProfileResults));
+    TProfileResults results;
+    std::memcpy(&results, result.Data.data(), sizeof(results));
+    UNIT_ASSERT_VALUES_EQUAL(results.Version, ProfileVersion);
+    UNIT_ASSERT(results.Count >= 1 && results.Count <= 2);
+    return results;
+}
+
+inline TString GrpcProfilePayload(ui64 id = 42, TString name = "Ada", ui32 score = 97, ui32 version = ProfileVersion) {
+    NFq::NWasmServices::NTest::Profile profile;
+    profile.set_id(id);
+    profile.set_name(name);
+    profile.set_score(score);
+    profile.set_version(version);
+    return profile.SerializeAsString();
+}
+
+inline TString GrpcBatchPayload(const TVector<ui64>& ids, TString name = "Ada", ui32 score = 97) {
+    NFq::NWasmServices::NTest::ProfileBatchPayload payload;
+    for (const auto id : ids) {
+        auto* profile = payload.add_profiles();
+        profile->set_id(id);
+        profile->set_name(name);
+        profile->set_score(score);
+        profile->set_version(ProfileVersion);
+    }
+    return payload.SerializeAsString();
+}
+
+inline TString HttpBatchPayload(const TVector<ui64>& ids) {
+    TStringBuilder text;
+    text << "[";
+    for (size_t i = 0; i < ids.size(); ++i) {
+        if (i) {
+            text << ",";
+        }
+        text << "{\"id\":" << ids[i] << ",\"name\":\"Ada\",\"score\":97,\"version\":1}";
+    }
+    text << "]";
+    return text;
 }
 
 struct TDirectReply {

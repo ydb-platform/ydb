@@ -11067,6 +11067,49 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_C(done, "leader stayed in pile 0 or a follower held the pile drain");
     }
 
+    Y_UNIT_TEST(TestBridgeFollowersAfterHiveRestart) {
+        static constexpr ui32 NUM_NODES = 4;
+        TTestBasicRuntime runtime(NUM_NODES, 2u); // data center == pile
+        TDummyBridge bridge(runtime);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets, runtime.GetNodeCount());
+            runtime.DispatchEvents(options);
+        }
+        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
+
+        THolder<TEvHive::TEvCreateTablet> create(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, BINDED_CHANNELS));
+        auto* followerGroup = create->Record.AddFollowerGroups();
+        followerGroup->SetFollowerCount(1);
+        followerGroup->SetFollowerCountPerDataCenter(true);
+        followerGroup->SetRequireAllDataCenters(true);
+        const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(create), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // Hive's view: a restarted follower's old instance may still answer pipes
+        auto countFollowers = [&] {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(tabletId, true));
+            TAutoPtr<IEventHandle> handle;
+            ui32 followers = 0;
+            for (const auto& tablet : runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle)->Record.GetTablets()) {
+                followers += tablet.GetFollowerID() != 0 && tablet.GetNodeID() != 0;
+            }
+            return followers;
+        };
+        bridge.Promote(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(countFollowers(), 2);
+
+        RebootTablet(runtime, hiveTablet, sender);
+        runtime.SimulateSleep(TDuration::Seconds(2)); // nodes resync with the new Hive
+        UNIT_ASSERT_VALUES_EQUAL_C(countFollowers(), 2, "per-DC follower on pile 0 stopped after Hive restart");
+    }
+
     Y_UNIT_TEST(SegmentsInSync) {
         static constexpr int NodeCount = 1;
         static constexpr auto NodeDeletePeriod = TDuration::Seconds(5);

@@ -687,7 +687,7 @@ public:
                     followerGroup.NodeFilter.AllowedNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::AllowedNodes>();
                     followerGroup.NodeFilter.AllowedDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>();
 
-                    followerGroup.RequireAllDataCenters = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>();
+                    followerGroup.SetRequireAllDataCenters(tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireAllDataCenters>());
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();

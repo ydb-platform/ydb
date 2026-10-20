@@ -387,7 +387,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
         }
     }
 
-    const bool firstGC = FirstGC && CollectGenStepInFlight;
+    const bool firstGC = FirstGC;
     if (CollectGenStepInFlight) {
         PopGCBarriers(*CollectGenStepInFlight);
         if (FirstGC) {

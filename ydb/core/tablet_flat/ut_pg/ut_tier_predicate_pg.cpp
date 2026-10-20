@@ -160,8 +160,8 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(!int8.Matches("-863999", seconds, now, offset));
     }
 
-    Y_UNIT_TEST(DateThresholdBeforeEpoch) {
-        // now - offset is 1969-12-22T00:00:00
+    Y_UNIT_TEST(ThresholdsBeforeEpoch) {
+        // now - offset is 1969-12-22T00:00:00, before both the Unix and the Postgres epochs
         const TInstant now = TInstant::Days(10);
         const TDuration offset = TDuration::Days(20);
 
@@ -169,6 +169,8 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(date.Matches("1969-12-21", {}, now, offset));
         UNIT_ASSERT(date.Matches("1969-12-22", {}, now, offset));
         UNIT_ASSERT(!date.Matches("1969-12-23", {}, now, offset));
+        UNIT_ASSERT(!date.Matches("2000-01-01", {}, now, offset));
+        UNIT_ASSERT(date.Matches("0001-01-01", {}, now, offset));
 
         TPgCase timestamp(TIMESTAMPOID);
         UNIT_ASSERT(timestamp.Matches("1969-12-22 00:00:00", {}, now, offset));
@@ -231,18 +233,69 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
     }
 
     Y_UNIT_TEST(BeforeYearOne) {
-        // Postgres dates before 1 AD are not supported, such rules are reported
+        // Bounds before 1 AD are plain integers in the Postgres representation
         TPgCase date(DATEOID);
-        const auto predicate = date.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO, Now,
+        const auto before = date.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO, Now,
             { TTierRange{ .To = Date(-100, 1, 1) } });
-        UNIT_ASSERT_VALUES_EQUAL(predicate.GetUnrepresentableTierIds(), TVector<ui32>{1});
+        UNIT_ASSERT(before.GetUnrepresentableTierIds().empty());
+        UNIT_ASSERT(date.Evaluate(before, "0001-01-01") == TTierDecision::Tier(TTierPredicate::DefaultTierId));
 
-        // Every date is after year -100, but an unrepresentable bound never matches
         const auto after = date.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO, Now,
             { TTierRange{ .From = Date(-100, 1, 1) } });
-        UNIT_ASSERT_VALUES_EQUAL(after.GetUnrepresentableTierIds(), TVector<ui32>{1});
-        UNIT_ASSERT(date.Evaluate(after, "0001-01-01") == TTierDecision::Tier(TTierPredicate::DefaultTierId));
-        UNIT_ASSERT(date.Evaluate(after, "2025-01-01") == TTierDecision::Tier(TTierPredicate::DefaultTierId));
+        UNIT_ASSERT(after.GetUnrepresentableTierIds().empty());
+        UNIT_ASSERT(date.Evaluate(after, "0001-01-01") == TTierDecision::Tier(1));
+        UNIT_ASSERT(date.Evaluate(after, "2025-01-01") == TTierDecision::Tier(1));
+    }
+
+    Y_UNIT_TEST(Infinities) {
+        // Postgres -infinity is older than any threshold, infinity is newer
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("-infinity"));
+        UNIT_ASSERT(!date.Matches("infinity"));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("-infinity"));
+        UNIT_ASSERT(!timestamp.Matches("infinity"));
+
+        // A threshold below the timestamp range still matches -infinity only
+        // (TDuration::Max) avoids the Max(x, y) macro from Postgres headers
+        const TInstant zero = TInstant::Zero();
+        const TDuration maxOffset = (TDuration::Max)();
+        UNIT_ASSERT(timestamp.Matches("-infinity", {}, zero, maxOffset));
+        UNIT_ASSERT(!timestamp.Matches("4713-01-01 00:00:00 BC", {}, zero, maxOffset));
+
+        // Absolute bounds below the timestamp range: only -infinity is before them
+        const TTierAbsoluteBound minBound{ Min<i64>() };
+        UNIT_ASSERT(timestamp.MatchesRanges("-infinity", { TTierRange{ .To = minBound } }));
+        UNIT_ASSERT(!timestamp.MatchesRanges("4713-01-01 00:00:00 BC", { TTierRange{ .To = minBound } }));
+        UNIT_ASSERT(timestamp.MatchesRanges("4713-01-01 00:00:00 BC", { TTierRange{ .From = minBound } }));
+        UNIT_ASSERT(timestamp.MatchesRanges("infinity", { TTierRange{ .From = minBound } }));
+    }
+
+    Y_UNIT_TEST(AroundPostgresEpoch) {
+        // Postgres stores dates and timestamps relative to 2000-01-01
+        const TInstant now = TInstant::Seconds(946684800) + TDuration::Days(1);
+        const TDuration offset = TDuration::Days(1);
+
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("1999-12-31", {}, now, offset));
+        UNIT_ASSERT(date.Matches("2000-01-01", {}, now, offset));
+        UNIT_ASSERT(!date.Matches("2000-01-02", {}, now, offset));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("1999-12-31 23:59:59.999999", {}, now, offset));
+        UNIT_ASSERT(timestamp.Matches("2000-01-01 00:00:00", {}, now, offset));
+        UNIT_ASSERT(!timestamp.Matches("2000-01-01 00:00:00.000001", {}, now, offset));
+    }
+
+    Y_UNIT_TEST(IntegerRangeEdges) {
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+        TPgCase int4(INT4OID);
+        UNIT_ASSERT(int4.Matches(ToString(Min<i32>()), seconds));
+        UNIT_ASSERT(!int4.Matches(ToString(Max<i32>()), seconds));
+        TPgCase int8(INT8OID);
+        UNIT_ASSERT(int8.Matches(ToString(Min<i64>()), seconds));
+        UNIT_ASSERT(!int8.Matches(ToString(Max<i64>()), seconds));
     }
 
     Y_UNIT_TEST(Unsupported) {

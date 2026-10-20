@@ -24,13 +24,13 @@ namespace NKikimr::NStorage {
                 if (!group.HasBridgeGroupState()) {
                     continue;
                 }
-                for (auto& pile : *group.MutableBridgeGroupState()->MutablePile()) {
-                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) != groupId) {
-                        continue;
+                NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        pile.SetGroupGeneration(*generation);
+                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
                     }
-                    pile.SetGroupGeneration(*generation);
-                    BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
-                }
+                });
             }
         }
 
@@ -227,8 +227,16 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+        if (const auto& error = ev->Get()->ErrorReason) {
+            // static groups can't be placed without knowing PDisks of BSC, they would get conflicting ones otherwise
+            throw TExError() << "Can't get base config: " << *error;
+        }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
-        CheckReassignGroupDisk();
+        if (AddedBridgePileId) {
+            AddBridgePileWithBaseConfig();
+        } else {
+            CheckReassignGroupDisk();
+        }
     }
 
     void TInvokeRequestHandlerActor::CheckReassignGroupDisk() {

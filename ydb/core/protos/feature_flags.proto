@@ -456,4 +456,5 @@ message TFeatureFlags {
     optional bool EnableColumnShardSetNotNull = 367 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableCompileCacheV2 = 369 [default = false];
 }

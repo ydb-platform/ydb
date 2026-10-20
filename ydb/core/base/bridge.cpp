@@ -27,7 +27,7 @@ namespace NKikimr {
     namespace NBridge {
 
         bool IsSameClusterState(const NKikimrBridge::TClusterState& x, const NKikimrBridge::TClusterState& y) {
-            Y_DEBUG_ABORT_UNLESS(x.PerPileStateSize() == y.PerPileStateSize());
+            // number of piles differs when the list of piles changes
             return x.PerPileStateSize() == y.PerPileStateSize()
                 && std::ranges::equal(x.GetPerPileState(), y.GetPerPileState())
                 && x.GetPrimaryPile() == y.GetPrimaryPile()
@@ -109,6 +109,8 @@ namespace NKikimr {
                 }
             }
 
+            res.SetPileListChanged(registry.GetPileListChanged());
+
             return res;
         }
 
@@ -122,6 +124,9 @@ namespace NKikimr {
                 &NKikimrBridge::TPileRegistry::GetImplicitPileId);
             if (implicitPileId && registry.PilesSize() <= implicitPileId.GetPileIndex()) {
                 return "ImplicitPileId in PileRegistry is out of range";
+            } else if (implicitPileId && clusterState.GetPerPileState(implicitPileId.GetPileIndex()) ==
+                    NKikimrBridge::TClusterState::INACTIVE) {
+                return "implicit pile is INACTIVE"; // nodes of implicit pile must be able to connect
             }
             const auto primary = TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPrimaryPile);
             const auto promoted = TBridgePileId::FromProto(&clusterState, &NKikimrBridge::TClusterState::GetPromotedPile);
@@ -130,7 +135,6 @@ namespace NKikimr {
                 const auto& pile = registry.GetPiles(i);
                 const auto pileId = TBridgePileId::FromPileIndex(i);
                 const auto state = clusterState.GetPerPileState(i);
-                const auto traits = PileStateTraits(state);
                 if (pile.HasName()) {
                     if (!names.insert(pile.GetName()).second) {
                         return TStringBuilder() << "duplicate pile name in PileRegistry: '" << pile.GetName() << "'";
@@ -140,11 +144,33 @@ namespace NKikimr {
                 } else if (pileId == primary || pileId == promoted || pileId == implicitPileId) {
                     return TStringBuilder() << "free slot of PileRegistry is the primary, promoted or implicit pile"
                         " PileIndex# " << i;
-                } else if (traits.RequiresDataQuorum || traits.RequiresConfigQuorum || traits.AllowsConnection) {
+                } else if (state != NKikimrBridge::TClusterState::INACTIVE) {
                     return TStringBuilder() << "free slot of PileRegistry is in state "
                         << NKikimrBridge::TClusterState::EPileState_Name(state) << " PileIndex# " << i;
                 }
             }
+            return std::nullopt;
+        }
+
+        std::optional<TString> ApplyPileRegistryChange(const NKikimrBridge::TPileRegistry& current,
+                const NKikimrBridge::TPileRegistry& next, NKikimrBridge::TClusterState *clusterState) {
+            auto *states = clusterState->MutablePerPileState();
+            if (current.PilesSize() != static_cast<size_t>(states->size())) {
+                return "number of piles in PileRegistry doesn't match number of piles in ClusterState";
+            }
+            for (size_t i = 0; i < current.PilesSize(); ++i) {
+                const auto& pile = current.GetPiles(i);
+                if (i < next.PilesSize() && next.GetPiles(i).HasName() &&
+                        next.GetPiles(i).GetName() == pile.GetName()) {
+                    continue; // the pile keeps its slot
+                } else if (pile.HasName() && states->Get(i) != NKikimrBridge::TClusterState::INACTIVE) {
+                    return TStringBuilder() << "pile '" << pile.GetName() << "' in state "
+                        << NKikimrBridge::TClusterState::EPileState_Name(states->Get(i))
+                        << " can't be removed from BridgeConfig, only INACTIVE piles can";
+                }
+                states->Set(i, NKikimrBridge::TClusterState::INACTIVE); // pile is new to this slot, or slot is free
+            }
+            states->Resize(next.PilesSize(), NKikimrBridge::TClusterState::INACTIVE);
             return std::nullopt;
         }
 
@@ -175,6 +201,16 @@ namespace NKikimr {
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
             return state;
+        }
+
+        NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {
+            Y_ABORT_UNLESS(bridgePileId && !GetGroupPile(*state, bridgePileId));
+            while (state->PileSize() <= bridgePileId.GetPileIndex()) {
+                state->AddPile()->SetAbsent(true);
+            }
+            auto *pile = state->MutablePile(bridgePileId.GetPileIndex());
+            pile->Clear();
+            return pile;
         }
 
     } // NBridge

@@ -135,6 +135,18 @@ class TestKvVolumeTool(StressFixture):
         self._run("describe")
         self._run("remove")
 
+    def test_discovery_lists_endpoints(self):
+        self._create_volume()
+        result = yatest.common.execute(
+            [self._tool(), "describe", *self._base_args(), "--verbose"],
+        )
+        stderr = result.std_err
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        assert "Discovered " in stderr, stderr
+        assert "load=" in stderr, stderr
+        self._run("remove")
+
     @pytest.mark.parametrize(
         "file_size",
         UPLOAD_DOWNLOAD_FILE_SIZES,

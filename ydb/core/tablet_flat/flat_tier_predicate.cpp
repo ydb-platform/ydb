@@ -5,7 +5,6 @@
 
 #include <util/string/cast.h>
 #include <util/system/byteorder.h>
-#include <util/system/unaligned_mem.h>
 
 #include <type_traits>
 
@@ -32,14 +31,23 @@ namespace {
     constexpr i64 PgEpochDays = 10957;
     constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
 
-    // Pg columns hold the Postgres binary (send/recv) format: the supported
-    // types are big-endian integers of a fixed width, so they are compared
-    // as integers without decoding them through Postgres (which allocates)
+    // Valid Postgres date/timestamp ranges relative to 2000-01-01, the end is exclusive
+    // (see IS_VALID_DATE and IS_VALID_TIMESTAMP in datatype/timestamp.h)
+    constexpr i64 PgMinDate = -2451545;
+    constexpr i64 PgEndDate = 2147483494 - 2451545;
+    constexpr i64 PgMinTimestamp = -211813488000000000ll;
+    constexpr i64 PgEndTimestamp = 9223371331200000000ll;
+
+    // A value in the native cell representation
     template <typename T>
-    T ReadPgInteger(const TCell& cell) {
-        Y_ENSURE(cell.Size() == sizeof(T), "Unexpected Pg value size " << cell.Size());
-        using TUnsigned = std::make_unsigned_t<T>;
-        return static_cast<T>(InetToHost(ReadUnaligned<TUnsigned>(cell.Data())));
+    TString RawOf(T value) {
+        return TString(reinterpret_cast<const char*>(&value), sizeof(value));
+    }
+
+    // The Postgres binary (send/recv) representation of fixed-width types is big-endian
+    template <typename T>
+    TString PgRawOf(T value) {
+        return RawOf(HostToInet(static_cast<std::make_unsigned_t<T>>(value)));
     }
 
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
@@ -255,23 +263,6 @@ namespace {
         return result;
     }
 
-    // DyNumber binary representation is ordered bytewise, except that negative
-    // numbers store inverted digits without a terminator: when one negative
-    // mantissa is a prefix of another, the shorter one is the greater number
-    // (as if it was padded with inverted zero digits)
-    int CompareDyNumbers(TStringBuf left, TStringBuf right) {
-        const size_t common = Min(left.size(), right.size());
-        if (const int result = left.Head(common).compare(right.Head(common))) {
-            return result;
-        }
-        if (left.size() == right.size()) {
-            return 0;
-        }
-        const bool negative = !left.empty() && left[0] == '\x00';
-        const bool leftShorter = left.size() < right.size();
-        return leftShorter != negative ? -1 : 1;
-    }
-
     bool IsRelative(const TTierBound& bound) {
         return std::holds_alternative<TTierRelativeBound>(bound);
     }
@@ -380,7 +371,7 @@ namespace {
 
         Type = info->TypeInfo;
         Pos = info->Pos;
-        PgTypeId = Type.GetTypeId() == NScheme::NTypeIds::Pg ? NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()) : 0;
+        TypeOrder = NScheme::TTypeInfoOrder(Type);
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
@@ -436,8 +427,42 @@ namespace {
         result.Cmp = cmp;
         const bool lessOrEqual = cmp == ECmp::LessOrEqual;
 
+        // The threshold is kept in the native cell representation of the column type
+        auto encodeRaw = [&](const TWide& value) -> TString {
+            switch (Type.GetTypeId()) {
+                case NScheme::NTypeIds::Date:
+                    return RawOf(static_cast<ui16>(value.Abs));
+                case NScheme::NTypeIds::Datetime:
+                case NScheme::NTypeIds::Uint32:
+                    return RawOf(static_cast<ui32>(value.Abs));
+                case NScheme::NTypeIds::Timestamp:
+                case NScheme::NTypeIds::Uint64:
+                    return RawOf(value.Abs);
+                case NScheme::NTypeIds::Date32:
+                    return RawOf(static_cast<i32>(value.AsSigned()));
+                case NScheme::NTypeIds::Datetime64:
+                case NScheme::NTypeIds::Timestamp64:
+                    return RawOf(value.AsSigned());
+                case NScheme::NTypeIds::Pg:
+                    switch (GetPgKind(Type)) {
+                        case EPgKind::Date:
+                        case EPgKind::Int4:
+                            return PgRawOf(static_cast<i32>(value.AsSigned()));
+                        case EPgKind::Timestamp:
+                        case EPgKind::Int8:
+                            return PgRawOf(value.AsSigned());
+                        case EPgKind::Unsupported:
+                            break;
+                    }
+                    break;
+                default:
+                    break;
+            }
+            Y_ENSURE(false, "Unexpected integer tiering column type " << Type.GetTypeId());
+        };
+
         // Integer columns: clamp the bound to the column range
-        auto setInteger = [&](TWide bound, TWide min, TWide max, bool isSigned) {
+        auto setInteger = [&](TWide bound, TWide min, TWide max) {
             const int toMin = CompareWide(bound, min);
             const int toMax = CompareWide(bound, max);
             switch (cmp) {
@@ -452,44 +477,39 @@ namespace {
                     break;
             }
             if (result.Kind == EKind::Value) {
-                if (isSigned) {
-                    result.Signed = bound.AsSigned();
-                } else {
-                    result.Unsigned = bound.Abs;
-                }
+                result.Raw = encodeRaw(bound);
             }
         };
 
         auto setUnsigned = [&](TWide bound, ui64 max) {
-            setInteger(bound, TWide::Unsigned(0), TWide::Unsigned(max), false);
+            setInteger(bound, TWide::Unsigned(0), TWide::Unsigned(max));
         };
 
         auto setSigned = [&](TWide bound, i64 min, i64 max) {
-            setInteger(bound, TWide::Signed(min), TWide::Signed(max), true);
+            setInteger(bound, TWide::Signed(min), TWide::Signed(max));
         };
 
-        // Postgres stores -infinity and infinity as the minimum and the maximum of
-        // the date/timestamp type. A finite bound outside of the type range saturates:
-        // below the range only -infinity is before it and every other value is after it,
-        // above the range only infinity is after it and every other value is before it
-        auto setPgTemporal = [&](TWide bound, i64 min, i64 max) {
+        // Postgres accepts only dates/timestamps within [validMin, validMax] and the special
+        // -infinity/infinity values. A bound outside of the valid range saturates: below it
+        // only -infinity is before the bound, above it only infinity is after the bound
+        auto setPgTemporal = [&](TWide bound, i64 validMin, i64 validMax, i64 minusInfinity, i64 infinity) {
             result.Kind = EKind::Value;
-            if (CompareWide(bound, TWide::Signed(min)) < 0) {
+            if (CompareWide(bound, TWide::Signed(validMin)) < 0) {
                 if (cmp == ECmp::GreaterOrEqual) {
-                    result.Signed = min + 1;
+                    result.Raw = encodeRaw(TWide::Signed(validMin));
                 } else {
                     result.Cmp = ECmp::LessOrEqual;
-                    result.Signed = min;
+                    result.Raw = encodeRaw(TWide::Signed(minusInfinity));
                 }
-            } else if (CompareWide(bound, TWide::Signed(max)) > 0) {
+            } else if (CompareWide(bound, TWide::Signed(validMax)) > 0) {
                 if (cmp == ECmp::GreaterOrEqual) {
-                    result.Signed = max;
+                    result.Raw = encodeRaw(TWide::Signed(infinity));
                 } else {
                     result.Cmp = ECmp::LessOrEqual;
-                    result.Signed = max - 1;
+                    result.Raw = encodeRaw(TWide::Signed(validMax));
                 }
             } else {
-                setSigned(bound, min, max);
+                result.Raw = encodeRaw(bound);
             }
         };
 
@@ -498,7 +518,7 @@ namespace {
                 static_cast<int>(Type.GetTypeId()));
             if (serialized) {
                 result.Kind = EKind::Value;
-                result.Serialized = std::move(*serialized);
+                result.Raw = std::move(*serialized);
             } else {
                 result.Kind = EKind::Unrepresentable;
             }
@@ -549,15 +569,15 @@ namespace {
                     case EPgKind::Date: {
                         // A date denotes the start of its day, Postgres counts days from 2000-01-01
                         const i64 days = lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay);
-                        setPgTemporal(TWide::Signed(days - PgEpochDays), Min<i32>(), Max<i32>());
+                        setPgTemporal(TWide::Signed(days - PgEpochDays), PgMinDate, PgEndDate - 1, Min<i32>(), Max<i32>());
                         break;
                     }
                     case EPgKind::Timestamp:
                         // Postgres counts microseconds from 2000-01-01
                         if (micros < Min<i64>() + PgEpochMicros) {
-                            setPgTemporal(TWide::Infinity(-1), Min<i64>(), Max<i64>());
+                            setPgTemporal(TWide::Infinity(-1), PgMinTimestamp, PgEndTimestamp - 1, Min<i64>(), Max<i64>());
                         } else {
-                            setPgTemporal(TWide::Signed(micros - PgEpochMicros), Min<i64>(), Max<i64>());
+                            setPgTemporal(TWide::Signed(micros - PgEpochMicros), PgMinTimestamp, PgEndTimestamp - 1, Min<i64>(), Max<i64>());
                         }
                         break;
                     case EPgKind::Int4:
@@ -581,40 +601,12 @@ namespace {
     }
 
     int TTierPredicate::Compare(const TCell& cell, const TThreshold& threshold) const {
-        auto compare = [](auto value, auto bound) {
-            return value < bound ? -1 : value > bound ? 1 : 0;
-        };
-
-        switch (Type.GetTypeId()) {
-            case NScheme::NTypeIds::Date:
-                return compare(ui64(cell.AsValue<ui16>()), threshold.Unsigned);
-            case NScheme::NTypeIds::Datetime:
-            case NScheme::NTypeIds::Uint32:
-                return compare(ui64(cell.AsValue<ui32>()), threshold.Unsigned);
-            case NScheme::NTypeIds::Timestamp:
-            case NScheme::NTypeIds::Uint64:
-                return compare(cell.AsValue<ui64>(), threshold.Unsigned);
-            case NScheme::NTypeIds::Date32:
-                return compare(i64(cell.AsValue<i32>()), threshold.Signed);
-            case NScheme::NTypeIds::Datetime64:
-            case NScheme::NTypeIds::Timestamp64:
-                return compare(cell.AsValue<i64>(), threshold.Signed);
-            case NScheme::NTypeIds::DyNumber:
-                return CompareDyNumbers(cell.AsBuf(), threshold.Serialized);
-            case NScheme::NTypeIds::Pg:
-                switch (PgTypeId) {
-                    case PgDateOid:
-                    case PgInt4Oid:
-                        return compare(i64(ReadPgInteger<i32>(cell)), threshold.Signed);
-                    case PgTimestampOid:
-                    case PgInt8Oid:
-                        return compare(ReadPgInteger<i64>(cell), threshold.Signed);
-                    default:
-                        Y_ENSURE(false, "Unreachable");
-                }
-            default:
-                Y_ENSURE(false, "Unreachable");
-        }
+        // TODO(https://github.com/ydb-platform/ydb/issues/56230): Pg cells are compared via
+        // PgNativeBinaryCompare, which allocates on every call.
+        // TODO(https://github.com/ydb-platform/ydb/issues/56231): DyNumber cells are compared
+        // bytewise, which mis-orders negative numbers with a common mantissa prefix.
+        const TCell bound(threshold.Raw.data(), threshold.Raw.size());
+        return CompareTypedCells(cell, bound, TypeOrder);
     }
 
     bool TTierPredicate::Matches(const TCell& cell, const TThreshold& threshold) const {

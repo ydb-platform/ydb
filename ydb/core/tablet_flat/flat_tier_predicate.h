@@ -155,9 +155,8 @@ namespace NTable {
 
             EKind Kind = EKind::Unrepresentable;
             ECmp Cmp = ECmp::LessOrEqual;
-            i64 Signed = 0;
-            ui64 Unsigned = 0;
-            TString Serialized;
+            // Threshold in the native cell representation of the column type
+            TString Raw;
         };
 
         struct TCompiledRange {
@@ -174,7 +173,7 @@ namespace NTable {
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
-        ui32 PgTypeId = 0; // Postgres type oid of a Pg column
+        NScheme::TTypeInfoOrder TypeOrder;
         TPos Pos = Max<TPos>();
         TVector<TVector<TCompiledRange>> Compiled;
     };

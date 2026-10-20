@@ -236,6 +236,32 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
         }
     }
 
+    Y_UNIT_TEST(ServiceConnectionResolutionIsAsynchronousAndOwnsItsState) {
+        TTempFile manifest(MakeTempName());
+        TFileOutput(manifest.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));
+        NFq::NConfig::TWasmServicesConfig config;
+        config.SetEnabled(true);
+        config.SetModuleSource(NFq::NConfig::TWasmServicesConfig::LOCAL_FILES);
+        auto* module = config.AddModules();
+        module->SetModulePath("unused");
+        module->SetManifestPath(manifest.Name());
+        auto promise = NThreading::NewPromise<TResolvedServiceConnection>();
+        auto factory = CreateServiceGatewayFactoryWithResolver(config, [promise](const TString& name) {
+            UNIT_ASSERT_VALUES_EQUAL(name, "/Root/profiles");
+            return promise.GetFuture();
+        });
+        auto gateway = factory->CreateDqFunctionGateway("WASM_PROFILE", {}, "/Root/profiles");
+        auto pending = gateway->ResolveFunction({}, "Profile");
+        UNIT_ASSERT(!pending.HasValue());
+        gateway.reset();
+        factory.Reset();
+        promise.SetValue(TResolvedServiceConnection{ "/Root/profiles", "public settings" });
+        const auto description = pending.GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(description.Connection, "/Root/profiles");
+        UNIT_ASSERT_VALUES_EQUAL(ServiceInvocationConnection(description.InvokeUrl), "/Root/profiles");
+        UNIT_ASSERT_VALUES_EQUAL(ServiceInvocationSettings(description.InvokeUrl), "public settings");
+    }
+
     Y_UNIT_TEST(ServiceRegistrySelectsModuleAndMethod) {
         TTempFile profile(MakeTempName()), echo(MakeTempName());
         TFileOutput(profile.Name()).Write(NResource::Find("/ydb/udfs/wasm/profile/manifest.json"));

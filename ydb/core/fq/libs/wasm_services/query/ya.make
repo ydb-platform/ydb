@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(query.cpp module_source.cpp)
+SRCS(query.cpp module_source.cpp fq_integration.cpp)
 
 PEERDIR(
     library/cpp/json

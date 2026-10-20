@@ -1,7 +1,6 @@
+#include "execution.h"
 #include "module_source.h"
-#include "query.h"
 
-#include <ydb/core/fq/libs/common/external_service.h>
 #include <ydb/core/fq/libs/wasm_services/manifest/manifest.h>
 #include <ydb/core/fq/libs/wasm_services/transport.h>
 
@@ -15,7 +14,6 @@
 #include <ydb/services/udf_store/wasm/host.h>
 #include <ydb/services/udf_store/wasm/registry_helpers.h>
 
-#include <google/protobuf/util/json_util.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/charset/utf8.h>
@@ -55,11 +53,14 @@ struct TSharedTransport {
     }
 };
 
-TString Invocation(const TString& module, const TString& method, const TString& connection) {
+TString Invocation(const TString& module, const TString& method, const TResolvedServiceConnection& connection) {
     NJson::TJsonValue value(NJson::JSON_MAP);
     value["module"] = module;
     value["method"] = method;
-    value["connection_id"] = connection;
+    value["connection_id"] = connection.Id;
+    if (connection.Settings) {
+        value["connection_settings"] = connection.Settings;
+    }
     return NJson::WriteJson(value, false);
 }
 
@@ -72,10 +73,11 @@ void ValidateMethod(const TServiceMethod& method, ui32 bytes, ui32 rows, ui64 bu
 
 class TServiceGateway final: public NYql::IDqFunctionGateway {
 public:
-    TServiceGateway(std::shared_ptr<const TServiceManifest> manifest, TString alias, TString id, ui32 bytes, ui32 rows, ui64 bufferedBytes)
+    TServiceGateway(std::shared_ptr<const TServiceManifest> manifest, TString alias, NThreading::TFuture<TResolvedServiceConnection> connection,
+        ui32 bytes, ui32 rows, ui64 bufferedBytes)
         : Manifest(std::move(manifest))
         , Alias(std::move(alias))
-        , Id(std::move(id))
+        , Connection(std::move(connection))
         , Bytes(bytes)
         , Rows(rows)
         , BufferedBytes(bufferedBytes)
@@ -85,15 +87,19 @@ public:
     NThreading::TFuture<NYql::NDqFunction::TDqFunctionDescription> ResolveFunction(const TString&, const TString& name) override {
         Y_ENSURE(Manifest->Methods.contains(name), "Unknown WASM service method");
         ValidateMethod(Manifest->Methods.at(name), Bytes, Rows, BufferedBytes);
-        return NThreading::MakeFuture(NYql::NDqFunction::TDqFunctionDescription{
-            .Type = Manifest->Name, .FunctionName = name, .Connection = Alias, .InvokeUrl = Invocation(Manifest->Name, name, Id),
-            .TransformType = TString(ServiceTransformType) });
+        return Connection.Apply([module = Manifest->Name, alias = Alias, name](const auto& future) {
+            const auto& connection = future.GetValue();
+            Y_ENSURE(connection.Id, "Missing WASM service connection id");
+            return NYql::NDqFunction::TDqFunctionDescription{ .Type = module, .FunctionName = name, .Connection = alias,
+                .InvokeUrl = Invocation(module, name, connection),
+                .TransformType = TString(ServiceTransformType) };
+        });
     }
 
 private:
     const std::shared_ptr<const TServiceManifest> Manifest;
     const TString Alias;
-    const TString Id;
+    const NThreading::TFuture<TResolvedServiceConnection> Connection;
     const ui32 Bytes, Rows;
     const ui64 BufferedBytes;
 };
@@ -593,49 +599,32 @@ TString ServiceInvocationConnection(const TString& invocation) {
     return id;
 }
 
-TString PrepareServiceConnection(const FederatedQuery::Connection& connection, const TString& currentIamToken) {
-    Y_ENSURE(connection.content().setting().has_external_service(), "Invalid WASM service connection type");
-    auto service = connection.content().setting().external_service();
-    Y_ENSURE(ValidateExternalService(service, false).Empty(), "Invalid external service connection");
-    if (service.auth().has_current_iam()) {
-        Y_ENSURE(!currentIamToken.empty(), "Current IAM token is unavailable for external service connection");
-        service.mutable_auth()->mutable_token()->set_token(currentIamToken);
-    }
-    // SecureParams travels through protobuf string fields, so keep its payload UTF-8.
-    TString payload;
-    Y_ENSURE(google::protobuf::util::MessageToJsonString(service, &payload).ok(), "Cannot prepare external service connection");
-    return payload;
+TString ServiceInvocationSettings(const TString& invocation) {
+    NJson::TJsonValue value;
+    Y_ENSURE(NJson::ReadJsonTree(invocation, &value, true) && value.IsMap(), "Invalid WASM service invocation");
+    return value.Has("connection_settings") ? value["connection_settings"].GetStringSafe() : TString();
 }
 
-NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactory(
-    const NConfig::TWasmServicesConfig& config, const THashMap<TString, FederatedQuery::Connection>& connections) {
+NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactoryWithResolver(
+    const NConfig::TWasmServicesConfig& config, TServiceConnectionResolver resolver) {
+    Y_ENSURE(resolver, "Missing WASM service connection resolver");
     auto source = CreateServiceModuleSource(config);
-    THashMap<TString, TString> aliases;
-    for (const auto& [id, connection] : connections) {
-        if (connection.content().setting().has_external_service()) {
-            Y_ENSURE(!id.empty() && aliases.emplace(connection.content().name(), id).second, "Invalid or duplicate external service connection");
-        }
-    }
     auto factory = MakeIntrusive<NYql::TDqFunctionGatewayFactory>();
     const ui32 bytes = config.GetMaxBatchBytes() ? config.GetMaxBatchBytes() : MaxServiceBatchBytes;
     const ui32 rows = config.GetMaxBatchRows() ? config.GetMaxBatchRows() : 1;
     const ui64 bufferedBytes = config.GetMaxBufferedBytes() ? config.GetMaxBufferedBytes() : 64 << 20;
     for (auto& module : source->Describe()) {
         auto manifest = std::make_shared<TServiceManifest>(std::move(module));
-        factory->Register(manifest->Name, [manifest, aliases, bytes, rows, bufferedBytes](const auto&, const TString& connection) {
-            const auto it = aliases.find(connection);
-            Y_ENSURE(it != aliases.end(), "Unknown or inaccessible external service connection");
-            return std::make_shared<TServiceGateway>(manifest, connection, it->second, bytes, rows, bufferedBytes);
+        factory->Register(manifest->Name, [manifest, resolver, bytes, rows, bufferedBytes](const auto&, const TString& connection) {
+            return std::make_shared<TServiceGateway>(manifest, connection, resolver(connection), bytes, rows, bufferedBytes);
         });
     }
     return factory;
 }
 
-void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
-    std::shared_ptr<ITvmTicketProvider> tvmProvider, ui32 userPool, NMonitoring::TDynamicCounterPtr counters) {
-    if (!tvmProvider) {
-        tvmProvider = CreateTvmTicketProvider();
-    }
+void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NConfig::TWasmServicesConfig& config,
+    TServiceBindingResolver resolver, ui32 userPool, NMonitoring::TDynamicCounterPtr counters) {
+    Y_ENSURE(resolver, "Missing WASM service binding resolver");
     auto source = CreateServiceModuleSource(config);
     // Compile local modules at startup, never on a transform's user-pool turn.
     // Store modules arrive asynchronously and are already compiled by UDF Store.
@@ -658,7 +647,7 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
     EnsureUdfHostIntrinsicsRegistered();
     NAsync::KeepAsyncHostIntrinsicsLinked();
     factory.RegisterOutputTransform<NYql::NProto::TFunctionTransform>(
-        TString(ServiceTransformType), [source, config, tvmProvider, sharedTransport](
+        TString(ServiceTransformType), [source, config, resolver, sharedTransport](
                                            NYql::NProto::TFunctionTransform&& settings, IDqAsyncIoFactory::TOutputTransformArguments&& args) {
             NJson::TJsonValue invocation;
             Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(), "Invalid WASM service invocation");
@@ -687,33 +676,7 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
             }
             const auto method = prepared->Manifest.Methods.find(invocation["method"].GetStringSafe());
             Y_ENSURE(method != prepared->Manifest.Methods.end(), "Unknown WASM service method");
-            const auto entry = args.SecureParams.find(ServiceConnectionKey(ServiceInvocationConnection(settings.GetInvokeUrl())));
-            Y_ENSURE(entry != args.SecureParams.end(), "External service connection is unavailable");
-            FederatedQuery::ExternalService service;
-            Y_ENSURE(google::protobuf::util::JsonStringToMessage(entry->second, &service).ok() && ValidateExternalService(service, true).Empty(),
-                "Invalid external service connection");
-            TBinding binding;
-            binding.Protocol = service.protocol() == FederatedQuery::ExternalService::HTTP ? EProtocol::Http : EProtocol::Grpc;
-            binding.Endpoint = service.endpoint();
-            binding.CaCertificate = service.ca_certificate();
-            for (const auto& [key, value] : service.headers()) {
-                binding.Headers.emplace_back(key, value);
-            }
-            if (service.has_tvm_auth()) {
-                Y_ENSURE(tvmProvider->IsAvailable(),
-                    "TVM ticket provider is not implemented; source/destination credentials are supported, but ticket acquisition is a stub");
-                binding.TvmProvider = tvmProvider;
-                binding.TvmCredentials = { service.tvm_auth().source_id(), service.tvm_auth().destination_id(), service.tvm_auth().secret() };
-            }
-            if (service.auth().has_token()) {
-                binding.Headers.emplace_back(
-                    binding.Protocol == EProtocol::Http ? "Authorization" : "authorization", "Bearer " + service.auth().token().token());
-            }
-            if (binding.Protocol == EProtocol::Grpc) {
-                grpc::SslCredentialsOptions options;
-                options.pem_root_certs = service.ca_certificate();
-                binding.GrpcCredentials = service.insecure() ? grpc::InsecureChannelCredentials() : grpc::SslCredentials(options);
-            }
+            auto binding = resolver(settings.GetInvokeUrl(), args.SecureParams);
             auto* actor = new TServiceTransform(prepared, method->second, std::move(binding), sharedTransport, std::move(args));
             return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });

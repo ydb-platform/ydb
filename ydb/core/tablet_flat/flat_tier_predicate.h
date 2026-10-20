@@ -105,9 +105,11 @@ namespace NTable {
 
             EKind Kind = EKind::Unrepresentable;
             ECmp Cmp = ECmp::LessOrEqual;
-            i64 Signed = 0;
-            ui64 Unsigned = 0;
-            TString Serialized;
+            // Threshold in the native cell representation of the column type
+            TCell Bound;
+            // Owns Bound data that does not fit into the cell (a long DyNumber). TString
+            // shares its buffer on copy and is never modified, so Bound stays valid
+            TString Storage;
         };
 
         struct TCompiledRange {
@@ -115,7 +117,8 @@ namespace NTable {
             std::optional<TThreshold> To;
         };
 
-        TThreshold MakeThreshold(i64 micros, ECmp cmp) const;
+        // ttlRounding keeps row table TTL rounding of relative (Interval) bounds
+        TThreshold MakeThreshold(i64 micros, ECmp cmp, bool ttlRounding) const;
         i64 ToMicros(const TTierBound& bound, i64 nowUs) const;
         bool Matches(const TCell& cell, const TThreshold& threshold) const;
         int Compare(const TCell& cell, const TThreshold& threshold) const;
@@ -123,7 +126,7 @@ namespace NTable {
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
-        ui32 PgTypeId = 0; // Postgres type oid of a Pg column
+        NScheme::TTypeInfoOrder TypeOrder;
         TPos Pos = Max<TPos>();
         TVector<TVector<TCompiledRange>> Compiled;
     };

@@ -467,6 +467,22 @@ namespace {
             setInteger(bound, TWide::Signed(min), TWide::Signed(max), true);
         };
 
+        // Postgres stores -infinity and infinity as the minimum and the maximum of
+        // the date/timestamp type, so a bound outside of the type range saturates:
+        // below the range only -infinity is before it, above only infinity is after
+        auto setPgTemporal = [&](TWide bound, i64 min, i64 max) {
+            if (CompareWide(bound, TWide::Signed(min)) < 0 && cmp != ECmp::GreaterOrEqual) {
+                result.Kind = EKind::Value;
+                result.Cmp = ECmp::LessOrEqual;
+                result.Signed = min;
+            } else if (CompareWide(bound, TWide::Signed(max)) > 0 && cmp == ECmp::GreaterOrEqual) {
+                result.Kind = EKind::Value;
+                result.Signed = max;
+            } else {
+                setSigned(bound, min, max);
+            }
+        };
+
         auto setSerialized = [&](TMaybe<TString> serialized) {
             Y_DEBUG_ABORT_UNLESS(serialized, "Cannot convert tiering threshold for column type %d",
                 static_cast<int>(Type.GetTypeId()));
@@ -522,15 +538,15 @@ namespace {
                     case EPgKind::Date: {
                         // A date denotes the start of its day, Postgres counts days from 2000-01-01
                         const i64 days = lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay);
-                        setSigned(TWide::Signed(days - PgEpochDays), Min<i32>(), Max<i32>());
+                        setPgTemporal(TWide::Signed(days - PgEpochDays), Min<i32>(), Max<i32>());
                         break;
                     }
                     case EPgKind::Timestamp:
                         // Postgres counts microseconds from 2000-01-01
                         if (micros < Min<i64>() + PgEpochMicros) {
-                            setSigned(TWide::Infinity(-1), Min<i64>(), Max<i64>());
+                            setPgTemporal(TWide::Infinity(-1), Min<i64>(), Max<i64>());
                         } else {
-                            setSigned(TWide::Signed(micros - PgEpochMicros), Min<i64>(), Max<i64>());
+                            setPgTemporal(TWide::Signed(micros - PgEpochMicros), Min<i64>(), Max<i64>());
                         }
                         break;
                     case EPgKind::Int4:

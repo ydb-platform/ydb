@@ -1069,9 +1069,8 @@ private:
         stageProto.SetStageCost(stageCost);
         // TODO: fill TKqpPhyStage::EstimatedRows and TKqpPhyTableOperation::EstimatedRows when:
         //  - read estimates take key ranges into account: now a read by ranges, e.g. `key IN $param`,
-        //    is estimated as the whole table, so the executer treats it as heavy;
+        //    is estimated as the whole table;
         //  - TShardInfo::EstimatedRows gets a consumer, e.g. task placement in TMaxTasksGraph.
-        // While these fields are empty, the executer does not request partition stats.
         const auto& secureParams = FindSecureParams(stage.Program().Ptr(), TypesCtx, SecretNames);
         stageProto.MutableSecureParams()->insert(secureParams.begin(), secureParams.end());
 

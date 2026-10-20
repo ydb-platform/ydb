@@ -406,7 +406,6 @@ public:
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
@@ -902,23 +901,12 @@ private:
         }
 
         if (resolveStatus == CONTINUE) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
+            DoExecute();
         }
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev)) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
-        }
-    }
-
-    void HandlePartitionStats(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        TBase::ApplyPartitionStatsResult(ev);
-        if (TBase::PendingPartitionStatsRequests == 0) {
             DoExecute();
         }
     }

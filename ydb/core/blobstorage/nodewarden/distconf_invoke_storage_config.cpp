@@ -486,8 +486,9 @@ namespace NKikimr::NStorage {
         };
 
         if (pileListChanged) {
-            // every node remaining in the cluster must take pile ids from pile registry; static nodes being removed
-            // from the config, as well as the nodes of INACTIVE piles, don't take part in the cluster
+            // every node connected to the cluster must take pile ids from pile registry; static nodes being removed
+            // from the config, as well as the nodes of piles not allowing connections (INACTIVE and DISCONNECTED ones),
+            // don't take part in the cluster; the ones of lower feature level are refused when their pile is back
             THashSet<ui32> staticNodeIds;
             for (const auto& node : Self->StorageConfig->GetAllNodes()) {
                 staticNodeIds.insert(node.GetNodeId());
@@ -496,9 +497,9 @@ namespace NKikimr::NStorage {
             THashSet<ui32> requiredNodeIds;
             for (const auto& node : ProposedStorageConfig.GetAllNodes()) {
                 const auto bridgePileId = ResolveNodePileId(registry, TNodeLocation(node.GetLocation()));
-                const bool inactive = bridgePileId && *bridgePileId && NBridge::GetPileState(
-                    ProposedStorageConfig.GetClusterState(), *bridgePileId) == NKikimrBridge::TClusterState::INACTIVE;
-                if (staticNodeIds.contains(node.GetNodeId()) && !inactive) {
+                const bool outside = bridgePileId && *bridgePileId && !NBridge::PileStateTraits(NBridge::GetPileState(
+                    ProposedStorageConfig.GetClusterState(), *bridgePileId)).AllowsConnection;
+                if (staticNodeIds.contains(node.GetNodeId()) && !outside) {
                     requiredNodeIds.insert(node.GetNodeId());
                 }
                 staticNodeIds.insert(node.GetNodeId());
@@ -509,7 +510,8 @@ namespace NKikimr::NStorage {
                     ignoredNodeIds.insert(nodeId);
                 }
             }
-            RequireBridgeCapability(true, std::move(requiredNodeIds), std::move(ignoredNodeIds), std::move(proceed));
+            RequireBridgeCapability(BridgeFeatureLevelPileOps, std::move(requiredNodeIds), std::move(ignoredNodeIds),
+                std::move(proceed));
         } else {
             proceed();
         }
@@ -734,7 +736,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
         if (msg.ClientId != ControllerPipeId) {
-            return;
+            return; // the pipe has already been closed
         }
         YDB_LOG_DEBUG("Received TEvClientConnected",
             {"marker", "NWDC65"},
@@ -743,9 +745,7 @@ namespace NKikimr::NStorage {
             {"clientId", msg.ClientId},
             {"serverId", msg.ServerId});
 
-        if (msg.ClientId != ControllerPipeId) {
-            return; // the pipe has already been closed
-        } else if (msg.Status != NKikimrProto::OK) {
+        if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
             throw TExError() << "Failed to connect to BSC with " << msg.Status;
         }
@@ -754,7 +754,7 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
         auto& msg = *ev->Get();
         if (msg.ClientId != ControllerPipeId) {
-            return;
+            return; // the pipe has been closed by this actor
         }
         YDB_LOG_DEBUG("Received TEvClientDestroyed",
             {"marker", "NWDC79"},
@@ -762,9 +762,6 @@ namespace NKikimr::NStorage {
             {"clientId", msg.ClientId},
             {"serverId", msg.ServerId});
 
-        if (msg.ClientId != ControllerPipeId) {
-            return; // the pipe has been closed by this actor
-        }
         ControllerPipeId = {};
         throw TExError() << "Pipe to BSC disconnected";
     }
@@ -782,13 +779,19 @@ namespace NKikimr::NStorage {
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
-            if (response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_BRIDGE_PILE_OPS) {
-                throw TExError() << "BS_CONTROLLER is way too old to add piles";
+        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
+            const bool adding = ControllerOp == EControllerOp::ADD_BRIDGE_PILE;
+            if (response.GetStatus(0).GetInterfaceVersion() < (adding ? BSC_INTERFACE_BRIDGE_PILE_OPS :
+                    BSC_INTERFACE_REMOVE_BRIDGE_PILE)) {
+                throw TExError() << "BS_CONTROLLER is way too old to " << (adding ? "add" : "remove") << " piles";
             }
-            record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile);
-            AddedBridgePileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
-            record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
+            record.SetOperation(adding
+                ? NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile
+                : NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateRemoveBridgePile);
+            BridgePileOpPileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            if (adding) {
+                record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
+            }
             NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
             return;
         }
@@ -835,6 +838,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case EControllerOp::ADD_BRIDGE_PILE:
+            case EControllerOp::REMOVE_BRIDGE_PILE:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -870,9 +874,11 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
-        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
+        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE || ControllerOp == EControllerOp::REMOVE_BRIDGE_PILE) {
             if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
-                throw TExError() << "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
+                throw TExError() << (ControllerOp == EControllerOp::ADD_BRIDGE_PILE
+                    ? "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
+                    : "Can't remove pile from the cluster: BSC can't delete parts of its groups in the pile: ")
                     << record.GetErrorReason();
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
@@ -910,6 +916,7 @@ namespace NKikimr::NStorage {
             }
 
             case EControllerOp::ADD_BRIDGE_PILE:
+            case EControllerOp::REMOVE_BRIDGE_PILE:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

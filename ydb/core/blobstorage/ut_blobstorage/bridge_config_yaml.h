@@ -81,6 +81,30 @@ namespace NBridgeTest {
         });
     }
 
+    // drop the pile from the bridge config of the cluster along with its hosts
+    inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult DropPileFromConfig(TEnvironmentSetup& env,
+            const TString& name) {
+        return ReplaceMainConfig(env, [&](YAML::Node& config) {
+            auto filter = [](const YAML::Node& items, auto&& keep) {
+                YAML::Node res(YAML::NodeType::Sequence);
+                for (const YAML::Node& item : items) {
+                    if (keep(item)) {
+                        res.push_back(item);
+                    }
+                }
+                return res;
+            };
+            config["bridge_config"]["piles"] = filter(config["bridge_config"]["piles"], [&](const YAML::Node& pile) {
+                return pile["name"].as<TString>() != name;
+            });
+            config["hosts"] = filter(config["hosts"], [&](const YAML::Node& host) {
+                // hosts of the implicit pile may have neither pile name nor location
+                const YAML::Node location = host["location"];
+                return !location || !location["bridge_pile_name"] || location["bridge_pile_name"].as<TString>() != name;
+            });
+        });
+    }
+
     // add the third pile (named as GetBridgedLocation does) with its nodes to the main config of the cluster
     inline NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult AddThirdPileToConfig(TEnvironmentSetup& env) {
         return AddPileToConfig(env, "pile_3", FirstThirdPileNodeId, LastThirdPileNodeId);

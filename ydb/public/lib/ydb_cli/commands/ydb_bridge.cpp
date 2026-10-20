@@ -1,7 +1,9 @@
 #include "ydb_bridge.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/command_utils.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
@@ -59,6 +61,7 @@ namespace {
         switch (kind) {
             case NYdb::NBridge::TPendingPileOperation::EKind::UNSPECIFIED: return "UNSPECIFIED";
             case NYdb::NBridge::TPendingPileOperation::EKind::ADD: return "ADD";
+            case NYdb::NBridge::TPendingPileOperation::EKind::REMOVE: return "REMOVE";
         }
         return "UNKNOWN";
     }
@@ -75,6 +78,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeRejoin>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeAddPile>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeRemovePile>(allowEmptyDatabase));
 }
 
 TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
@@ -449,6 +453,50 @@ int TCommandBridgeAddPile::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Pile added to the cluster successfully, it can be rejoined now." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeRemovePile::TCommandBridgeRemovePile(bool allowEmptyDatabase)
+    : TYdbCommand("remove-pile", {}, "Remove a DISCONNECTED pile from the cluster: delete its parts of every storage "
+        "group along with ALL THEIR DATA, which can't be undone, and make it INACTIVE. Waits until every storage group "
+        "loses its part in the pile; then the pile may be dropped from the bridge config along with its hosts.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+    CompletionDescription = "Remove a DISCONNECTED pile from the cluster along with ALL ITS DATA";
+}
+
+void TCommandBridgeRemovePile::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("pile", "Name of the pile to remove.")
+        .Required().RequiredArgument("PILE_NAME").StoreResult(&Pile);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeRemovePile::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+bool TCommandBridgeRemovePile::Prompt(TConfig& config) {
+    if (!config.AssumeYes) {
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
+        Cout << colors.RedColor() << "Every storage group of pile " << Pile << " will be deleted along with all the data "
+            "it holds. This can't be undone." << colors.OldColor() << " Use \"--assume-yes\" (\"-y\") option to "
+            "proceed without prompting." << Endl;
+        return AskYesOrNo("Do you want to remove pile " + Pile + " from the cluster?", /* defaultAnswer */ false);
+    }
+    return true;
+}
+
+int TCommandBridgeRemovePile::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.RemovePile(Pile).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Pile removed from the cluster successfully, it is INACTIVE now." << Endl;
 
     return EXIT_SUCCESS;
 }

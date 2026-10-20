@@ -73,7 +73,10 @@ namespace NKikimr {
                 configured.insert(pile.GetName());
             }
 
-            NKikimrBridge::TPileRegistry res;
+            // settings of the registry other than the list of piles (like PileListChanged) are kept as they are
+            NKikimrBridge::TPileRegistry res = registry;
+            res.ClearPiles();
+            res.ClearImplicitPileId();
             THashSet<TString> placed;
             for (const auto& pile : registry.GetPiles()) {
                 auto *slot = res.AddPiles();
@@ -108,8 +111,6 @@ namespace NKikimr {
                     res.SetImplicitPileId(registry.GetImplicitPileId());
                 }
             }
-
-            res.SetPileListChanged(registry.GetPileListChanged());
 
             return res;
         }
@@ -211,6 +212,16 @@ namespace NKikimr {
             auto *pile = state->MutablePile(bridgePileId.GetPileIndex());
             pile->Clear();
             return pile;
+        }
+
+        void RemoveGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {
+            auto *pile = GetGroupPile(state, bridgePileId);
+            Y_ABORT_UNLESS(pile);
+            pile->Clear();
+            pile->SetAbsent(true);
+            while (state->PileSize() && state->GetPile(state->PileSize() - 1).GetAbsent()) {
+                state->MutablePile()->RemoveLast();
+            }
         }
 
     } // NBridge

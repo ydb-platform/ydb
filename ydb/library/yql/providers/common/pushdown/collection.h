@@ -15,7 +15,6 @@ void CollectPredicates(TExprContext& ctx, const NNodes::TExprBase& predicate, TP
     TExprContext& ctx, const NNodes::TExprBase& lambdaArg, const NNodes::TExprBase& lambdaBody, const TSettings& settings);
 
 struct TLikeSettings {
-    bool IsUtf8 = true;
     bool CaseSensitive = true;
     TExprNodePtr Haystack;
     TExprNodePtr Pattern;

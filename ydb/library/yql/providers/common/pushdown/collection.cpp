@@ -886,21 +886,10 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
             settings.CaseSensitive = *boolValue;
             continue;
         }
-        if (maybeName.Cast().StringValue() == "Utf8") {
-            if (auto maybeJust = TExprBase(value).Maybe<TCoJust>()) {
-                value = maybeJust.Cast().Input().Ptr();
-            }
-            auto maybeBool = TExprBase(value).Maybe<TCoBool>();
-            if (!maybeBool) {
-                return std::nullopt;
-            }
-            auto boolValue = TryFromString<bool>(maybeBool.Cast().Literal().StringValue());
-            if (!boolValue) {
-                return std::nullopt;
-            }
-            settings.IsUtf8 = *boolValue;
-            continue;
-        }
+        // Re2::Option(xxx AS Utf8) could've been used for passing Utf8-mode,
+        // but currently unimplemented: I]LIKE always works in utf8 mode;
+        // trigger test failure if anything changed (pushdown will require changes);
+        // Note: *all* callers will require changes by then
         return std::nullopt;
     }
     return settings;

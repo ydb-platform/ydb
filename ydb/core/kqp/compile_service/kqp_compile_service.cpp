@@ -624,11 +624,13 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
+        // COMPILE is the final lookup, so this is a definitive miss; PARSE and SPLIT may still hit
+        // on a later lookup. The miss is reported before the request is queued, so a request that
+        // is later rejected, times out or is cancelled still counts.
         if (compileSettings.Action == ECompileActorAction::COMPILE) {
-            return EnqueueCacheMiss(std::move(compileRequest), ctx);
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
         }
 
-        // Parsing or splitting can still lead to a cache hit in a subsequent request.
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -840,13 +842,6 @@ private:
         }
     }
 
-    // The miss is reported at lookup time, before the request is queued: a request that is
-    // later rejected, times out or is cancelled still did not find its plan in the cache.
-    void EnqueueCacheMiss(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-        EnqueueCompileRequest(std::move(compileRequest), ctx);
-    }
-
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
@@ -903,8 +898,9 @@ private:
 
         compileRequest.QueryAst = std::move(queryAst);
 
+        // A recompile did not look up the cache, and a SPLIT is followed by per-statement lookups.
         if (compileRequest.FindInCache && compileRequest.CompileSettings.Action != ECompileActorAction::SPLIT) {
-            return EnqueueCacheMiss(std::move(compileRequest), ctx);
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
         }
 
         EnqueueCompileRequest(std::move(compileRequest), ctx);

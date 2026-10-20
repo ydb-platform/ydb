@@ -452,9 +452,15 @@ class SnapshotRowsTest(unittest.TestCase):
 
 
 class CloudApiTest(unittest.TestCase):
-    def test_iam_token_uses_env(self):
-        with mock.patch.dict(os.environ, {"YC_TOKEN": "t-from-env"}, clear=False):
-            self.assertEqual(iam_token(), "t-from-env")
+    def test_iam_token_uses_ci_ydb_key(self):
+        with mock.patch.dict(os.environ, {"CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/tmp/sa.json"}, clear=False):
+            with mock.patch("github_actions.export_runner_capacity.os.path.isfile", return_value=True):
+                with mock.patch(
+                    "github_actions.export_runner_capacity.iam_token_from_key_file",
+                    return_value="t-from-sa",
+                ) as mint:
+                    self.assertEqual(iam_token(), "t-from-sa")
+                    mint.assert_called_once_with("/tmp/sa.json")
 
     def test_quota_accepts_camel_case_id(self):
         headroom = quota_headroom([

@@ -31,6 +31,7 @@ PEERDIR(
 
 DATA(
     arcadia/ydb/core/kqp/opt/rbo/verification/benchmark_ut/coverage_policy.json
+    arcadia/ydb/core/kqp/opt/rbo/verification/benchmark_ut/corpora/job
     arcadia/ydb/core/kqp/ut/rbo/data
 )
 

@@ -56,7 +56,16 @@ constexpr ui64 CoverageReportVersion = 5;
 enum class ECoverageRun {
     Environment,
     ProofFloor,
+    Exploratory,
 };
+
+// The repository's dialect adaptation of ClickHouse/ClickBench's 43 queries.
+// Exploratory reports have no coverage floor; TPCH/TPCDS retain their contract.
+const TSuite Clickbench{
+    "CLICKBENCH_YQL", "clickbench", "schema/clickbench.sql", "yql-clickbench/q", 43};
+const TSuite Job{
+    "JOB_YQL", "job", "schema.yql", "q", 113,
+    "ydb/core/kqp/opt/rbo/verification/benchmark_ut/corpora/job"};
 
 struct TCoverageRunConfig {
     ECoverageMode Mode = ECoverageMode::FormulaDashboard;
@@ -170,9 +179,8 @@ NJson::TJsonValue ResultBundleManifest(const TVector<TSnapshotPair>& bundle, TSt
     return manifest;
 }
 
-TString DataPath(TStringBuf relative) {
-    return ArcadiaSourceRoot() +
-        "/ydb/core/kqp/ut/rbo/data/" + TString(relative);
+TString DataPath(const TSuite& suite, TStringBuf relative) {
+    return ArcadiaSourceRoot() + "/" + suite.SourceRoot + "/" + TString(relative);
 }
 
 TIntrusivePtr<IKqpGateway> MakeGateway(Tests::TServer& server) {
@@ -262,7 +270,7 @@ TKikimrRunner MakeRunner() {
 }
 
 void CreateTables(TKikimrRunner& kikimr, const TSuite& suite) {
-    std::string schema = TFileInput(DataPath(suite.Schema)).ReadAll();
+    std::string schema = TFileInput(DataPath(suite, suite.Schema)).ReadAll();
     const std::regex table(
         R"(CREATE TABLE [^\(]+ \([^;]*\))",
         std::regex::multiline);
@@ -285,7 +293,7 @@ $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
 $round = ($x,$y) -> { return $x; };
 )";
-    return prelude + TFileInput(DataPath(
+    return prelude + TFileInput(DataPath(suite,
         suite.QueryPrefix + ToString(queryId) + ".yql")).ReadAll();
 }
 
@@ -1196,6 +1204,11 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
 
     try {
         policy = LoadCoveragePolicy();
+        if (run == ECoverageRun::Exploratory) {
+            TSuiteCoveragePolicy exploratory;
+            exploratory.QueryCount = suite.QueryCount;
+            policy->Suites.emplace(suite.Name, std::move(exploratory));
+        }
         const auto config = ResolveCoverageRun(*policy, suite, run);
         mode = config.Mode;
         timeoutMs = config.TimeoutMs;
@@ -1357,6 +1370,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     }
 
     NJson::TJsonValue report = CoverageReportHeader(suite);
+    report["exploratory"] = run == ECoverageRun::Exploratory;
     report["solver_present"] = solver.Defined();
     report["construction_timeout_ms"] = ConstructionTimeoutMs;
     report["timeout_ms"] = timeoutResolved
@@ -1937,6 +1951,14 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
 
     Y_UNIT_TEST(TPCDS) {
         RunCoverage(Tpcds, ECoverageRun::Environment);
+    }
+
+    Y_UNIT_TEST(ClickBenchExploratory) {
+        RunCoverage(Clickbench, ECoverageRun::Exploratory);
+    }
+
+    Y_UNIT_TEST(JoinOrderBenchmarkExploratory) {
+        RunCoverage(Job, ECoverageRun::Exploratory);
     }
 
     Y_UNIT_TEST(ProofFloorTpchCorpus) {

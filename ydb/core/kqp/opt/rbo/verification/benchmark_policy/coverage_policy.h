@@ -33,6 +33,7 @@ struct TSuite {
     TString Schema;
     TString QueryPrefix;
     ui32 QueryCount;
+    TString SourceRoot = "ydb/core/kqp/ut/rbo/data";
 };
 
 inline const TSuite Tpch{

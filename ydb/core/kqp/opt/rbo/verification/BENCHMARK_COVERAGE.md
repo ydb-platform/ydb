@@ -23,6 +23,29 @@ that necessarily pass through the verifier.
 
 Render the replacement table with `python3 benchmark_ut/render_policy.py` from
 this directory; use `--check` to check this document without writing it.
+
+## Additional analytical corpora
+
+`ClickBenchExploratory` runs the repository's 43 YQL adaptations of
+[ClickBench](https://github.com/ClickHouse/ClickBench).
+`JoinOrderBenchmarkExploratory` runs all 113 queries from the
+[Join Order Benchmark distribution](https://github.com/gregrahn/join-order-benchmark),
+revision `a39603662e023e449cb2121997a5034df9e02ebf`, accompanying
+[How Good Are Query Optimizers, Really?](https://www.vldb.org/pvldb/vol9/p204-leis.pdf).
+These suites use the same real-host initial/final captures and bounded checker.
+They have no coverage floors and do not relax the TPCH/TPCDS policy.
+
+The JOB corpus is reproducibly adapted by `benchmark_ut/adapt_job.py`.
+Its `corpora/job/source.json` records original filenames, source and adapted
+SHA-256 hashes, and schema changes. Projections and predicates are preserved;
+table paths and the comma-join pragma are changed for YQL. Text uses YDB's UTF-8
+byte ordering, and varchar length restrictions are not modeled. No IMDb data is
+included. These are dialect adaptations, not benchmark performance measurements.
+
+Use `RBO_COVERAGE_QUERIES` to select manageable batches and
+`RBO_COVERAGE_USE_SOLVER=1` for proof attempts. Keep preparation, export,
+construction and proof results separate in the generated reports.
+
 The [archived measurements and findings](history/pre-audit-refactor/BENCHMARK_COVERAGE.md)
 retain all earlier corpus inventories, focused solver results, artifacts,
 commit references, and corrected/superseded checkpoints. They are historical

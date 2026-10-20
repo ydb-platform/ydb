@@ -521,6 +521,16 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 20,
+                "ColumnName": "ExcludedVDisks",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 21,
+                "ColumnName": "WritePolicy",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 109,
                 "ColumnName": "BlobDepotId",
                 "ColumnType": "Uint64"
@@ -576,6 +586,8 @@
                     16,
                     17,
                     106,
+                    20,
+                    21,
                     109,
                     110,
                     111,

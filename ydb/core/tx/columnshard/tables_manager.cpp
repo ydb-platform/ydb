@@ -339,7 +339,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
     }
 
     {
-        TLoadTimeSignals::TLoadTimer timer = LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard(&loadDurations.SchemaPresetVersions);
+        TLoadTimeSignals::TLoadTimer timer =
+            LoadTimeCounters->SchemaPresetVersionsLoadTimeCounters.StartGuard(&loadDurations.SchemaPresetVersions);
         TMemoryProfileGuard g("TTablesManager/InitFromDB::PresetVersions");
 
         auto rowset = db.Table<Schema::SchemaPresetVersionInfo>().Select();

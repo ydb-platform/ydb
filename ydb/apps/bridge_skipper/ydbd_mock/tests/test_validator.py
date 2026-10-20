@@ -1,5 +1,6 @@
 import itertools
 import unittest
+from unittest.mock import patch
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import model, validator
 from ydb.apps.bridge_skipper.ydbd_mock.lib.model import ClusterState, Stored
@@ -123,6 +124,27 @@ class DerivationTest(Case):
 
     def test_unknown_future_enum_value_is_an_internal_error(self):
         self.assertError(run(st([S, S]), [("pile2", 77)]), model.INTERNAL_ERROR, "Unsupported pile state")
+
+    def test_known_inactive_enum_value_is_rejected_without_changing_snapshot(self):
+        current = st([S, S], generation=4, quorum_piles_last=["pile1"], sync={1: 3})
+        snapshot = current.to_json()
+
+        with patch.object(model, "PUB_INACTIVE", 7):
+            result = run(current, [("pile2", 7)])
+
+        self.assertError(result, model.BAD_REQUEST,
+                         "Pile can't be switched to INACTIVE state, it has to be removed from the cluster instead")
+        self.assertEqual(current.to_json(), snapshot)
+
+    def test_unknown_seven_on_old_schema_is_an_internal_error_without_changing_snapshot(self):
+        current = st([S, S], generation=4, quorum_piles_last=["pile1"], sync={1: 3})
+        snapshot = current.to_json()
+
+        with patch.object(model, "PUB_INACTIVE", None):
+            result = run(current, [("pile2", 7)])
+
+        self.assertError(result, model.INTERNAL_ERROR, "Unsupported pile state")
+        self.assertEqual(current.to_json(), snapshot)
 
     def test_no_primary_in_the_result(self):
         self.assertError(run(st([S, S]), [("pile1", DISC)]),

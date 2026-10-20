@@ -117,6 +117,10 @@ def validate_update(
                     model.BAD_REQUEST,
                     "Multiple promoted piles are not allowed, found %d and %d" % (pile_id(final_promoted), pile_id(i)))
             final_promoted = i
+        if model.PUB_INACTIVE is not None and public == model.PUB_INACTIVE:
+            return _fail(
+                model.BAD_REQUEST,
+                "Pile can't be switched to INACTIVE state, it has to be removed from the cluster instead")
         stored = _to_stored(public)
         if stored is None:
             return _fail(model.INTERNAL_ERROR, "Unsupported pile state")

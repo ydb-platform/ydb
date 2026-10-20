@@ -17,6 +17,13 @@ Design, including what the demo requires and the HTTP API: [README.ai.md](README
 
 Every other method returns `UNIMPLEMENTED` and an `rpc.unimplemented` event.
 
+Inactive piles and add/remove-pile operations are not modeled. With schemas
+containing `PileState.INACTIVE = 7`, an otherwise valid update requesting that
+state returns `BAD_REQUEST` with `Pile can't be switched to INACTIVE state, it
+has to be removed from the cluster instead`, leaving the cluster state unchanged.
+Older schemas reject the unknown wire value with `INTERNAL_ERROR` and
+`Unsupported pile state`.
+
 ## Quick start
 
 Once, from the repo root. This creates `~/ydbd_mock_work` (virtualenv, generated protos, run directory):

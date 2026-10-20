@@ -19,6 +19,8 @@ PUB_SYNCHRONIZED = PileState.SYNCHRONIZED
 PUB_NOT_SYNCHRONIZED = PileState.NOT_SYNCHRONIZED
 PUB_SUSPENDED = PileState.SUSPENDED
 PUB_DISCONNECTED = PileState.DISCONNECTED
+# Older schemas do not have the state used by the add/remove-pile API.
+PUB_INACTIVE = getattr(PileState, "INACTIVE", None)
 
 SUCCESS = StatusIds.SUCCESS
 BAD_REQUEST = StatusIds.BAD_REQUEST

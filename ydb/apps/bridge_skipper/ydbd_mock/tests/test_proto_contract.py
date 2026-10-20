@@ -1,7 +1,7 @@
 """Guards against upstream proto changes that the mock would silently mishandle.
 
-A new enum value or a moved field makes one of these tests fail. That is the
-signal for someone to decide how the mock should treat the change.
+An unreviewed enum value or a moved field makes one of these tests fail. Known
+unsupported states are acknowledged explicitly and covered by rejection tests.
 """
 import unittest
 
@@ -24,19 +24,22 @@ StatusIds = ydb_status_codes_pb2.StatusIds
 
 
 class PileStateContractTest(unittest.TestCase):
-    def test_exactly_the_values_the_validator_maps(self):
-        self.assertEqual(
-            dict(PileState.State.items()),
-            {
-                "UNSPECIFIED": 0,
-                "PRIMARY": 1,
-                "PROMOTED": 2,
-                "SYNCHRONIZED": 3,
-                "NOT_SYNCHRONIZED": 4,
-                "SUSPENDED": 5,
-                "DISCONNECTED": 6,
-            },
-        )
+    def test_known_public_state_values(self):
+        actual = dict(PileState.State.items())
+        expected = {
+            "UNSPECIFIED": 0,
+            "PRIMARY": 1,
+            "PROMOTED": 2,
+            "SYNCHRONIZED": 3,
+            "NOT_SYNCHRONIZED": 4,
+            "SUSPENDED": 5,
+            "DISCONNECTED": 6,
+        }
+        # Newer schemas include INACTIVE. The mock rejects it rather than modeling
+        # inactive piles; accept both schema versions while guarding future additions.
+        if "INACTIVE" in actual:
+            expected["INACTIVE"] = 7
+        self.assertEqual(actual, expected)
 
     def test_pile_state_fields(self):
         msg = PileState(pile_name="p", state=PileState.PRIMARY)

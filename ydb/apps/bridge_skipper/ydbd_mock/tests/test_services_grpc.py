@@ -154,6 +154,10 @@ class BridgeFlowTest(GrpcCase):
              "Invalid transition from SYNCHRONIZED to NOT_SYNCHRONIZED_1"),
             ([("pile2", ydb_bridge_common_pb2.PileState.UNSPECIFIED)], model.INTERNAL_ERROR,
              "Unsupported pile state"),
+            ([("pile2", getattr(ydb_bridge_common_pb2.PileState, "INACTIVE", 7))],
+             model.BAD_REQUEST if model.PUB_INACTIVE is not None else model.INTERNAL_ERROR,
+             "Pile can't be switched to INACTIVE state, it has to be removed from the cluster instead"
+             if model.PUB_INACTIVE is not None else "Unsupported pile state"),
         ]
         for pairs, status, message in cases:
             op = await self.update(c, c.label("pile1"), *pairs)
@@ -161,8 +165,7 @@ class BridgeFlowTest(GrpcCase):
             self.assertEqual(op.status, status, message)
             self.assertEqual(operations.issue_texts(op), [message])
         self.assertEqual((await self.get_state(c, c.label("pile1"))).generation, 1)
-        self.assertEqual([e["message"] for e in self.events(c, "pile1", kind="reject")][-1],
-                         "Unsupported pile state")
+        self.assertEqual([e["message"] for e in self.events(c, "pile1", kind="reject")][-1], cases[-1][2])
 
     async def test_takedown_of_the_primary_is_rejected_like_the_real_server(self):
         c = await self.make()

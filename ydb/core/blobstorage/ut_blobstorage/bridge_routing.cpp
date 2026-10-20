@@ -63,39 +63,6 @@ namespace {
         };
     }
 
-    std::vector<ui32> GetPileGroups(TEnvironmentSetup& env, ui32 groupId) {
-        const auto info = GetGroupInfo(env, groupId);
-        std::vector<ui32> res;
-        for (const auto& pile : info.GetBridgeGroupState().GetPile()) {
-            res.push_back(pile.GetGroupId());
-        }
-        return res;
-    }
-
-    // read the blob from the physical group of the pile, so that the bridge proxy can't restore it
-    NKikimrProto::EReplyStatus ReadFromPileGroup(TEnvironmentSetup& env, ui32 pileGroupId, ui32 nodeId,
-            const TLogoBlobID& id, const TString& data) {
-        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
-            new TEvNodeWardenQueryGroupInfo(pileGroupId)), nodeId);
-        auto info = env.WaitForEdgeActorEvent<TEvNodeWardenGroupInfo>(edge, false);
-        UNIT_ASSERT_C(info->Get()->Record.HasGroup(), info->Get()->Record.DebugString());
-        const ui32 generation = info->Get()->Record.GetGroup().GetGroupGeneration();
-        env.Runtime->WrapInActorContext(edge, [&] {
-            auto *request = new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(), NKikimrBlobStorage::FastRead);
-            request->ForceGroupGeneration = generation;
-            SendToBSProxy(edge, pileGroupId, request);
-        });
-        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
-        const auto& msg = *res->Get();
-        UNIT_ASSERT_VALUES_EQUAL_C(msg.Status, NKikimrProto::OK, msg.ToString());
-        UNIT_ASSERT_VALUES_EQUAL(msg.ResponseSz, 1);
-        if (msg.Responses[0].Status == NKikimrProto::OK) {
-            UNIT_ASSERT_VALUES_EQUAL(msg.Responses[0].Buffer.ConvertToString(), data);
-        }
-        return msg.Responses[0].Status;
-    }
-
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeRouting) {

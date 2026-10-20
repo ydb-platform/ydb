@@ -297,7 +297,9 @@ namespace NKikimr {
                         Y_ABORT_UNLESS(response.Id == RestoreQueue[payload.Index].Id);
                         Y_ABORT_UNLESS(response.Buffer.size() == response.Id.BlobSize());
                         RestoreQueue[payload.Index].Buffer = static_cast<TRcBuf>(response.Buffer);
-                        RestoreQueue[payload.Index].IssueKeepFlag = response.DoNotKeep < response.Keep;
+                        // the flag may be known from the earlier response about this blob, while this read may come from
+                        // VDisks not knowing it yet
+                        RestoreQueue[payload.Index].IssueKeepFlag |= response.DoNotKeep < response.Keep;
                         IssueRestorePut(self, payload.Index);
                         return nullptr;
                     } else {

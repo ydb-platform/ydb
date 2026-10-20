@@ -17,10 +17,12 @@ namespace {
         void SetReport(NMemory::TConsumerReport report) override {
             Consumption = report.Used;
             Peak = Max(Peak.load(), report.Used);
+            ++Reports;
         }
 
         std::atomic<ui64> Consumption = 0;
         std::atomic<ui64> Peak = 0;
+        std::atomic<ui32> Reports = 0;
         std::atomic<ui32> Compactions = 0;
     };
 
@@ -116,6 +118,7 @@ namespace {
         Commit,
         Reschedule,
         RollbackChanges,
+        RepeatedRollbackChanges,
     };
 
     class TTxWrite : public ITransaction {
@@ -136,7 +139,11 @@ namespace {
                     txc.Reschedule();
                     return false;
                 }
-                if (Result == EWriteResult::RollbackChanges) {
+                if (Result == EWriteResult::RollbackChanges || Result == EWriteResult::RepeatedRollbackChanges) {
+                    txc.DB.RollbackChanges();
+                }
+                if (Result == EWriteResult::RepeatedRollbackChanges) {
+                    WriteString(txc, 1, value);
                     txc.DB.RollbackChanges();
                 }
             }
@@ -185,15 +192,19 @@ namespace {
         TMemoryEnv env(2 * MiB);
         TMemoryStats stats;
         ui64 consumption = 0;
+        ui32 reports = 0;
         float rejection = 0;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
+            const ui32 before = env.Consumer->Reports;
             executor->Execute(new TTxWrite(stats, 1, result), ctx);
+            reports = env.Consumer->Reports - before;
             consumption = env.Consumer->Consumption;
             rejection = executor->GetRejectProbability();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
         UNIT_ASSERT_C(consumption >= 8 * MiB, consumption);
+        UNIT_ASSERT_VALUES_EQUAL(reports, 1);
         UNIT_ASSERT_VALUES_EQUAL(rejection, 1.0f);
         env.Env.WaitFor("write transaction completion", [&] {
             return stats.Finished.load();
@@ -247,6 +258,10 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_MemTableMemory) {
 
     Y_UNIT_TEST(ExplicitRollbackRefreshesAllocatedCapacity) {
         CheckRollback(EWriteResult::RollbackChanges);
+    }
+
+    Y_UNIT_TEST(RepeatedExplicitRollbackRefreshesAllocatedCapacityOnce) {
+        CheckRollback(EWriteResult::RepeatedRollbackChanges);
     }
 }
 

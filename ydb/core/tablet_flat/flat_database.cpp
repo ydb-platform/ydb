@@ -13,6 +13,7 @@
 #include "util_fmt_abort.h"
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
 
@@ -854,6 +855,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     } else {
         auto affects = DatabaseImpl->RollbackTransaction();
         Change->RollbackAffects.insert(Change->RollbackAffects.end(), affects.begin(), affects.end());
+        SortUnique(Change->RollbackAffects);
     }
 
     DatabaseImpl->RunGC();

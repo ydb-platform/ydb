@@ -544,6 +544,38 @@ Y_UNIT_TEST(CreateExternalServiceWithTvm) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(CreateExternalServiceWithTvmSecretPath) {
+    auto res = SqlToYql(R"sql(
+        USE plato; PRAGMA TablePathPrefix='/Root';
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="123", TVM_DESTINATION_ID="456", TVM_SECRET_PATH="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive words = {{TString("Write"), 0}};
+    VerifyProgram(res, words, [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "tvm_secret_path");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/Root/source_secret");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(words["Write"], 1);
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvmRejectsMixedSecrets) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="123", TVM_DESTINATION_ID="456",
+            TVM_SECRET_NAME="source_secret", TVM_SECRET_PATH="/Root/source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM_SECRET_NAME and TVM_SECRET_PATH");
+}
+
 Y_UNIT_TEST(CreateExternalServiceWithTvmRequiresDestination) {
     auto res = SqlToYql(R"sql(
         USE plato;

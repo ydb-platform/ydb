@@ -34,6 +34,39 @@ namespace NSchemeBoard {
 
 namespace {
 
+    struct TEvPrivate {
+        enum EEv {
+            EvPublicationComplete = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvRequestedUpdate,
+            EvEnd,
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE));
+
+        // Only exchanged locally between a populator and its children.
+        struct TEvPublicationComplete: public TEventLocal<TEvPublicationComplete, EvPublicationComplete> {
+            const TPathId PathId;
+            const ui64 Version;
+            const ui64 Cookie;
+
+            TEvPublicationComplete(TPathId pathId, ui64 version, ui64 cookie)
+                : PathId(pathId)
+                , Version(version)
+                , Cookie(cookie)
+            {}
+        };
+
+        // Refreshing a dirty path carries no new publication to acknowledge.
+        // Cookie zero alone cannot express this: it is a valid publication ID.
+        struct TEvRequestedUpdate: public TEventLocal<TEvRequestedUpdate, EvRequestedUpdate> {
+            THolder<NInternalEvents::TEvUpdateBuilder> Update;
+
+            explicit TEvRequestedUpdate(THolder<NInternalEvents::TEvUpdateBuilder> update)
+                : Update(std::move(update))
+            {}
+        };
+    };
+
     using TDelayedUpdates = TVector<THolder<IEventHandle>>;
 
     void ReplayUpdates(TDelayedUpdates& updates) {
@@ -124,9 +157,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
         ProcessSync(nullptr, fromPathId);
     }
 
-    void EnqueueUpdate(NInternalEvents::TEvUpdate::TPtr& ev, bool canSend = false) {
-        const TPathId pathId = ev->Get()->GetPathId();
-        const auto& record = (static_cast<NInternalEvents::TEvUpdateBuilder*>(ev->Get()))->Record;
+    void EnqueueUpdate(THolder<NInternalEvents::TEvUpdateBuilder> update, ui64 cookie, bool canSend, bool trackPublication) {
+        const TPathId pathId = update->GetPathId();
+        const auto& record = update->Record;
         const ui64 version = record.GetIsDeletion() ? Max<ui64>() : NSchemeBoard::GetPathVersion(record);
 
         if (canSend && UpdatesInFlight.size() < BatchSizeLimit) {
@@ -143,11 +176,14 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
                 UpdatesRequested.erase(it);
             }
 
-            UpdatesInFlight[pathId].emplace(version, ev->Cookie);
+            auto& versions = UpdatesInFlight[pathId];
+            if (trackPublication) {
+                versions.emplace(version, cookie);
+            }
             if (needSend) {
                 // Publication cookies are retained in UpdatesInFlight. The
                 // replica only needs to echo the kind of update being ACKed.
-                Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, IncrementalUpdateCookie);
+                Send(Replica, std::move(update), IEventHandle::FlagTrackDelivery, IncrementalUpdateCookie);
             }
         } else {
             auto it = UpdatesRequested.find(pathId);
@@ -156,7 +192,42 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
                 UpdatesRequested.erase(it);
             }
 
-            Updates[pathId].emplace(version, ev->Cookie);
+            auto& versions = Updates[pathId];
+            if (trackPublication) {
+                versions.emplace(version, cookie);
+            }
+        }
+    }
+
+    void EnqueueUpdate(NInternalEvents::TEvUpdate::TPtr& ev, bool canSend = false) {
+        auto update = THolder<NInternalEvents::TEvUpdateBuilder>(
+            static_cast<NInternalEvents::TEvUpdateBuilder*>(ev->Release().Release()));
+        EnqueueUpdate(std::move(update), ev->Cookie, canSend, true);
+    }
+
+    void EnqueueRequestedUpdate(TEvPrivate::TEvRequestedUpdate::TPtr& ev, bool canSend = false) {
+        EnqueueUpdate(std::move(ev->Get()->Update), 0, canSend, false);
+    }
+
+    void Handle(TEvPrivate::TEvRequestedUpdate::TPtr& ev) {
+        EnqueueRequestedUpdate(ev, true);
+    }
+
+    void Handle(TEvPrivate::TEvPublicationComplete::TPtr& ev) {
+        Y_ABORT_UNLESS(ev->Sender == Parent);
+        const auto* msg = ev->Get();
+        for (auto* updates : {&Updates, &UpdatesRequested, &UpdatesInFlight}) {
+            if (auto it = updates->find(msg->PathId); it != updates->end()) {
+                for (auto version = it->second.begin(); version != it->second.end() && version->first <= msg->Version; ) {
+                    if (version->second == msg->Cookie) {
+                        version = it->second.erase(version);
+                    } else {
+                        ++version;
+                    }
+                }
+                // Keep the path even when its set becomes empty: it must still
+                // be synchronized, or retain its slot until the replica ACKs.
+            }
         }
     }
 
@@ -207,7 +278,11 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
     void RequestUpdates() {
         auto move = [](auto& src, auto& dst) {
-            dst.insert(src.begin(), src.end());
+            for (auto& [pathId, versions] : src) {
+                // A newer update may have queued the same path while asleep.
+                // Preserve its unfinished publications from both queues.
+                dst[pathId].merge(versions);
+            }
             src.clear();
         };
 
@@ -438,7 +513,9 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvHandshakeResponse, Handle);
             hFunc(NInternalEvents::TEvUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvRequestedUpdate, EnqueueRequestedUpdate);
 
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
@@ -452,9 +529,11 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvDescribeResult, Handle);
             hFunc(NInternalEvents::TEvUpdate, Handle);
+            hFunc(TEvPrivate::TEvRequestedUpdate, Handle);
             hFunc(NSchemeshardEvents::TEvUpdateAck, Handle);
             hFunc(NInternalEvents::TEvCommitResponse, Handle);
 
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
@@ -467,7 +546,9 @@ public:
     STATEFN(StateSleep) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NInternalEvents::TEvUpdate, EnqueueUpdate);
+            hFunc(TEvPrivate::TEvRequestedUpdate, EnqueueRequestedUpdate);
 
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvents::TEvWakeup::EventType, Bootstrap);
@@ -477,6 +558,7 @@ public:
 
     STATEFN(StateCalm) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvPublicationComplete, Handle);
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
@@ -538,13 +620,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie, TStringBuf path) {
+    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie, TStringBuf path, TVector<TActorId>& replicaPopulators) {
         const auto* desc = Descriptions.FindPtr(pathId);
         Y_ABORT_UNLESS(desc || isDeletion);
 
         // Replay sends the latest description, so use its current path too.
         // The saved publication path is needed only after deletion.
         TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, desc ? TStringBuf(desc->Path) : path);
+        replicaPopulators.reserve(replicaPopulators.size() + replicas.size());
         for (const auto& replica : replicas) {
             const TActorId* replicaPopulator = ReplicaToReplicaPopulator.FindPtr(replica);
             Y_ABORT_UNLESS(replicaPopulator != nullptr);
@@ -557,6 +640,11 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             }
             update->Record.SetNeedAck(true);
 
+            // A retry may target a changed replica selection. Remember all
+            // recipients of this publication until it reaches a quorum.
+            if (std::find(replicaPopulators.begin(), replicaPopulators.end(), *replicaPopulator) == replicaPopulators.end()) {
+                replicaPopulators.push_back(*replicaPopulator);
+            }
             Send(*replicaPopulator, std::move(update), 0, cookie);
         }
     }
@@ -678,7 +766,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
         update->Record.SetNeedAck(true);
 
-        Send(ev->Sender, std::move(update));
+        Send(ev->Sender, new TEvPrivate::TEvRequestedUpdate(std::move(update)));
     }
 
     void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
@@ -743,17 +831,16 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         auto it = UpdateAcks.find(ev->Cookie);
         if (it == UpdateAcks.end()) {
-            it = UpdateAcks.emplace(ev->Cookie, TUpdateAckInfo{ev->Sender, {}, {}}).first;
+            it = UpdateAcks.emplace(ev->Cookie, TUpdateAckInfo{ev->Sender, {}, {}, {}}).first;
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), THashSet<TActorId>{});
-
+        it->second.PathAcks.try_emplace(std::make_pair(pathId, version));
         auto& path = it->second.Paths[pathId];
         path = isDeletion && !Descriptions.contains(pathId)
             ? record.GetPath()
             : Descriptions.at(pathId).Path;
-        Update(pathId, isDeletion, ev->Cookie, path);
+        Update(pathId, isDeletion, ev->Cookie, path, it->second.ReplicaPopulators[pathId]);
 
         if (isDeletion) {
             Descriptions.erase(pathId);
@@ -813,8 +900,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            pathIt->second.insert(ev->Sender);
-            if (CheckQuorum(pathIt->second)) {
+            pathIt->second.AckedPopulators.insert(ev->Sender);
+            if (CheckQuorum(pathIt->second.AckedPopulators)) {
                 YDB_LOG_NOTICE("Ack update",
                     {"selfId", SelfId()},
                     {"to", it->second.AckTo},
@@ -825,9 +912,23 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 auto ack = MakeHolder<NSchemeshardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
                 Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
+                const ui64 completedVersion = pathIt->first.second;
                 auto eraseIt = pathIt;
                 ++pathIt;
                 it->second.PathAcks.erase(eraseIt);
+
+                const bool pathComplete = pathIt == it->second.PathAcks.end() || pathIt->first.first != pathId;
+                // Replays can carry a newer description than the original
+                // publication. Once this path/cookie is fully acknowledged,
+                // release every version retained by any of its recipients.
+                for (const auto& replicaPopulator : it->second.ReplicaPopulators.at(pathId)) {
+                    Send(replicaPopulator, new TEvPrivate::TEvPublicationComplete(
+                        pathId, pathComplete ? Max<ui64>() : completedVersion, ev->Cookie));
+                }
+                if (pathComplete) {
+                    it->second.ReplicaPopulators.erase(pathId);
+                    it->second.Paths.erase(pathId);
+                }
 
                 if (it->second.PathAcks.empty()) {
                     UpdateAcks.erase(it);
@@ -893,12 +994,12 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         // Include existing children: a ring change can select a child that did
         // not receive the original publication. Repeated updates and ACKs are
         // idempotent, so resending to the whole current selection is safe.
-        for (const auto& [cookie, info] : UpdateAcks) {
+        for (auto& [cookie, info] : UpdateAcks) {
             TPathId previousPath;
             for (const auto& [pathVersion, _] : info.PathAcks) {
                 const auto& pathId = pathVersion.first;
                 if (pathId != previousPath) {
-                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId));
+                    Update(pathId, !Descriptions.contains(pathId), cookie, info.Paths.at(pathId), info.ReplicaPopulators[pathId]);
                     previousPath = pathId;
                 }
             }
@@ -933,14 +1034,14 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             updateAck.SetCookie(cookie);
             ActorIdToProto(info.AckTo, updateAck.MutableAckTo());
 
-            for (const auto& [pathIdVersion, acksCount] : info.PathAcks) {
+            for (const auto& [pathIdVersion, pathAcks] : info.PathAcks) {
                 auto& pathAck = *updateAck.AddPathAcks();
 
                 pathAck.MutablePathId()->SetOwnerId(pathIdVersion.first.OwnerId);
                 pathAck.MutablePathId()->SetLocalPathId(pathIdVersion.first.LocalPathId);
 
                 pathAck.SetVersion(pathIdVersion.second);
-                pathAck.SetAcksCount(acksCount.size());
+                pathAck.SetAcksCount(pathAcks.AckedPopulators.size());
             }
 
             if (record.UpdateAcksSize() >= limit) {
@@ -1079,8 +1180,13 @@ private:
 
     struct TUpdateAckInfo {
         TActorId AckTo;
-        // ReplicaPopulator actor IDs identify the replica incarnations that acknowledged each publication.
-        TMap<std::pair<TPathId, ui64>, THashSet<TActorId>> PathAcks;
+        struct TPathAcks {
+            THashSet<TActorId> AckedPopulators;
+        };
+        TMap<std::pair<TPathId, ui64>, TPathAcks> PathAcks;
+        // Include recipients of every version and replay until the path/cookie
+        // completes, even if the replica selection changes between versions.
+        THashMap<TPathId, TVector<TActorId>> ReplicaPopulators;
         // Keep routing information until completion, even for deleted paths.
         THashMap<TPathId, TString> Paths;
     };

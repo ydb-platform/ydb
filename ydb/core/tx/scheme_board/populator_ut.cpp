@@ -369,7 +369,303 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         TestPublicationAckDoesNotAdvanceFullSync(12345);
     }
 
-    void TestPublicationSurvivesReplicaReplacement(bool deletion, bool deleteAfterPublication = false) {
+    enum class EBacklogRecovery {
+        Update,
+        Delete,
+        Reconnect,
+    };
+
+    void TestCompletedPublicationsDoNotAccumulate(bool offline, bool keepPending = true, ui64 pendingCookie = 10000,
+            bool holdRefreshAck = false, EBacklogRecovery recovery = EBacklogRecovery::Update) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}}, ReplicasInRingGroup));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        const TPathId pathId(owner, 100);
+        const auto info = GetStateStorageInfo(runtime);
+        const auto replica = info->RingGroups.front().Rings.front().Replicas.front();
+        const auto replicaActor = runtime.GetLocalServiceId(replica);
+
+        // One replica cannot finish its handshake or return update ACKs;
+        // the other two can still form a quorum.
+        TActorId child;
+        using THandshake = NInternalEvents::TEvHandshakeResponse;
+        TBlockEvents<THandshake> handshakeBlocker(runtime, [&](const THandshake::TPtr& ev) {
+            if (ev->Sender == replicaActor) {
+                child = ev->Recipient;
+                return offline;
+            }
+            return false;
+        });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("replica handshake", [&] { return bool(child); }, TDuration::Seconds(10));
+        TUpdateAck::TPtr lastReplicaAck;
+        auto delayedReplicaAcks = runtime.AddObserver<TUpdateAck>([&](TUpdateAck::TPtr& ev) {
+            if ((!offline || holdRefreshAck) && ev->Recipient == child) {
+                // Retain only the last reply, so the test itself does not
+                // accumulate the ACKs whose delivery it prevents.
+                lastReplicaAck = std::move(ev);
+            }
+        });
+        ui64 receivedVersion = 0;
+        auto updateObserver = runtime.AddObserver<NInternalEvents::TEvUpdate>([&](NInternalEvents::TEvUpdate::TPtr& ev) {
+            if (ev->Sender == child && ev->Get()->GetPathId() == pathId) {
+                const auto& record = ev->Get()->GetRecord();
+                receivedVersion = Max(receivedVersion, record.GetIsDeletion() ? Max<ui64>() : NSchemeBoard::GetPathVersion(record));
+            }
+        });
+
+        auto publish = [&](ui64 version, ui64 cookie) {
+            auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            desc->Record = GenerateDescribe("/Root/TestPath", pathId, version);
+            desc->Record.SetStatus(version == Max<ui64>() ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
+            runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        };
+        auto retainedPairs = [&](bool expectPendingPath = true) {
+            runtime.Send(new IEventHandle(child, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+            auto ev = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
+            const auto& response = ev->Get()->Record.GetReplicaPopulatorResponse();
+            const size_t paths = response.UpdatesSize() + response.UpdatesRequestedSize() + response.UpdatesInFlightSize();
+            UNIT_ASSERT_VALUES_EQUAL(paths, expectPendingPath ? 1 : 0);
+            size_t count = 0;
+            for (const auto* updates : {&response.GetUpdates(), &response.GetUpdatesRequested(), &response.GetUpdatesInFlight()}) {
+                for (const auto& update : *updates) {
+                    for (const auto& version : update.GetVersions()) {
+                        count += version.TxIdsSize();
+                    }
+                }
+            }
+            return count;
+        };
+
+        // Keep a genuinely unfinished publication: its cookie must survive
+        // completion of later versions of the same path.
+        TBlockEvents<TUpdateAck> pendingAcks(runtime, [&](const TUpdateAck::TPtr& ev) {
+            return ev->Recipient == populator && ev->Cookie == pendingCookie && ev->Sender != child;
+        });
+        if (keepPending) {
+            publish(1, pendingCookie);
+            runtime.WaitFor("two pending publication ACKs", [&] { return pendingAcks.size() == 2; }, TDuration::Seconds(10));
+        }
+
+        constexpr ui64 publications = 512;
+        ui64 latestVersion = recovery == EBacklogRecovery::Delete ? Max<ui64>() : publications + 1;
+        size_t firstBatchPairs = 0;
+        size_t finalPairs = 0;
+        for (ui64 i = 1; i <= publications; ++i) {
+            publish(i == publications ? latestVersion : i + 1, i);
+            auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, i);
+            if (i == publications / 2) {
+                firstBatchPairs = retainedPairs();
+            }
+        }
+        finalPairs = retainedPairs();
+        // Count the actual retained payload rather than process RSS, which
+        // depends on allocator caching. Each pair is a separately allocated
+        // tree node and contains two ui64 values plus tree/allocator overhead.
+        Cerr << "retained pairs after 256/512 publications: " << firstBatchPairs << "/" << finalPairs
+             << "; payload bytes: " << firstBatchPairs * 2 * sizeof(ui64)
+             << "/" << finalPairs * 2 * sizeof(ui64) << Endl;
+
+        // Resume delivery and verify both catch-up and the unfinished cookie.
+        bool latestReplicaAckSeen = false;
+        bool pendingAckFromRecoveredReplica = false;
+        auto ackObserver = runtime.AddObserver<TUpdateAck>([&](TUpdateAck::TPtr& ev) {
+            if (ev->Recipient == child && ev->Get()->Record.GetVersion() == latestVersion) {
+                latestReplicaAckSeen = true;
+            }
+            if (ev->Sender == child && ev->Recipient == populator && ev->Cookie == pendingCookie) {
+                pendingAckFromRecoveredReplica = true;
+            }
+        });
+        if (offline) {
+            handshakeBlocker.Stop().Unblock();
+        }
+        if (!offline || holdRefreshAck) {
+            runtime.WaitFor("last replica ACK", [&] {
+                return lastReplicaAck && lastReplicaAck->Get()->Record.GetVersion() == latestVersion;
+            }, TDuration::Seconds(10));
+            if (holdRefreshAck) {
+                const auto count = retainedPairs();
+                Cerr << "pairs while requested update ACK is held: " << count << Endl;
+                UNIT_ASSERT_VALUES_EQUAL_C(count, keepPending ? 1 : 0,
+                    "a requested update must not introduce a synthetic publication cookie");
+            }
+            if (recovery == EBacklogRecovery::Reconnect) {
+                for (ui64 cycle = 1; cycle <= 5; ++cycle) {
+                    runtime.Send(new IEventHandle(child, edge, new TEvInterconnect::TEvNodeDisconnected(replica.NodeId())));
+                    ++latestVersion;
+                    latestReplicaAckSeen = false;
+                    publish(latestVersion, publications + cycle);
+                    auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge);
+                    UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, publications + cycle);
+                    runtime.Send(new IEventHandle(child, edge, new TEvents::TEvWakeup()));
+                    runtime.WaitFor("requested update after reconnect", [&] {
+                        return lastReplicaAck && lastReplicaAck->Get()->Record.GetVersion() == latestVersion;
+                    }, TDuration::Seconds(10));
+                    UNIT_ASSERT_VALUES_EQUAL_C(retainedPairs(), keepPending ? 1 : 0,
+                        "reconnect " << cycle << " accumulated synthetic publication cookies");
+                }
+            }
+            delayedReplicaAcks.Remove();
+            runtime.Send(lastReplicaAck.Release(), 0, /* viaActorSystem */ true);
+        }
+        runtime.WaitFor("latest version and pending ACK from recovered replica", [&] {
+            return receivedVersion == latestVersion && latestReplicaAckSeen && (!keepPending || pendingAckFromRecoveredReplica);
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+        if (keepPending) {
+            pendingAcks.Unblock(1);
+            auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, pendingCookie);
+            UNIT_ASSERT_VALUES_EQUAL(ack->Get()->GetPathId(), pathId);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(retainedPairs(false), 0);
+
+        const size_t expectedPairs = keepPending ? 1 : 0;
+        UNIT_ASSERT_VALUES_EQUAL_C(firstBatchPairs, expectedPairs, "completed publications retained on lagging replica");
+        UNIT_ASSERT_VALUES_EQUAL_C(finalPairs, expectedPairs, "memory grows with the number of completed publications");
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsDoNotAccumulateOnOfflineReplica) {
+        TestCompletedPublicationsDoNotAccumulate(true);
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsDoNotAccumulateInFlight) {
+        TestCompletedPublicationsDoNotAccumulate(false);
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsLeaveEmptyPendingPath) {
+        TestCompletedPublicationsDoNotAccumulate(true, false);
+    }
+
+    Y_UNIT_TEST(CompletedPublicationsKeepInFlightSlot) {
+        TestCompletedPublicationsDoNotAccumulate(false, false);
+    }
+
+    Y_UNIT_TEST(RequestedUpdateDoesNotCreatePublicationCookie) {
+        TestCompletedPublicationsDoNotAccumulate(true, false, 10000, true);
+    }
+
+    Y_UNIT_TEST(UnfinishedPublicationWithZeroCookieIsPreserved) {
+        TestCompletedPublicationsDoNotAccumulate(true, true, 0);
+    }
+
+    Y_UNIT_TEST(CompletedDeletionIsDeliveredToRecoveredReplica) {
+        TestCompletedPublicationsDoNotAccumulate(true, true, 10000, true, EBacklogRecovery::Delete);
+    }
+
+    Y_UNIT_TEST(ReconnectsWithoutAcksDoNotAccumulatePublicationCookies) {
+        TestCompletedPublicationsDoNotAccumulate(true, true, 10000, true, EBacklogRecovery::Reconnect);
+    }
+
+    Y_UNIT_TEST(CompletedPublicationIsReleasedAfterRecipientReplacement) {
+        TTestBasicRuntime runtime;
+        SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}}, 5));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto monEdge = runtime.AllocateEdgeActor();
+        constexpr ui64 owner = TTestTxConfig::SchemeShard;
+        constexpr ui64 cookie = 12345;
+        const TPathId pathId(owner, 100);
+        const auto info = GetStateStorageInfo(runtime);
+        TVector<TActorId> replicas;
+        for (const auto& ring : info->RingGroups.front().Rings) {
+            for (const auto& replica : ring.Replicas) {
+                replicas.push_back(replica);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(replicas.size(), 5);
+        const auto removedReplica = runtime.GetLocalServiceId(replicas[0]);
+        const auto laggingReplica = runtime.GetLocalServiceId(replicas[1]);
+        TActorId removedChild;
+        TActorId laggingChild;
+        using THandshake = NInternalEvents::TEvHandshakeResponse;
+        TBlockEvents<THandshake> handshakes(runtime, [&](const THandshake::TPtr& ev) {
+            if (ev->Sender == removedReplica) {
+                removedChild = ev->Recipient;
+                return true;
+            }
+            if (ev->Sender == laggingReplica) {
+                laggingChild = ev->Recipient;
+                return true;
+            }
+            return false;
+        });
+        const auto populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
+        runtime.WaitFor("both lagging replica handshakes", [&] {
+            return removedChild && laggingChild;
+        }, TDuration::Seconds(10));
+        TBlockEvents<TUpdateAck> acks(runtime, [&](const TUpdateAck::TPtr& ev) {
+            return ev->Recipient == populator && ev->Cookie == cookie;
+        });
+        auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+        desc->Record = GenerateDescribe("/Root/TestPath", pathId, 1);
+        desc->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
+        runtime.WaitFor("three healthy recipients", [&] { return acks.size() == 3; }, TDuration::Seconds(10));
+
+        auto inspect = [&](const TActorId& actor) {
+            runtime.Send(new IEventHandle(actor, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+            return runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
+        };
+        auto checkLagging = [&](size_t paths, size_t pairs) {
+            auto ev = inspect(laggingChild);
+            const auto& r = ev->Get()->Record.GetReplicaPopulatorResponse();
+            UNIT_ASSERT_VALUES_EQUAL(r.UpdatesSize() + r.UpdatesRequestedSize() + r.UpdatesInFlightSize(), paths);
+            size_t count = 0;
+            for (const auto* updates : {&r.GetUpdates(), &r.GetUpdatesRequested(), &r.GetUpdatesInFlight()}) {
+                for (const auto& update : *updates) {
+                    for (const auto& version : update.GetVersions()) {
+                        count += version.TxIdsSize();
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(count, pairs);
+        };
+        checkLagging(1, 1);
+
+        // Replace one original recipient before the healthy majority ACKs.
+        // The replacement does not reply, so the original three ACKs must
+        // finish publication and release the other lagging recipient's pair.
+        auto updated = MakeIntrusive<TStateStorageInfo>();
+        updated->RingGroups = info->RingGroups;
+        const auto replacement = runtime.AllocateEdgeActor();
+        for (auto& ring : updated->RingGroups.front().Rings) {
+            for (auto& replica : ring.Replicas) {
+                if (replica == replicas[0]) {
+                    replica = replacement;
+                }
+            }
+        }
+        runtime.Send(new IEventHandle(populator, edge, new TEvStateStorage::TEvListSchemeBoardResult(updated)));
+        auto before = inspect(populator);
+        const auto& parentBefore = before->Get()->Record.GetPopulatorResponse();
+        UNIT_ASSERT_VALUES_EQUAL(parentBefore.ReplicaPopulatorsSize(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(parentBefore.UpdateAcksSize(), 1);
+        for (const auto& actor : parentBefore.GetReplicaPopulators()) {
+            UNIT_ASSERT(ActorIdFromProto(actor) != removedChild);
+        }
+        acks.Stop().Unblock();
+        auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, cookie);
+        checkLagging(1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(inspect(populator)->Get()->Record.GetPopulatorResponse().UpdateAcksSize(), 0);
+
+        bool caughtUp = false;
+        auto observer = runtime.AddObserver<TUpdateAck>([&](TUpdateAck::TPtr& ev) {
+            if (ev->Recipient == laggingChild && ev->Get()->GetPathId() == pathId && ev->Get()->Record.GetVersion() == 1) {
+                caughtUp = true;
+            }
+        });
+        handshakes.Stop().Unblock();
+        runtime.WaitFor("remaining lagging replica catches up", [&] { return caughtUp; }, TDuration::Seconds(10));
+        checkLagging(0, 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountEvents<TUpdateAck>(runtime, false, edge), 0);
+    }
+
+    void TestPublicationSurvivesReplicaReplacement(bool deletion, bool deleteAfterPublication = false, bool checkReplayCleanup = false) {
         TTestBasicRuntime runtime;
         SetupMinimalRuntime(runtime, CreateCustomStateStorageSetupper({{}, {}}, ReplicasInRingGroup));
         const auto edge = runtime.AllocateEdgeActor();
@@ -397,9 +693,9 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
         populator = runtime.Register(CreateSchemeBoardPopulator(owner, 1, {}, 0));
         initialized.Wait(TDuration::Seconds(10));
         initialized.Stop();
-        auto publish = [&](ui64 cookie, bool remove) {
+        auto publish = [&](ui64 cookie, bool remove, ui64 version = 1) {
             auto desc = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
-            desc->Record = GenerateDescribe("/Root/TestPath", pathId, remove ? 2 : 1);
+            desc->Record = GenerateDescribe("/Root/TestPath", pathId, remove ? 2 : version);
             desc->Record.SetStatus(remove ? NKikimrScheme::StatusPathDoesNotExist : NKikimrScheme::StatusSuccess);
             runtime.Send(new IEventHandle(populator, edge, desc.Release(), 0, cookie));
         };
@@ -418,6 +714,12 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
             publish(cookie + 1, true);
             runtime.WaitFor("deletion ACKs", [&] { return oldAcks.size() == 6; }, TDuration::Seconds(10));
         }
+        if (checkReplayCleanup) {
+            // The old cookie is replayed using this newer description, so the
+            // lagging child retains version 2 even for the version-1 publication.
+            publish(cookie + 1, false, 2);
+            runtime.WaitFor("newer publication ACKs", [&] { return oldAcks.size() == 6; }, TDuration::Seconds(10));
+        }
         configObserver.Remove();
         TBlockEvents<NInternalEvents::TEvHandshakeResponse> newHandshakes(runtime, [&](const auto& ev) {
             return newReplicaActors.contains(ev->Sender);
@@ -433,9 +735,34 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
                 ++committed;
             }
         });
+        if (checkReplayCleanup) {
+            newHandshakes.Unblock(2);
+            runtime.WaitFor("replacement quorum synchronized", [&] { return committed == 2; }, TDuration::Seconds(10));
+            // Consume the ACKs: observers can see an edge-mailbox event
+            // repeatedly while it remains queued in the test runtime.
+            THashSet<ui64> completedCookies;
+            for (size_t i = 0; i < 2; ++i) {
+                auto ack = runtime.GrabEdgeEvent<TUpdateAck>(edge, TDuration::Seconds(10));
+                UNIT_ASSERT(ack->Cookie == cookie || ack->Cookie == cookie + 1);
+                UNIT_ASSERT_VALUES_EQUAL(ack->Get()->GetPathId(), pathId);
+                UNIT_ASSERT_VALUES_EQUAL(ack->Get()->Record.GetVersion(), ack->Cookie == cookie ? 1 : 2);
+                UNIT_ASSERT(completedCookies.insert(ack->Cookie).second);
+            }
+            const auto laggingChild = newHandshakes.front()->Recipient;
+            runtime.Send(new IEventHandle(laggingChild, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
+            auto state = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
+            const auto& child = state->Get()->Record.GetReplicaPopulatorResponse();
+            UNIT_ASSERT_VALUES_EQUAL(child.UpdatesSize(), 1);
+            for (const auto* updates : {&child.GetUpdates(), &child.GetUpdatesRequested(), &child.GetUpdatesInFlight()}) {
+                for (const auto& update : *updates) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(update.VersionsSize(), 0,
+                        "completed replays must not retain newer-version publication markers");
+                }
+            }
+        }
         newHandshakes.Stop().Unblock();
         runtime.WaitFor("replacement replicas fully synchronized", [&] { return committed == 3; }, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), deleteAfterPublication ? 2 : 1,
+        UNIT_ASSERT_VALUES_EQUAL_C(CountEvents<TUpdateAck>(runtime, false, edge), checkReplayCleanup ? 0 : (deleteAfterPublication ? 2 : 1),
             "publication must finish on the new replica configuration without a client retry");
         runtime.Send(new IEventHandle(populator, monEdge, new TSchemeBoardMonEvents::TEvInfoRequest(100)));
         auto response = runtime.GrabEdgeEvent<TSchemeBoardMonEvents::TEvInfoResponse>(monEdge);
@@ -452,6 +779,10 @@ Y_UNIT_TEST_SUITE(TPopulatorQuorumTest) {
 
     Y_UNIT_TEST(UpdateThenDeletionSurvivesReplicaReplacement) {
         TestPublicationSurvivesReplicaReplacement(false, true);
+    }
+
+    Y_UNIT_TEST(CompletedReplaysReleaseNewerDescriptionMarkers) {
+        TestPublicationSurvivesReplicaReplacement(false, false, true);
     }
 
     Y_UNIT_TEST(ReplayUsesCurrentDescriptionPath) {

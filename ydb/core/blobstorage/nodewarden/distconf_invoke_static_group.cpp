@@ -132,6 +132,10 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+        if (const auto& error = ev->Get()->ErrorReason) {
+            // static groups can't be placed without knowing PDisks of BSC, they would get conflicting ones otherwise
+            throw TExError() << "Can't get base config: " << *error;
+        }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
         CheckReassignGroupDisk();
     }

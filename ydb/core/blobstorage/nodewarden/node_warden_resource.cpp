@@ -84,7 +84,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
 
     // apply proxy information before we try to start VDisks/PDisks
-    ApplyGroupInfoFromServiceSet(serviceSet);
+    ApplyGroupInfoFromServiceSet(serviceSet, isStatic, comprehensive);
 
     // merge new configuration into current one
     NKikimrBlobStorage::TNodeWardenServiceSet *target = isStatic ? &StaticServices : &DynamicServices;

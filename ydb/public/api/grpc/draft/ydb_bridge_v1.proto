@@ -25,4 +25,7 @@ service BridgeService {
     // Add an INACTIVE pile to the cluster, so that it can be rejoined then
     rpc AddPile(Ydb.Bridge.AddPileRequest) returns (Ydb.Bridge.AddPileResponse);
 
+    // Remove a DISCONNECTED pile from the cluster along with all its data, so that it becomes INACTIVE
+    rpc RemovePile(Ydb.Bridge.RemovePileRequest) returns (Ydb.Bridge.RemovePileResponse);
+
 }

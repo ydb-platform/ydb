@@ -808,11 +808,64 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         }
     };
 
-    // nodes of older versions take pile ids from positions in their BridgeConfig, so dynamic ones get no configuration
-    // once the list of piles has been changed
+    // subscribes dynamic node to the keeper; pushes get the configs pushed to it
+    TActorId SubscribeDynamicNode(TTestActorSystem& runtime, TActorId keeperId, ui32 nodeId, ui32 bridgeFeatureLevel,
+            std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush>& pushes) {
+        // the test system delivers events to the recipient of the forwarded event, so the stub is also the sender
+        const TActorId sessionId = runtime.Register(new TSessionStub(pushes), nodeId);
+        NKikimrBlobStorage::TEvNodeWardenDynamicConfigSubscribe record;
+        record.SetBridgeCapable(true);
+        // older versions report only PileListChangeCapable
+        record.SetPileListChangeCapable(bridgeFeatureLevel >= NStorage::BridgeFeatureLevelPileList);
+        if (bridgeFeatureLevel > NStorage::BridgeFeatureLevelPileList) {
+            record.SetBridgeFeatureLevel(bridgeFeatureLevel);
+        }
+        TString data;
+        UNIT_ASSERT(record.SerializeToString(&data));
+        runtime.Send(new IEventHandle(sessionId, NStorage::TEvNodeWardenDynamicConfigSubscribe::EventType, 0,
+            keeperId, sessionId, MakeIntrusive<TEventSerializedData>(std::move(data), TEventSerializationInfo{}),
+            0, {}, {}), nodeId);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !pushes.empty(); }));
+        return sessionId;
+    }
+
+    // dynamic nodes of older versions get no configuration once it requires the bridge features they don't support: the
+    // ones taking pile ids from positions in their BridgeConfig once the list of piles has been changed, the ones
+    // supporting only changes of the list of piles once a pile has been removed
     Y_UNIT_TEST(OlderDynamicNodeGetsNoConfig) {
         auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
-        config.MutableClusterStateDetails()->MutablePileRegistry()->SetPileListChanged(true);
+        auto *registry = config.MutableClusterStateDetails()->MutablePileRegistry();
+        registry->SetPileListChanged(true);
+        registry->SetRequiredFeatureLevel(NStorage::BridgeFeatureLevelPileOps);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        FillTwoPileBridgedMetadata(state, config);
+        TTestActorSystem runtime(7); // nodes 5-7 are dynamic ones
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId : {1u, 3u}) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+
+        for (ui32 level = 0; level <= NStorage::BridgeFeatureLevel; ++level) {
+            std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> pushes;
+            SubscribeDynamicNode(runtime, keepers.front(), 5 + level, level, pushes);
+            UNIT_ASSERT_VALUES_EQUAL_C(pushes.front().HasConfig(), level == NStorage::BridgeFeatureLevel, level);
+        }
+    }
+
+    // the list of piles can't be changed, piles can't be added or removed unless every node supports these bridge
+    // features, dynamic nodes too, as nodes of older versions would be disconnected afterwards
+    Y_UNIT_TEST(PileOperationsRequireFeatureLevel) {
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
 
         TNodeWardenTestState state;
@@ -825,27 +878,27 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         runtime.Start();
         Y_DEFER { runtime.Stop(); };
         std::vector<TActorId> keepers;
-        for (ui32 nodeId : {1u, 3u}) {
+        for (ui32 nodeId : {1u, 4u}) { // nodes of the pile staying in the cluster
             keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
         }
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
 
-        for (const auto& [nodeId, pileListChangeCapable] : {std::make_pair(5u, false), std::make_pair(6u, true)}) {
-            std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> pushes;
-            // the test system delivers events to the recipient of the forwarded event, so the stub is also the sender
-            const TActorId sessionId = runtime.Register(new TSessionStub(pushes), nodeId);
-            const TActorId sender = sessionId;
-            NKikimrBlobStorage::TEvNodeWardenDynamicConfigSubscribe record;
-            record.SetBridgeCapable(true);
-            record.SetPileListChangeCapable(pileListChangeCapable);
-            TString data;
-            UNIT_ASSERT(record.SerializeToString(&data));
-            runtime.Send(new IEventHandle(sessionId, NStorage::TEvNodeWardenDynamicConfigSubscribe::EventType, 0,
-                keepers.front(), sender, MakeIntrusive<TEventSerializedData>(std::move(data), TEventSerializationInfo{}),
-                0, {}, {}), nodeId);
-            UNIT_ASSERT(SimUntil(runtime, [&] { return !pushes.empty(); }));
-            UNIT_ASSERT_VALUES_EQUAL(pushes.front().HasConfig(), pileListChangeCapable);
-        }
+        std::vector<NKikimrBlobStorage::TEvNodeWardenDynamicConfigPush> olderPushes, pushes;
+        SubscribeDynamicNode(runtime, keepers.front(), 5, NStorage::BridgeFeatureLevelPileList, olderPushes);
+        SubscribeDynamicNode(runtime, keepers.front(), 6, NStorage::BridgeFeatureLevel, pushes);
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableRemoveBridgePile()->SetPileName("pile1");
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        runtime.Send(new IEventHandle(keepers.front(), edge, request.release()), 1);
+        auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "they have to be upgraded or stopped first NodeIds# 5");
+        UNIT_ASSERT_C(!record.GetErrorReason().Contains("5 6"), record.GetErrorReason()); // the node of this version
+        UNIT_ASSERT(!QueryKeeper(runtime, keepers.front()).GetQueryConfig().GetConfig().GetClusterStateDetails()
+            .HasPendingPileOperation());
     }
 
     // replaced config gets pile registry stored; new piles are INACTIVE, only INACTIVE piles can be dropped; change of
@@ -976,6 +1029,21 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         const auto error = update(makeBridgeConfig({"pile0", "pile1", "pile2"}), &converting, &local, true);
         UNIT_ASSERT(error);
         UNIT_ASSERT_STRING_CONTAINS(*error, "can't be changed until BSC finishes conversion");
+
+        // the feature level required since pile operations stays when the list of piles changes and when it doesn't;
+        // the latter is not reported as a change
+        auto required = config;
+        const ui32 pileOpsLevel = NStorage::BridgeFeatureLevelPileOps;
+        required.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(pileOpsLevel);
+        for (const auto& [names, expectChanged] : std::initializer_list<std::pair<TVector<TString>, bool>>{
+                {{"pile0", "pile1"}, false}, {{"pile0", "pile1", "pile2"}, true}}) {
+            if (const auto error = update(makeBridgeConfig(names), &required, &local, expectChanged)) {
+                UNIT_FAIL(*error);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(required.GetClusterStateDetails().GetPileRegistry().GetRequiredFeatureLevel(),
+                pileOpsLevel);
+            UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(required), pileOpsLevel);
+        }
 
         // empty pile name is persisted as a name, not as a free slot
         const auto withEmpty = makeBridgeConfig({"", "pile1"});
@@ -1190,8 +1258,8 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
     }
 
-    // sessions with the peers of older versions established before the list of piles has been changed are not checked
-    // again, so they get disconnected when the changed list arrives
+    // sessions with the peers of older versions established before the config has started requiring the bridge features
+    // they don't support (changed list of piles, removed pile) are not checked again, so they get disconnected then
     Y_UNIT_TEST(OlderPeerSessionsDisconnected) {
         const auto config = MakeTwoPileBridgedConfig("pile0", "pile1"); // nodes 1 and 4 are in pile0, 2 and 3 in pile1
         UNIT_ASSERT(!NStorage::IsPileListChanged(config));
@@ -1199,6 +1267,11 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         changed.MutableClusterStateDetails()->MutablePileRegistry()->SetPileListChanged(true);
         changed.SetGeneration(changed.GetGeneration() + 1);
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&changed);
+        auto removed = changed;
+        removed.MutableClusterStateDetails()->MutablePileRegistry()->SetRequiredFeatureLevel(
+            NStorage::BridgeFeatureLevelPileOps);
+        removed.SetGeneration(removed.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&removed);
 
         TTestActorSystem runtime(4);
         auto& bridge = runtime.GetAppDataBridgeConfig();
@@ -1223,27 +1296,37 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             TBridgePileId::FromPileIndex(0), "pile0"), 1);
         const TActorId edge = runtime.AllocateEdgeActor(1);
 
-        auto makeParams = [&](ui32 pileIndex, bool olderPeer) {
+        // bridge feature level 0 is reported by the versions taking pile ids from positions in BridgeConfig, level 1 by the
+        // ones reporting only PileListChangeCapable
+        auto makeParams = [&](ui32 pileIndex, ui32 level) {
             NKikimrBlobStorage::TConnectivityPayload payload;
             TBridgePileId::FromPileIndex(pileIndex).CopyToProto(&payload,
                 &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
             payload.SetBridgePileName(bridge.GetPiles(pileIndex).GetName());
-            payload.SetPileListChangeCapable(!olderPeer);
+            payload.SetPileListChangeCapable(level >= NStorage::BridgeFeatureLevelPileList);
+            if (level > NStorage::BridgeFeatureLevelPileList) {
+                payload.SetBridgeFeatureLevel(level);
+            }
             payload.MutableStorageConfig()->CopyFrom(config);
             THashMap<TString, TString> params;
             UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
             return params;
         };
-        auto incoming = [&](ui32 peerNodeId, ui32 pileIndex, bool olderPeer) {
+        auto incoming = [&](ui32 peerNodeId, ui32 pileIndex, ui32 level) {
             runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvCheckIncomingConnection(peerNodeId,
-                makeParams(pileIndex, olderPeer))), 1);
+                makeParams(pileIndex, level))), 1);
             auto ev = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(edge, false);
             UNIT_ASSERT_C(!ev->Get()->ErrorReason, *ev->Get()->ErrorReason);
         };
-        auto outgoing = [&](ui32 peerNodeId, ui32 pileIndex, bool olderPeer) {
+        auto outgoing = [&](ui32 peerNodeId, ui32 pileIndex, ui32 level) {
             runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvNotifyOutgoingConnectionEstablished(
-                peerNodeId, true, makeParams(pileIndex, olderPeer))), 1);
+                peerNodeId, true, makeParams(pileIndex, level))), 1);
             runtime.Sim([&] { return runtime.HasImmediateEvents(); });
+        };
+        auto applyConfig = [&](const NKikimrBlobStorage::TStorageConfig& config, size_t numDisconnected) {
+            runtime.Send(new IEventHandle(checkerId, edge, new TEvNodeWardenStorageConfig(
+                std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config), true, bridgeInfo)), 1);
+            runtime.Sim([&] { return disconnected.size() < numDisconnected || runtime.HasImmediateEvents(); });
         };
         auto proxies = [&](std::initializer_list<ui32> nodeIds) {
             THashSet<TActorId> res;
@@ -1256,21 +1339,24 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         };
 
         // older peers connect while the list of piles is the same
-        incoming(2, 1, true);
-        incoming(4, 0, false);
-        outgoing(3, 1, true);
+        incoming(2, 1, 0);
+        incoming(4, 0, NStorage::BridgeFeatureLevelPileList);
+        outgoing(3, 1, 0);
         UNIT_ASSERT(disconnected.empty());
 
-        // the list gets changed, sessions of older peers are dropped
-        runtime.Send(new IEventHandle(checkerId, edge, new TEvNodeWardenStorageConfig(
-            std::make_shared<const NKikimrBlobStorage::TStorageConfig>(changed), true, bridgeInfo)), 1);
-        runtime.Sim([&] { return disconnected.size() < 2 || runtime.HasImmediateEvents(); });
+        // the list gets changed, sessions of the peers taking pile ids from positions are dropped
+        applyConfig(changed, 2);
         UNIT_ASSERT_EQUAL(disconnected, proxies({2, 3}));
+
+        // a pile gets removed, sessions of the peers supporting only changes of the list of piles are dropped too
+        disconnected.clear();
+        applyConfig(removed, 1);
+        UNIT_ASSERT_EQUAL(disconnected, proxies({4}));
 
         // outgoing session with older peer gets dropped as soon as it is established (incoming one is refused)
         disconnected.clear();
-        outgoing(4, 0, false);
-        outgoing(3, 1, true);
+        outgoing(4, 0, NStorage::BridgeFeatureLevel);
+        outgoing(3, 1, NStorage::BridgeFeatureLevelPileList);
         UNIT_ASSERT_EQUAL(disconnected, proxies({3}));
     }
 
@@ -1727,6 +1813,121 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT(NStorage::ValidateConfig(config));
         config.MutableClusterStateDetails()->SetBscConversionPending(false);
         UNIT_ASSERT(!NStorage::ValidateConfig(config));
+    }
+
+    // removal of the pile drops parts of bridged static groups in the pile (their VDisks are destroyed by the nodes) and
+    // its state storage replicas; the inline pile of the converted cluster makes its group the pure bridge proxy one
+    Y_UNIT_TEST(RemoveBridgePileFromConfig) {
+        const auto pile0 = TBridgePileId::FromPileIndex(0);
+        const auto pile1 = TBridgePileId::FromPileIndex(1);
+        auto vdiskStatuses = [](const NKikimrBlobStorage::TStorageConfig& config) {
+            TStringBuilder res;
+            for (const auto& vdisk : config.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
+                res << VDiskIDFromVDiskID(vdisk.GetVDiskID()) << ':'
+                    << NKikimrBlobStorage::EEntityStatus_Name(vdisk.GetEntityStatus()) << ' ';
+            }
+            return res;
+        };
+        // the config is valid, and it is a valid update of the config before removal (if any)
+        auto check = [](NKikimrBlobStorage::TStorageConfig config, const NKikimrBlobStorage::TStorageConfig *prev) {
+            config.SetGeneration(config.GetGeneration() + 1);
+            NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+            const auto error = prev ? NStorage::ValidateConfigUpdate(*prev, config) : NStorage::ValidateConfig(config);
+            if (error) {
+                UNIT_FAIL(*error);
+            }
+        };
+
+        // native cluster: the pile group goes away
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        for (const auto pileId : {pile0, pile1}) {
+            auto *ringGroup = config.MutableStateStorageConfig()->AddRingGroups();
+            ringGroup->SetNToSelect(1);
+            ringGroup->AddNode(pileId == pile0 ? 1 : 3);
+            pileId.CopyToProto(ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
+        }
+        auto *details = config.MutableClusterStateDetails();
+        auto *pss = details->AddPileSyncState();
+        pile1.CopyToProto(pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::SetBridgePileId);
+        pss->SetUnsyncedBSC(true);
+        auto *op = details->MutablePendingPileOperation();
+        pile1.CopyToProto(op, &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::SetBridgePileId);
+        op->SetKind(NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE);
+        UNIT_ASSERT(NStorage::TDistributedConfigKeeper::RemoveBridgePileFromConfig(&config, pile1)); // SYNCHRONIZED
+        config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        auto prev = config;
+        if (const auto error = NStorage::TDistributedConfigKeeper::RemoveBridgePileFromConfig(&config, pile1)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT_EQUAL(config.GetClusterState().GetPerPileState(1), NKikimrBridge::TClusterState::INACTIVE);
+        UNIT_ASSERT(!config.GetClusterStateDetails().PileSyncStateSize());
+        UNIT_ASSERT(!config.GetClusterStateDetails().HasPendingPileOperation());
+        // nodes may know the removed group, so its id is not reused
+        UNIT_ASSERT_VALUES_EQUAL(config.GetClusterStateDetails().GetNextStaticGroupId(), 3);
+        const auto& ss = config.GetBlobStorageConfig().GetServiceSet();
+        UNIT_ASSERT_VALUES_EQUAL(ss.GroupsSize(), 2);
+        const auto& proxy = ss.GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(proxy.GetGroupGeneration(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(proxy.GetBridgeGroupState().PileSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ss.GetGroups(1).GetGroupID(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(vdiskStatuses(config), "[1:1:0:0:0]:INITIAL [2:1:0:0:0]:DESTROY ");
+        UNIT_ASSERT_VALUES_EQUAL(ss.PDisksSize(), 2); // the destroyed VDisk still occupies its slot
+        UNIT_ASSERT_VALUES_EQUAL(config.GetStateStorageConfig().RingGroupsSize(), 1);
+        UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&config.GetStateStorageConfig().GetRingGroups(0),
+            &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), pile0);
+        check(config, &prev);
+        // static parts may go away only along with the pile
+        auto stay = config;
+        stay.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        stay.SetGeneration(stay.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&stay);
+        UNIT_ASSERT(NStorage::ValidateConfigUpdate(prev, stay));
+
+        // converted cluster which has got the second pile: the inline pile goes away, its group stays as proxy
+        config = MakeStorageConfig(4, 1, {1});
+        for (auto& node : *config.MutableAllNodes()) {
+            node.MutableLocation()->SetBridgePileName(node.GetNodeId() <= 2 ? "pile0" : "pile1");
+        }
+        NKikimrConfig::TBridgeConfig bridgeConfig;
+        bridgeConfig.AddPiles()->SetName("pile0");
+        if (const auto error = NStorage::ConvertStorageConfigToBridge(&config, bridgeConfig)) {
+            UNIT_FAIL(*error);
+        }
+        details = config.MutableClusterStateDetails();
+        details->ClearBscConversionPending();
+        details->MutablePileRegistry()->AddPiles()->SetName("pile1");
+        AddMultiVDiskGroup(config, {3}, TBlobStorageGroupType::ErasureNone, 1);
+        auto *ssm = config.MutableBlobStorageConfig()->MutableServiceSet();
+        ssm->MutableGroups(1)->SetBridgeProxyGroupId(0);
+        pile1.CopyToProto(ssm->MutableGroups(1), &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
+        auto *pile = NBridge::AddGroupPile(ssm->MutableGroups(0)->MutableBridgeGroupState(), pile1);
+        pile->SetGroupId(1);
+        pile->SetGroupGeneration(1);
+        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
+        auto *clusterState = config.MutableClusterState();
+        clusterState->AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
+        clusterState->SetPerPileState(0, NKikimrBridge::TClusterState::DISCONNECTED);
+        pile1.CopyToProto(clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
+        pile1.CopyToProto(clusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        check(config, nullptr);
+        prev = config;
+        if (const auto error = NStorage::TDistributedConfigKeeper::RemoveBridgePileFromConfig(&config, pile0)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT(!config.GetClusterStateDetails().GetPileRegistry().GetImplicitPileId());
+        const auto& group = config.GetBlobStorageConfig().GetServiceSet().GetGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), 3);
+        UNIT_ASSERT(!group.RingsSize());
+        UNIT_ASSERT(!group.HasErasureSpecies());
+        UNIT_ASSERT(!group.HasBridgePileId());
+        UNIT_ASSERT(!group.HasBridgeProxyGroupId());
+        UNIT_ASSERT_VALUES_EQUAL(group.GetBridgeGroupState().PileSize(), 2);
+        UNIT_ASSERT(!NBridge::GetGroupPile(group.GetBridgeGroupState(), pile0));
+        UNIT_ASSERT_VALUES_EQUAL(NBridge::GetGroupPile(group.GetBridgeGroupState(), pile1)->GetGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(vdiskStatuses(config), "[0:2:0:0:0]:DESTROY [1:1:0:0:0]:INITIAL ");
+        check(config, &prev);
     }
 
     Y_UNIT_TEST(ThreeNodeSplitConvergesThroughMailbox) {
@@ -8681,6 +8882,42 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
         UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetNodeId(), 3u);
         UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetPDiskId(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetVSlotId(), 1u);
+    }
+
+    // static VDisk placed on the PDisk of BSC takes slot id below the range BSC allocates from, as BSC may allocate the
+    // next one of its range there (VSlots being deleted are not even listed in base config); only when static ids have
+    // reached that range, the slot ids listed are taken into account
+    Y_UNIT_TEST(StaticSlotIdsStayBelowBscRange) {
+        for (const ui32 staticSlotId : {0u, 1000u}) {
+            TSetup s = MakeSetup();
+            auto *vslot = s.BaseConfig.AddVSlot(); // VSlot of BSC on the target PDisk
+            vslot->MutableVSlotId()->SetNodeId(3);
+            vslot->MutableVSlotId()->SetPDiskId(1);
+            vslot->MutableVSlotId()->SetVSlotId(1005);
+            vslot->SetGroupId(0x80000001);
+            vslot->SetGroupGeneration(1);
+            vslot->SetStatus("READY");
+            auto *group = s.BaseConfig.AddGroup();
+            group->SetGroupId(0x80000001);
+            group->SetGroupGeneration(1);
+            group->SetGroupSizeInUnits(1);
+            if (staticSlotId) { // static VDisk placed by older version in the range of BSC
+                auto *destroyed = s.Config.MutableBlobStorageConfig()->MutableServiceSet()->AddVDisks();
+                VDiskIDFromVDiskID(TVDiskID(TGroupId::FromValue(5), 1, 0, 0, 0), destroyed->MutableVDiskID());
+                destroyed->MutableVDiskLocation()->SetNodeID(3);
+                destroyed->MutableVDiskLocation()->SetPDiskID(1);
+                destroyed->MutableVDiskLocation()->SetVDiskSlotID(staticSlotId);
+                destroyed->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+            }
+            NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
+            Reallocate(s, NodeIds({}), false, {
+                .TargetPDiskId = NBsController::TPDiskId(3, 1),
+                .Reassignments = &reassignments,
+            });
+            const auto it = reassignments.find(TVDiskIdShort(0, 0, 0));
+            UNIT_ASSERT(it != reassignments.end() && it->second.TargetSlotId);
+            UNIT_ASSERT_VALUES_EQUAL(it->second.TargetSlotId->GetVSlotId(), staticSlotId ? 1006u : 1u);
+        }
     }
 
     Y_UNIT_TEST(Block42KeepsExistingVDisksOnNonAllowedNodes) {

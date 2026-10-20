@@ -163,6 +163,7 @@ namespace NKikimr::NStorage {
             DISABLE_DISTCONF,
             OTHER,
             ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
+            REMOVE_BRIDGE_PILE, // BSC validates removal of the pile, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
@@ -199,17 +200,25 @@ namespace NKikimr::NStorage {
 
         void ConvertToBridge(const TQuery::TConvertToBridge& cmd);
 
-        // check that every node runs with BridgeConfig (and with support of changes of the list of piles, when
-        // pileListChange is set), then invoke the callback; every static node listed in requiredNodeIds must report it,
-        // while nodes listed in ignoredNodeIds may not report anything (they are leaving the cluster)
-        void RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
+        // check that every node runs with BridgeConfig (and supports bridge features of minFeatureLevel, when it is set),
+        // then invoke the callback; every static node listed in requiredNodeIds must report it, while nodes listed in
+        // ignoredNodeIds may not report anything (they are leaving the cluster)
+        void RequireBridgeCapability(ui32 minFeatureLevel, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
         void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
 
-        TBridgePileId AddedBridgePileId; // set while adding pile, BaseConfig is requested for it
+        TBridgePileId BridgePileOpPileId; // the pile being added or removed, see ControllerOp
+
+        // common checks of the operations changing the set of piles: the pile is listed in BridgeConfig and it is in the
+        // expected state, no other operation is in progress; returns the id of the pile
+        TBridgePileId CheckPileOperation(const TString& pileName, NKikimrBridge::TClusterState::EPileState expectedState,
+            bool adding);
+        // every node remaining in the cluster has to support pile operations (see RequireBridgeCapability)
+        void RequirePileOperationCapability(TBridgePileId leavingPileId, std::function<void()> callback);
 
         void AddBridgePile(const TQuery::TAddBridgePile& cmd);
         void AddBridgePileWithBaseConfig();
+        void RemoveBridgePile(const TQuery::TRemoveBridgePile& cmd);
         void NotifyBridgePileOperation(const TQuery::TNotifyBridgePileOperation& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

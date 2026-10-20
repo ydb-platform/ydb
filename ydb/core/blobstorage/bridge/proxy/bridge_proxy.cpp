@@ -867,8 +867,12 @@ namespace NKikimr {
             Y_DEBUG_ABORT_UNLESS(inserted1);
 
             // send event; inline pile is served by inner proxy, as the service id of this group points to us
-            if (groupId == GroupId) {
-                Y_ABORT_UNLESS(InnerProxyId);
+            if (groupId == GroupId && !InnerProxyId) {
+                // the inline pile has been removed (with its DS proxy) while the request was running against the group
+                // configuration having it; the subrequests the inner proxy was running got errors when it stopped, and so
+                // do the ones issued afterwards (like restore writes)
+                ReplyWithError(*ev, SelfId(), cookie, "inline pile has been removed from the cluster");
+            } else if (groupId == GroupId) {
                 Send(InnerProxyId, ev.release(), 0, cookie, request->Span.GetTraceId());
             } else {
                 SendToBSProxy(SelfId(), groupId, ev.release(), cookie, request->Span.GetTraceId());
@@ -1088,6 +1092,12 @@ namespace NKikimr {
                 // decommitted group has lost its piles, so there is nothing to route requests to; BlobDepot agent in front
                 // of us stops us right away, and the requests we hold are answered with error then
                 return;
+            }
+            if (InnerProxyId && msg->Info && !msg->Info->IsInlinePile()) {
+                // the pile of the inline pile has been removed from the cluster along with its VDisks, the group serves
+                // as bridge proxy group only now
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, InnerProxyId, SelfId(), nullptr, 0));
+                InnerProxyId = {};
             }
             if (InnerProxyId) {
                 // inner proxy has to see its group as an ordinary pile one

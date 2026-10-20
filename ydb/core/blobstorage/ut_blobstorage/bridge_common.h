@@ -141,9 +141,9 @@ namespace NBridgeTest {
         return InvokeDistconf(env, [](auto& record) { record.MutableConvertToBridge(); });
     }
 
-    inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env,
+    inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
             TInstant deadline = TInstant::Max()) {
-        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, 1, deadline);
+        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
         UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
         return res.GetQueryConfig().GetConfig();
     }
@@ -152,7 +152,7 @@ namespace NBridgeTest {
             NKikimrBridge::TClusterState::EPileState state) {
         const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
         for (;;) {
-            const auto config = QueryStorageConfig(env, deadline);
+            const auto config = QueryStorageConfig(env, 1, deadline);
             const auto response = InvokeDistconf(env, [&](auto& record) {
                 auto *next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
                 next->CopyFrom(config.GetClusterState());
@@ -163,7 +163,7 @@ namespace NBridgeTest {
                 return;
             }
             // Synchronization can advance another pile between QueryConfig and the command.
-            const auto current = QueryStorageConfig(env, deadline).GetClusterState();
+            const auto current = QueryStorageConfig(env, 1, deadline).GetClusterState();
             UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration()
                 && env.Runtime->GetClock() < deadline,
                 response.DebugString() << " before# " << config.GetClusterState().ShortDebugString()
@@ -232,16 +232,22 @@ namespace NBridgeTest {
         }
     };
 
-    // wait until the condition holds, checking it every step of simulated time
+    // wait until the condition holds, checking it every step of simulated time; describe tells the state on failure
     inline void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what,
-            TDuration step = TDuration::Seconds(10), ui32 numSteps = 60) {
+            TDuration step = TDuration::Seconds(10), ui32 numSteps = 60,
+            const std::function<TString()>& describe = {}) {
         for (ui32 i = 0; i < numSteps; ++i) {
             if (condition()) {
                 return;
             }
             env.Sim(step);
         }
-        UNIT_ASSERT_C(condition(), what << " not reached");
+        UNIT_ASSERT_C(condition(), what << " not reached" << (describe ? " " + describe() : TString()));
+    }
+
+    inline void WaitUntil(TEnvironmentSetup& env, const std::function<bool()>& condition, const TString& what,
+            const std::function<TString()>& describe) {
+        WaitUntil(env, condition, what, TDuration::Seconds(10), 60, describe);
     }
 
     // request the change of the pile state in the next cluster state generation

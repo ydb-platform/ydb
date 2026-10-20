@@ -1097,21 +1097,26 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::Perform(TEvGather::TCollectBridgeCapability *response,
             const TEvScatter::TCollectBridgeCapability& /*request*/, TScatterTask& task) {
-        auto add = [&](ui32 nodeId, bool capable, bool pileListChangeCapable) {
+        auto add = [&](ui32 nodeId, bool capable, ui32 bridgeFeatureLevel) {
             if (capable) {
                 response->AddCapableNodeIds(nodeId);
-                if (pileListChangeCapable) {
+                if (bridgeFeatureLevel >= BridgeFeatureLevelPileList) {
                     response->AddPileListChangeCapableNodeIds(nodeId);
+                }
+                if (bridgeFeatureLevel) {
+                    auto *item = response->AddFeatureLevels();
+                    item->SetNodeId(nodeId);
+                    item->SetLevel(bridgeFeatureLevel);
                 }
             } else {
                 response->AddNotCapableNodeIds(nodeId);
             }
         };
 
-        // this version supports changes of the list of piles
-        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig), true);
+        add(SelfId().NodeId(), static_cast<bool>(Cfg->BridgeConfig), BridgeFeatureLevel);
         for (const ui32 nodeId : ConnectedDynamicNodes) {
-            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId), PileListChangeCapableDynamicNodes.contains(nodeId));
+            const auto it = DynamicNodeFeatureLevels.find(nodeId);
+            add(nodeId, BridgeCapableDynamicNodes.contains(nodeId), it != DynamicNodeFeatureLevels.end() ? it->second : 0);
         }
         for (const auto& reply : task.CollectedResponses) {
             if (reply.HasCollectBridgeCapability()) {
@@ -1125,6 +1130,7 @@ namespace NKikimr::NStorage {
                 for (const ui32 nodeId : item.GetPileListChangeCapableNodeIds()) {
                     response->AddPileListChangeCapableNodeIds(nodeId);
                 }
+                response->MutableFeatureLevels()->MergeFrom(item.GetFeatureLevels());
             }
         }
     }

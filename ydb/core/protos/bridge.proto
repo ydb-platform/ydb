@@ -35,6 +35,9 @@ message TPileRegistry {
     // set once the list of piles has been changed (piles added, dropped or reordered in BridgeConfig); nodes of older
     // versions take pile ids from positions in their BridgeConfig, so they can't get the configuration since then
     bool PileListChanged = 3;
+    // nodes supporting lower level of bridge features can't get the configuration (PileListChanged implies level 1); set
+    // when some feature they don't support is used, e.g. a pile is removed
+    uint32 RequiredFeatureLevel = 4;
 }
 
 message TClusterStateDetails {
@@ -64,12 +67,22 @@ message TClusterStateDetails {
     message TPendingPileOperation {
         enum EKind {
             ADD = 0; // pile went from INACTIVE to DISCONNECTED, BSC has to add parts in this pile to its bridged groups
+            // DISCONNECTED pile is being removed: BSC has to delete parts in this pile of its bridged groups, then
+            // distconf deletes the static ones and makes the pile INACTIVE
+            REMOVE = 1;
         }
         uint32 BridgePileId = 1;
         EKind Kind = 2;
         optional string ErrorReason = 3; // why BSC has failed to perform its part last time (it retries meanwhile)
+        // unique for every operation (the generation of the config it was started with), so that a notification of BSC
+        // delivered late can't finish another operation on the same pile; 0 for operations started by older versions
+        uint64 OperationId = 4;
     }
     TPendingPileOperation PendingPileOperation = 5;
+
+    // static group ids are never reused, as nodes ignore group info with generation lower than the one they know; this is
+    // the lowest id for the parts of static groups allocated when piles are added, set once some of them are removed
+    uint32 NextStaticGroupId = 6;
 }
 
 message TGroupState {

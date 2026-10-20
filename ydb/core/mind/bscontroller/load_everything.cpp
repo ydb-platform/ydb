@@ -734,9 +734,12 @@ public:
 
                 groupState = &jt->second->BridgeGroupInfo->GetBridgeGroupState();
             } else if (const auto it = Self->StaticGroups.find(targetGroupId); it != Self->StaticGroups.end()) {
-                if (!it->second.Info || !it->second.Info->Group || !it->second.Info->Group->HasBridgeProxyGroupId() ||
-                        !it->second.Info->Group->HasBridgePileId()) {
+                if (!it->second.Info || !it->second.Info->Group) {
                     Y_DEBUG_ABORT();
+                    return {};
+                } else if (!it->second.Info->Group->HasBridgeProxyGroupId() || !it->second.Info->Group->HasBridgePileId()) {
+                    // the inline pile has been removed along with its pile, the group is the bridge proxy one only now;
+                    // the entry could have been left if BSC has restarted before forgetting it
                     return {};
                 }
                 bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),

@@ -103,7 +103,9 @@ public:
     class TTxUpdateShred;
     class TTxCheckUnsynced;
     class TTxConvertToBridge;
+    class TTxBridgePileOperation;
     class TTxAddBridgePile;
+    class TTxRemoveBridgePile;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
@@ -1776,6 +1778,7 @@ private:
     void InitializeSelfHealState();
     void FillInSelfHealGroups(TEvControllerUpdateSelfHealInfo& msg, TConfigState *state);
     void PushStaticGroupsToSelfHeal();
+    THashSet<TGroupId> StaticGroupsInSelfHeal; // the ones last pushed, to delete them when they go away
     void ProcessVDiskStatus(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s);
 
     void UpdateSelfHealCounters();
@@ -2117,6 +2120,8 @@ private:
     // validate addition of the pile against the storage config being proposed, then send the response
     ITransaction* CreateTxValidateAddBridgePile(TBridgePileId pileId, NKikimrBlobStorage::TStorageConfig&& storageConfig,
         std::unique_ptr<IEventHandle> response);
+    // validate removal of the pile, then send the response
+    ITransaction* CreateTxValidateRemoveBridgePile(TBridgePileId pileId, std::unique_ptr<IEventHandle> response);
 
     struct TAuditLogInfo {
         TString PeerName;
@@ -2231,15 +2236,24 @@ private:
     // perform BSC part of the pending pile operation from ClusterStateDetails, if there is one
     void CheckBridgePileOperation();
     void OnBridgePileOperationStepDone(TBridgePileId pileId,
-        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, std::optional<TString> error);
+        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, ui64 operationId,
+        std::optional<TString> error);
     void HandleRetryBridgePileOperation();
 
     // add the part in the pile to every bridged group lacking it; added gets (bridge proxy group, new part) pairs
     void AddBridgePileGroups(TConfigState& state, TBridgePileId pileId, ui64 becameUnsyncedGeneration,
         std::vector<std::tuple<TGroupId, TGroupId>> *added);
 
+    // delete the part in the pile of every bridged group (inline pile keeps serving as bridge proxy group only); every
+    // group having VDisks in the pile has to be such part, as its data is lost otherwise; returns the number of bridged
+    // groups that have lost their part
+    size_t RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId);
+
     // pile with pending operation, which BSC has not finished yet; such pile is not synced in any case
     TBridgePileId GetPendingOperationPileId() const;
+
+    // the pile is being removed, so new groups get no parts there
+    bool IsBridgePileBeingRemoved(TBridgePileId pileId) const;
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);

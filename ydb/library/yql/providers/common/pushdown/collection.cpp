@@ -868,7 +868,7 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
     }
 
     auto namedApply = just->ChildPtr(0);
-    if (!namedApply->IsCallable("NamedApply") || namedApply->ChildrenSize() < 2) {
+    if (!namedApply->IsCallable("NamedApply") || namedApply->ChildrenSize() <= 2) {
         return std::nullopt;
     }
 

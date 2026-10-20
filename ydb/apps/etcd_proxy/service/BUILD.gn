@@ -2,18 +2,18 @@ library("service") {
   public_deps = [
     # "//library/cpp/monlib/dynamic_counters",
     "//ydb/apps/etcd_proxy/proto",
-    # "//ydb/core/grpc_services/base",
-    # "//ydb/library/actors/core",
+    "//ydb/core/grpc_services/base",
+    "//ydb/library/actors/core",
     # "//ydb/library/grpc/server",
-    # "//ydb/public/sdk/cpp/src/client/query",
-    # "//ydb/public/sdk/cpp/src/client/topic",
+    "//ydb/public/sdk/cpp/src/client/query",
+    "//ydb/public/sdk/cpp/src/client/topic",
   ]
 
   deps = [
     # "//library/cpp/json",
     # "//library/cpp/resource",
     # "//ydb/core/base",
-    # "//ydb/core/grpc_services",
+    "//ydb/core/grpc_services",
     # "//ydb/core/kesus/tablet",  # peerdir only
     # "//ydb/core/keyvalue",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/driver",  # peerdir only

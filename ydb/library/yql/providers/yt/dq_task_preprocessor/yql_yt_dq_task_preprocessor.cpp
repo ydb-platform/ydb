@@ -211,7 +211,7 @@ public:
     }
 
     TYtDqTaskPreprocessor(TYtDqTaskPreprocessor&&) = default;
-    TYtDqTaskPreprocessor& operator=(TYtDqTaskPreprocessor&&) = default;
+    TYtDqTaskPreprocessor& operator=(TYtDqTaskPreprocessor&&) = delete;
 
     THashMap<TString, TString> GetTaskParams(const THashMap<TString, TString>& graphParams, const THashMap<TString, TString>& secureParams) final {
         YQL_LOG_CTX_SCOPE(TStringBuf("YtDqTaskPreprocessor"), __FUNCTION__);

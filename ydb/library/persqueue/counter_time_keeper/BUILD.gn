@@ -1,6 +1,6 @@
 library("counter_time_keeper") {
   public_deps = [
-    # "//ydb/core/tablet",
+    "//ydb/core/tablet",
   ]
 
   deps = [

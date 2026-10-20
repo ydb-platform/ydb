@@ -1,7 +1,7 @@
 library("abstract") {
   public_deps = [
     # "//ydb/core/tx/columnshard/data_accessor",
-    # "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/portions",
     # "//ydb/library/accessor",
   ]
 
@@ -31,7 +31,7 @@ library("common") {
 
 library("counters") {
   public_deps = [
-    # "//ydb/core/tx/columnshard/engines/portions",
+    "//ydb/core/tx/columnshard/engines/portions",
     # "//ydb/library/signals",
   ]
 

@@ -6,7 +6,7 @@ library("driver") {
     # "//ydb/public/sdk/cpp/src/client/trace",
     # "//ydb/public/sdk/cpp/src/client/types",
     "//ydb/public/sdk/cpp/src/client/types/credentials",
-    # "//ydb/public/sdk/cpp/src/client/types/executor",
+    "//ydb/public/sdk/cpp/src/client/types/executor",
     # "//ydb/public/sdk/cpp/src/client/types/fatal_error_handlers",
     "//ydb/public/sdk/cpp/src/client/types/status",
   ]

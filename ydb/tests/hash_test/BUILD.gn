@@ -1,5 +1,16 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# SRC(<file> -mavx2) of ya.make: the generator drops per-file flags
+avx2_source_set("avx2") {
+  sources = [
+    "kernel_mem_avx2.cpp",
+    "kernel_xxh_avx2.cpp",
+  ]
+}
+
 linked_executable("hash_test") {
   deps = [
+    ":avx2",
     "//contrib/restricted/cityhash-1.0.2",
     "//library/cpp/getopt",
     "//ydb/core/blobstorage/crypto",
@@ -16,8 +27,6 @@ linked_executable("hash_test") {
     "kernel_chacha_vec.cpp",
     "kernel_city.cpp",
     "kernel_mem.cpp",
-    "kernel_mem_avx2.cpp",
-    "kernel_xxh_avx2.cpp",
     "kernel_xxh_scalar.cpp",
     "kernel_xxh_sse2.cpp",
     "main.cpp",

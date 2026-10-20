@@ -3,16 +3,16 @@ library("deprecated") {
     # "//contrib/libs/protobuf",
     # "//contrib/libs/yaml-cpp",
     # "//library/cpp/json",
-    # "//library/cpp/protobuf/json",
-    # "//library/cpp/yaml/as",
+    "//library/cpp/protobuf/json",
+    "//library/cpp/yaml/as",
     "//ydb/core/protos",
   ]
 
   deps = [
-    # "//ydb/core/base",
+    "//ydb/core/base",
     # "//ydb/core/erasure",
     # "//ydb/library/yaml_config",  # peerdir only
-    # "//ydb/library/yaml_json",
+    "//ydb/library/yaml_json",
   ]
 
   sources = [ "yaml_config_parser.cpp" ]

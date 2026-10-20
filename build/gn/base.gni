@@ -168,14 +168,13 @@ template("serialize_enums") {
         configs += [ ":$_enum_include" ]
         if (defined(invoker.yql_abi_version)) {
             _abi = string_split(invoker.yql_abi_version, ".")
-            configs -= [ "//build/gn/config:yql_abi_current" ]
             if (!defined(defines)) {
                 defines = []
             }
             defines += [
-                "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
-                "UDF_ABI_VERSION_MINOR=${_abi[1]}",
-                "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+                "MIN_UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+                "MIN_UDF_ABI_VERSION_MINOR=${_abi[1]}",
+                "MIN_UDF_ABI_VERSION_PATCH=${_abi[2]}",
             ]
         }
         if (pch_mode == "global" && current_toolchain == default_toolchain) {
@@ -395,18 +394,18 @@ template("library") {
             }
         }
 
-        # UDF ABI: the current one by default (//build/gn/config:yql_abi_current in
-        # the default configs); YQL_ABI_VERSION(M m p) in ya.make -> "M.m.p" here.
+        # UDF ABI: the stable one (//build/gn/config:yql_abi in the default
+        # configs); YQL_ABI_VERSION(M m p) in ya.make -> "M.m.p" here, the minimum
+        # the module needs of it (MIN_UDF_ABI_VERSION_*, checked by udf_version.h).
         if (defined(invoker.yql_abi_version)) {
             _abi = string_split(invoker.yql_abi_version, ".")
-            configs -= [ "//build/gn/config:yql_abi_current" ]
             if (!defined(defines)) {
                 defines = []
             }
             defines += [
-                "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
-                "UDF_ABI_VERSION_MINOR=${_abi[1]}",
-                "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+                "MIN_UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+                "MIN_UDF_ABI_VERSION_MINOR=${_abi[1]}",
+                "MIN_UDF_ABI_VERSION_PATCH=${_abi[2]}",
             ]
         }
 

@@ -157,6 +157,11 @@ config("shared_library") {
     cflags = [
         "-fPIC",
     ]
+    # A library's own (non-weak) functions -- its calls, its vtables -- bound
+    # within it, not looked up in the ~2000 libraries a program loads: most of
+    # its startup otherwise. Weak ones (Y_WEAK defaults, inline functions) stay
+    # interposable, as without it; -Bsymbolic-functions would bind them too.
+    ldflags = [ "-Wl,-Bsymbolic-non-weak-functions" ]
 }
 
 config("static_library") {
@@ -183,8 +188,13 @@ config("no_warnings") {
     cflags = [ "-Wno-everything" ]
 }
 
-config("yql_abi_current") {
-    defines = [ "USE_CURRENT_UDF_ABI_VERSION" ]
+# The UDF ABI of every module: the stable one, as ya's default (and
+# YQL_ABI_VERSION / YQL_STABLE_ABI_VERSION / YQL_LAST_ABI_VERSION). All the
+# objects of a binary have to agree on it (udf_version.h aborts the load
+# otherwise). TODO: YQL_CURRENT_ABI_VERSION -- the current ABI of its whole
+# closure, ya building every YQL_LIBRARY twice for it
+config("yql_abi") {
+    defines = [ "USE_STABLE_UDF_ABI_VERSION" ]
 }
 
 config("no_undefined") {

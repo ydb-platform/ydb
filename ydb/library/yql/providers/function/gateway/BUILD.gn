@@ -6,7 +6,7 @@ library("gateway") {
   ]
 
   deps = [
-    # "//yql/essentials/utils",
+    "//yql/essentials/utils",
   ]
 
   sources = [ "dq_function_gateway.cpp" ]

@@ -61,7 +61,7 @@ TRIVIAL_MACROS = MODULE_MACROS | {
     "NO_BUILD_IF",   # of a condition that holds: GN<not built>, see parse_yamake
     "GENERATE_ENUM_SERIALIZATION",   # -> serialize_enum_headers
     "SRCDIR", "ADDINCL", "NO_WSHADOW", "ENABLE", "NO_COMPILER_WARNINGS", "SUPPRESSIONS", "NEED_CHECK", "ENV",
-    "YQL_LAST_ABI_VERSION",   # the default UDF ABI, see //build/gn/config:yql_abi_current
+    "YQL_LAST_ABI_VERSION", "YQL_STABLE_ABI_VERSION",   # the default UDF ABI, see //build/gn/config:yql_abi
     "GENERATE_ENUM_SERIALIZATION_WITH_HEADER", # TODO: temporary ignore
     "RESOURCE", "RESOURCE_FILES", "ALL_RESOURCE_FILES", "ALL_RESOURCE_FILES_FROM_DIRS",  # -> resources
     "CFLAGS", "CXXFLAGS", "CONLYFLAGS", "ALLOCATOR_IMPL", # TODO: temporary ignore
@@ -117,16 +117,16 @@ def proto_provided(label, grpc):
 # USE_COMMON_GOOGLE_APIS(...) pulls in google/api/*.proto etc., always imported
 # (and thus re-exported) by the module's own .proto sources -> always public.
 GOOGLEAPIS_COMMON_PROTOS_LABEL = "//contrib/libs/googleapis-common-protos"
-# Its headers need YQL_LAST_ABI_VERSION() / YQL_ABI_VERSION() in the includer's
-# ya.make (udf_version.h #errors otherwise); a module without either is reported.
+# A module including its headers without YQL_*ABI_VERSION() is reported (the
+# stable ABI by default, in ya as in GN).
 UDF_MODULE = "yql/essentials/public/udf"
 # YQL_UDF*(name): a multimodule -- the UDF as a shared object (YQL_UDF_SHARED)
 # and, for its PEERDIRs, static libraries at the module's and at the current
 # UDF ABI, every SRCS of them GLOBAL_SRCS (the UDF registers itself), with the
 # PEERDIRs below added (_ADD_YQL_UDF_*DEPS in
 # build/conf/project_specific/yql_udf.conf). GN builds the static one at the
-# current ABI (its consumers -- ydbd, ... -- are YQL_LAST_ABI_VERSION): a
-# LIBRARY of global sources.
+# default (stable) ABI of its consumers -- ydbd, ...: a LIBRARY of global
+# sources.
 YQL_UDF_MACROS = {"YQL_UDF", "YQL_UDF_YDB", "YQL_UDF_CONTRIB"}
 YQL_UDF_PEERDIRS = (UDF_MODULE, UDF_MODULE + "/support")
 # Macros that declare an artifact-producing (non-test) module.
@@ -411,7 +411,7 @@ class Module:
         self.recurses = []           # RECURSE / RECURSE_ROOT_RELATIVE dirs
         self.test_recurses = []      # RECURSE_FOR_TESTS dirs
         self.set_vars = {}           # SET(<var> <value>) of the module, for NO_BUILD_IF
-        self.yql_abi = None          # "current" (YQL_LAST_ABI_VERSION) or "M.m.p" (YQL_ABI_VERSION)
+        self.yql_abi = None          # "current": the default ABI (YQL_LAST_ABI_VERSION), or "M.m.p": its minimum (YQL_ABI_VERSION)
         self.allocator = None        # ALLOCATOR(<name>) of a program or a test
         self.generated = []          # repo-relative files the module generates (RUN_PROGRAM ... OUT, ...)
         self.proto_plugins = []      # (name, dir) of CPP_PROTO_PLUGIN0(<name> <dir>)
@@ -916,7 +916,7 @@ def parse_yamake(path, directory, root):
             name, args = "SRCS", args[1:]
         elif name == "YQL_LIBRARY":
             # multimodule: a LIBRARY at the stable and at the current UDF ABI;
-            # GN builds the current one (as LIBRARY + YQL_LAST_ABI_VERSION)
+            # GN builds the stable one (as LIBRARY + YQL_LAST_ABI_VERSION)
             name = "LIBRARY"
             mod.yql_abi = mod.yql_abi or "current"
         elif name in YQL_UDF_MACROS:
@@ -991,10 +991,10 @@ def parse_yamake(path, directory, root):
             mod.allocator = args[0]
         elif name in GENERATOR_MACROS:
             mod.generated.extend(_generated_outputs(name, args, directory, mod.set_vars))
-        elif name == "YQL_LAST_ABI_VERSION":
+        elif name in ("YQL_LAST_ABI_VERSION", "YQL_STABLE_ABI_VERSION"):
             mod.yql_abi = "current"
         elif name == "YQL_ABI_VERSION" and mod.yql_udf:
-            pass   # the shared UDF's and the stable static's; GN builds the current one
+            pass   # the minimum of the shared UDF and of its statics: GN builds a static one
         elif name == "YQL_ABI_VERSION":
             if len(args) == 3 and all(a.isdigit() for a in args):
                 mod.yql_abi = ".".join(args)
@@ -3877,7 +3877,7 @@ class Report:
             for d, v in sorted(set(self.yql_abi_explicit)):
                 print("  %-58s %s" % (d, v), file=o)
         if self.yql_abi_missing:
-            print("\nincludes udf without yql abi (ya make would #error; gn builds it with the current ABI):", file=o)
+            print("\nincludes udf without yql abi (the stable ABI, as in ya):", file=o)
             for d in sorted(set(self.yql_abi_missing)):
                 print("  %s" % d, file=o)
         if self.provides_unknown:

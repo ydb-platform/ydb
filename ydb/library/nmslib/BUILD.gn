@@ -1,57 +1,75 @@
-library("nmslib") {
-  public_deps = [
-    # "//library/cpp/testing/common",
-  ]
+# yamake2gn: keep  -- hand-written, do not regenerate
 
-  sources = [
-    "src/distcomp_bregman.cc",
-    "src/distcomp_diverg.cc",
-    "src/distcomp_edist.cc",
-    "src/distcomp_js.cc",
-    "src/distcomp_l2sqr_sift.cc",
-    "src/distcomp_lp.cc",
-    "src/distcomp_overlap.cc",
-    "src/distcomp_rankcorr.cc",
-    "src/distcomp_scalar.cc",
-    "src/distcomp_sparse_scalar_fast.cc",
-    "src/experimentconf.cc",
-    "src/global.cc",
-    "src/init.cc",
-    "src/knnquery.cc",
-    "src/logging.cc",
-    "src/memory.cc",
-    "src/method/dummy.cc",
-    "src/method/hnsw.cc",
-    "src/method/hnsw_distfunc_opt.cc",
-    "src/method/pivot_neighb_invindx.cc",
-    "src/method/seqsearch.cc",
-    "src/method/simple_inverted_index.cc",
-    "src/method/small_world_rand.cc",
-    "src/method/vptree.cc",
-    "src/params.cc",
-    "src/params_cmdline.cc",
-    "src/query.cc",
-    "src/rangequery.cc",
-    "src/searchoracle.cc",
-    "src/space.cc",
-    "src/space/space_ab_diverg.cc",
-    "src/space/space_bregman.cc",
-    "src/space/space_dummy.cc",
-    "src/space/space_js.cc",
-    "src/space/space_l2sqr_sift.cc",
-    "src/space/space_lp.cc",
-    "src/space/space_renyi_diverg.cc",
-    "src/space/space_scalar.cc",
-    "src/space/space_sparse_dense_fusion.cc",
-    "src/space/space_sparse_jaccard.cc",
-    "src/space/space_sparse_lp.cc",
-    "src/space/space_sparse_scalar_bin_fast.cc",
-    "src/space/space_sparse_scalar_fast.cc",
-    "src/space/space_sparse_vector.cc",
-    "src/space/space_sparse_vector_inter.cc",
-    "src/space/space_string.cc",
-    "src/space/space_vector.cc",
-    "src/space/space_word_embed.cc",
-    "src/utils.cc",
-  ]
+# Imported third-party code (nmslib), kept as in upstream: its own headers are
+# included by short paths from include/ (ADDINCL in ya.make).
+config("public_config") {
+    include_dirs = [ "include" ]
+    cflags = [ "-Wno-sign-compare" ]
+}
+
+config("private_config") {
+    cflags = [
+        "-Wno-instantiation-after-specialization",
+        "-Wno-range-loop-construct",
+        "-Wno-switch",
+        "-Wno-uninitialized",
+        "-Wno-unused-but-set-variable",
+    ]
+}
+
+contrib_library("nmslib") {
+    sources = [
+        "src/distcomp_bregman.cc",
+        "src/distcomp_diverg.cc",
+        "src/distcomp_edist.cc",
+        "src/distcomp_js.cc",
+        "src/distcomp_l2sqr_sift.cc",
+        "src/distcomp_lp.cc",
+        "src/distcomp_overlap.cc",
+        "src/distcomp_rankcorr.cc",
+        "src/distcomp_scalar.cc",
+        "src/distcomp_sparse_scalar_fast.cc",
+        "src/experimentconf.cc",
+        "src/global.cc",
+        "src/init.cc",
+        "src/knnquery.cc",
+        "src/logging.cc",
+        "src/memory.cc",
+        "src/method/dummy.cc",
+        "src/method/hnsw.cc",
+        "src/method/hnsw_distfunc_opt.cc",
+        "src/method/pivot_neighb_invindx.cc",
+        "src/method/seqsearch.cc",
+        "src/method/simple_inverted_index.cc",
+        "src/method/small_world_rand.cc",
+        "src/method/vptree.cc",
+        "src/params.cc",
+        "src/params_cmdline.cc",
+        "src/query.cc",
+        "src/rangequery.cc",
+        "src/searchoracle.cc",
+        "src/space.cc",
+        "src/space/space_ab_diverg.cc",
+        "src/space/space_bregman.cc",
+        "src/space/space_dummy.cc",
+        "src/space/space_js.cc",
+        "src/space/space_l2sqr_sift.cc",
+        "src/space/space_lp.cc",
+        "src/space/space_renyi_diverg.cc",
+        "src/space/space_scalar.cc",
+        "src/space/space_sparse_dense_fusion.cc",
+        "src/space/space_sparse_jaccard.cc",
+        "src/space/space_sparse_lp.cc",
+        "src/space/space_sparse_scalar_bin_fast.cc",
+        "src/space/space_sparse_scalar_fast.cc",
+        "src/space/space_sparse_vector.cc",
+        "src/space/space_sparse_vector_inter.cc",
+        "src/space/space_string.cc",
+        "src/space/space_vector.cc",
+        "src/space/space_word_embed.cc",
+        "src/utils.cc",
+    ]
+
+    public_configs = [ ":public_config" ]
+    configs = [ ":private_config" ]
 }

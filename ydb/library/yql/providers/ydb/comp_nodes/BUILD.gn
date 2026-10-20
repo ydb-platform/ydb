@@ -1,18 +1,18 @@
 library("comp_nodes") {
   deps = [
-    # "//ydb/core/scheme",
+    "//ydb/core/scheme",
     # "//ydb/library/actors/core",
     # "//ydb/library/mkql_proto/protos",  # peerdir only
-    # "//ydb/library/yql/dq/actors/compute",
+    "//ydb/library/yql/dq/actors/compute",
     # "//ydb/library/yql/dq/actors/protos",  # peerdir only
     "//ydb/library/yql/providers/ydb/proto",
-    # "//ydb/public/lib/experimental",
-    # "//ydb/public/sdk/cpp/adapters/issue",
+    "//ydb/public/lib/experimental",
+    "//ydb/public/sdk/cpp/adapters/issue",
     # "//ydb/public/sdk/cpp/src/client/driver",
-    # "//yql/essentials/core/dq_integration/transform",
+    "//yql/essentials/core/dq_integration/transform",
     # "//yql/essentials/minikql",
-    # "//yql/essentials/minikql/computation",
-    # "//yql/essentials/providers/common/structured_token",
+    "//yql/essentials/minikql/computation",
+    "//yql/essentials/providers/common/structured_token",
   ]
 
   sources = [

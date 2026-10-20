@@ -233,14 +233,13 @@ template("linked_executable") {
     }
     if (defined(invoker.yql_abi_version)) {
       _abi = string_split(invoker.yql_abi_version, ".")
-      configs -= [ "//build/gn/config:yql_abi_current" ]
       if (!defined(defines)) {
         defines = []
       }
       defines += [
-        "UDF_ABI_VERSION_MAJOR=${_abi[0]}",
-        "UDF_ABI_VERSION_MINOR=${_abi[1]}",
-        "UDF_ABI_VERSION_PATCH=${_abi[2]}",
+        "MIN_UDF_ABI_VERSION_MAJOR=${_abi[0]}",
+        "MIN_UDF_ABI_VERSION_MINOR=${_abi[1]}",
+        "MIN_UDF_ABI_VERSION_PATCH=${_abi[2]}",
       ]
     }
 

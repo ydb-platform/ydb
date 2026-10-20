@@ -1,6 +1,6 @@
 library("otel") {
   deps = [
-    # "//contrib/libs/opentelemetry-cpp/api",  # peerdir only
+    "//contrib/libs/opentelemetry-cpp/api",  # peerdir only
     # "//ydb/public/sdk/cpp/src/client/trace",  # peerdir only
   ]
 

@@ -88,7 +88,7 @@ _default_configs = [
   "//build/gn/config:std_string",
   "//build/gn/config:ydb_embedded_nbs",
   "//build/gn/config:no_undefined",
-  "//build/gn/config:yql_abi_current",
+  "//build/gn/config:yql_abi",
   "//build/gn/config:macro_prefix_map",
 ]
 if (host_cpu == "x64") {

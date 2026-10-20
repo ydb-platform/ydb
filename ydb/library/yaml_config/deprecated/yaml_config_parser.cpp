@@ -536,7 +536,7 @@ namespace NKikimr::NYaml::NDeprecated {
             NJson::TJsonValue defaultHiveInfo;
             defaultHiveInfo.SetType(NJson::EJsonValueType::JSON_MAP);
             defaultHiveInfo.InsertValue("hive_uid", 1);
-            defaultHiveInfo.InsertValue("hive", std::move(NJson::TJsonValue(72057594037968897)));
+            defaultHiveInfo.InsertValue("hive", NJson::TJsonValue(72057594037968897));
             hiveConfig.AppendValue(defaultHiveInfo);
         }
 
@@ -546,15 +546,15 @@ namespace NKikimr::NYaml::NDeprecated {
             if (domain.Has("domain_id")) {
                 Y_ENSURE_BT(GetUnsignedIntegerSafe(domain, "domain_id") == 1);
             } else {
-                domain.InsertValue("domain_id", std::move(NJson::TJsonValue(static_cast<ui64>(1))));
+                domain.InsertValue("domain_id", NJson::TJsonValue(static_cast<ui64>(1)));
             }
 
             if (!domain.Has("scheme_root")) {
-                domain.InsertValue("scheme_root", std::move(NJson::TJsonValue(72057594046678944)));
+                domain.InsertValue("scheme_root", NJson::TJsonValue(72057594046678944));
             }
 
             if (!domain.Has("plan_resolution")){
-                domain.InsertValue("plan_resolution", std::move(NJson::TJsonValue(10)));
+                domain.InsertValue("plan_resolution", NJson::TJsonValue(10));
             }
 
             Y_ENSURE_BT(domain.Has("plan_resolution"));
@@ -761,7 +761,7 @@ namespace NKikimr::NYaml::NDeprecated {
         }
 
         if (!json["log_config"].Has("default_level")) {
-            json["log_config"].InsertValue("default_level", std::move(NJson::TJsonValue(5)));
+            json["log_config"].InsertValue("default_level", NJson::TJsonValue(5));
         }
     }
 
@@ -773,7 +773,7 @@ namespace NKikimr::NYaml::NDeprecated {
 
         if (!json["interconnect_config"].Has("start_tcp")) {
             auto& config = json["interconnect_config"];
-            config.InsertValue("start_tcp", std::move(NJson::TJsonValue(true)));
+            config.InsertValue("start_tcp", NJson::TJsonValue(true));
         }
     }
 

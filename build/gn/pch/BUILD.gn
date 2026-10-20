@@ -18,7 +18,7 @@ template("shared_pch") {
       "c++-header",
       "-fpch-instantiate-templates",
     ]
-    configs -= [ "//build/gn/config:yql_abi_current" ]
+    configs -= [ "//build/gn/config:yql_abi" ]
     configs += [ ":${_name}_private_config" ]
     deps = []
     deps = platform_deps + [ "//contrib/libs/cxxsupp/libcxx" ]

@@ -1,10 +1,21 @@
+# yamake2gn: keep  -- hand-written, do not regenerate
+
+# Imported third-party code (nmslib): the tests include their helpers by short
+# paths from test/ (ADDINCL in ya.make)
+config("private_config") {
+    include_dirs = [ "//ydb/library/nmslib/test" ]
+    defines = [ "NMSLIB_ARCADIA_TEST" ]
+}
+
 linked_executable("test_integr") {
-  deps = [
-    "//library/cpp/testing/common",  # peerdir only
-    "//ydb/library/nmslib",
-  ]
+    deps = [
+        "//library/cpp/testing/common",  # peerdir only
+        "//ydb/library/nmslib",
+    ]
 
-  sources = [ "test_integr.cc" ]
+    sources = [ "test_integr.cc" ]
 
-  link_select = [ "allocator=tcmalloc" ]
+    configs = [ ":private_config" ]
+
+    link_select = [ "allocator=tcmalloc" ]
 }

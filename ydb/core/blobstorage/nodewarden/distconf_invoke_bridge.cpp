@@ -61,6 +61,10 @@ namespace NKikimr::NStorage {
                     if (currentState == NKikimrBridge::TClusterState::INACTIVE) {
                         throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name
                             << "' is not added to the cluster";
+                    } else if (NBridge::GetPendingPileOperationPileId(Self->StorageConfig->GetClusterStateDetails()) ==
+                            TBridgePileId::FromPileIndex(i)) {
+                        throw TExError() << "Pile '" << Self->BridgeInfo->Piles[i].Name
+                            << "' is being added to the cluster, its state can't be changed until BSC finishes";
                     }
                     switch (newState) {
                         case NKikimrBridge::TClusterState::DISCONNECTED:
@@ -209,6 +213,9 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
         auto *details = config.MutableClusterStateDetails();
+        if (NBridge::GetPendingPileOperationPileId(*details) == bridgePileId) {
+            throw TExError() << "Pile has pending operation"; // BSC has not created all the parts of its groups yet
+        }
 
         for (auto& state : *details->MutablePileSyncState()) {
             if (TBridgePileId::FromProto(&state, &std::decay_t<decltype(state)>::GetBridgePileId) == bridgePileId) {
@@ -419,6 +426,87 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
         config.MutableClusterStateDetails()->ClearBscConversionPending();
+        StartProposition(&config);
+    }
+
+    void TInvokeRequestHandlerActor::AddBridgePile(const TQuery::TAddBridgePile& cmd) {
+        RunCommonChecks();
+        NeedBridgeMode();
+
+        if (!Self->SelfManagementEnabled) {
+            throw TExError() << "Self-management must be enabled to add piles";
+        }
+
+        const auto& config = *Self->StorageConfig;
+        const auto& clusterState = config.GetClusterState();
+        const auto& details = config.GetClusterStateDetails();
+        const auto registry = Self->GetConfigPileRegistry(config);
+        Y_ABORT_UNLESS(registry); // the node runs with BridgeConfig
+
+        const TBridgePileId pileId = NBridge::ResolvePileId(*registry, cmd.GetPileName());
+        if (!pileId) {
+            throw TExError() << "Pile '" << cmd.GetPileName() << "' is not listed in BridgeConfig";
+        } else if (const auto state = NBridge::GetPileState(clusterState, pileId); state != NKikimrBridge::TClusterState::INACTIVE) {
+            throw TExError() << "Pile '" << cmd.GetPileName() << "' is already added to the cluster, its state is "
+                << NKikimrBridge::TClusterState::EPileState_Name(state);
+        } else if (details.GetBscConversionPending()) {
+            throw TExError() << "Piles can't be added until BSC finishes conversion of the cluster";
+        } else if (const auto *pending = Self->BridgeInfo->FindPile(NBridge::GetPendingPileOperationPileId(details))) {
+            throw TExError() << "Operation on pile '" << pending->Name << "' is in progress";
+        }
+
+        // every node of the cluster must know of pending pile operations and take pile ids from the registry; nodes of
+        // INACTIVE piles (including the one being added) are not connected to the cluster
+        THashSet<ui32> requiredNodeIds;
+        THashSet<ui32> ignoredNodeIds;
+        for (const auto& node : config.GetAllNodes()) {
+            const auto bridgePileId = ResolveNodePileId(registry, TNodeLocation(node.GetLocation()));
+            const bool inactive = !bridgePileId || NBridge::GetPileState(clusterState, *bridgePileId) ==
+                NKikimrBridge::TClusterState::INACTIVE;
+            (inactive ? ignoredNodeIds : requiredNodeIds).insert(node.GetNodeId());
+        }
+        RequireBridgeCapability(true, std::move(requiredNodeIds), std::move(ignoredNodeIds), [this, pileId] {
+            // PDisks of the new pile are already known to BSC, static groups have to be allocated on the same ones
+            AddedBridgePileId = pileId;
+            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryBaseConfig);
+        });
+    }
+
+    void TInvokeRequestHandlerActor::AddBridgePileWithBaseConfig() {
+        RunCommonChecks();
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        if (auto error = Self->AddBridgePileToConfig(&config, AddedBridgePileId, &BaseConfig.value())) {
+            throw TExError() << "Can't add pile to the cluster: " << *error;
+        }
+        ProposedStorageConfig = std::move(config);
+
+        // BSC checks whether it can add parts to its groups before anything is committed
+        ControllerOp = EControllerOp::ADD_BRIDGE_PILE;
+        ConnectToController();
+    }
+
+    void TInvokeRequestHandlerActor::NotifyBridgePileOperation(const TQuery::TNotifyBridgePileOperation& cmd) {
+        RunCommonChecks();
+
+        const auto& details = Self->StorageConfig->GetClusterStateDetails();
+        const auto& op = details.GetPendingPileOperation();
+        if (const auto pileId = NBridge::GetPendingPileOperationPileId(details); !pileId) {
+            throw TExError() << "No pending pile operation";
+        } else if (pileId != TBridgePileId::FromProto(&cmd, &TQuery::TNotifyBridgePileOperation::GetBridgePileId) ||
+                op.GetKind() != cmd.GetKind()) {
+            throw TExError() << "Pending pile operation is another one";
+        } else if (cmd.HasErrorReason() && op.HasErrorReason() && op.GetErrorReason() == cmd.GetErrorReason()) {
+            return Finish(TResult::OK, std::nullopt); // nothing changes
+        }
+
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto *mutableDetails = config.MutableClusterStateDetails();
+        if (cmd.HasErrorReason()) {
+            mutableDetails->MutablePendingPileOperation()->SetErrorReason(cmd.GetErrorReason());
+        } else {
+            mutableDetails->ClearPendingPileOperation();
+        }
         StartProposition(&config);
     }
 

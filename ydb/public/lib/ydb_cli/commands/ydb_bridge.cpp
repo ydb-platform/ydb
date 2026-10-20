@@ -54,6 +54,14 @@ namespace {
         }
         return "UNKNOWN";
     }
+
+    TString PendingPileOperationKindToString(NYdb::NBridge::TPendingPileOperation::EKind kind) {
+        switch (kind) {
+            case NYdb::NBridge::TPendingPileOperation::EKind::UNSPECIFIED: return "UNSPECIFIED";
+            case NYdb::NBridge::TPendingPileOperation::EKind::ADD: return "ADD";
+        }
+        return "UNKNOWN";
+    }
 }
 
 TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
@@ -66,6 +74,7 @@ TCommandBridge::TCommandBridge(bool allowEmptyDatabase)
     AddCommand(std::make_unique<TCommandBridgeTakedown>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeRejoin>(allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandBridgeConvert>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandBridgeAddPile>(allowEmptyDatabase));
 }
 
 TCommandBridgeUpdate::TCommandBridgeUpdate(bool allowEmptyDatabase)
@@ -198,6 +207,13 @@ int TCommandBridgeList::Run(TConfig& config) {
             }
             json.InsertValue("piles", piles);
             json.InsertValue("conversion_in_progress", result.IsConversionInProgress());
+            if (const auto& op = result.GetPendingPileOperation()) {
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                item.InsertValue("pile_name", op->PileName);
+                item.InsertValue("kind", PendingPileOperationKindToString(op->Kind));
+                item.InsertValue("error_reason", op->ErrorReason);
+                json.InsertValue("pending_pile_operation", item);
+            }
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
             break;
@@ -217,6 +233,13 @@ int TCommandBridgeList::Run(TConfig& config) {
             ss << "Generation: " << result.GetGeneration() << Endl;
             if (result.IsConversionInProgress()) {
                 ss << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
+            }
+            if (const auto& op = result.GetPendingPileOperation()) {
+                ss << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind)
+                    << Endl;
+                if (!op->ErrorReason.empty()) {
+                    ss << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
+                }
             }
             Cout << ss.Str();
             break;
@@ -395,6 +418,37 @@ int TCommandBridgeConvert::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster converted to bridge mode successfully." << Endl;
+
+    return EXIT_SUCCESS;
+}
+
+TCommandBridgeAddPile::TCommandBridgeAddPile(bool allowEmptyDatabase)
+    : TYdbCommand("add-pile", {}, "Add a pile listed in the bridge config with its hosts (and shown as INACTIVE) to the "
+        "cluster: create its parts of storage groups and make it DISCONNECTED.")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandBridgeAddPile::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("pile", "Name of the pile to add.")
+        .Required().RequiredArgument("PILE_NAME").StoreResult(&Pile);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.SetFreeArgsNum(0);
+}
+
+void TCommandBridgeAddPile::Parse(TConfig& config) {
+    TYdbCommand::Parse(config);
+}
+
+int TCommandBridgeAddPile::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NBridge::TBridgeClient(driver);
+
+    auto result = client.AddPile(Pile).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    Cout << "Pile added to the cluster successfully, it can be rejoined now." << Endl;
 
     return EXIT_SUCCESS;
 }

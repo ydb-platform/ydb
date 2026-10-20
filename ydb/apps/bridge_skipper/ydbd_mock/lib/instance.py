@@ -25,6 +25,21 @@ from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology, TopologyErr
 log = logging.getLogger("ydbd_mock")
 
 
+async def _finish_on_cancel(awaitable):
+    """Finish owned cleanup before propagating cancellation, including repeated cancellation."""
+    task = asyncio.ensure_future(awaitable)
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+    result = task.result()
+    if cancelled:
+        raise asyncio.CancelledError
+    return result
+
+
 def _server_credentials(tls: typing.Optional[dict]):
     """Best-effort TLS: `tls: {cert_file: ..., key_file: ...}` in the topology. None means plaintext."""
     if not tls:
@@ -47,37 +62,68 @@ class NodeServer:
         self.index = index
         self.node = process.inst.pile_info.nodes[index]
         self.server: typing.Optional["grpc.aio.Server"] = None
+        self._start_task: typing.Optional["asyncio.Task"] = None
+        self._stop_task: typing.Optional["asyncio.Task"] = None
 
     @property
     def running(self) -> bool:
         return self.server is not None
 
     async def start(self) -> None:
+        if self._stop_task is not None:
+            await asyncio.shield(self._stop_task)
+            self._stop_task = None
         if self.server is not None:
+            await asyncio.shield(self._start_task)
             return
         p = self.process
+        # A READY server cannot be destroyed safely by the bundled grpcio. Validate before allocation.
+        credentials = _server_credentials(p.topo.tls)
         server = grpc.aio.server(
             options=[("grpc.so_reuseport", 0)],
             interceptors=[services.UnregisteredServiceInterceptor(p.events, self.node.label)],
         )
-        credentials = _server_credentials(p.topo.tls)
-        services.register(server, p.inst, p.runtimes[self.index], tls=credentials is not None)
-        try:
-            if credentials is not None:
-                port = server.add_secure_port(self.node.endpoint, credentials)
-            else:
-                port = server.add_insecure_port(self.node.endpoint)
-        except RuntimeError as e:
-            raise OSError("cannot bind %s: %s" % (self.node.endpoint, e))
-        if not port:
-            raise OSError("cannot bind %s" % self.node.endpoint)
-        await server.start()
         self.server = server
+        self._start_task = asyncio.create_task(self._start(server, credentials))
+        # Keep the task owned if reconciliation is cancelled. stop() joins it before shutting down.
+        await asyncio.shield(self._start_task)
+
+    async def _start(self, server, credentials) -> None:
+        p = self.process
+        try:
+            try:
+                services.register(server, p.inst, p.runtimes[self.index], tls=credentials is not None)
+                try:
+                    if credentials is not None:
+                        port = server.add_secure_port(self.node.endpoint, credentials)
+                    else:
+                        port = server.add_insecure_port(self.node.endpoint)
+                except RuntimeError as e:
+                    raise OSError("cannot bind %s: %s" % (self.node.endpoint, e))
+                if not port:
+                    raise OSError("cannot bind %s" % self.node.endpoint)
+            finally:
+                # grpcio.stop() does nothing in READY. Even a failed bind needs start then stop to
+                # release the native server; starting a server with no bound ports is supported.
+                await server.start()
+        except BaseException:
+            await server.stop(None)
+            self.server = None
+            raise
 
     async def stop(self, grace: typing.Optional[float] = 0.0) -> None:
-        server, self.server = self.server, None
-        if server is not None:
-            await server.stop(grace)
+        if self._stop_task is None or (
+                self._stop_task.done() and (self._stop_task.cancelled() or self._stop_task.exception() is not None)):
+            self._stop_task = asyncio.create_task(self._stop(grace))
+        await asyncio.shield(self._stop_task)
+
+    async def _stop(self, grace: typing.Optional[float]) -> None:
+        if self._start_task is not None:
+            # A failed start has its own rollback. Still join it before attempting any remaining cleanup.
+            await asyncio.gather(self._start_task, return_exceptions=True)
+        if self.server is not None:
+            await self.server.stop(grace)
+            self.server = None
 
 
 class MockProcess:
@@ -105,43 +151,54 @@ class MockProcess:
 
     async def start(self) -> None:
         pile = self.inst.pile_info
-        app = control_api.build_app(self)
-        self._runner = web.AppRunner(app, access_log=None)
-        await self._runner.setup()
-        site = web.TCPSite(self._runner, pile.control_host, pile.control_port, reuse_address=True)
         try:
-            await site.start()
-        except OSError as e:
-            await self._runner.cleanup()
-            self._runner = None
-            raise OSError("cannot bind control port %s: %s" % (pile.control_endpoint, e))
-        try:
+            app = control_api.build_app(self)
+            self._runner = web.AppRunner(app, access_log=None)
+            await self._runner.setup()
+            site = web.TCPSite(self._runner, pile.control_host, pile.control_port, reuse_address=True)
+            try:
+                await site.start()
+            except OSError as e:
+                raise OSError("cannot bind control port %s: %s" % (pile.control_endpoint, e))
             await self.inst.start()      # loads the replica: it decides which listeners may open
             self._serving = True
             await self.reconcile_listeners(grace=0.0)
-        except (OSError, ReplicaError):
+        except BaseException:
             await self.stop()
             raise
 
     async def stop(self, grace: float = 1.0) -> None:
+        await _finish_on_cancel(self._stop(grace))
+
+    async def _stop(self, grace: float) -> None:
         self._serving = False
-        for task in list(self._listener_tasks):
+        tasks = list(self._listener_tasks)
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*self._listener_tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        errors = [r for r in results if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError)]
         async with self._listener_lock:
-            await asyncio.gather(*(n.stop(grace) for n in self.nodes))
-        await self.inst.stop()
+            results = await asyncio.gather(*(n.stop(grace) for n in self.nodes), return_exceptions=True)
+        errors.extend(r for r in results if isinstance(r, BaseException))
+        cleanups = [self.inst.stop]
         if self._runner is not None:
-            await self._runner.cleanup()
-            self._runner = None
-        await self.transport.close()
+            cleanups.append(self._runner.cleanup)
+        cleanups.append(self.transport.close)
+        for cleanup in cleanups:
+            try:
+                await cleanup()
+            except BaseException as e:
+                errors.append(e)
+        self._runner = None
         self.events.close()
+        if errors:
+            raise errors[0]
 
     # ----- listeners -----
 
     def _listener_wanted(self, index: int) -> bool:
         """A node listens unless it is faulted down, or its pile stopped serving (run.cpp)."""
-        return not self.inst.node_faults[index].down and self.inst.serves()
+        return self._serving and not self.inst.node_faults[index].down and self.inst.serves()
 
     async def reconcile_listeners(self, grace: float = 1.0, drain_updates: bool = False) -> None:
         """Reconcile listeners, optionally waiting for active updates to send their replies first."""
@@ -152,8 +209,8 @@ class MockProcess:
                     wanted = self._listener_wanted(node.index)
                     if wanted:
                         replies_by_node.pop(node.index, None)
-                        if not node.running:
-                            await node.start()
+                        # Joining an owned transition also handles node-up during an unfinished stop.
+                        await node.start()
                     elif node.running:
                         if drain_updates:
                             # Snapshot only once per closing node: later requests cannot postpone closure.

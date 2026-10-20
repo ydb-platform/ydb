@@ -9,6 +9,7 @@ TEST_SRCS(
     test_extras.py
     test_followups.py
     test_health.py
+    test_instance.py
     test_model.py
     test_proto_contract.py
     test_replica.py

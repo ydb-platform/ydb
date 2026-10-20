@@ -12,7 +12,7 @@ import typing
 import aiohttp
 import grpc
 
-from ydb.apps.bridge_skipper.ydbd_mock.lib.instance import MockProcess
+from ydb.apps.bridge_skipper.ydbd_mock.lib.instance import MockProcess, _finish_on_cancel
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Policies, Timings, Topology
 from ydb.public.api.grpc import ydb_config_v1_pb2_grpc
 from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc
@@ -68,17 +68,36 @@ class LiveCluster:
     async def start(self) -> "LiveCluster":
         for name in self.topo.pile_names:
             self.procs[name] = self._new_process(name)
-        await asyncio.gather(*(p.start() for p in self.procs.values()))
-        self._http = aiohttp.ClientSession()
+        try:
+            results = await _finish_on_cancel(asyncio.gather(
+                *(p.start() for p in self.procs.values()), return_exceptions=True))
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+            self._http = aiohttp.ClientSession()
+        except BaseException:
+            await self.stop()
+            raise
         return self
 
     async def stop(self) -> None:
-        for channel in self._channels.values():
-            await channel.close(None)
+        await _finish_on_cancel(self._stop())
+
+    async def _stop(self) -> None:
+        results = await asyncio.gather(
+            *(channel.close(None) for channel in self._channels.values()), return_exceptions=True)
+        errors = [r for r in results if isinstance(r, BaseException)]
         self._channels.clear()
         if self._http is not None:
-            await self._http.close()
-        await asyncio.gather(*(p.stop(0.0) for p in self.procs.values()), return_exceptions=True)
+            try:
+                await self._http.close()
+            except BaseException as e:
+                errors.append(e)
+            self._http = None
+        results = await asyncio.gather(*(p.stop(0.0) for p in self.procs.values()), return_exceptions=True)
+        errors.extend(r for r in results if isinstance(r, BaseException))
+        if errors:
+            raise errors[0]
 
     async def kill(self, pile: str) -> None:
         """What SIGKILL does to a real instance: every listener and the replica go away at once."""

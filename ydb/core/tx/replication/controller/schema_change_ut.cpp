@@ -1789,11 +1789,21 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
             .Database(env.GetDatabase()));
         auto session = client.CreateSession().GetValueSync().GetSession();
         const auto upsert = [&](ui32 key) {
-            const auto result = session.ExecuteDataQuery(Sprintf(
-                "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
-                NYdb::NTable::TTxControl::BeginTx()
-                        .CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            for (ui32 attempt = 0; attempt < 50; ++attempt) {
+                const auto result = session.ExecuteDataQuery(Sprintf(
+                    "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
+                    NYdb::NTable::TTxControl::BeginTx()
+                            .CommitTx()).GetValueSync();
+                if (result.IsSuccess()) {
+                    return;
+                }
+
+                const auto status = result.GetStatus();
+                UNIT_ASSERT_C(enableAfterCreation && attempt + 1 < 50 &&
+                    (status == NYdb::EStatus::ABORTED || status == NYdb::EStatus::SCHEME_ERROR),
+                    result.GetIssues().ToString());
+                Sleep(TDuration::MilliSeconds(100));
+            }
         };
         const auto waitForRow = [&](ui32 key) {
             for (ui32 attempt = 0; attempt < 600; ++attempt) {

@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/kernel_logic.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
+#include <ydb/core/formats/arrow/program/visitor.h>
 
 #include <ydb/library/formats/arrow/helpers/array.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
@@ -584,6 +585,32 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
 
     Y_UNIT_TEST(OrFinishesOnAbsorbingInput) {
         AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, false);
+    }
+
+    Y_UNIT_TEST(StopsReadyInputBatchAfterKernelAbsorbingResult) {
+        TFailDataSource dataSource;
+        auto resources = std::make_unique<TAccessorsCollection>(2);
+        resources->AddVerified(1, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ std::nullopt, 1 })), false);
+        resources->AddVerified(2, std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 0 })), false);
+        ui32 materializations = 0;
+        // Processing input 3 would materialize it.
+        resources->AddVerified(3, std::make_shared<TCountingSparsedArray>(arrow::MakeNullScalar(arrow::uint8()), 2, materializations), false);
+
+        TProcessorContext context(dataSource, std::move(resources), std::nullopt, false);
+        NGraph::NExecution::TExecutionVisitor visitor(std::move(context));
+        auto processor =
+            std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ 1, 2, 3 }), TColumnChainInfo(4), NKernels::EOperation::And);
+        NGraph::NExecution::TCompiledGraph::TNode node(5, processor);
+        UNIT_ASSERT(visitor.OnEnter(node).IsSuccess());
+        UNIT_ASSERT(visitor.OnComeback(node, TColumnChainInfo::BuildVector({ 1 })).IsSuccess());
+        UNIT_ASSERT(visitor.OnComeback(node, TColumnChainInfo::BuildVector({ 2, 3 })).IsSuccess());
+
+        UNIT_ASSERT_VALUES_EQUAL(materializations, 0);
+        const auto& output = visitor.MutableContext().GetResources().GetAccessorVerified(4);
+        UNIT_ASSERT(arrow::Concatenate(output->GetChunkedArray()->chunks()).ValueOrDie()->Equals(*NKikimr::NKernels::UInt8VecToArray({ 0, 0 })));
+        const auto exit = visitor.OnExit(node);
+        UNIT_ASSERT(exit.IsSuccess());
+        UNIT_ASSERT(*exit == NGraph::NExecution::TCompiledGraph::IVisitor::EVisitStatus::Skipped);
     }
 };
 

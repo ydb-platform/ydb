@@ -40,6 +40,10 @@ namespace {
             return ToWorkScope(Impl.GetFullPoolId());
         }
 
+        double GetSchedulingWeight() const final {
+            return Impl.GetSchedulingWeight();
+        }
+
     private:
         TSchedulableBase Impl;
     };

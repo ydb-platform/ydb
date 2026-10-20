@@ -1,5 +1,6 @@
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
+#include "dq_execution_wait.h"
 
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
@@ -32,7 +33,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
-
+#include <util/system/datetime.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -166,14 +167,15 @@ NUdf::TUnboxedValue DqBuildInputValue(
     NUdf::IPgBuilder* pgBuilder,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker,
-    bool useReadySet
+    bool useReadySet,
+    bool reportSchedulingWait
 ) {
     switch (inputDesc.GetTypeCase()) {
         case NYql::NDqProto::TTaskInput::kSource:
             Y_ABORT_UNLESS(inputs.size() == 1);
             return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker);
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
+            return CreateInputUnionValue(type, std::move(inputs), holderFactory, stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet, reportSchedulingWait);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
@@ -608,6 +610,7 @@ public:
             SpillerFactory->SetTaskCounters(SpillingTaskCounters);
         }
         AllocatedHolder->ProgramParsed.CompGraph->GetContext().SpillerFactory = std::move(SpillerFactory);
+        AllocatedHolder->ProgramParsed.CompGraph->GetContext().ExecutionWaitObserver = WaitObserver.get();
 
         // the input channels of a task are all v1 or all v2, and the v2 ones support TDqInputReadySet
         const bool useReadySet = task.GetDqChannelVersion() >= 2u && Context.ChannelService
@@ -619,6 +622,8 @@ public:
             TDqMeteringStats::TInputStats* inputStats = nullptr;
             if (task.EnableMetering()) {
                 inputStats = &MeteringStats.AddInputs();
+            } else if (Scheduling) {
+                inputStats = &SchedulingMeteringStats.AddInputs();
             }
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
@@ -730,7 +735,8 @@ public:
                         PgBuilder_.get(),
                         &transform->Watermark,
                         transform->WatermarksTracker ? &*transform->WatermarksTracker : nullptr,
-                        useReadySet
+                        useReadySet,
+                        Scheduling != nullptr
                     );
                     inputs.clear();
                     inputs.emplace_back(transform->TransformOutput);
@@ -761,7 +767,8 @@ public:
                             PgBuilder_.get(),
                             &Watermark,
                             inputUsesWatermarks ? WatermarksTracker : nullptr,
-                            useReadySet
+                            useReadySet,
+                            Scheduling != nullptr
                         )
                     );
                 }
@@ -934,7 +941,49 @@ public:
         }
     }
 
+    void ConfigureScheduling(std::shared_ptr<TTaskSchedulingHandle> scheduling, ui64 maxRowsPerRun) override {
+        Scheduling = std::move(scheduling);
+        WaitObserver = Scheduling ? std::make_unique<TTaskExecutionWaitObserver>(Scheduling) : nullptr;
+        MaxRowsPerRun = maxRowsPerRun;
+        if (Context.ComputeCtx) {
+            Context.ComputeCtx->Scheduling = Scheduling;
+        }
+    }
+
+    void SetExecutionBudget(ui64 cpuUs, TMonotonic deadline) override {
+        SliceCpuUs = cpuUs;
+        SliceDeadline = deadline;
+    }
+
     ERunStatus Run() final {
+        const ui64 cpuStart = Scheduling ? ThreadCPUTime() : 0;
+        SliceCpuStart = cpuStart;
+        const auto wallStart = Scheduling ? TMonotonic::Now() : TMonotonic();
+        ui64 inputRowsBefore = 0;
+        if (Scheduling) {
+            WaitObserver->BeginRun();
+            LastRunProgress = {};
+            LastRunProgress.RunnerInvoked = true;
+            for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                for (const auto& input : stats->Inputs) {
+                    inputRowsBefore += input->RowsConsumed;
+                }
+            }
+        }
+        Y_DEFER {
+            if (Scheduling) {
+                ui64 inputRowsAfter = 0;
+                for (const auto* stats : {&MeteringStats, &SchedulingMeteringStats}) {
+                    for (const auto& input : stats->Inputs) {
+                        inputRowsAfter += input->RowsConsumed;
+                    }
+                }
+                LastRunProgress.InputRows = inputRowsAfter - inputRowsBefore;
+                LastRunProgress.InputItems = InputsConsumed;
+                LastRunProgress.CpuTimeUs = ThreadCPUTime() - cpuStart;
+                LastRunProgress.ElapsedTimeUs = (TMonotonic::Now() - wallStart).MicroSeconds();
+            }
+        };
         LOG(TStringBuilder() << "Run task: " << TaskId);
         if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
             auto guard = BindAllocator();
@@ -951,6 +1000,9 @@ public:
         InputsConsumed = 0;
         auto runStatus = FetchAndDispatch();
         LastFetchTime = TInstant::Now();
+        if (Scheduling) {
+            LastRunProgress.Finished = runStatus == ERunStatus::Finished && LastFetchStatus != ERunStatus::Finished;
+        }
         LastFetchStatus = runStatus;
 
         if (Y_UNLIKELY(CollectFull())) {
@@ -1164,7 +1216,13 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         bool dataConsumed = false;
-        while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
+        for (;;) {
+            if (Scheduling) {
+                Scheduling->BeginProbe();
+            }
+            if (AllocatedHolder->Output->GetFillLevel() != NoLimit) {
+                break;
+            }
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
             if (!AllocatedHolder->ResultStreamFinished && !AllocatedHolder->Output->IsEarlyFinished()) {
@@ -1177,6 +1235,14 @@ private:
 
             switch (fetchStatus) {
                 case NUdf::EFetchStatus::Ok: {
+                    if (Scheduling) {
+                        ui64 rows = 1;
+                        if (isWide &&
+                            AnyOf(AllocatedHolder->OutputWideType->GetElements(), [](const auto* type) { return type->IsBlock(); })) {
+                            rows = TArrowBlock::From(wideBuffer.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
+                        }
+                        LastRunProgress.OutputRows += rows;
+                    }
                     if (isWide) {
                         AllocatedHolder->Output->WideConsume(wideBuffer.data(), wideBuffer.size());
                     } else {
@@ -1186,6 +1252,16 @@ private:
                         ++Stats->TotalOutputsProduced;
                     }
                     dataConsumed = true;
+                    if (Scheduling && !Scheduling->ObserveOnly && (LastRunProgress.OutputRows >= MaxRowsPerRun
+                        || (SliceCpuUs && ThreadCPUTime() - SliceCpuStart >= SliceCpuUs)
+                        || (SliceDeadline && TMonotonic::Now() >= SliceDeadline))) {
+                        LastRunProgress.BudgetExhausted = true;
+                        Scheduling->MakeRunnable();
+                        AllocatedHolder->Output->Flush();
+                        // Preserve the legacy runner status; the scheduling side
+                        // channel explicitly says Runnable, not an input wait.
+                        return ERunStatus::PendingInput;
+                    }
                     break;
                 }
                 case NUdf::EFetchStatus::Finish: {
@@ -1259,6 +1335,12 @@ private:
     TRuntimeSettings::TConstPtr RuntimeSettings;
 
     ui64 InputsConsumed = 0;
+    std::shared_ptr<TTaskSchedulingHandle> Scheduling;
+    std::unique_ptr<TTaskExecutionWaitObserver> WaitObserver;
+    ui64 MaxRowsPerRun = 0;
+    ui64 SliceCpuUs = 0;
+    ui64 SliceCpuStart = 0;
+    TMonotonic SliceDeadline;
 
     struct TInputTransformInfo {
         NUdf::TUnboxedValue TransformInput;
@@ -1318,6 +1400,7 @@ private:
 
     std::unique_ptr<TDqTaskRunnerStats> Stats;
     TDqMeteringStats MeteringStats;
+    TDqMeteringStats SchedulingMeteringStats;
     TDuration RunComputeTime;
 
 private:

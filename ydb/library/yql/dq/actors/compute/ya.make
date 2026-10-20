@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    dq_task_execution.cpp
     dq_async_compute_actor.cpp
     dq_checkpoints_states.cpp
     dq_compute_actor_async_io_factory.cpp
@@ -28,6 +29,8 @@ PEERDIR(
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/runtime/streaming
+    ydb/library/yql/dq/task_scheduler
+    ydb/library/yql/dq/tasks
     yql/essentials/minikql
     yql/essentials/minikql/comp_nodes
     yql/essentials/public/issue

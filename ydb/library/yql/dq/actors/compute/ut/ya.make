@@ -11,6 +11,7 @@ ENDIF()
 
 SRCS(
     dq_compute_actor_async_input_helper_ut.cpp
+    dq_task_execution_ut.cpp
     dq_compute_actor_channels_ut.cpp
     dq_compute_actor_checkpoints_ut.cpp
     dq_compute_memory_quota_ut.cpp

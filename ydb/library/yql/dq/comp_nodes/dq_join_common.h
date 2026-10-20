@@ -154,6 +154,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
 
     EFetchResult MatchRows(TComputationContext& ctx, auto consumeOneOrTwoTuples) {
         while (!Build_.Finished()) {
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
             auto res = Build_.ForEachRow(ctx, [&](auto tuple) { Table_.Add({tuple, tuple + Build_.UserDataSize()}); });
             switch (res) {
             case NYql::NUdf::EFetchStatus::Finish: {
@@ -161,6 +162,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
+                inputWait.Yielded();
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
@@ -171,6 +173,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
             }
         }
         if (!Probe_.Finished()) {
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
             auto result = Probe_.ForEachRow(ctx, [&](NJoinTable::TTuple probeTuple) {
                 bool found = false;
                 Table_.Lookup(probeTuple, [&](NJoinTable::TTuple matchedBuildTuple) {
@@ -223,6 +226,7 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
                 return consumedTotal == 0 ? EFetchResult::Finish : EFetchResult::One;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
+                inputWait.Yielded();
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
@@ -321,6 +325,7 @@ template <typename Source> class TInMemoryHashJoin {
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
                            JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto isFull) {
         while (!Sources_.Build.Finished()) {
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
@@ -328,6 +333,7 @@ template <typename Source> class TInMemoryHashJoin {
                 break;
             }
             case NYql::NUdf::EFetchStatus::Yield: {
+                inputWait.Yielded();
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
@@ -370,8 +376,12 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (!Sources_.Probe.Finished()) {
+            TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
+            if (resEnum == EFetchResult::Yield) {
+                inputWait.Yielded();
+            }
 
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
@@ -673,7 +683,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         return Layouts_.Build->Flatten(tuples);
     }
 
-    EFetchResult WaitWhileSpilling() {
+    template <class TFutureFactory>
+    EFetchResult WaitWhileSpilling(TComputationContext& ctx, const void* operation, EExecutionWaitKind kind,
+                                   TFutureFactory&& getFuture) {
+        if (ctx.ExecutionWaitObserver) {
+            ctx.ExecutionWaitObserver->AwaitFuture(reinterpret_cast<ui64>(this), operation, kind, getFuture());
+        }
         return EFetchResult::Yield;
     }
 
@@ -798,9 +813,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
             if (!state.Pack.has_value()) {
+                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Build);
                 FetchResult<TPackResult> var = state.Build.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
+                    inputWait.Yielded();
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
@@ -814,7 +831,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
                 switch (res) {
                 case Spilling:
-                    return WaitWhileSpilling();
+                    return WaitWhileSpilling(ctx, &state.Spiller, EExecutionWaitKind::SpillWrite,
+                        [&] { return state.Spiller.GetPendingSpill(); });
                 case FinishedSpilling:
                     break;
                 case DontHavePages:{
@@ -834,7 +852,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
             switch (res) {
                 case Spilling:
-                    return WaitWhileSpilling();
+                    return WaitWhileSpilling(ctx, &state.Spiller, EExecutionWaitKind::SpillWrite,
+                        [&] { return state.Spiller.GetPendingSpill(); });
                 case FinishedSpilling:
                     break;
                 case DontHavePages:
@@ -878,9 +897,11 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
             if (!state.FetchedPack.has_value()) {
+                TExecutionInputScope inputWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Probe);
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
+                    inputWait.Yielded();
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
@@ -930,7 +951,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             } else {
                 switch (state.Spiller.SpillWhile(notEnoughMemory)) {
                 case Spilling:
-                    return WaitWhileSpilling();
+                    return WaitWhileSpilling(ctx, &state.Spiller, EExecutionWaitKind::SpillWrite,
+                        [&] { return state.Spiller.GetPendingSpill(); });
                 case FinishedSpilling:
                     break;
                 case DontHavePages: {
@@ -1036,7 +1058,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 }
 
             } else {
-                return WaitWhileSpilling();
+                return WaitWhileSpilling(ctx, &state.All, EExecutionWaitKind::SpillWrite, [&] { return state.All; });
             }
         } else if (auto* s = std::get_if<JoinPairsOfPartitions>(&State_)) {
             // TODO: Implement repartitioning logic here to handle cases where a single partition is too large and may cause out-of-memory (OOM) errors.
@@ -1077,7 +1099,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         AddBuildTable(state.SelectedPair->BucketIndex, table);
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
-                        return WaitWhileSpilling();
+                        return WaitWhileSpilling(ctx, &tdata->All, EExecutionWaitKind::SpillRead, [&] { return tdata->All; });
                     }
                 } else {
                     auto* table = std::get_if<TTableAndSomeData>(&state.SelectedPair->Table);
@@ -1097,7 +1119,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                         }
                         if (table->PendingMatchWrites.size() >= Settings.SpillingPagesAtTime) {
-                            return WaitWhileSpilling();
+                            return WaitWhileSpilling(ctx, &table->PendingMatchWrites, EExecutionWaitKind::SpillWrite, [&] {
+                                TVector<NThreading::TFuture<ISpiller::TKey>> futures;
+                                for (const auto& write : table->PendingMatchWrites) {
+                                    futures.push_back(write.Write);
+                                }
+                                return NThreading::WaitAny(futures);
+                            });
                         }
                     }
                     const auto probePagesLeft = [&]() {
@@ -1186,7 +1214,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                                 MKQL_ENSURE(table->FutureGridProbeIndices.empty(),
                                             "unconsumed grid probe page indices");
                                 if (!table->PendingMatchWrites.empty()) {
-                                    return WaitWhileSpilling();
+                                    return WaitWhileSpilling(ctx, &table->PendingMatchWrites, EExecutionWaitKind::SpillWrite, [&] {
+                                        NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wait;
+                                        for (const auto& write : table->PendingMatchWrites) {
+                                            wait.Add(write.Write);
+                                        }
+                                        return std::move(wait).Finish();
+                                    });
                                 }
                             }
                         }
@@ -1218,7 +1252,14 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             }
                             table->ProbeResumeIndex = 0;
                         } else {
-                            return WaitWhileSpilling();
+                            return WaitWhileSpilling(ctx, &table->Futures.front(), EExecutionWaitKind::SpillRead, [&] {
+                                NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wait;
+                                wait.Add(table->Futures.front());
+                                if constexpr (TracksProbeMatches()) {
+                                    wait.Add(table->FutureMatchBits.front());
+                                }
+                                return std::move(wait).Finish();
+                            });
                         }
                     }
                 }

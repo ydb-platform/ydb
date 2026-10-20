@@ -128,6 +128,16 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         , Assign_(assign)
     {}
 
+    NThreading::TFuture<void> GetPendingSpill() const {
+        NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wait;
+        if (SpillingPages_) {
+            for (const auto& page : *SpillingPages_) {
+                wait.Add(page.BlobId);
+            }
+        }
+        return std::move(wait).Finish();
+    }
+
     void AddRow(TSingleTuple tuple) {
         const int bucketIndex =
             Assign_ == EBucketAssign::RoundRobin ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
@@ -217,6 +227,19 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         BuildingMatchRows_.resize(State_.Buckets.size());
         State_.ProbeMatchKeys.resize(State_.Buckets.size());
         FlushBuildingPages();
+    }
+
+    NThreading::TFuture<void> GetPendingSpill() const {
+        NThreading::TWaitGroup<NThreading::TWaitPolicy::TAll> wait;
+        if (SpillingPages_) {
+            for (const auto& page : *SpillingPages_) {
+                wait.Add(page.Write);
+                if (page.MatchWrite) {
+                    wait.Add(*page.MatchWrite);
+                }
+            }
+        }
+        return std::move(wait).Finish();
     }
 
     [[nodiscard]] ESpillResult SpillWhile(std::predicate auto condition) {

@@ -50,6 +50,10 @@ public:
     // the input finished: its marks are ignored from now on
     void Retire(ui32 slot);
 
+    bool IsRetired(ui32 slot) const {
+        return States[slot] == ESlotState::Retired;
+    }
+
     ui32 Size() const {
         return Marked.size();
     }

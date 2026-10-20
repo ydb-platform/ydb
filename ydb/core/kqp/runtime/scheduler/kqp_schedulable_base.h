@@ -31,6 +31,7 @@ public:
     void StopExecution();
     void NotifyResumed(bool byScheduler);
     void RegisterForResume(const NActors::TActorId& actorId);
+    double GetSchedulingWeight() const;
 
     const NHdrf::TFullPoolId& GetFullPoolId() const {
         Y_ENSURE(IsAccountable());

@@ -269,6 +269,12 @@ namespace NKikimr::NStorage {
         bool SelfManagementEnabled = false;
         TBridgeInfo::TPtr BridgeInfo;
 
+        // the cluster runs in bridge mode; the one not converted yet runs single pile in implicit state, while it is the
+        // ordinary cluster for configuration management
+        bool IsBridged() const {
+            return BridgeInfo && !BridgeInfo->IsImplicit;
+        }
+
         // currently active storage config
         TStorageConfigPtr StorageConfig;
         TString MainConfigYaml; // the part we have to push (unless this is storage-only) to console

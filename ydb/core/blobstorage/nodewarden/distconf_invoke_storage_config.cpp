@@ -622,7 +622,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::CollectCommittedConfig() {
         auto needsRecovery = [this] {
-            return !Self->BridgeInfo && (Self->ConfigRecoveryRequired
+            return !Self->IsBridged() && (Self->ConfigRecoveryRequired
                 || Self->IsBelowKnownAppliedConfig(*ConfigAwaitingCommit));
         };
         const bool metadataOnly = !FullCommitConfirmationNeeded && !needsRecovery();
@@ -679,7 +679,7 @@ namespace NKikimr::NStorage {
 
             const bool committedQuorum = HasConfigQuorum(*ConfigAwaitingCommit, successfulDisks,
                 TBridgePileId(), *Self->Cfg, false);
-            if (!Self->BridgeInfo && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
+            if (!Self->IsBridged() && !metadataOnly && (committedQuorum || Self->ConfigRecoveryRequired)) {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;

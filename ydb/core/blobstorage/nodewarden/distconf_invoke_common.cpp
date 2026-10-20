@@ -348,7 +348,7 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::QueryConfig(const TQuery::TQueryConfig& request) {
-        auto reply = [this, fresh = request.GetRequireFresh() && !Self->BridgeInfo] {
+        auto reply = [this, fresh = request.GetRequireFresh() && !Self->IsBridged()] {
             Finish(TResult::OK, std::nullopt, [&](auto *record) {
                 auto *response = record->MutableQueryConfig();
                 if (Self->StorageConfig) {
@@ -357,7 +357,7 @@ namespace NKikimr::NStorage {
                 response->SetFresh(fresh);
             });
         };
-        if (request.GetRequireFresh() && !Self->BridgeInfo) {
+        if (request.GetRequireFresh() && !Self->IsBridged()) {
             CollectConfig([reply = std::move(reply)](TProcessCollectConfigsResult&&) { reply(); });
         } else {
             reply();
@@ -461,7 +461,7 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::StartProposition(NKikimrBlobStorage::TStorageConfig *config, bool mindPrev,
             const NKikimrBlobStorage::TStorageConfig *propositionBase, bool fromBootstrap) {
-        if ((Self->BridgeInfo || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
+        if ((Self->IsBridged() || Self->SelfManagementEnabled) && Self->StorageConfig->GetGeneration()
             && !std::holds_alternative<TCollectConfigsAndPropose>(Query)) {
             const TStorageConfigMeta base(*Self->StorageConfig);
             auto savedBase = propositionBase ? std::make_optional(*propositionBase) : std::nullopt;
@@ -475,7 +475,7 @@ namespace NKikimr::NStorage {
                 AdvancesConflictingGeneration = advancesConflictingGeneration;
                 StartPropositionImpl(&config, mindPrev, savedBase ? &*savedBase : nullptr, fromBootstrap);
             };
-            if (Self->BridgeInfo && !mindPrev) {
+            if (Self->IsBridged() && !mindPrev) {
                 CollectBridgeConfig(*config, [start = std::move(start)]() mutable { start(false); });
             } else {
                 CollectConfig([start = std::move(start)](TProcessCollectConfigsResult&& result) mutable {
@@ -783,7 +783,7 @@ namespace NKikimr::NStorage {
             const auto& request = ev->Get()->Record.GetValidateTargetedProposition();
             const ui32 nodeId = ev->Sender.NodeId();
             bool confirmed = false;
-            if (!BridgeInfo && Scepter && CurrentProposition && IsPropositionCurrent(*CurrentProposition)
+            if (!IsBridged() && Scepter && CurrentProposition && IsPropositionCurrent(*CurrentProposition)
                 && request.HasConfig()
                 && TStorageConfigMeta(request.GetConfig()) == TStorageConfigMeta(CurrentProposition->StorageConfig)) {
                 const auto it = ScatterTasks.find(request.GetScatterCookie());
@@ -853,7 +853,7 @@ namespace NKikimr::NStorage {
         const bool deferExecution = RootState == ERootState::ERROR_TIMEOUT;
         auto& queue = deferExecution ? InvokePending : InvokeQ;
         std::shared_ptr<TFreshConfigQueryGroup> group;
-        if (auto *op = std::get_if<TInvokeExternalOperation>(&query); op && !BridgeInfo
+        if (auto *op = std::get_if<TInvokeExternalOperation>(&query); op && !IsBridged()
             && op->Command.HasQueryConfig() && op->Command.GetQueryConfig().GetRequireFresh()) {
             const ui32 refillNodeId = op->Command.GetQueryConfig().GetRefillNodeId();
             if (refillNodeId) {

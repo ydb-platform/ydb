@@ -3052,9 +3052,9 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 1);
     }
 
-    Y_UNIT_TEST(RecoveryRetainsPublishedProposal) {
+    void TestRecoveryRetainsPublishedProposal(const NKikimrConfig::TBridgeConfig *bridgeConfig) {
         TCommitConfirmationFixture fixture(true);
-        fixture.Start(true);
+        fixture.Start(true, bridgeConfig);
         const TActorId root = fixture.Root();
         const ui32 sourceNodeId = root.NodeId() % 3 + 1;
         const auto updated = MakeNextConfig(fixture.Config);
@@ -3073,6 +3073,18 @@ selector_config: []
         UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
                                  updated.GetFingerprint());
         CheckDurableConfigConverges(fixture, updated);
+    }
+
+    Y_UNIT_TEST(RecoveryRetainsPublishedProposal) {
+        TestRecoveryRetainsPublishedProposal(nullptr);
+    }
+
+    // nodes of the cluster prepared for conversion to bridged one run with single-pile BridgeConfig, while the cluster
+    // is still the ordinary one for configuration management, and its configuration is recovered the same way
+    Y_UNIT_TEST(RecoveryRetainsPublishedProposalBeforeConversion) {
+        NKikimrConfig::TBridgeConfig bridgeConfig;
+        bridgeConfig.AddPiles()->SetName("pile_1");
+        TestRecoveryRetainsPublishedProposal(&bridgeConfig);
     }
 
     Y_UNIT_TEST(RecoveryIgnoresUnpublishedMinorityProposal) {

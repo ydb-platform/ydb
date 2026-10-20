@@ -2566,7 +2566,26 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     }
 }
 
-void RunFinalDumpSpillingIsBatchedTest() {
+class TRecordingExecutionWaitObserver : public IExecutionWaitObserver {
+public:
+    TExecutionInputWaitScope BeginInput() const override { return {}; }
+    void AwaitInput(TExecutionInputWaitScope, ui64, EExecutionInputSide) override {}
+    void AwaitFuture(ui64, const void*, EExecutionWaitKind kind, const NThreading::TFuture<void>& future) override {
+        Kind = kind;
+        Future = future;
+        ++FutureWaits;
+    }
+    void AwaitCallback(ui64, EExecutionWaitKind) override { ++OpaqueWaits; }
+    void MakeRunnable() override {}
+    void Reset() { Kind.reset(); Future.reset(); }
+
+    std::optional<EExecutionWaitKind> Kind;
+    std::optional<NThreading::TFuture<void>> Future;
+    ui64 FutureWaits = 0;
+    ui64 OpaqueWaits = 0;
+};
+
+void RunFinalDumpSpillingIsBatchedTest(bool reportWaits = false) {
     auto testData = FinalDumpSpillingTestData();
     auto descr = MakeJoinDescription(testData);
     descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
@@ -2575,6 +2594,8 @@ void RunFinalDumpSpillingIsBatchedTest() {
     auto spillerFactory = std::make_shared<TControlledWriteSpillerFactory>(
         std::make_shared<TPreallocatedSpillerFactory>(32_MB));
     graph->GetContext().SpillerFactory = spillerFactory;
+    TRecordingExecutionWaitObserver observer;
+    graph->GetContext().ExecutionWaitObserver = reportWaits ? &observer : nullptr;
 
     const size_t tupleWidth = testData.Renames.size() + 1;
     std::vector<NUdf::TUnboxedValue> output(tupleWidth);
@@ -2585,6 +2606,7 @@ void RunFinalDumpSpillingIsBatchedTest() {
     constexpr size_t MaxPendingPuts = TestStorageSettings.SpillingPagesAtTime * MaxWritesPerPage;
 
     while (true) {
+        observer.Reset();
         const auto status = stream.WideFetch(output.data(), tupleWidth);
         if (status == NYql::NUdf::EFetchStatus::Finish) {
             break;
@@ -2600,6 +2622,10 @@ void RunFinalDumpSpillingIsBatchedTest() {
             continue;
         }
         UNIT_ASSERT_LE(pendingPuts, MaxPendingPuts);
+        if (reportWaits) {
+            UNIT_ASSERT(observer.Kind && *observer.Kind == EExecutionWaitKind::SpillWrite);
+            UNIT_ASSERT(observer.Future && !observer.Future->IsReady());
+        }
         if (!stoppedRegularSpilling) {
             // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
             // submitted all of them at once instead of limiting the batch to SpillingPagesAtTime pages.
@@ -2607,12 +2633,20 @@ void RunFinalDumpSpillingIsBatchedTest() {
             stoppedRegularSpilling = true;
         }
         spillerFactory->CompletePendingPuts();
+        if (reportWaits) {
+            UNIT_ASSERT(observer.Future->IsReady());
+        }
     }
 
     UNIT_ASSERT(stoppedRegularSpilling);
     UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
     UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
     UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), MaxPendingPuts);
+    if (reportWaits) {
+        UNIT_ASSERT_GT(observer.FutureWaits, 0);
+        UNIT_ASSERT_VALUES_EQUAL(observer.OpaqueWaits, 0);
+    }
+    graph->GetContext().ExecutionWaitObserver = nullptr;
 }
 
 // The mock spiller resolves every future at once, so the states that wait for spilling are only
@@ -3150,6 +3184,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
     Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
         RunFinalDumpSpillingIsBatchedTest();
+    }
+
+    Y_UNIT_TEST(TestJoinReportsConcreteSpillFutureThroughContext) {
+        RunFinalDumpSpillingIsBatchedTest(true);
     }
 
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {

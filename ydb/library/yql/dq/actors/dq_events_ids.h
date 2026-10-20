@@ -62,6 +62,20 @@ struct TDqComputeEvents {
 
         // place all new events here
 
+        EvTaskReady,
+        EvTaskRunPermit,
+        EvTaskReleased,
+        EvTaskRegisterGraph,
+        EvTaskForgetGraph,
+        EvTaskRegistered,
+        EvTaskStateUpdate,
+        EvTaskDescribeQuery,
+        EvTaskQueryGraph,
+        EvTaskWorkerWakeup,
+        EvTaskWorkerRetry,
+        EvTaskSliceFinished,
+        EvTaskExecutionAvailable,
+
         EvEnd
     };
 

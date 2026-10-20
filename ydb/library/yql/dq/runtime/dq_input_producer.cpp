@@ -43,7 +43,8 @@ public:
         ui64& inputsConsumed,
         NKikimr::NMiniKQL::TWatermark* watermark,
         TDqComputeActorWatermarks* watermarksTracker,
-        bool useReadySet
+        bool useReadySet,
+        bool reportSchedulingWait
     )
         : TBase(memInfo)
         , Inputs(std::move(inputs))
@@ -54,6 +55,7 @@ public:
         , InputsConsumed(inputsConsumed)
         , WatermarkStorage(watermark)
         , WatermarksTracker(watermarksTracker)
+        , ReportSchedulingWait(reportSchedulingWait)
     {
         Y_ENSURE(!WatermarksTracker || WatermarkStorage);
         InputKeys.reserve(Inputs.size());
@@ -184,6 +186,16 @@ private:
             return NUdf::EFetchStatus::Ok;
         }
 
+        if (ReportSchedulingWait && ReadySet && Alive) {
+            // Idle inputs were not probed on this Fetch, but they still belong
+            // to the union's wait set. Keep the version from their last empty
+            // probe so a concurrent mark/notification cannot be lost.
+            for (ui32 slot = 0; slot < Inputs.size(); ++slot) {
+                if (!ReadySet->IsRetired(slot)) {
+                    Inputs[slot]->ReportSchedulingWait();
+                }
+            }
+        }
         return Alive == 0 ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
@@ -280,6 +292,7 @@ private:
 
     // set when the inputs are visited when marked rather than polled, see BindReadySet
     std::shared_ptr<TDqInputReadySet> ReadySet;
+    const bool ReportSchedulingWait;
 };
 
 template<bool IsWide>
@@ -948,13 +961,14 @@ NUdf::TUnboxedValue CreateInputUnionValue(
     ui64& inputsConsumed,
     NKikimr::NMiniKQL::TWatermark* watermark,
     TDqComputeActorWatermarks* watermarksTracker,
-    bool useReadySet
+    bool useReadySet,
+    bool reportSchedulingWait
 ) {
     ValidateInputTypes(type, inputs);
     if (type->IsMulti()) {
-        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
+        return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet, reportSchedulingWait);
     }
-    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet);
+    return factory.Create<TDqInputUnionStreamValue<false>>(type, std::move(inputs), stats, startTs, inputsConsumed, watermark, watermarksTracker, useReadySet, reportSchedulingWait);
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
@@ -974,7 +988,7 @@ NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(
             // we can ignore scalar columns, since all they have exactly the same value in all inputs
             EraseIf(sortCols, [](const auto& sortCol) { return *sortCol.IsScalar; });
             if (sortCols.empty()) {
-                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr, false);
+                return factory.Create<TDqInputUnionStreamValue<true>>(type, std::move(inputs), stats, startTs, inputsConsumed, nullptr, nullptr, false, false);
             }
             return factory.Create<TDqInputMergeBlockStreamValue>(type, std::move(inputs), std::move(sortCols), factory, stats, startTs, inputsConsumed, pgBuilder);
         }

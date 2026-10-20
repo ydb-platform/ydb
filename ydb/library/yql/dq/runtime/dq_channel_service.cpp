@@ -158,6 +158,9 @@ void TLocalBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregat
 }
 
 void TLocalBuffer::Push(TDataChunk&& data) {
+    if (auto task = GetOutputTask()) {
+        task->RecordOutputBytes(data.Bytes);
+    }
     if ((!FinishPushed && !Finished.load()) ||
         data.Checkpoint // Checkpoints may be generated after channel finish
     ) {
@@ -448,19 +451,32 @@ void TLocalBuffer::BindStorage(std::shared_ptr<TLocalBuffer>& self, IDqChannelSt
 
 void TLocalBuffer::NotifyInput(bool force) {
     if (NeedToNotifyInput.exchange(false) || force) {
+        LastInputNotificationTime.store(TInstant::Now());
+        if (auto task = GetInputTask()) {
+            task->Signal(InputDependency(Info.ChannelId),
+                         InflightBytes.load() >= GetMaxInflightBytes() ? ETaskPriority::Drain : ETaskPriority::Normal);
+            if (!task->ObserveOnly) {
+                return;
+            }
+        }
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastInputNotificationTime.store(TInstant::Now());
     }
 }
 
 void TLocalBuffer::NotifyOutput(bool force) {
     if (NeedToNotifyOutput.exchange(false) || force) {
+        LastOutputNotificationTime.store(TInstant::Now());
+        if (auto task = GetOutputTask()) {
+            task->Signal(OutputDependency(Info.ChannelId));
+            if (!task->ObserveOnly) {
+                return;
+            }
+        }
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastOutputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -588,7 +604,13 @@ void TOutputDescriptor::OnFinishConfirmed() {
     if (FinishEpoch) {
         (*FinishEpoch)++;
     }
-    ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    auto task = std::atomic_load(&OutputTask);
+    if (task) {
+        task->Signal(OutputDependency(Info.ChannelId));
+    }
+    if (!task || task->ObserveOnly) {
+        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    }
 }
 
 bool TOutputDescriptor::IsStorageEmpty() const {
@@ -750,7 +772,13 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
     }
 
     if (NeedToNotifyOutput.exchange(false) || flushed) {
-        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        auto task = std::atomic_load(&OutputTask);
+        if (task) {
+            task->Signal(OutputDependency(Info.ChannelId));
+        }
+        if (!task || task->ObserveOnly) {
+            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
     }
 }
 
@@ -832,7 +860,13 @@ void TOutputDescriptor::UpdateMemoryPressure(bool memoryPressure, TNodeState* no
     }
 
     if (wakeup) {
-        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        auto task = std::atomic_load(&OutputTask);
+        if (task) {
+            task->Signal(OutputDependency(Info.ChannelId));
+        }
+        if (!task || task->ObserveOnly) {
+            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
     }
 }
 
@@ -894,7 +928,13 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
         }
         FillLevel = EDqFillLevel::SoftLimit;
         if (NeedToNotifyOutput.exchange(false)) {
-            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            auto task = std::atomic_load(&OutputTask);
+            if (task) {
+                task->Signal(OutputDependency(Info.ChannelId));
+            }
+            if (!task || task->ObserveOnly) {
+                ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            }
         }
     }
 
@@ -926,6 +966,9 @@ void TOutputBuffer::SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggrega
 }
 
 void TOutputBuffer::Push(TDataChunk&& data) {
+    if (auto task = GetOutputTask()) {
+        task->RecordOutputBytes(data.Bytes);
+    }
     if (!Descriptor->IsTerminatedOrAborted() && (!Descriptor->IsFinished() ||
         data.Checkpoint // Checkpoints may be generated after channel finish
     )) {
@@ -1012,7 +1055,13 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
                 std::lock_guard lock(QueueMutex);
                 ReadyHook.Mark();
             }
-            ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            auto task = std::atomic_load(&InputTask);
+            if (task) {
+                task->Signal(InputDependency(Info.ChannelId));
+            }
+            if (!task || task->ObserveOnly) {
+                ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+            }
         }
 
         // Checkpoints may be generated after channel finish
@@ -1058,7 +1107,13 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     Queue.emplace(std::move(data));
     ReadyHook.Mark();
     if (NeedToNotifyInput.exchange(false)) {
-        ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        auto task = std::atomic_load(&InputTask);
+        if (task) {
+            task->Signal(InputDependency(Info.ChannelId));
+        }
+        if (!task || task->ObserveOnly) {
+            ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
     }
 
     return false;
@@ -2939,7 +2994,17 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
     }
 
     TDataChunk chunk;
+    const auto dependency = InputDependency(GetChannelId());
+    const ui64 version = Scheduling ? Scheduling->Observe(dependency) : 0;
     bool popResult = Buffer->Pop(chunk);
+    if (Scheduling) {
+        if (popResult) {
+            Scheduling->RecordInputBytes(chunk.Bytes);
+        } else {
+            LastEmptySchedulingVersion = version;
+            Scheduling->Await(dependency, version);
+        }
+    }
     // a consumer polls its inputs mostly to find them empty: the time is taken for a pop with data and for the 1st
     // empty one after it, so that PopTime tells since when an input has been dry without a clock read per poll
     if (popResult || PushStats.PopResult) {
@@ -2993,6 +3058,9 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         buffer->SetFillAggregator(Aggregator);
     }
     Serializer->Buffer = buffer;
+    if (Scheduling) {
+        buffer->BindTaskScheduling(Scheduling, false);
+    }
     if (FinishEpoch) {
         // the stub never finishes: the bound buffer may have already
         Serializer->Buffer->SetFinishEpoch(FinishEpoch);
@@ -3010,6 +3078,9 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer->Info.InputActorId = inputActorId;
     auto buffer = service->GetInputBuffer(Buffer->Info, ChannelQuotaManager);
     Buffer = buffer;
+    if (Scheduling) {
+        buffer->BindTaskScheduling(Scheduling, true);
+    }
     if (ReadyHook) {
         // the stub held no data: the bound buffer may have some already
         Buffer->SetReadyHook(ReadyHook);

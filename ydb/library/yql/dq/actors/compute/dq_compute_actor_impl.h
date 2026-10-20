@@ -7,6 +7,8 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
+#include "dq_task_execution.h"
+#include <util/generic/scope.h>
 
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -173,6 +175,14 @@ public:
             }
 
             InitializeWatermarks();
+            // Checkpoint managers are installed later by coordinator messages.
+            // Check the task mode before opting into the synchronous PoC.
+            if (RuntimeSettings.TaskScheduler && !TDerived::HasAsyncTaskRunner
+                && CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED
+                && !Checkpoints && Task.GetDqChannelVersion() >= 2u)
+            {
+                TaskScheduling = RuntimeSettings.TaskScheduler->Register(this->SelfId(), ExecuterId, Task.GetId());
+            }
 
             if (RuntimeSettings.Timeout) {
                 CA_LOG_D("Set execution timeout " << *RuntimeSettings.Timeout);
@@ -202,6 +212,9 @@ public:
             }
 
             static_cast<TDerived*>(this)->DoBootstrap();
+            if (!Terminated) {
+                InitializeWorkerExecution();
+            }
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             OnMemoryLimitExceptionHandler();
         } catch (const std::exception& e) {
@@ -209,6 +222,10 @@ public:
         }
 
         ReportEventElapsedTime();
+        if (WorkerBootstrapLease) {
+            WorkerBootstrapLease = false;
+            WorkerExecution->Release();
+        }
     }
 
 protected:
@@ -341,6 +358,8 @@ protected:
         MetricsReporter.ReportEvent(ev->GetTypeRewrite(), ev);
 
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTaskRunPermit, HandleTaskRunPermit);
+            hFunc(TEvTaskSliceFinished, HandleWorkerSliceFinished);
             hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
             hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
             hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
@@ -389,8 +408,66 @@ protected:
         return nullptr;
     }
 
+    virtual void InitializeWorkerExecution() {}
+    virtual void CompleteWorkerSlice(TTaskSliceResult) { Y_ABORT("Worker execution is not supported"); }
+
+    bool EnterWorkerEndpoint(TAutoPtr<NActors::IEventHandle>& ev) {
+        if (!WorkerExecution->TryAcquireEndpoint()) {
+            DeferredWorkerEvents.emplace_back(ev.Release());
+            return false;
+        }
+        if (ev->GetTypeRewrite() == TEvTaskExecutionAvailable::EventType) {
+            ev.Destroy();
+        }
+        if (!DeferredWorkerEvents.empty()) {
+            if (ev) {
+                DeferredWorkerEvents.emplace_back(ev.Release());
+            }
+            ev.Reset(DeferredWorkerEvents.front().Release());
+            DeferredWorkerEvents.pop_front();
+        }
+        if (!ev) {
+            WorkerExecution->Release();
+            return false;
+        }
+        return true;
+    }
+
+    void LeaveWorkerEndpoint(const std::shared_ptr<TDqTaskExecution>& execution) {
+        if (!Terminated && !DeferredWorkerEvents.empty()) {
+            this->Send(this->SelfId(), new TEvTaskExecutionAvailable());
+        }
+        execution->Release();
+    }
+
+    void RetireWorkerExecution() {
+        if (WorkerExecution) {
+            if (CompletingWorkerSlice) {
+                ScheduledRunProgress.Finished |= State == NDqProto::COMPUTE_STATE_FINISHED;
+                TaskScheduling->Complete(ScheduledRunProgress);
+            }
+            WorkerExecution->Retire(State == NDqProto::COMPUTE_STATE_FINISHED);
+        }
+    }
+
     void DoExecute() {
         Y_ASSERT(!Terminated);
+        if (TaskScheduling && !TaskScheduling->ObserveOnly && !ExecutingScheduledTask) {
+            TaskScheduling->RequestExecution();
+            return;
+        }
+        const bool observing = TaskScheduling && TaskScheduling->ObserveOnly;
+        if (observing) {
+            TaskScheduling->RequestExecution();
+            const auto generation = TaskScheduling->TryDispatch();
+            Y_ABORT_UNLESS(generation && TaskScheduling->Start(*generation));
+            ScheduledRunProgress = {};
+        }
+        Y_DEFER {
+            if (observing) {
+                TaskScheduling->Complete(ScheduledRunProgress);
+            }
+        };
 
         auto guard = BindAllocator();
         // memory hungry operators reach the task memory quota through this thread-local binding
@@ -563,7 +640,9 @@ protected:
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
             // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
-            ContinueExecute(EResumeSource::CAPendingInput);
+            if (!TaskScheduling || TaskScheduling->ObserveOnly || !TaskScheduling->HasObservedWaits()) {
+                ContinueExecute(EResumeSource::CAPendingInput);
+            }
             return;
         }
 
@@ -654,6 +733,10 @@ protected:
 protected:
     void PassAway() override {
         Y_ABORT_UNLESS(Terminated);
+        if (TaskScheduling) {
+            TaskScheduling->Complete(ScheduledRunProgress);
+            TaskScheduling->Cancel(State == NDqProto::COMPUTE_STATE_FINISHED);
+        }
         NActors::TActorBootstrapped<TDerived>::PassAway();
     }
 
@@ -856,6 +939,12 @@ protected:
     }
 
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
+        if (TaskScheduling && !TaskScheduling->ObserveOnly) {
+            if (Running || Checkpoints) {
+                TaskScheduling->RequestExecution();
+            }
+            return;
+        }
         if (!ResumeEventScheduled && (Running ||
             Checkpoints // After finish graph should continue checkpoints distribution
         )) {
@@ -1247,6 +1336,29 @@ protected:
     }
 
 protected:
+    void HandleTaskRunPermit(TEvTaskRunPermit::TPtr& ev) {
+        if (ev->Get()->Task != TaskScheduling || !TaskScheduling->Start(ev->Get()->Generation)) {
+            return;
+        }
+        ExecutingScheduledTask = true;
+        ScheduledRunProgress = {};
+        Y_DEFER {
+            ExecutingScheduledTask = false;
+            TaskScheduling->Complete(ScheduledRunProgress);
+        };
+        if (Running) {
+            DoExecute();
+        }
+    }
+
+    void HandleWorkerSliceFinished(TEvTaskSliceFinished::TPtr& ev) {
+        if (ev->Get()->Execution == WorkerExecution) {
+            CompletingWorkerSlice = true;
+            Y_DEFER { CompletingWorkerSlice = false; };
+            CompleteWorkerSlice(std::move(ev->Get()->Result));
+        }
+    }
+
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
         ResumeEventScheduled = false;
         if (Running) {
@@ -2927,6 +3039,13 @@ protected:
     THashMap<ui64, TAsyncOutputInfoBase> SinksMap; // Output index -> Sink info
     THashMap<ui64, TAsyncOutputTransformInfo> OutputTransformsMap; // Output index -> Transforms info
     bool ResumeEventScheduled = false;
+    std::shared_ptr<TTaskSchedulingHandle> TaskScheduling;
+    std::shared_ptr<TDqTaskExecution> WorkerExecution;
+    bool WorkerBootstrapLease = false;
+    bool CompletingWorkerSlice = false;
+    std::deque<THolder<NActors::IEventHandle>> DeferredWorkerEvents;
+    bool ExecutingScheduledTask = false;
+    TTaskRunProgress ScheduledRunProgress;
     NDqProto::EComputeState State;
     TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
     ui64 ComputeActorElapsedTicks = 0;

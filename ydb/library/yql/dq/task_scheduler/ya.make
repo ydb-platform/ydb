@@ -1,0 +1,20 @@
+LIBRARY()
+
+SRCS(
+    task_graph.cpp
+    task_scheduler.cpp
+    worker_pool.cpp
+)
+
+PEERDIR(
+    library/cpp/monlib/dynamic_counters
+    library/cpp/time_provider
+    ydb/library/actors/core
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    compare
+    ut
+)

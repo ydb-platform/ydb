@@ -464,6 +464,9 @@ public:
         TDqWatermarkGeneratorTracker* sourceWatermarksTracker = nullptr
     ) = 0;
     virtual ERunStatus Run() = 0;
+    virtual void ConfigureScheduling(std::shared_ptr<TTaskSchedulingHandle>, ui64 /* maxRowsPerRun */) {}
+    virtual void SetExecutionBudget(ui64 /* cpuUs */, TMonotonic /* deadline */) {}
+    TTaskRunProgress LastRunProgress;
 
     virtual bool HasEffects() const = 0;
 

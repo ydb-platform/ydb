@@ -3,6 +3,7 @@
 #include "dq_input_channel.h"
 #include "dq_input_ready.h"
 #include "dq_output_channel.h"
+#include <ydb/library/yql/dq/task_scheduler/task_scheduler.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -97,6 +98,13 @@ public:
 
     TChannelFullInfo Info;
 
+    virtual void BindTaskScheduling(std::shared_ptr<TTaskSchedulingHandle> task, bool input) {
+        std::atomic_store(input ? &InputTask : &OutputTask, std::move(task));
+    }
+    std::shared_ptr<TTaskSchedulingHandle> GetInputTask() const { return std::atomic_load(&InputTask); }
+    std::shared_ptr<TTaskSchedulingHandle> GetOutputTask() const { return std::atomic_load(&OutputTask); }
+    std::shared_ptr<TTaskSchedulingHandle> InputTask, OutputTask;
+
     virtual EDqFillLevel GetFillLevel() const = 0;
     virtual void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) = 0;
     virtual void Push(TDataChunk&& data) = 0;
@@ -138,6 +146,7 @@ public:
     virtual void SetServiceActorId(NActors::TActorId serviceActorId) = 0;
     // TDqChannelLimits::EnableChannelNotifications
     virtual bool IsChannelNotificationsEnabled() const = 0;
+    virtual std::shared_ptr<IDqTaskScheduler> GetTaskScheduler() const { return {}; }
 };
 
 inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
@@ -151,6 +160,8 @@ constexpr ui32 DqIcChannelData = 9;         // TEvChannelDataV2, TEvChannelDisco
 constexpr ui32 DqIcChannelControl = 10;     // TEvChannelAckV2, TEvChannelUpdateV2
 
 struct TDqChannelLimits {
+    bool EnableTaskScheduling = false;
+    TTaskSchedulerSettings TaskScheduling;
     // Node level memory back pressure: report a negative IMemoryQuotaManager::GetMemoryAvailability of the
     // receiver side to the sender and keep the channel at the cold inflight window while it is set.
     // Off by default, the cold window is then used only until the 1st peer pop, as before.

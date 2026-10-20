@@ -440,6 +440,14 @@ public:
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
             limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
+            limits.EnableTaskScheduling = config.GetEnableTaskScheduling();
+            limits.TaskScheduling.Shards = config.GetTaskSchedulerShards();
+            limits.TaskScheduling.ObserveOnly = config.GetTaskSchedulerObserveOnly();
+            limits.TaskScheduling.MaxInFlightPerShard = config.GetTaskSchedulerMaxInFlightPerShard();
+            limits.TaskScheduling.MaxRowsPerRun = config.GetTaskSchedulerMaxRowsPerRun();
+            limits.TaskScheduling.UseWorkerPool = config.GetTaskSchedulerUseWorkerPool();
+            limits.TaskScheduling.WorkerSliceCpuUs = config.GetTaskSchedulerWorkerSliceCpuUs();
+            limits.TaskScheduling.WorkerActivationUs = config.GetTaskSchedulerWorkerActivationUs();
             limits.UnboundWaitPeriod = TDuration::MilliSeconds(config.GetUnboundWaitPeriodMs());
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();

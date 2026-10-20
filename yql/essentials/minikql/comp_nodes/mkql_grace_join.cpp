@@ -729,7 +729,11 @@ private:
     }
 
     EFetchResult FetchAndPackData(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
+        TExecutionInputScope leftWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Left);
         const NKikimr::NMiniKQL::EFetchResult resultLeft = FlowLeft_->FetchValues(ctx, LeftPacker_->TuplePtrs.data());
+        if (resultLeft == EFetchResult::Yield) {
+            leftWait.Yielded();
+        }
         NKikimr::NMiniKQL::EFetchResult resultRight;
 
         if (resultLeft == EFetchResult::One) {
@@ -770,7 +774,11 @@ private:
                 std::copy_n(LeftPacker_->TupleHolder.begin(), LeftPacker_->TotalColumnsNum, RightPacker_->TupleHolder.begin());
             }
         } else {
+            TExecutionInputScope rightWait(ctx.ExecutionWaitObserver, this, EExecutionInputSide::Right);
             resultRight = FlowRight_->FetchValues(ctx, RightPacker_->TuplePtrs.data());
+            if (resultRight == EFetchResult::Yield) {
+                rightWait.Yielded();
+            }
         }
 
         if (resultRight == EFetchResult::One) {
@@ -913,6 +921,9 @@ private:
             }
             if (IsSpillingAllowed_ && ctx.SpillerFactory && IsSwitchToSpillingModeCondition()) {
                 SwitchMode(EOperatingMode::Spilling, ctx);
+                if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->MakeRunnable();
+                }
                 return EFetchResult::Yield;
             }
             if (isYield != EFetchResult::Finish) {
@@ -927,6 +938,9 @@ private:
                 auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker_->TablePtr : *RightPacker_->TablePtr;
                 if (IsSpillingAllowed_ && ctx.SpillerFactory && !JoinedTablePtr_->TryToPreallocateMemoryForJoin(leftTable, rightTable, JoinKind_, *HaveMoreLeftRows_, *HaveMoreRightRows_)) {
                     SwitchMode(EOperatingMode::Spilling, ctx);
+                    if (ctx.ExecutionWaitObserver) {
+                        ctx.ExecutionWaitObserver->MakeRunnable();
+                    }
                     return EFetchResult::Yield;
                 }
 
@@ -992,6 +1006,9 @@ private:
                     bool isWaitingForReduce = TryToReduceMemoryAndWait();
 
                     if (isWaitingForReduce) {
+                        if (ctx.ExecutionWaitObserver) {
+                            ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
+                        }
                         return EFetchResult::Yield;
                     }
                 }
@@ -1004,6 +1021,9 @@ private:
 
         if (!*HaveMoreLeftRows_ && !*HaveMoreRightRows_) {
             if (!IsSpillingFinished()) {
+                if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
+                }
                 return EFetchResult::Yield;
             }
             if (!IsSpillingFinalized_) {
@@ -1014,6 +1034,9 @@ private:
                 UpdateSpilling();
             }
             if (!IsReadyForSpilledDataProcessing()) {
+                if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillWrite);
+                }
                 return EFetchResult::Yield;
             }
 
@@ -1023,10 +1046,13 @@ private:
         return EFetchResult::Yield;
     }
 
-    EFetchResult ProcessSpilledData(TComputationContext&, NUdf::TUnboxedValue* const* output) {
+    EFetchResult ProcessSpilledData(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
         while (SpilledBucketsJoinOrderCurrentIndex_ != NGraceJoin::NumberOfBuckets) {
             UpdateSpilling();
             if (IsRestoringSpilledBuckets()) {
+                if (ctx.ExecutionWaitObserver) {
+                    ctx.ExecutionWaitObserver->AwaitCallback(reinterpret_cast<ui64>(this), EExecutionWaitKind::SpillRead);
+                }
                 return EFetchResult::Yield;
             }
 

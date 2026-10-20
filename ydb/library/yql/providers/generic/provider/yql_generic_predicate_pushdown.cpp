@@ -1211,7 +1211,12 @@ TString FormatRegexp(const TPredicate::TRegexp& regexp) {
 TString FormatLike(const TPredicate::TLike& like) {
     const auto& value = FormatExpression(like.value());
     const auto& pattern = FormatExpression(like.pattern());
-    auto ret = TStringBuilder() << "(" << value << (like.case_sensitive() ? " LIKE " : " ILIKE ") << pattern << ")";
+    auto ret = TStringBuilder() << "(" << value << (like.case_sensitive() ? " LIKE " : " ILIKE ") << pattern;
+    if (like.has_escape()) {
+        const auto& escape = FormatExpression(like.escape());
+        ret << " ESCAPE " << escape;
+    }
+    ret << ")";
     return std::move(ret);
 }
 

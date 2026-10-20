@@ -3449,6 +3449,11 @@
                 "ColumnId": 10,
                 "ColumnName": "ParentIndex",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "TableSchemeSql",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3464,7 +3469,8 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11
                 ],
                 "RoomID": 0,
                 "Codec": 0,

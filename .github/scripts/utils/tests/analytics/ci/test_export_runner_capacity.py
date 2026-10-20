@@ -61,6 +61,16 @@ def vm(name, cores, ram_gib, created, labels=None, status="RUNNING", zone=""):
     return row
 
 
+class FootprintsYamlTest(unittest.TestCase):
+    def test_sizes_come_from_runners_footprints_yml(self):
+        specs, default = load_label_footprints()
+        self.assertEqual(default, {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0})
+        self.assertEqual(
+            specs["build-preset-analytic-node"],
+            {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0},
+        )
+
+
 class DiskSizeTest(unittest.TestCase):
     def test_ghrun_defaults_to_relw_nrd(self):
         self.assertEqual(instance_nrd_gib(vm("ghrun-a", 64, 256, "2026-10-02T14:23:23Z", {"ghrun": "a"})), 2417.0)

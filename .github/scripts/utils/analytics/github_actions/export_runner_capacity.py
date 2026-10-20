@@ -43,21 +43,10 @@ QUOTA_FIELDS = (
     ("compute.instances.count", "instances", False),
     ("compute.ssdNonReplicatedDisks.size", "nrd_gib", True),
 )
-_RELW_SIZE = {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0}
-_TINY_SIZE = {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0}
-DEFAULT_FITS = {
-    "relwithdebinfo": dict(_RELW_SIZE),
-    "release-asan": dict(_RELW_SIZE),
+FIT_PRESETS = {
+    "relwithdebinfo": "build-preset-relwithdebinfo",
+    "release-asan": "build-preset-release-asan",
 }
-DEFAULT_LABEL_FOOTPRINTS = {
-    "build-preset-relwithdebinfo": dict(_RELW_SIZE),
-    "build-preset-release": dict(_RELW_SIZE),
-    "build-preset-release-asan": dict(_RELW_SIZE),
-    "build-preset-release-msan": dict(_RELW_SIZE),
-    "build-preset-release-tsan": dict(_RELW_SIZE),
-    "build-preset-analytic-node": dict(_TINY_SIZE),
-}
-DEFAULT_JOB_FOOTPRINT = dict(_RELW_SIZE)
 JOB_RANK = {"in_progress": 2, "queued": 1}
 # GitHub-hosted images. They do not wait for ghrun and must not count as demand.
 GITHUB_HOSTED_PREFIXES = ("ubuntu-", "windows-", "macos-")
@@ -147,31 +136,80 @@ def bytes_to_gib(value: float) -> float:
     return value
 
 
-def load_fit_footprints(path: Optional[Path] = None) -> Dict[str, Dict[str, float]]:
+def _size_from_raw(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+    fallback = fallback or {}
+    out: Dict[str, float] = {}
+    for key in ("vcpu", "ram_gb", "nrd_ssd_gb"):
+        number = as_float((raw or {}).get(key))
+        if number is None:
+            number = as_float(fallback.get(key))
+        if number is not None:
+            out[key] = number
+    return out
+
+
+def _parse_footprints_yaml(text: str) -> Dict[str, Any]:
+    """Read footprints / default_footprint when PyYAML is not installed."""
+    data: Dict[str, Any] = {"footprints": {}, "default_footprint": {}}
+    section = None
+    current = None
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip(" "))
+        line = raw.strip()
+        if indent == 0:
+            current = None
+            if line.startswith("footprints:"):
+                section = "footprints"
+            elif line.startswith("default_footprint:"):
+                section = "default"
+            else:
+                section = None
+            continue
+        if section == "footprints" and indent == 2 and line.endswith(":"):
+            current = line[:-1].strip()
+            data["footprints"][current] = {}
+            continue
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        number = as_float(value.strip())
+        if number is None:
+            continue
+        if section == "default" and indent == 2:
+            data["default_footprint"][key.strip()] = number
+        elif section == "footprints" and current and indent >= 4:
+            data["footprints"][current][key.strip()] = number
+    return data
+
+
+def _load_footprints_yaml(path: Optional[Path] = None) -> Dict[str, Any]:
     path = path or footprints_path()
-    out = {label: dict(spec) for label, spec in DEFAULT_FITS.items()}
     if not path.is_file():
-        return out
+        return {}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
     try:
         import yaml
     except ImportError:
-        return out
+        return _parse_footprints_yaml(text)
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return out
-    footprints = data.get("footprints") or {}
-    mapping = {
-        "relwithdebinfo": "build-preset-relwithdebinfo",
-        "release-asan": "build-preset-release-asan",
-    }
-    for label, key in mapping.items():
-        raw = footprints.get(key) or {}
-        spec = out[label]
-        for src, dest in (("vcpu", "vcpu"), ("ram_gb", "ram_gb"), ("nrd_ssd_gb", "nrd_ssd_gb")):
-            number = as_float(raw.get(src))
-            if number is not None and number > 0:
-                spec[dest] = number
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def load_fit_footprints(path: Optional[Path] = None) -> Dict[str, Dict[str, float]]:
+    specs, default = load_label_footprints(path)
+    out: Dict[str, Dict[str, float]] = {}
+    for short, label in FIT_PRESETS.items():
+        spec = specs.get(label) or default
+        if spec:
+            out[short] = dict(spec)
     return out
 
 
@@ -334,9 +372,10 @@ def instance_nrd_gib(instance: Dict[str, Any]) -> Optional[float]:
         return None
     ram = instance_ram_gib(instance) or 0.0
     cores = instance_cores(instance) or 0.0
+    specs, default = load_label_footprints()
     if ram <= 16 and cores <= 8:
-        return 186.0
-    return _RELW_SIZE["nrd_ssd_gb"]
+        return (specs.get("build-preset-analytic-node") or {}).get("nrd_ssd_gb")
+    return (default or specs.get("build-preset-relwithdebinfo") or {}).get("nrd_ssd_gb")
 
 
 def age_sec(now: datetime, moment: Optional[datetime]) -> Optional[float]:
@@ -439,35 +478,13 @@ def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
 
 
 def load_label_footprints(path: Optional[Path] = None):
-    """Runner size by GitHub label, plus the size used when the label is unknown."""
-    path = path or footprints_path()
-    specs = {label: dict(spec) for label, spec in DEFAULT_LABEL_FOOTPRINTS.items()}
-    default = dict(DEFAULT_JOB_FOOTPRINT)
-    if not path.is_file():
-        return specs, default
-    try:
-        import yaml
-    except ImportError:
-        return specs, default
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return specs, default
+    """Runner size by GitHub label from runners_footprints.yml."""
+    data = _load_footprints_yaml(path)
+    default = _size_from_raw(data.get("default_footprint"))
+    specs: Dict[str, Dict[str, float]] = {}
     for label, raw in (data.get("footprints") or {}).items():
-        if not isinstance(raw, dict):
-            continue
-        specs[str(label)] = {
-            "vcpu": as_float(raw.get("vcpu")) or default["vcpu"],
-            "ram_gb": as_float(raw.get("ram_gb")) or default["ram_gb"],
-            "nrd_ssd_gb": as_float(raw.get("nrd_ssd_gb")) or default["nrd_ssd_gb"],
-        }
-    raw_default = data.get("default_footprint") or {}
-    if isinstance(raw_default, dict):
-        default = {
-            "vcpu": as_float(raw_default.get("vcpu")) or default["vcpu"],
-            "ram_gb": as_float(raw_default.get("ram_gb")) or default["ram_gb"],
-            "nrd_ssd_gb": as_float(raw_default.get("nrd_ssd_gb")) or default["nrd_ssd_gb"],
-        }
+        if isinstance(raw, dict):
+            specs[str(label)] = _size_from_raw(raw, default)
     return specs, default
 
 
@@ -528,8 +545,12 @@ def queue_jobs(
     default: Optional[Dict[str, float]] = None,
 ) -> List[Dict[str, Any]]:
     """One row per queued job, with the GitHub link so the dash can open it."""
-    specs = specs or {}
-    default = default or dict(DEFAULT_JOB_FOOTPRINT)
+    if specs is None or default is None:
+        loaded_specs, loaded_default = load_label_footprints()
+        if specs is None:
+            specs = loaded_specs
+        if default is None:
+            default = loaded_default
     jobs: List[Dict[str, Any]] = []
     used = set()
     for run, job in pairs:

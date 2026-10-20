@@ -344,9 +344,9 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST(UndeliveredCloseNotifiesAttachedSessions) {
-        TStringStream logs;
+        TCapturedLog logs;
         TKikimrSettings settings;
-        settings.SetUseRealThreads(false).SetNodeCount(2).SetLogStream(&logs);
+        settings.SetUseRealThreads(false).SetNodeCount(2).SetLogCapture(logs);
         auto kikimr = TKikimrRunner(settings);
         auto runtime = kikimr.GetTestServer().GetRuntime();
         const auto proxy = MakeKqpProxyID(runtime->GetNodeId(0));
@@ -415,9 +415,9 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST_TWIN(TableUndeliveredFinalizeAfterCancelReleasesSession, commit) {
-        TStringStream logs;
+        TCapturedLog logs;
         TKikimrSettings settings;
-        settings.SetUseRealThreads(false).SetLogStream(&logs);
+        settings.SetUseRealThreads(false).SetLogCapture(logs);
         settings.FeatureFlags.SetEnableForceImmediateEffectsExecution(true);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
         auto kikimr = TKikimrRunner(settings);
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         });
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([&](IEventHandle&) { return bool{heldFinalize}; });
-        UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+        UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Snapshot());
         runtime->SimulateSleep(TDuration::Seconds(2));
         UNIT_ASSERT_C(cancelled, "CancelAfter did not reach the finalizing executer");
         UNIT_ASSERT_C(!replied, "Write finalization must ignore CancelAfter");
@@ -494,17 +494,17 @@ Y_UNIT_TEST_SUITE(KqpService) {
         kikimr.RunCall([&] { return session.Close().GetValueSync(); });
         TDispatchOptions closed;
         closed.FinalEvents.emplace_back([&](IEventHandle&) { return counters.GetActiveSessionActors()->Val() == 0; });
-        UNIT_ASSERT_C(runtime->DispatchEvents(closed, TDuration::Seconds(10)), logs.Str());
+        UNIT_ASSERT_C(runtime->DispatchEvents(closed, TDuration::Seconds(10)), logs.Snapshot());
         auto next = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
         UNIT_ASSERT_C(next.IsSuccess(), next.GetIssues().ToString());
     }
 
     // Delay the completed commit's response until timeout starts cleanup rollback.
     Y_UNIT_TEST(TableCommitTimeoutAfterBufferCompletionReleasesSession) {
-        TStringStream logs;
+        TCapturedLog logs;
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.SetLogStream(&logs);
+        settings.SetLogCapture(logs);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
 
         auto kikimr = TKikimrRunner(settings);
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         runtime->SimulateSleep(TDuration::Seconds(3));
         auto result = runtime->WaitFuture(queryFuture);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
-        UNIT_ASSERT_C(rollbackUndelivered, logs.Str());
+        UNIT_ASSERT_C(rollbackUndelivered, logs.Snapshot());
 
         runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         runtime->Send(heldCommitResult.Release());
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
                 return counters.GetActiveSessionActors()->Val() == 0;
             });
-            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Snapshot());
         }
         UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
         auto nextCreate = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });
@@ -574,10 +574,10 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
     // A no-op write rolls back read locks; timeout starts a second rollback.
     Y_UNIT_TEST(TableNoOpWriteTimeoutDuringRollbackReleasesSession) {
-        TStringStream logs;
+        TCapturedLog logs;
         TKikimrSettings settings;
         settings.SetUseRealThreads(false);
-        settings.SetLogStream(&logs);
+        settings.SetLogCapture(logs);
         settings.AppConfig.MutableTableServiceConfig()->SetSessionsLimitPerNode(1);
 
         auto kikimr = TKikimrRunner(settings);
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         runtime->SimulateSleep(TDuration::Seconds(3));
         auto result = runtime->WaitFuture(queryFuture);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
-        UNIT_ASSERT_C(rollbackExecuterId && rollbackExecuterId != commitExecuterId, logs.Str());
+        UNIT_ASSERT_C(rollbackExecuterId && rollbackExecuterId != commitExecuterId, logs.Snapshot());
 
         // The pending rollback result must reach the new cleanup executer.
         holdShardResults = false;
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
                 return counters.GetActiveSessionActors()->Val() == 0;
             });
-            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Str());
+            UNIT_ASSERT_C(runtime->DispatchEvents(opts, TDuration::Seconds(10)), logs.Snapshot());
         }
         UNIT_ASSERT_VALUES_EQUAL(counters.GetActiveSessionActors()->Val(), 0);
         auto nextCreate = kikimr.RunCall([&] { return db.CreateSession().GetValueSync(); });

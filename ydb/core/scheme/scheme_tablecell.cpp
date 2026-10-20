@@ -480,6 +480,26 @@ TCell TSerializedCellVec::ExtractCell(std::string_view data, size_t pos) {
     return cell;
 }
 
+bool TSerializedCellVec::TryParseCells(std::string_view data, TVector<TCell>& cells) {
+    cells.clear();
+    if (data.empty()) {
+        return true;
+    }
+
+    TSerializedCellReader reader(data);
+
+    ui16 cellCount;
+    if (!reader.Read(&cellCount)) {
+        return false;
+    }
+
+    if (!TryDeserializeCellVecBody(reader.Snapshot(), cellCount, cells)) {
+        return false;
+    }
+
+    return true;
+}
+
 bool TSerializedCellVec::DoTryParse() {
     if (!TryDeserializeCellVec(Buf, Cells)) {
         Buf.clear();

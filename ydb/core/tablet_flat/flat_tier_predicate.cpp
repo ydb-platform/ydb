@@ -32,6 +32,13 @@ namespace {
     constexpr i64 PgEpochDays = 10957;
     constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
 
+    // Valid Postgres date/timestamp ranges relative to 2000-01-01, the end is exclusive
+    // (see IS_VALID_DATE and IS_VALID_TIMESTAMP in datatype/timestamp.h)
+    constexpr i64 PgMinDate = -2451545;
+    constexpr i64 PgEndDate = 2147483494 - 2451545;
+    constexpr i64 PgMinTimestamp = -211813488000000000ll;
+    constexpr i64 PgEndTimestamp = 9223371331200000000ll;
+
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
     constexpr ui32 PgInt8Oid = 20;
     constexpr ui32 PgInt4Oid = 23;
@@ -198,10 +205,11 @@ namespace {
 
         TThreshold result;
 
-        // The threshold is kept in the native cell representation of the column type
-        auto setRaw = [&](auto value) {
+        // The threshold is kept as a cell in the native representation of the column type,
+        // fixed-width values fit into the cell itself
+        auto setCell = [&](auto value) {
             result.Kind = EKind::Value;
-            result.Raw = TString(reinterpret_cast<const char*>(&value), sizeof(value));
+            result.Bound = TCell::Make(value);
         };
 
         // Clamps to the column range: values above the range match everything,
@@ -212,7 +220,7 @@ namespace {
             } else if (static_cast<ui64>(value) > Max<T>()) {
                 result.Kind = EKind::AlwaysMatch;
             } else {
-                setRaw(static_cast<T>(value));
+                setCell(static_cast<T>(value));
             }
         };
 
@@ -222,15 +230,13 @@ namespace {
             } else if (value < Min<T>()) {
                 result.Kind = EKind::NeverMatch;
             } else {
-                setRaw(static_cast<T>(value));
+                setCell(static_cast<T>(value));
             }
         };
 
         // Postgres binary (send/recv) representation of fixed-width types is big-endian
         auto setPg = [&]<typename T>(T, i64 value) {
-            result.Kind = EKind::Value;
-            const auto raw = HostToInet(static_cast<std::make_unsigned_t<T>>(static_cast<T>(value)));
-            result.Raw = TString(reinterpret_cast<const char*>(&raw), sizeof(raw));
+            setCell(HostToInet(static_cast<std::make_unsigned_t<T>>(static_cast<T>(value))));
         };
 
         auto setSerialized = [&](TMaybe<TString> serialized) {
@@ -238,7 +244,8 @@ namespace {
                 static_cast<int>(Type.GetTypeId()));
             if (serialized) {
                 result.Kind = EKind::Value;
-                result.Raw = std::move(*serialized);
+                result.Storage = std::move(*serialized);
+                result.Bound = TCell(result.Storage.data(), result.Storage.size());
             }
         };
 
@@ -284,9 +291,9 @@ namespace {
                 if (value >= typeMax) {
                     result.Kind = EKind::AlwaysMatch;
                 } else if (Type.GetTypeId() == NScheme::NTypeIds::Uint32) {
-                    setRaw(static_cast<ui32>(value));
+                    setCell(static_cast<ui32>(value));
                 } else {
-                    setRaw(value);
+                    setCell(value);
                 }
                 break;
             }
@@ -296,24 +303,25 @@ namespace {
                 break;
             case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
-                    // Postgres stores -infinity and infinity as the minimum and the maximum
-                    // of the type, so a threshold below the type range saturates to the
-                    // minimum (only -infinity matches) instead of matching nothing
+                    // Postgres accepts only dates/timestamps within the valid range and the
+                    // special -infinity/infinity values (the type minimum/maximum). A threshold
+                    // below the valid range matches only -infinity, a threshold above it
+                    // matches every value except infinity.
                     case EPgKind::Date: {
                         // A date denotes the start of its day
                         const i64 days = FloorDiv(thresholdUs, MicrosPerDay) - PgEpochDays;
-                        if (days > Max<i32>()) {
-                            result.Kind = EKind::AlwaysMatch;
+                        if (days < PgMinDate) {
+                            setPg(i32(), Min<i32>());
                         } else {
-                            setPg(i32(), std::max<i64>(days, Min<i32>()));
+                            setPg(i32(), std::min<i64>(days, PgEndDate - 1));
                         }
                         break;
                     }
                     case EPgKind::Timestamp:
-                        if (thresholdUs < Min<i64>() + PgEpochMicros) {
+                        if (thresholdUs < PgMinTimestamp + PgEpochMicros) {
                             setPg(i64(), Min<i64>());
                         } else {
-                            setPg(i64(), thresholdUs - PgEpochMicros);
+                            setPg(i64(), std::min<i64>(thresholdUs - PgEpochMicros, PgEndTimestamp - 1));
                         }
                         break;
                     case EPgKind::Int4:
@@ -373,8 +381,7 @@ namespace {
         // PgNativeBinaryCompare, which allocates on every call.
         // TODO(https://github.com/ydb-platform/ydb/issues/56231): DyNumber cells are compared
         // bytewise, which mis-orders negative numbers with a common mantissa prefix.
-        const TCell bound(threshold.Raw.data(), threshold.Raw.size());
-        return CompareTypedCells(cell, bound, TypeOrder) <= 0;
+        return CompareTypedCells(cell, threshold.Bound, TypeOrder) <= 0;
     }
 
     TTierDecision TTierPredicate::Evaluate(const TRowState& row) const {

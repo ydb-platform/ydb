@@ -117,7 +117,10 @@ namespace NTable {
 
             EKind Kind = EKind::Unrepresentable;
             // Threshold in the native cell representation of the column type
-            TString Raw;
+            TCell Bound;
+            // Owns Bound data that does not fit into the cell (a long DyNumber). TString
+            // shares its buffer on copy and is never modified, so Bound stays valid
+            TString Storage;
         };
 
         TThreshold MakeThreshold(i64 thresholdUs) const;

@@ -70,7 +70,7 @@ Do this before any get/update. The human adds the MCP in the client; you cannot.
 }
 ```
 
-2. If `yc` is not on `PATH`, show https://yandex.cloud/docs/cli/quickstart. Do not run the installer unless the human asks: `curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash`, then `yc init`.
+2. If `yc` is not on `PATH`, propose `curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash` ([quickstart](https://yandex.cloud/docs/cli/quickstart)). After the human approves, run it. Then tell them to run `yc init` themselves (browser login). Do not run `yc init`.
 3. After `yc` exists, run `yc iam create-token >/dev/null` and check only the exit code. Do not print the token. Never commit a token. If create-token fails, tell the human to run `yc init`. Static token: `DATALENS_YC_STATIC_AUTH=1` and `DATALENS_API_AUTH_HEADER="Bearer <iam-token>"`.
 4. `getDashboard` `dashboardId` `135ob2ntmr0ok` `workbookId` `ev4an7f2ncmk2` `branch` `saved`. 401/403 means the human needs access to that workbook in org `bpfssp32nspchhs4df3c`. Stop.
 

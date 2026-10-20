@@ -229,15 +229,29 @@ public:
 
                 TSmallVec<TRawTypeValue> key;
 
-                if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+                bool needsMvccRead =
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
+<<<<<<< HEAD
                     userDb.NeedToReadBeforeWrite(fullTableId))
                 {
+=======
+                    (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                        && validatedOperation.GetDefaultFilledColumnCount() != 0) ||
+                    (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
+                        && (userDb.GetCollectAffectedRows()
+                            || userDb.GetLockMode() == TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation));
+
+                const auto* collector = userDb.GetChangeCollector(fullTableId);
+                needsMvccRead = needsMvccRead || (collector && collector->NeedToReadKeys());
+
+                if (needsMvccRead || userDb.NeedToReadBeforeWrite(fullTableId)) {
+>>>>>>> 2cc3e9396eb (DataShard CDC: fix missing precharge bugs (#56216))
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
-                        userDb.PrechargeRow(fullTableId, key);
+                        userDb.PrechargeRow(fullTableId, key, needsMvccRead);
                     }
                 }
             }

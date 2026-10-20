@@ -655,7 +655,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     , Type(info->Type)
     , GroupSizeInUnits(info->GroupSizeInUnits)
     , WritePolicy(info->WritePolicy)
-    , ExcludedVDisks(info->ExcludedVDisks)
+    , VDiskStates(info->VDiskStates)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -675,7 +675,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other,
     , Type(other.Type)
     , GroupSizeInUnits(other.GroupSizeInUnits)
     , WritePolicy(other.WritePolicy)
-    , ExcludedVDisks(other.ExcludedVDisks)
+    , VDiskStates(other.VDiskStates)
     , BlobDepotId(other.BlobDepotId)
     , DecommitStatus(other.DecommitStatus)
     , Group(other.Group)
@@ -800,36 +800,54 @@ bool TBlobStorageGroupInfo::TWritePolicy::CheckWriteDurability(TVector<ui32> par
     return CheckLayouts(WriteDurability, std::move(partsPerFailRealm));
 }
 
-std::optional<TVector<ui32>> TBlobStorageGroupInfo::ParseExcludedVDisks(
-        const NKikimrBlobStorage::TExcludedVDisks& excluded, const TTopology& topology, IOutputStream* err) {
-    TVector<ui32> result;
-    for (ui32 orderNumber : excluded.GetVDiskOrderNumber()) {
-        if (orderNumber >= topology.GetTotalVDisksNum()) {
-            if (err) {
-                *err << "Excluded VDisk order number is outside group topology: " << orderNumber;
+std::optional<TVector<TBlobStorageGroupInfo::TVDiskState>> TBlobStorageGroupInfo::ParseVDiskStates(
+        const NKikimrBlobStorage::TVDiskStates& states, const TTopology& topology, IOutputStream* err) {
+    auto fail = [&](TStringBuf message) -> std::optional<TVector<TVDiskState>> {
+        if (err) {
+            *err << message;
+        }
+        return std::nullopt;
+    };
+    TVector<TVDiskState> result;
+    for (const auto& disk : states.GetVDisk()) {
+        if (!disk.HasOrderNumber() || !disk.HasState()
+                || (disk.GetState() != NKikimrBlobStorage::TVDiskStates::Included
+                    && disk.GetState() != NKikimrBlobStorage::TVDiskStates::Excluded
+                    && disk.GetState() != NKikimrBlobStorage::TVDiskStates::Replicating)) {
+            return fail("VDisk state requires a logical order number and a valid state");
+        }
+        if (disk.GetOrderNumber() >= topology.GetTotalVDisksNum()) {
+            return fail("VDisk state order number is outside group topology");
+        }
+        result.push_back({disk.GetOrderNumber(), static_cast<EVDiskState>(disk.GetState())});
+    }
+    Sort(result, [](const auto& x, const auto& y) { return x.OrderNumber < y.OrderNumber; });
+    TVector<TVDiskState> normalized;
+    for (const auto& disk : result) {
+        if (!normalized.empty() && normalized.back().OrderNumber == disk.OrderNumber) {
+            if (normalized.back().State != disk.State) {
+                return fail("Conflicting states for the same VDisk");
             }
-            return std::nullopt;
-        }
-        result.push_back(orderNumber);
-    }
-    SortUnique(result);
-    TVector<ui32> counts(topology.GetTotalFailRealmsNum(), 0);
-    for (ui32 orderNumber : result) {
-        ++counts[topology.GetVDiskId(orderNumber).FailRealm];
-    }
-    for (ui32 realm = 0; realm < counts.size(); ++realm) {
-        ui32 total = 0;
-        for (const auto& domain : topology.FailRealms[realm].FailDomains) {
-            total += domain.VDisks.size();
-        }
-        if (counts[realm] && counts[realm] != total) {
-            if (err) {
-                *err << "VDisk exclusions must cover the whole failrealm: " << realm;
-            }
-            return std::nullopt;
+        } else {
+            normalized.push_back(disk);
         }
     }
-    return result;
+    TVector<EVDiskState> realmStates(topology.GetTotalFailRealmsNum(), EVDiskState::Included);
+    TVector<bool> seen(topology.GetTotalFailRealmsNum(), false);
+    TVector<EVDiskState> diskStates(topology.GetTotalVDisksNum(), EVDiskState::Included);
+    for (const auto& disk : normalized) {
+        diskStates[disk.OrderNumber] = disk.State;
+    }
+    for (ui32 order = 0; order < diskStates.size(); ++order) {
+        const ui32 realm = topology.GetVDiskId(order).FailRealm;
+        if (seen[realm] && realmStates[realm] != diskStates[order]) {
+            return fail("All VDisks in a failrealm must have the same state");
+        }
+        seen[realm] = true;
+        realmStates[realm] = diskStates[order];
+    }
+    EraseIf(normalized, [](const auto& disk) { return disk.State == EVDiskState::Included; });
+    return normalized;
 }
 
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
@@ -879,11 +897,11 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     }
     res->GroupSizeInUnits = group.GetGroupSizeInUnits();
 
-    auto excluded = ParseExcludedVDisks(group.GetExcludedVDisks(), res->GetTopology(), err);
-    if (!excluded) {
+    auto states = ParseVDiskStates(group.GetVDiskStates(), res->GetTopology(), err);
+    if (!states) {
         return nullptr;
     }
-    res->ExcludedVDisks = std::move(*excluded);
+    res->VDiskStates = std::move(*states);
     if (group.HasWritePolicy()) {
         res->WritePolicy = TWritePolicy::Parse(group.GetWritePolicy(), res->GetTopology(), err);
         if (!res->WritePolicy) {

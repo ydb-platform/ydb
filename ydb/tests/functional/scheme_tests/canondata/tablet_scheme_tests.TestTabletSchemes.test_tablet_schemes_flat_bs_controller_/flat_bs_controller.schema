@@ -522,7 +522,7 @@
             },
             {
                 "ColumnId": 20,
-                "ColumnName": "ExcludedVDisks",
+                "ColumnName": "VDiskStates",
                 "ColumnType": "String"
             },
             {

@@ -96,11 +96,13 @@ Y_UNIT_TEST_SUITE(GroupWriteTest) {
         group->AddRings()->AddFailDomains()->AddVDiskLocations();
         for (bool invalidPolicy : {false, true}) {
             group->ClearWritePolicy();
-            group->ClearExcludedVDisks();
+            group->ClearVDiskStates();
             if (invalidPolicy) {
                 group->MutableWritePolicy();
             } else {
-                group->MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+                auto* diskState = group->MutableVDiskStates()->AddVDisk();
+                diskState->SetOrderNumber(1);
+                diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
             }
             UNIT_ASSERT_EXCEPTION(CreateVDiskWriterLoadTest(command, TActorId(), 1), TLoadActorException);
         }

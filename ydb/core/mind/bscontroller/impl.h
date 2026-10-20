@@ -706,7 +706,7 @@ public:
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
         Table::GroupSizeInUnits::Type GroupSizeInUnits;
-        NKikimrBlobStorage::TExcludedVDisks ExcludedVDisks;
+        NKikimrBlobStorage::TVDiskStates VDiskStates;
         std::optional<NKikimrBlobStorage::TGroupWritePolicy> WritePolicy;
 
         Table::BridgePileId::Type BridgePileId;
@@ -788,7 +788,7 @@ public:
                     Table::SeenOperational,
                     Table::DecommitStatus,
                     Table::GroupSizeInUnits,
-                    Table::ExcludedVDisks,
+                    Table::VDiskStates,
                     Table::WritePolicy,
                     Table::BridgePileId,
                     Table::VirtualGroupName,
@@ -815,7 +815,7 @@ public:
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
                     &TGroupInfo::GroupSizeInUnits,
-                    &TGroupInfo::ExcludedVDisks,
+                    &TGroupInfo::VDiskStates,
                     &TGroupInfo::WritePolicy,
                     &TGroupInfo::BridgePileId,
                     &TGroupInfo::VirtualGroupName,

@@ -416,7 +416,7 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
-    Y_UNIT_TEST(ExcludedVDisksAndWritePolicyPersistence) {
+    Y_UNIT_TEST(VDiskStatesAndWritePolicyPersistence) {
         TEnvironmentSetup env(9, 3);
         bool active = false;
         env.Prepare("excluded-vdisks", [](TTestActorRuntime&) {}, active);
@@ -434,30 +434,33 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             return response.GetStatus(0).GetBaseConfig().GetGroup(0);
         };
         auto group = query();
-        auto set = [&](ui32 generation, std::initializer_list<ui32> disks, bool rollback = false) {
+        auto set = [&](ui32 generation, std::initializer_list<ui32> disks, bool rollback = false,
+                NKikimrBlobStorage::TVDiskStates::EState state = NKikimrBlobStorage::TVDiskStates::Excluded) {
             NKikimrBlobStorage::TConfigRequest req;
             req.SetRollback(rollback);
-            auto *cmd = req.AddCommand()->MutableSetGroupExcludedVDisks();
+            auto *cmd = req.AddCommand()->MutableSetGroupVDiskStates();
             cmd->SetGroupId(group.GetGroupId());
             cmd->SetGroupGeneration(generation);
             for (ui32 disk : disks) {
-                cmd->MutableExcludedVDisks()->AddVDiskOrderNumber(disk);
+                auto* diskState = cmd->MutableVDiskStates()->AddVDisk();
+                diskState->SetOrderNumber(disk);
+                diskState->SetState(state);
             }
             return env.Invoke(req);
         };
         auto check = [&] {
-            UNIT_ASSERT_VALUES_EQUAL(group.GetExcludedVDisks().VDiskOrderNumberSize(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(group.GetExcludedVDisks().GetVDiskOrderNumber(0), 0);
-            UNIT_ASSERT_VALUES_EQUAL(group.GetExcludedVDisks().GetVDiskOrderNumber(1), 1);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetVDiskStates().VDiskSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetVDiskStates().GetVDisk(0).GetOrderNumber(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(group.GetVDiskStates().GetVDisk(1).GetOrderNumber(), 1);
         };
-        UNIT_ASSERT_VALUES_EQUAL(group.GetExcludedVDisks().VDiskOrderNumberSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetVDiskStates().VDiskSize(), 0);
         const ui32 generation = group.GetGroupGeneration();
         UNIT_ASSERT(!set(generation, {9}).GetSuccess());
         UNIT_ASSERT(!set(generation, {0}).GetSuccess());
         UNIT_ASSERT(!set(generation, {0, 1}).GetSuccess());
         UNIT_ASSERT(set(generation, {2, 1, 0}, true).GetRollbackSuccess());
         UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), generation);
-        UNIT_ASSERT_VALUES_EQUAL(query().GetExcludedVDisks().VDiskOrderNumberSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetVDiskStates().VDiskSize(), 0);
         UNIT_ASSERT(set(generation, {2, 0, 1, 2}).GetSuccess());
         group = query();
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), generation + 1);
@@ -541,8 +544,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (const auto& info : response->Get()->Record.GetServiceSet().GetGroups()) {
             if (info.GetGroupID() == group.GetGroupId()) {
                 found = true;
-                UNIT_ASSERT_VALUES_EQUAL(info.GetExcludedVDisks().SerializeAsString(),
-                    group.GetExcludedVDisks().SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(info.GetVDiskStates().SerializeAsString(),
+                    group.GetVDiskStates().SerializeAsString());
                 UNIT_ASSERT(info.HasWritePolicy());
                 UNIT_ASSERT_VALUES_EQUAL(info.GetWritePolicy().SerializeAsString(),
                     group.GetWritePolicy().SerializeAsString());
@@ -555,11 +558,38 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         group = query();
         UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeReset + 1);
         UNIT_ASSERT(!group.HasWritePolicy());
+        const ui32 beforeReplicating = group.GetGroupGeneration();
+        UNIT_ASSERT(set(beforeReplicating, {2, 0, 1, 2}, false,
+            NKikimrBlobStorage::TVDiskStates::Replicating).GetSuccess());
+        group = query();
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeReplicating + 1);
+        check();
+        for (const auto& disk : group.GetVDiskStates().GetVDisk()) {
+            UNIT_ASSERT(disk.GetState() == NKikimrBlobStorage::TVDiskStates::Replicating);
+        }
+        UNIT_ASSERT(set(group.GetGroupGeneration(), {0, 1, 2}, false,
+            NKikimrBlobStorage::TVDiskStates::Replicating).GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), group.GetGroupGeneration());
+        UNIT_ASSERT(!set(group.GetGroupGeneration(), {0}, false,
+            NKikimrBlobStorage::TVDiskStates::Replicating).GetSuccess());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        group = query();
+        check();
+        UNIT_ASSERT(group.GetVDiskStates().GetVDisk(0).GetState() ==
+            NKikimrBlobStorage::TVDiskStates::Replicating);
+        const ui32 beforeIncluded = group.GetGroupGeneration();
+        UNIT_ASSERT(set(beforeIncluded, {2, 0, 1}, false,
+            NKikimrBlobStorage::TVDiskStates::Included).GetSuccess());
+        group = query();
+        UNIT_ASSERT_VALUES_EQUAL(group.GetGroupGeneration(), beforeIncluded + 1);
+        UNIT_ASSERT_VALUES_EQUAL(group.GetVDiskStates().VDiskSize(), 0);
+        UNIT_ASSERT(set(group.GetGroupGeneration(), {0, 1, 2}).GetSuccess());
+        group = query();
         const ui32 beforeClear = group.GetGroupGeneration();
         UNIT_ASSERT(set(beforeClear, {}).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(query().GetGroupGeneration(), beforeClear + 1);
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(query().GetExcludedVDisks().VDiskOrderNumberSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetVDiskStates().VDiskSize(), 0);
         UNIT_ASSERT(!query().HasWritePolicy());
     }
 

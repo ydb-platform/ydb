@@ -378,7 +378,9 @@ namespace NKikimr {
                 if (invalidPolicy) {
                     invalid.MutableWritePolicy();
                 } else {
-                    invalid.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+                    auto* diskState = invalid.MutableVDiskStates()->AddVDisk();
+                    diskState->SetOrderNumber(1);
+                    diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
                 }
                 UNIT_ASSERT_VALUES_EQUAL(checkReadiness(newVDiskId, &invalid), NKikimrProto::ERROR);
                 UNIT_ASSERT_VALUES_EQUAL(checkReadiness(oldVDiskId, nullptr), NKikimrProto::OK);

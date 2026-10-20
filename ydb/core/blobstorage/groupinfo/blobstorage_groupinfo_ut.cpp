@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(!error.Str().empty());
     }
 
-    Y_UNIT_TEST(ExcludedVDisks) {
+    Y_UNIT_TEST(VDiskStates) {
         NKikimrBlobStorage::TGroupInfo group;
         group.SetGroupID(0);
         group.SetGroupGeneration(1);
@@ -43,31 +43,36 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
         const auto original = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(original);
-        UNIT_ASSERT(original->ExcludedVDisks.empty());
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(2);
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(0);
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(2);
+        UNIT_ASSERT(original->VDiskStates.empty());
+        for (ui32 order : {2u, 0u, 1u, 2u}) {
+            auto* diskState = group.MutableVDiskStates()->AddVDisk();
+            diskState->SetOrderNumber(order);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+        }
         const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(info);
-        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks.size(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks[0], 0);
-        UNIT_ASSERT_VALUES_EQUAL(info->ExcludedVDisks[1], 1);
+        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates[0].OrderNumber, 0);
+        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates[1].OrderNumber, 1);
         UNIT_ASSERT(info->HasVDiskPolicyChanged(*original));
         for (ui32 orderNumber = 0; orderNumber < 9; ++orderNumber) {
-            UNIT_ASSERT_VALUES_EQUAL(info->IsVDiskExcluded(info->GetVDiskId(orderNumber)),
+            UNIT_ASSERT_VALUES_EQUAL(info->GetVDiskState(info->GetVDiskId(orderNumber)) == TBlobStorageGroupInfo::EVDiskState::Excluded,
                 orderNumber < 3);
         }
         TBlobStorageGroupInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
-        UNIT_ASSERT(copy.ExcludedVDisks == info->ExcludedVDisks);
+        UNIT_ASSERT(copy.VDiskStates == info->VDiskStates);
         UNIT_ASSERT(!copy.HasVDiskPolicyChanged(*info));
-        group.ClearExcludedVDisks();
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(1);
+        group.ClearVDiskStates();
+        {
+            auto* diskState = group.MutableVDiskStates()->AddVDisk();
+            diskState->SetOrderNumber(1);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+        }
         UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
-        group.ClearExcludedVDisks();
+        group.ClearVDiskStates();
         const auto cleared = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
         UNIT_ASSERT(cleared);
-        UNIT_ASSERT(cleared->ExcludedVDisks.empty());
+        UNIT_ASSERT(cleared->VDiskStates.empty());
         UNIT_ASSERT(cleared->HasVDiskPolicyChanged(*info));
         auto* writePolicy = group.MutableWritePolicy();
         writePolicy->AddWriteOk()->AddPartsPerFailRealm(2);
@@ -82,7 +87,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(policyCopy.WritePolicy == withPolicy->WritePolicy);
         UNIT_ASSERT(!policyCopy.HasVDiskPolicyChanged(*withPolicy));
         for (ui32 i = 0; i < 3; ++i) {
-            group.MutableExcludedVDisks()->AddVDiskOrderNumber(i);
+            auto* diskState = group.MutableVDiskStates()->AddVDisk();
+            diskState->SetOrderNumber(i);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
         }
         group.SetBridgeProxyGroupId(0);
         group.MutableBridgeGroupState()->AddPile()->SetGroupId(0);
@@ -91,8 +98,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         UNIT_ASSERT(inlineInfo->IsInlinePile());
         const auto view = inlineInfo->MakeInlinePileView();
         UNIT_ASSERT(view->WritePolicy == inlineInfo->WritePolicy);
-        UNIT_ASSERT(view->ExcludedVDisks == inlineInfo->ExcludedVDisks);
-        group.ClearExcludedVDisks();
+        UNIT_ASSERT(view->VDiskStates == inlineInfo->VDiskStates);
+        group.ClearVDiskStates();
         group.ClearBridgeProxyGroupId();
         group.ClearBridgeGroupState();
         group.ClearWritePolicy();
@@ -100,7 +107,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         group.MutableWritePolicy();
         UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, nullptr));
         group.ClearWritePolicy();
-        group.MutableExcludedVDisks()->AddVDiskOrderNumber(9);
+        {
+            auto* diskState = group.MutableVDiskStates()->AddVDisk();
+            diskState->SetOrderNumber(9);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+        }
         TStringStream error;
         UNIT_ASSERT(!TBlobStorageGroupInfo::Parse(group, nullptr, &error));
         UNIT_ASSERT(!error.Str().empty());
@@ -195,13 +206,76 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         auto invalid = proto;
         invalid.MutableWriteOk(0)->AddPartsPerFailRealm(4);
         UNIT_ASSERT(!TBlobStorageGroupInfo::TWritePolicy::Parse(invalid, topology));
-        NKikimrBlobStorage::TExcludedVDisks excluded;
-        excluded.AddVDiskOrderNumber(0);
-        UNIT_ASSERT(!TBlobStorageGroupInfo::ParseExcludedVDisks(excluded, topology));
-        for (ui32 i = 1; i < 8; ++i) {
-            excluded.AddVDiskOrderNumber(i);
+        NKikimrBlobStorage::TVDiskStates excluded;
+        {
+            auto* diskState = excluded.AddVDisk();
+            diskState->SetOrderNumber(0);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
         }
-        UNIT_ASSERT(TBlobStorageGroupInfo::ParseExcludedVDisks(excluded, topology));
+        UNIT_ASSERT(!TBlobStorageGroupInfo::ParseVDiskStates(excluded, topology));
+        for (ui32 i = 1; i < 8; ++i) {
+            auto* diskState = excluded.AddVDisk();
+            diskState->SetOrderNumber(i);
+            diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
+        }
+        UNIT_ASSERT(TBlobStorageGroupInfo::ParseVDiskStates(excluded, topology));
+    }
+
+    Y_UNIT_TEST(VDiskStatesReplicating) {
+        using TInfo = TBlobStorageGroupInfo;
+        using TProto = NKikimrBlobStorage::TVDiskStates;
+        NKikimrBlobStorage::TGroupInfo group;
+        group.SetGroupID(0);
+        group.SetGroupGeneration(1);
+        group.SetErasureSpecies(TBlobStorageGroupType::ErasureMirror3dc);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            auto* ring = group.AddRings();
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                ring->AddFailDomains()->AddVDiskLocations();
+            }
+        }
+        auto add = [&](ui32 order, TProto::EState state) {
+            auto* disk = group.MutableVDiskStates()->AddVDisk();
+            disk->SetOrderNumber(order);
+            disk->SetState(state);
+        };
+        for (ui32 order = 0; order < 3; ++order) {
+            add(order, TProto::Excluded);
+            add(order + 3, TProto::Replicating);
+        }
+        add(3, TProto::Replicating); // Identical duplicates are normalized.
+        add(8, TProto::Included); // Explicit default is normalized away.
+        const auto info = TInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+        UNIT_ASSERT_VALUES_EQUAL(info->VDiskStates.size(), 6);
+        for (ui32 order = 0; order < 9; ++order) {
+            const auto expected = order < 3 ? TInfo::EVDiskState::Excluded
+                : order < 6 ? TInfo::EVDiskState::Replicating : TInfo::EVDiskState::Included;
+            UNIT_ASSERT(info->GetVDiskState(info->GetVDiskId(order)) == expected);
+        }
+        TInfo copy(info, TVDiskID(0, 2, 0, 0, 0), TActorId());
+        UNIT_ASSERT(copy.VDiskStates == info->VDiskStates);
+        UNIT_ASSERT(!copy.HasVDiskPolicyChanged(*info));
+        add(3, TProto::Excluded);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Conflicting duplicate.
+        group.MutableVDiskStates()->MutableVDisk()->RemoveLast();
+        group.MutableVDiskStates()->MutableVDisk(3)->SetState(TProto::Included);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Mixed states in a realm.
+        group.ClearVDiskStates();
+        group.MutableVDiskStates()->AddVDisk()->SetOrderNumber(0);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Missing state.
+        group.ClearVDiskStates();
+        group.MutableVDiskStates()->AddVDisk()->SetState(TProto::Included);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Missing position.
+        group.ClearVDiskStates();
+        auto* invalid = group.MutableVDiskStates()->AddVDisk();
+        invalid->SetOrderNumber(0);
+        invalid->GetReflection()->MutableUnknownFields(invalid)->AddVarint(2, 99);
+        UNIT_ASSERT(!TInfo::Parse(group, nullptr, nullptr)); // Unknown enum on the wire.
+        group.ClearVDiskStates();
+        const auto cleared = TInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(cleared);
+        UNIT_ASSERT(cleared->HasVDiskPolicyChanged(*info));
     }
 
     Y_UNIT_TEST(TestBelongsToSubgroup) {

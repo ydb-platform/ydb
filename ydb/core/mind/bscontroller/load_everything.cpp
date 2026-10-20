@@ -244,7 +244,7 @@ public:
                                                    std::get<2>(geom),
                                                    false /* ddisk, will fill in later */);
 
-                group.ExcludedVDisks = groups.GetValueOrDefault<T::ExcludedVDisks>();
+                group.VDiskStates = groups.GetValueOrDefault<T::VDiskStates>();
                 if (groups.HaveValue<T::WritePolicy>()) {
                     group.WritePolicy = groups.GetValue<T::WritePolicy>();
                 }

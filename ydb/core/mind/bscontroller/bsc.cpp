@@ -1281,7 +1281,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMergeBoxes:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMoveGroups:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kChangeGroupSizeInUnits:
-                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupExcludedVDisks:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupVDiskStates:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetGroupWritePolicy:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

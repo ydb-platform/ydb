@@ -97,8 +97,20 @@ message TVDiskLocation {
 }
 
 // Logical VDisk positions, independent of group generation and physical placement.
-message TExcludedVDisks {
-    repeated uint32 VDiskOrderNumber = 1;
+message TVDiskStates {
+    enum EState {
+        Included = 0;
+        Excluded = 1;
+        // Contents may be incomplete for reads. Successful writes may count
+        // towards the configured write policy.
+        Replicating = 2;
+    }
+    message TVDisk {
+        optional uint32 OrderNumber = 1;
+        optional EState State = 2 [default = Included];
+    }
+    // Omitted positions are Included. All positions in a failrealm must agree.
+    repeated TVDisk VDisk = 1;
 }
 
 // Each entry is a minimum number of written parts in a distinct failrealm.
@@ -143,7 +155,7 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    optional TExcludedVDisks ExcludedVDisks = 24;
+    optional TVDiskStates VDiskStates = 24;
     optional TGroupWritePolicy WritePolicy = 25;
 }
 

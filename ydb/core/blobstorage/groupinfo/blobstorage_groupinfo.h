@@ -532,18 +532,34 @@ public:
     };
 
     std::optional<TWritePolicy> WritePolicy;
-    // Logical order numbers; exclusions must cover whole failrealms.
-    TVector<ui32> ExcludedVDisks;
+    enum class EVDiskState : ui32 {
+        Included = 0,
+        Excluded = 1,
+        Replicating = 2,
+    };
+    struct TVDiskState {
+        ui32 OrderNumber;
+        EVDiskState State;
+        bool operator==(const TVDiskState&) const = default;
+    };
+    // Non-default logical positions; every failrealm has a uniform state.
+    TVector<TVDiskState> VDiskStates;
 
-    static std::optional<TVector<ui32>> ParseExcludedVDisks(const NKikimrBlobStorage::TExcludedVDisks& excluded,
+    static std::optional<TVector<TVDiskState>> ParseVDiskStates(const NKikimrBlobStorage::TVDiskStates& states,
         const TTopology& topology, IOutputStream* err = nullptr);
 
-    bool IsVDiskExcluded(const TVDiskIdShort& vdisk) const {
-        return std::find(ExcludedVDisks.begin(), ExcludedVDisks.end(), GetOrderNumber(vdisk)) != ExcludedVDisks.end();
+    EVDiskState GetVDiskState(const TVDiskIdShort& vdisk) const {
+        const ui32 orderNumber = GetOrderNumber(vdisk);
+        for (const auto& item : VDiskStates) {
+            if (item.OrderNumber == orderNumber) {
+                return item.State;
+            }
+        }
+        return EVDiskState::Included;
     }
 
     bool HasVDiskPolicyChanged(const TBlobStorageGroupInfo& previous) const {
-        return ExcludedVDisks != previous.ExcludedVDisks || WritePolicy != previous.WritePolicy;
+        return VDiskStates != previous.VDiskStates || WritePolicy != previous.WritePolicy;
     }
 
     // virtual group BlobDepot tablet id

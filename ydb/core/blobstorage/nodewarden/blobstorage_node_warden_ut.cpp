@@ -3565,7 +3565,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 if (invalidPolicy) {
                     invalid.MutableWritePolicy(); // Both lists of layouts are missing.
                 } else {
-                    invalid.MutableExcludedVDisks()->AddVDiskOrderNumber(1); // Only order number 0 exists.
+                    auto* diskState = invalid.MutableVDiskStates()->AddVDisk();
+                    diskState->SetOrderNumber(1); // Only order number 0 exists.
+                    diskState->SetState(NKikimrBlobStorage::TVDiskStates::Excluded);
                 }
                 const auto resolverId = setup.Runtime.AllocateEdgeActor(setup.NodeId);
                 group.GroupResolver = resolverId;

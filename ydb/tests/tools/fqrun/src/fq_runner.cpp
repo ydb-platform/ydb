@@ -1,6 +1,8 @@
 #include "fq_runner.h"
 #include "fq_setup.h"
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/json/json_prettifier.h>
 
@@ -105,7 +107,8 @@ public:
     bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) {
         for (const auto& connection : connections) {
             if (VerbosityLevel >= EVerbosity::QueriesText) {
-                Cout << CoutColors.Cyan() << "Creating connection:\n" << CoutColors.Default() << Endl << connection.DebugString() << Endl;
+                Cout << CoutColors.Cyan() << "Creating connection:\n"
+                     << CoutColors.Default() << Endl << NKikimr::SecureDebugStringMultiline(connection) << Endl;
             }
 
             TString connectionId;
@@ -187,7 +190,21 @@ private:
         };
 
         TString previousIssues;
+        std::optional<TInstant> cancelDeadline;
         while (true) {
+            if (IsInterrupted() && !cancelDeadline) {
+                Cerr << "Execution interrupted; requesting FQ query cancellation" << Endl;
+                cancelDeadline = TInstant::Now() + CancellationTimeout();
+                const auto status = FqSetup.AbortQuery(QueryId, CurrentOptions);
+                if (!status.IsSuccess()) {
+                    Cerr << "Failed to cancel query: " << status.ToString() << Endl;
+                    return false;
+                }
+            }
+            if (cancelDeadline && TInstant::Now() >= *cancelDeadline) {
+                Cerr << "Timed out waiting for query cancellation" << Endl;
+                return false;
+            }
             TExecutionMeta meta;
             const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
@@ -208,7 +225,7 @@ private:
                 return false;
             }
 
-            Sleep(Options.PingPeriod);
+            Sleep(std::min(Options.PingPeriod, TDuration::MilliSeconds(100)));
         }
 
         printStats(ExecutionMeta, true);

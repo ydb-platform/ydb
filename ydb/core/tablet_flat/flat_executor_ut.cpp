@@ -4166,8 +4166,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
 
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 48MB
-            for (i64 key = 1; key <= 6; ++key) {
+            // 32 MiB of payload occupies about 52 MiB including arena waste
+            for (i64 key = 1; key <= 4; ++key) {
                 executor->Execute(new TTxWrite8MB(key), ctx);
             }
             rejectProbability = executor->GetRejectProbability();
@@ -4193,8 +4193,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
 
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 32MB
-            for (i64 key = 1; key <= 4; ++key) {
+            // 16 MiB of payload occupies about 28 MiB including arena waste
+            for (i64 key = 1; key <= 2; ++key) {
                 executor->Execute(new TTxWrite8MB(key), ctx);
             }
             rejectProbability = executor->GetRejectProbability();

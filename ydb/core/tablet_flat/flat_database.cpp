@@ -497,9 +497,10 @@ void TDatabase::RollbackChanges()
     TTxStamp stamp = Change->Stamp;
     IPages& env = *Env;
 
-    Commit(stamp, false, nullptr);
+    auto prod = Commit(stamp, false, nullptr);
     env.OnRollbackChanges();
     Begin(stamp, env);
+    Change->RollbackAffects = std::move(prod.Change->RollbackAffects);
 }
 
 TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
@@ -532,6 +533,10 @@ void TDatabase::EnumerateTxStatusParts(const std::function<void(const TIntrusive
 
 ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
     return Require(tableId)->GetMemSize(epoch);
+}
+
+ui64 TDatabase::GetTableMemAllocatedSize(ui32 tableId) const {
+    return Require(tableId)->GetMemAllocatedSize();
 }
 
 ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
@@ -847,7 +852,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             Y_TABLET_ERROR(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
     } else {
-        DatabaseImpl->RollbackTransaction();
+        auto affects = DatabaseImpl->RollbackTransaction();
+        Change->RollbackAffects.insert(Change->RollbackAffects.end(), affects.begin(), affects.end());
     }
 
     DatabaseImpl->RunGC();

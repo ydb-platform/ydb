@@ -155,8 +155,13 @@ public:
     // one of the channels and of the tasks whose compute actors did not terminate
     ~TSchedulerQueryQuotaManager() override {
         const ui64 externalMemory = ExternalMemory.load();
-        Y_DEBUG_ABORT_UNLESS(AllocatedMemory.load() == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
-            Tx->TxId, AllocatedMemory.load() - externalMemory);
+        const ui64 allocatedMemory = AllocatedMemory.load();
+        Y_DEBUG_ABORT_UNLESS(allocatedMemory == externalMemory, "TxId: %" PRIu64 ", %" PRIu64 " bytes of Memory not freed",
+            Tx->TxId, allocatedMemory - externalMemory);
+        // the Memory not freed is returned anyway: otherwise it's lost for the pool and the node till the restart
+        if (allocatedMemory > externalMemory) {
+            FreeQuota(allocatedMemory - externalMemory);
+        }
         FreeTasks(ExecutionUnits.load(), externalMemory, ElasticMemory.load());
 
         delete MaxAllocationBacktrace.load();
@@ -281,9 +286,11 @@ public:
             backtraceLock.lock();
         }
 
-        res << ", tx initially granted memory: " << HumanReadableSize(ExternalMemory.load() + ExecutionUnits.load() * TaskMemory, SF_BYTES)
+        const ui64 externalMemory = ExternalMemory.load();
+        const ui64 allocatedMemory = AllocatedMemory.load();
+        res << ", tx initially granted memory: " << HumanReadableSize(externalMemory + ExecutionUnits.load() * TaskMemory, SF_BYTES)
             << ", tx expected elastic memory: " << HumanReadableSize(ElasticMemory.load(), SF_BYTES)
-            << ", tx total memory allocations: " << HumanReadableSize(AllocatedMemory.load() - ExternalMemory.load(), SF_BYTES)
+            << ", tx total memory allocations: " << HumanReadableSize(allocatedMemory > externalMemory ? allocatedMemory - externalMemory : 0, SF_BYTES)
             << ", tx largest successful memory allocation: " << HumanReadableSize(MaxAllocationSize.load(), SF_BYTES)
             << ", tx last failed memory allocation: " << HumanReadableSize(FailedAllocationSize.load(), SF_BYTES)
             << ", tx total execution units: " << ExecutionUnits.load()
@@ -619,6 +626,17 @@ public:
         const auto& poolId = msg.GetPoolId().empty() ? NResourcePool::DEFAULT_POOL_ID : msg.GetPoolId();
         const auto& databaseId = msg.GetDatabaseId();
 
+        // TODO: not expected - such a query is not in the scheduler, so the memory limit of its pool isn't applied
+        if (databaseId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID && NScheduler::IsMemoryScheduled()) {
+            YDB_LOG_ERROR_COMP(NKikimrServices::KQP_NODE, "Query of a resource pool without the database id",
+                {"marker", "KQPNS"},
+                {"nodeId", SelfId().NodeId()},
+                {"txId", txId},
+                {"requester", executerId},
+                {"poolId", poolId});
+            Y_DEBUG_ABORT("TxId: %" PRIu64 ", query of the resource pool %s without the database id", txId, poolId.c_str());
+        }
+
         NScheduler::NHdrf::NDynamic::TQueryPtr query;
         if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || CaFactory_->AccountDefaultPoolInScheduler.load())) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
@@ -689,16 +707,24 @@ public:
         const ui32 tasksCount = msg.GetTasks().size();
 
         // The initial memory (M) of a task is the limit it's started with, the elastic one (E) - what it's expected to grow by
-        auto initialLimitOf = [&](const NYql::NDqProto::TDqTask& dqTask) {
-            return !EnableSmallComputeMemoryAllocations && IsHeavyProgram(dqTask) ? heavyLimit : lightLimit;
+        struct TTaskMemory {
+            ui64 Initial = 0;
+            ui64 Elastic = 0;
+        };
+        auto taskMemoryOf = [&](const NYql::NDqProto::TDqTask& dqTask) {
+            const ui64 initialLimit = !EnableSmallComputeMemoryAllocations && IsHeavyProgram(dqTask) ? heavyLimit : lightLimit;
+            return TTaskMemory{
+                .Initial = initialLimit,
+                .Elastic = EstimateTaskElasticMemory(dqTask, initialLimit, lightLimit, heavyLimit),
+            };
         };
 
         ui64 externalMemory = 0;
         ui64 elasticMemory = 0;
         for (const auto& dqTask: msg.GetTasks()) {
-            const ui64 initialLimit = initialLimitOf(dqTask);
-            externalMemory += initialLimit;
-            elasticMemory += EstimateTaskElasticMemory(dqTask, initialLimit, lightLimit, heavyLimit);
+            const auto taskMemory = taskMemoryOf(dqTask);
+            externalMemory += taskMemory.Initial;
+            elasticMemory += taskMemory.Elastic;
         }
         ui64 channelMemory = 0;
 
@@ -764,7 +790,8 @@ public:
 
             const auto taskId = dqTask.GetId();
 
-            const auto initialMemoryLimit = initialLimitOf(dqTask);
+            const auto taskMemory = taskMemoryOf(dqTask);
+            const auto initialMemoryLimit = taskMemory.Initial;
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
@@ -792,7 +819,7 @@ public:
                 .State = State_, // pass state to later inform when task is finished
                 .QueryQuotaManager = QueryQuotaManager,
                 .InitialMemoryLimit = initialMemoryLimit,
-                .ElasticMemory = EstimateTaskElasticMemory(dqTask, initialMemoryLimit, lightLimit, heavyLimit),
+                .ElasticMemory = taskMemory.Elastic,
                 .Database = msg.GetDatabase(),
                 .Query = query,
                 .UseBatchPool = msg.GetUseBatchPool(),

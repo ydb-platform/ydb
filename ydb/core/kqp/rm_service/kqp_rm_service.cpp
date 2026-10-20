@@ -1152,7 +1152,7 @@ public:
             {"selfId", SelfId()},
             {"resourceBrokerId", ResourceBrokerId});
 
-        // as the compute scheduler decides on its start, see TComputeScheduler::IsMemoryEnabled
+        // The same decision as the compute scheduler makes on its start (see TComputeScheduler::IsMemoryEnabled)
         const auto& featureFlags = AppData()->FeatureFlags;
         if (featureFlags.GetEnableResourcePoolsScheduler() && featureFlags.GetEnableComputeSchedulerMemory()) {
             ResourceManager->QueryMemoryScheduled.store(true);
@@ -1595,7 +1595,7 @@ private:
                     ? ResourceManager->GetQueryMemoryLimit()
                     : ResourceManager->TotalMemoryResource->GetLimit();
                 const ui64 memoryAvailable = fromScheduler
-                    ? Min(ResourceManager->GetQueryMemoryAvailable(), memoryLimit)
+                    ? ResourceManager->GetQueryMemoryAvailable()
                     : ResourceManager->TotalMemoryResource->Available();
 
                 payload.SetAvailableComputeActors(ResourceManager->ExecutionUnitsResource.load()); // legacy

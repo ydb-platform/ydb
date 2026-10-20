@@ -1830,6 +1830,59 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT(query4->GetSnapshot());
     }
 
+    Y_UNIT_TEST(NewQueriesOfIdlePoolWaitForSnapshot) {
+        /*
+            Scenario:
+            - The pool was idle in the latest snapshot, so the new queries get the minimal fair-share of the pool, and
+              it's compared with the usage of the whole pool: only one task of them all starts
+            - The queries of the pool, which is not in the snapshot yet, have no snapshot: one task of each query starts
+            - The next snapshot gives the fair-share by the demand, so the rest of the tasks start
+        */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr ui64 kQueries = 3;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "idle", {});
+        scheduler.UpdateFairShare();
+        scheduler.AddOrUpdatePool(databaseId, "new", {});
+
+        std::vector<std::vector<TSchedulableTaskPtr>> idleTasks;
+        std::vector<std::vector<TSchedulableTaskPtr>> newTasks;
+        for (ui64 i = 0; i < kQueries; ++i) {
+            auto idleQuery = scheduler.AddOrUpdateQuery(databaseId, "idle", i, {});
+            UNIT_ASSERT_VALUES_EQUAL(idleQuery->GetSnapshot()->CpuFairShare, 1);
+            idleTasks.emplace_back(CreateDemandTasks(idleQuery, 1));
+
+            auto newQuery = scheduler.AddOrUpdateQuery(databaseId, "new", kQueries + i, {});
+            UNIT_ASSERT(!newQuery->GetSnapshot());
+            newTasks.emplace_back(CreateDemandTasks(newQuery, 1));
+        }
+
+        for (ui64 i = 0; i < kQueries; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(idleTasks[i][0]->TryIncreaseUsage(), i == 0);
+            UNIT_ASSERT(newTasks[i][0]->TryIncreaseUsage());
+        }
+
+        scheduler.UpdateFairShare();
+
+        for (ui64 i = 1; i < kQueries; ++i) {
+            UNIT_ASSERT(idleTasks[i][0]->TryIncreaseUsage());
+        }
+
+        for (ui64 i = 0; i < kQueries; ++i) {
+            idleTasks[i][0]->DecreaseUsage(TDuration::Zero(), TSchedulableTask::CPU_DEFAULT);
+            newTasks[i][0]->DecreaseUsage(TDuration::Zero(), TSchedulableTask::CPU_DEFAULT);
+        }
+    }
+
     Y_UNIT_TEST(ThrottleTimeIsNotLostOnStop) {
         /*
             Scenario:

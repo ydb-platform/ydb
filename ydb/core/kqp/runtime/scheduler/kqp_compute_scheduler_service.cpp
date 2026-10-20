@@ -212,7 +212,14 @@ public:
             Y_ENSURE(poolIt != PoolSubscribtions.end());
             poolIt->second = false;
 
-            NHdrf::TStaticAttributes attrs;
+            // The full config of the pool: the limits not configured in it (e.g. reset) are removed.
+            // The attributes are merged, so the defaults are set explicitly
+            NHdrf::TStaticAttributes attrs{
+                .CpuLimit = NHdrf::Infinity(),
+                .MemoryLimit = NHdrf::Infinity(),
+                .ReadLimit = TDuration::Seconds(1), // see TSchedulableRead
+            };
+            PoolMemoryLimitPercents.erase(poolIt->first);
             SetCpuAttributes(*ev->Get()->Config, attrs);
             SetMemoryAttributes(poolIt->first, *ev->Get()->Config, attrs);
             ApplyPoolConfig(databaseId, poolId, attrs);
@@ -228,6 +235,7 @@ public:
                 Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
             } else {
                 // The second removal - the pool was really removed.
+                PoolMemoryLimitPercents.erase(poolIt->first);
                 PoolSubscribtions.erase(poolIt);
                 // TODO: Scheduler->RemovePool(…);
                 // TODO: Scheduler->UpdatePool(…);
@@ -325,11 +333,8 @@ private:
         return Max<ui64>(poolStats.MaxThreadCount, 1);
     }
 
-    // Update limit and guarantee - they are applied together,
-    // since lowering the limit of a pool has to lower its guarantee as well.
-    // A limit percent of -1 means that the setting is not configured, so the previous value is kept.
-    // The guarantee is different: the config always carries the whole pool description, so -1 means
-    // that the pool has no guarantee anymore and the reservation it holds has to be released.
+    // The limit and the guarantee are set together, since a lower limit has to lower the guarantee as well.
+    // A limit of -1 is not set (TEvUpdatePoolInfo removes it beforehand), a guarantee of -1 releases the reservation.
     void SetCpuAttributes(const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) const {
         const auto totalCpuLimit = Scheduler->GetTotalCpuLimit();
 
@@ -346,9 +351,8 @@ private:
         attrs.CpuGuarantee = static_cast<ui64>(std::max(config.TotalCpuGuaranteePercentPerNode, 0.0) * totalCpuLimit / 100);
     }
 
-    // A limit percent of -1 means that the setting is not configured, so the previous value is kept.
-    // The percent is remembered, since the limit follows the total memory limit.
-    void SetMemoryAttributes(const NHdrf::TFullPoolId& fullPoolId, const NResourcePool::TPoolSettings& config, NHdrf::TStaticAttributes& attrs) {
+    // As SetCpuAttributes. The percent is remembered, since the limit follows the total memory limit.
+    void SetMemoryAttributes(const NHdrf::TFullPoolId& fullPoolId, const NResourcePool::TPoolSettings& config,  NHdrf::TStaticAttributes& attrs) {
         if (!Scheduler->IsMemoryEnabled()) {
             return;
         }
@@ -700,6 +704,7 @@ NScheduler::TComputeSchedulerPtr CreateKqpComputeScheduler(const NMonitoring::TD
             .AttemptBonus = TDuration::MicroSeconds(schedulerSettings.GetAttemptTaskBonusUs()),
             .MaxRandomDelay = TDuration::MicroSeconds(schedulerSettings.GetMaxTaskRandomDelayUs()),
         },
+        // the resource manager decides the same from the app data, see TComputeScheduler::IsMemoryEnabled
         .MemoryEnabled = appConfig.GetFeatureFlags().GetEnableComputeSchedulerMemory(),
     };
 

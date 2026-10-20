@@ -1,6 +1,7 @@
 #include "kqp_compute_scheduler_service.h"
 #include "kqp_schedulable_memory.h"
 
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
@@ -254,6 +255,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
     /* Scenario:
         - The limit of the memory consumer is the total memory limit of the scheduler.
         - The memory limits of the pools are the shares of it, and follow it.
+        - The memory limit of a pool is removed once the setting is reset in its config, as the CPU one.
      */
     Y_UNIT_TEST(ConsumerLimitIsTotalMemoryLimit) {
         TTestBasicRuntime runtime;
@@ -280,18 +282,41 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
 
         NResourcePool::TPoolSettings poolSettings;
         poolSettings.TotalMemoryLimitPercentPerNode = 30;
+        poolSettings.TotalCpuLimitPercentPerNode = 50;
         const TActorId sender = runtime.AllocateEdgeActor();
         runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
 
         auto pool = scheduler->GetOrCreateMemoryPool("db", "pool");
         UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 300_MB);
+        UNIT_ASSERT_LT(pool->GetCpuLimit(), NScheduler::NHdrf::Infinity());
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetReadLimit(), TDuration::MilliSeconds(500));
 
         runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(500_MB)));
         runtime.SimulateSleep(TDuration::MilliSeconds(10));
 
         UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 500_MB);
         UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 150_MB);
+
+        // the pool is added once more without the settings (as the node service does it): the limits are kept
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool")));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), 150_MB);
+        UNIT_ASSERT_LT(pool->GetCpuLimit(), NScheduler::NHdrf::Infinity());
+
+        // the settings are reset in the config of the pool: the limits are removed, the memory one doesn't follow the
+        // total limit anymore
+        runtime.Send(new IEventHandle(service, sender,
+            new NWorkloadManager::TEvUpdatePoolInfo("db", "pool", NResourcePool::TPoolSettings(), std::nullopt)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), NScheduler::NHdrf::Infinity());
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetCpuLimit(), NScheduler::NHdrf::Infinity());
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetReadLimit(), TDuration::Seconds(1));
+
+        runtime.Send(new IEventHandle(service, memoryController, new NMemory::TEvConsumerLimit(400_MB)));
+        runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(scheduler->GetTotalMemoryLimit(), 400_MB);
+        UNIT_ASSERT_VALUES_EQUAL(pool->GetMemoryLimit(), NScheduler::NHdrf::Infinity());
     }
 
     /* Scenario:

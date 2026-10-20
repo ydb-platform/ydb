@@ -3,6 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/tempdir.h>
+
+#include <util/generic/scope.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
 #include <util/string/strip.h>
@@ -36,9 +38,10 @@ class TEmptyFileCache: public IFileCache {
 public:
     std::atomic<bool> FailGetDir = false;
 
-    TEmptyFileCache(TString directory, std::function<void()> beforeAcquire)
+    TEmptyFileCache(TString directory, std::function<void()> beforeAcquire, std::function<void()> beforeGetDir = {})
         : Directory_(std::move(directory))
         , BeforeAcquire_(std::move(beforeAcquire))
+        , BeforeGetDir_(std::move(beforeGetDir))
     { }
 
     void AddFile(const TString&, const TString&) override { }
@@ -55,6 +58,9 @@ public:
     ui64 UsedDiskSize() override { return 0; }
     TString GetDir() override
     {
+        if (BeforeGetDir_) {
+            BeforeGetDir_();
+        }
         if (FailGetDir.load()) {
             throw std::runtime_error("Cannot get executor directory");
         }
@@ -64,6 +70,7 @@ public:
 private:
     const TString Directory_;
     const std::function<void()> BeforeAcquire_;
+    const std::function<void()> BeforeGetDir_;
 };
 
 class TPipeMetricsFixture {
@@ -236,9 +243,177 @@ private:
     }
 };
 
+void CheckEofExecutorReaped(bool failColdStart, bool useNewApi, bool blockCleanup = false)
+{
+    TTempDir directory;
+    const auto pidDirectory = directory.Path() / "pids";
+    pidDirectory.MkDirs();
+    const auto executable = directory.Path() / "executor";
+    {
+        TFileOutput script(executable);
+        script << "#!/bin/sh\n"
+            << "printf '%s\\n' \"$$\" > \"$PID_DIRECTORY/${PWD##*/}\"\n"
+            << "exec /bin/cat > /dev/null\n";
+    }
+    UNIT_ASSERT_VALUES_EQUAL(Chmod(executable.c_str(), MODE0755), 0);
+
+    const int processCount = failColdStart ? 2 : 1;
+    TVector<int> pids(processCount, 0);
+    auto readPids = [&] {
+        bool ready = true;
+        for (int slot = 1; slot <= processCount; ++slot) {
+            const auto file = pidDirectory / ("Slot-" + ToString(slot));
+            if (!file.Exists() || !TryFromString(Strip(TFileInput(file).ReadAll()), pids[slot - 1]) || pids[slot - 1] <= 0) {
+                ready = false;
+            }
+        }
+        return ready;
+    };
+    std::atomic<bool> holdRefill = false;
+    std::atomic<bool> refillEntered = false;
+    auto fileCache = MakeIntrusive<TEmptyFileCache>(directory.Name(), [&] {
+        WaitUntil(readPids, "EOF executor did not publish its PID");
+        if (blockCleanup) {
+            WaitUntil([&] { return refillEntered.load(); }, "Refill did not block the scheduler");
+        }
+    }, [&] {
+        if (holdRefill.load()) {
+            refillEntered.store(true);
+            WaitUntil([&] { return !holdRefill.load(); }, "Refill was not released");
+        }
+    });
+    IProxyFactory::TPtr factory;
+    Y_DEFER {
+        holdRefill.store(false);
+        if (refillEntered.load()) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(5);
+            while (TInstant::Now() < deadline) {
+                try {
+                    const auto file = pidDirectory / "Slot-2";
+                    int pid = 0;
+                    if (file.Exists() && TryFromString(Strip(TFileInput(file).ReadAll()), pid) && pid > 0) {
+                        break;
+                    }
+                } catch (...) { }
+                Sleep(TDuration::MilliSeconds(10));
+            }
+        }
+        factory = nullptr;
+        try {
+            TVector<TFsPath> files;
+            pidDirectory.List(files);
+            for (const auto& file : files) {
+                int pid = 0;
+                if (!TryFromString(Strip(TFileInput(file).ReadAll()), pid) || pid <= 0) {
+                    continue;
+                }
+                int status = 0;
+                int result;
+                do {
+                    result = waitpid(pid, &status, WNOHANG);
+                } while (result == -1 && errno == EINTR);
+                if (result == 0) {
+                    kill(pid, SIGKILL);
+                    while (waitpid(pid, &status, 0) == -1 && errno == EINTR) { }
+                }
+            }
+        } catch (...) { }
+    };
+
+    TPipeFactoryOptions options;
+    options.ExecPath = executable.GetPath();
+    options.FileCache = fileCache;
+    options.Env["PID_DIRECTORY"] = pidDirectory.GetPath();
+    options.MaxProcesses = failColdStart || blockCleanup ? processCount : 0;
+    factory = CreatePipeFactory(options);
+    if (failColdStart || blockCleanup) {
+        WaitUntil(readPids, "EOF executors did not publish their PIDs");
+        fileCache->FailGetDir.store(failColdStart);
+        holdRefill.store(blockCleanup);
+    }
+
+    Yql::DqsProto::TTaskMeta meta;
+    if (failColdStart) {
+        auto* setting = meta.AddSettings();
+        setting->SetName("_PortoMemoryLimit");
+        setting->SetValue("1024");
+    }
+    auto* file = meta.AddFiles();
+    file->SetObjectType(Yql::DqsProto::TFile::EUSER_FILE);
+    file->SetObjectId("missing");
+    NDqProto::TDqTask task;
+    task.MutableMeta()->PackFrom(meta);
+    auto prepareTask = [&] {
+        if (useNewApi) {
+            factory->Get(/*alloc*/ nullptr, NDq::TDqTaskSettings(&task), NDqProto::DQ_STATS_MODE_NONE);
+        } else {
+            factory->GetOld(/*alloc*/ nullptr, NDq::TDqTaskSettings(&task));
+        }
+    };
+    UNIT_ASSERT_EXCEPTION_CONTAINS(prepareTask(), std::runtime_error,
+        failColdStart ? "Cannot get executor directory" : "Cannot find object `missing` in cache");
+
+    if (blockCleanup) {
+        siginfo_t info{};
+        const auto deadline = TInstant::Now() + TDuration::Seconds(3);
+        while (true) {
+            info = {};
+            const int result = waitid(P_PID, pids.front(), &info, WEXITED | WNOHANG | WNOWAIT);
+            UNIT_ASSERT_VALUES_EQUAL(result, 0);
+            if (info.si_pid == pids.front()) {
+                break;
+            }
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "Executor did not exit on EOF while cleanup was queued");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(info.si_code, static_cast<int>(CLD_EXITED));
+        UNIT_ASSERT_VALUES_EQUAL(info.si_status, 0);
+        holdRefill.store(false);
+    }
+
+    for (int pid : pids) {
+        siginfo_t info{};
+        const auto deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (true) {
+            info = {};
+            // Observe exit without reaping the child on behalf of the factory.
+            const int result = waitid(P_PID, pid, &info, WEXITED | WNOHANG | WNOWAIT);
+            if (result == -1 && errno == ECHILD) {
+                break;
+            }
+            UNIT_ASSERT_C(result == 0 || errno == EINTR, "Cannot inspect executor " << pid);
+            UNIT_ASSERT_C(TInstant::Now() < deadline,
+                "Executor was not reaped (Pid: " << pid << ", ExitPid: " << info.si_pid
+                << ", ExitCode: " << info.si_code << ", ExitStatus: " << info.si_status << ")");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TPipeMetricsTest) {
+
+    Y_UNIT_TEST(FailedPreparationReapsEofExecutor)
+    {
+        CheckEofExecutorReaped(/*failColdStart*/ false, /*useNewApi*/ false);
+    }
+
+    Y_UNIT_TEST(NewRunnerApiFailureReapsEofExecutor)
+    {
+        CheckEofExecutorReaped(/*failColdStart*/ false, /*useNewApi*/ true);
+    }
+
+    Y_UNIT_TEST(FailedColdStartReapsEvictedEofExecutors)
+    {
+        CheckEofExecutorReaped(/*failColdStart*/ true, /*useNewApi*/ false);
+    }
+
+    Y_UNIT_TEST(FailedPreparationClosesPipesBeforeQueuedCleanup)
+    {
+        CheckEofExecutorReaped(/*failColdStart*/ false, /*useNewApi*/ false, /*blockCleanup*/ true);
+    }
+
     Y_UNIT_TEST(MetricBudgetIsSixteenScalars)
     {
         struct TCounterVisitor: public NMonitoring::ICountableConsumer {

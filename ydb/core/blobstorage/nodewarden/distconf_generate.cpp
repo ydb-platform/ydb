@@ -806,6 +806,10 @@ namespace NKikimr::NStorage {
             }
             TNodeLocation location(node.GetLocation());
             TBridgePileId pileId = ResolveNodePileId(pileRegistry, location).value_or(TBridgePileId());
+            if (pileId && NBridge::GetPileState(baseConfig.GetClusterState(), pileId) ==
+                    NKikimrBridge::TClusterState::INACTIVE) {
+                continue; // INACTIVE pile has no state storage replicas
+            }
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {

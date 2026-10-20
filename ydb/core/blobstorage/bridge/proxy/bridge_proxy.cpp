@@ -264,9 +264,8 @@ namespace NKikimr {
                 if (!NBridge::PileStateTraits(pile.State).RequiresDataQuorum) {
                     return false;
                 }
-                const auto& state = Info->Group->GetBridgeGroupState();
-                const auto& gp = state.GetPile(pile.BridgePileId.GetPileIndex());
-                return gp.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+                const auto *gp = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
+                return gp && gp->GetStage() == NKikimrBridge::TGroupState::SYNCED;
             }
 
             std::unique_ptr<IEventBase> ProcessResponse(TThis& self, std::unique_ptr<TEvBlobStorage::TEvGetResult> ev,
@@ -826,36 +825,38 @@ namespace NKikimr {
 
             Y_ABORT_UNLESS(request->Info->Group);
             const auto& state = request->Info->Group->GetBridgeGroupState();
-            for (size_t i = 0; i < state.PileSize(); ++i) {
-                const auto bridgePileId = TBridgePileId::FromPileIndex(i);
-                const TBridgeInfo::TPile *pile = BridgeInfo->GetPile(bridgePileId);
-                if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
-                    continue; // skip this pile, no data quorum needed
+            NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
+                    const NKikimrBridge::TGroupState::TPile& groupPileInfo) {
+                const TBridgeInfo::TPile *pile = BridgeInfo->FindPile(bridgePileId);
+                if (!pile) {
+                    return; // group info is newer than bridge info, pile is just added and doesn't hold any data yet
+                } else if (!NBridge::PileStateTraits(pile->State).RequiresDataQuorum) {
+                    return; // skip this pile, no data quorum needed
                 }
 
                 // check the sync state for this group
-                const auto& groupPileInfo = state.GetPile(i);
                 if (auto eventToSend = PrepareEvent(groupPileInfo, originalRequest, pile->BridgePileId)) {
                     SendQuery(request, pile->BridgePileId, std::move(eventToSend));
                 }
-            }
+            });
 
             Y_ABORT_UNLESS(request->ResponsesPending);
         }
 
         void SendQuery(std::shared_ptr<TRequest> request, TBridgePileId bridgePileId, std::unique_ptr<IEventBase> ev,
                 TRequestPayload&& payload = {}) {
-            const auto& state = request->Info->Group->GetBridgeGroupState();
-            const auto& groupPileInfo = state.GetPile(bridgePileId.GetPileIndex());
-            const auto groupId = TGroupId::FromProto(&groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            const auto *groupPileInfo = NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
+                bridgePileId);
+            Y_ABORT_UNLESS(groupPileInfo);
+            const auto groupId = TGroupId::FromProto(groupPileInfo, &NKikimrBridge::TGroupState::TPile::GetGroupId);
 
             auto *common = dynamic_cast<TEvBlobStorage::TEvRequestCommon*>(ev.get());
             Y_ABORT_UNLESS(common);
-            common->ForceGroupGeneration = groupPileInfo.GetGroupGeneration();
+            common->ForceGroupGeneration = groupPileInfo->GetGroupGeneration();
 
             STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
                 (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, groupPileInfo));
+                (GroupPileInfo, *groupPileInfo));
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
@@ -984,8 +985,10 @@ namespace NKikimr {
                     ++common->RestartCounter;
                     auto handle = std::make_unique<IEventHandle>(SelfId(), request->Sender, ev.release(), 0, request->Cookie);
 
-                    const auto& bridgeGroupState = Info->Group->GetBridgeGroupState();
-                    const ui32 myGeneration = bridgeGroupState.GetPile(pile.BridgePileId.GetPileIndex()).GetGroupGeneration();
+                    // when the group has no part in this pile anymore, our configuration is newer than the one the
+                    // request was executed with
+                    const auto *groupPile = NBridge::GetGroupPile(Info->Group->GetBridgeGroupState(), pile.BridgePileId);
+                    const ui32 myGeneration = groupPile ? groupPile->GetGroupGeneration() : Max<ui32>();
 
                     Y_VERIFY_DEBUG_S(common->RestartCounter < 100, "GroupId# " << GroupId
                         << " item.GroupId# " << item.GroupId
@@ -1020,8 +1023,8 @@ namespace NKikimr {
                     } else {
                         // we can retry this message (obviously, we HAD request executed at incorrect generation, but
                         // now generation is correct)
-                        Y_DEBUG_ABORT_UNLESS(request->Info->Group->GetBridgeGroupState().GetPile(
-                            pile.BridgePileId.GetPileIndex()).GetGroupGeneration() < myGeneration);
+                        Y_DEBUG_ABORT_UNLESS(NBridge::GetGroupPile(request->Info->Group->GetBridgeGroupState(),
+                            pile.BridgePileId)->GetGroupGeneration() < myGeneration);
                         TActivationContext::Send(handle.release());
                     }
                     request->Finished = true;

@@ -1,5 +1,7 @@
 #include "distconf.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
+
 namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ApplyStaticNodeIds(const std::vector<ui32>& nodeIds) {
@@ -18,6 +20,7 @@ namespace NKikimr::NStorage {
             ConnectedToStaticNode = *nodeId;
             auto ev = std::make_unique<TEvNodeWardenDynamicConfigSubscribe>();
             ev->Record.SetBridgeCapable(static_cast<bool>(Cfg->BridgeConfig));
+            ev->Record.SetPileListChangeCapable(true);
             TActivationContext::Send(new IEventHandle(MakeBlobStorageNodeWardenID(ConnectedToStaticNode), SelfId(),
                 ev.release(), IEventHandle::FlagSubscribeOnSession, ++StaticNodeSubscriptionCookie));
         } else if (timestamp != TMonotonic::Max()) {
@@ -73,7 +76,7 @@ namespace NKikimr::NStorage {
 
     void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
         for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
-            PushConfigToDynamicNode(actorId, sessionId, false);
+            PushConfigToDynamicNode(actorId, sessionId, false, PileListChangeCapableDynamicNodes.contains(actorId.NodeId()));
         }
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
@@ -81,12 +84,14 @@ namespace NKikimr::NStorage {
             UnsubscribeQueue.insert(ConnectedDynamicNodes.begin(), ConnectedDynamicNodes.end());
             ConnectedDynamicNodes.clear();
             BridgeCapableDynamicNodes.clear();
+            PileListChangeCapableDynamicNodes.clear();
         }
     }
 
     void TDistributedConfigKeeper::OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId) {
         ConnectedDynamicNodes.erase(nodeId);
         BridgeCapableDynamicNodes.erase(nodeId);
+        PileListChangeCapableDynamicNodes.erase(nodeId);
         DynamicConfigSubscribers.erase(sessionId);
         UnsubscribeQueue.insert(nodeId);
     }
@@ -96,8 +101,9 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(sessionId);
 
         const bool partOfNodeQuorum = PartOfNodeQuorum();
+        const bool pileListChangeCapable = ev->Get()->Record.GetPileListChangeCapable();
         if (!partOfNodeQuorum || StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId, true);
+            PushConfigToDynamicNode(ev->Sender, sessionId, true, pileListChangeCapable);
         }
         if (!partOfNodeQuorum) {
             return;
@@ -111,21 +117,31 @@ namespace NKikimr::NStorage {
         } else {
             BridgeCapableDynamicNodes.erase(peerNodeId);
         }
+        if (pileListChangeCapable) {
+            PileListChangeCapableDynamicNodes.insert(peerNodeId);
+        } else {
+            PileListChangeCapableDynamicNodes.erase(peerNodeId);
+        }
         const auto [_, inserted] = DynamicConfigSubscribers.try_emplace(sessionId, ev->Sender);
         Y_ABORT_UNLESS(inserted);
     }
 
-    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache) {
+    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache,
+            bool pileListChangeCapable) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
         auto& record = ev->Record;
+        const auto& config = SelfManagementEnabled ? StorageConfig : BaseConfig;
         if (!PartOfNodeQuorum()) { // this configuration is not reliable, don't push anything
             ev->Record.SetNoQuorum(true);
         } else if (!StorageConfig) {
             // no storage configuration -- no nothing
-        } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
-            target->CopyFrom(*StorageConfig);
+        } else if (!pileListChangeCapable && IsPileListChanged(*config)) {
+            // the node can't work with this configuration, it has to be upgraded
+            YDB_LOG_WARN("Dynamic node runs version not supporting changes of the list of piles, config is not pushed",
+                {"marker", "NWDC88"},
+                {"nodeId", actorId.NodeId()});
         } else {
-            target->CopyFrom(*BaseConfig);
+            record.MutableConfig()->CopyFrom(*config);
         }
         if (addCache) {
             // push full cache to the dynamic node

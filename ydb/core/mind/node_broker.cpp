@@ -1636,6 +1636,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
         TString Error;
+        std::optional<TString> ImplicitPileName;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1675,6 +1676,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
             } else if (!resolved) {
                 // pile name may be omitted only when there is implicit pile (for cluster converted from non-bridged one)
                 Error = "Bridge pile not specified while bridge mode is enabled";
+            }
+            if (bridgeInfo && bridgeInfo->ImplicitPile) {
+                ImplicitPileName = bridgeInfo->ImplicitPile->Name;
             }
             ResolveTenant(ctx);
         }
@@ -1743,7 +1747,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 {"scopeId", ScopeIdToString(ScopeId)},
                 {"servicedSubDomain", ServicedSubDomain});
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error)));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error),
+                std::move(ImplicitPileName)));
             Die(ctx);
         }
 

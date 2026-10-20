@@ -9,8 +9,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <util/string/escape.h>
 
-#include <thread>
-
 namespace NKikimr::NStat {
 
 Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
@@ -331,30 +329,26 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
 
     Y_UNIT_TEST(ForbidAccess) {
         TTestEnv env(1, 1);
-        auto& runtime = *env.GetServer().GetRuntime();
 
         CreateDatabase(env, "Database", 1, true);
         PrepareUniformTable(env, "Database", "Table");
 
-        NYdb::EStatus status;
-        auto test = [&] () {
+        const auto status = env.RunInThreadPool([&] {
             auto driverConfig = NYdb::TDriverConfig()
                 .SetEndpoint(env.GetEndpoint())
                 .SetDatabase("/Root")
                 .SetAuthToken("user@builtin");
             auto driver = NYdb::TDriver(driverConfig);
             auto db = NYdb::NTable::TTableClient(driver);
-            auto session = db.CreateSession().GetValueSync().GetSession();
+            auto sessionResult = db.CreateSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
 
             auto result = session.ExecuteDataQuery(R"(
                 SELECT * FROM `/Root/Database/.metadata/statistics_v2`;
             )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            status = result.GetStatus();
-        };
-        std::thread testThread(test);
-
-        runtime.SimulateSleep(TDuration::Seconds(1));
-        testThread.join();
+            return result.GetStatus();
+        });
 
         UNIT_ASSERT_VALUES_EQUAL(status, NYdb::EStatus::SCHEME_ERROR);
     }

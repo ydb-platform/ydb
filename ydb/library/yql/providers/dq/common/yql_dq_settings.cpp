@@ -7,7 +7,7 @@
 namespace NYql {
 
 TDqConfiguration::TDqConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(DqProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TDqSettings>(DqProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, DataSizePerJob);
     REGISTER_SETTING(*this, MaxDataSizePerJob);

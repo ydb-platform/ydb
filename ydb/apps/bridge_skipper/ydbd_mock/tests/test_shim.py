@@ -7,13 +7,16 @@ import sys
 import tempfile
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SHIM = os.path.join(HERE, "..", "scripts", "ydb_shim.py")
+if getattr(sys, "is_standalone_binary", False):
+    import yatest.common
+    SHIM = yatest.common.source_path("ydb/apps/bridge_skipper/ydbd_mock/scripts/ydb_shim.py")
+else:
+    SHIM = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts", "ydb_shim.py"))
 
 
-@unittest.skipUnless(os.path.exists(SHIM), "scripts/ydb_shim.py is not part of this build")
 class ShimTest(unittest.TestCase):
     def setUp(self):
+        self.assertTrue(os.path.isfile(SHIM), "ydb_shim.py is required test data")
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.run_dir = self._tmp.name
@@ -25,8 +28,10 @@ class ShimTest(unittest.TestCase):
         os.chmod(self.fake, os.stat(self.fake).st_mode | stat.S_IXUSR)
 
     def shim(self, *argv):
-        env = dict(os.environ, YDBD_MOCK_RUN_DIR=self.run_dir, YDBD_MOCK_REAL_YDB=self.fake)
-        proc = subprocess.run([sys.executable, SHIM] + list(argv), env=env, capture_output=True, text=True)
+        env = dict(os.environ, YDBD_MOCK_RUN_DIR=self.run_dir, YDBD_MOCK_REAL_YDB=self.fake,
+                   Y_PYTHON_ENTRY_POINT=":main")
+        proc = subprocess.run([sys.executable, SHIM] + list(argv), env=env, capture_output=True, text=True,
+                              timeout=10)
         return proc.returncode, proc.stdout, proc.stderr
 
     EP = ["-e", "grpc://mock-pile1-1:2135"]

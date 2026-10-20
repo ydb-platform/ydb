@@ -21,6 +21,10 @@ TEST_SRCS(
     test_validator.py
 )
 
+DATA(
+    arcadia/ydb/apps/bridge_skipper/ydbd_mock/scripts/ydb_shim.py
+)
+
 PEERDIR(
     ydb/apps/bridge_skipper/ydbd_mock/lib
 )

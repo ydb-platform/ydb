@@ -32,9 +32,10 @@ class PidIdentityTest(unittest.TestCase):
             proc.wait()
 
     def spawn(self, *argv):
+        env = dict(os.environ, Y_PYTHON_ENTRY_POINT=":main")
         proc = subprocess.Popen(
             [sys.executable, "-c", "import time; time.sleep(60)"] + list(argv),
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
         self._procs.append(proc)
         time.sleep(0.1)
         return proc

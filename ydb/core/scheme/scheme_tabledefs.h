@@ -735,14 +735,18 @@ public:
 
     using TCPtr = std::shared_ptr<const TPartitioning>;
 
-    explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions)
-        : Partitions(std::move(partitions)) {}
+    explicit TPartitioning(TVector<TKeyDesc::TPartitionInfo>&& partitions, ui64 version = 0)
+        : Partitions(std::move(partitions))
+        , Version(version) {}
 
-    explicit TPartitioning(const TVector<TKeyDesc::TPartitionInfo>& partitions)
-        : Partitions(partitions) {}
+    explicit TPartitioning(const TVector<TKeyDesc::TPartitionInfo>& partitions, ui64 version = 0)
+        : Partitions(partitions)
+        , Version(version) {}
 
     size_t Size() const { return Partitions.size(); }
     bool Empty() const { return Partitions.empty(); }
+
+    ui64 GetVersion() const { return Version; }
 
     using const_iterator = TVector<TKeyDesc::TPartitionInfo>::const_iterator;
     const_iterator begin() const { return Partitions.begin(); }
@@ -763,6 +767,7 @@ public:
 
 private:
     TVector<TKeyDesc::TPartitionInfo> Partitions;
+    ui64 Version = 0;
 };
 
 

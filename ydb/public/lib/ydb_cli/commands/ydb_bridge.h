@@ -95,4 +95,15 @@ private:
     TString Pile;
 };
 
+class TCommandBridgeConvert : public TYdbCommand {
+public:
+    TCommandBridgeConvert(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+};
+
 }

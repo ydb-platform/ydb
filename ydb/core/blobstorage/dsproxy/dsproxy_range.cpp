@@ -153,7 +153,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     from = TLogoBlobID(TabletId, generation, step, channel, 0 /* blobSize */, cookie);
                     send = send && from <= to;
                 } else {
-                    // backward query; we have to patch 'to' with predecessor of lastBlobId
+                    // backward query; we have to patch 'from' with predecessor of lastBlobId
                     if (!cookie--) {
                         cookie = TLogoBlobID::MaxCookie;
                         if (!step--) { // if the step was zero, it is set to Max<ui32> automatically and so for generation
@@ -165,7 +165,9 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                         }
                     }
 
-                    from = TLogoBlobID(TabletId, generation, step, channel, TLogoBlobID::MaxBlobSize, cookie);
+                    // CrcMode sorts before BlobSize, so MaxBlobSize alone does not cover blobs with CRC.
+                    from = TLogoBlobID::Make(TabletId, generation, step, channel,
+                        TLogoBlobID::MaxBlobSize, cookie, TLogoBlobID::MaxCrcMode);
                     send = send && to < from;
                 }
 

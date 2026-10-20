@@ -3,7 +3,7 @@
 
 Rows live one year (the same TTL as analytics/ci_metrics). One sample is
 quota headroom, how many preset VMs still fit, each runner, and the Actions
-queue. The Capacity tab in DataLens reads this table, not ci_metrics.
+queue. The Runners capacity tab in DataLens reads this table, not ci_metrics.
 """
 
 from __future__ import annotations
@@ -287,6 +287,55 @@ def instance_ram_gib(instance: Dict[str, Any]) -> Optional[float]:
     if raw is None:
         return None
     return bytes_to_gib(raw)
+
+
+def _disk_size_gib(disk: Dict[str, Any]) -> Optional[float]:
+    spec = disk.get("disk_spec") or disk.get("diskSpec") or disk
+    raw = as_float(spec.get("size") or spec.get("disk_size") or disk.get("size"))
+    if raw is None:
+        return None
+    return bytes_to_gib(raw)
+
+
+def _disk_type(disk: Dict[str, Any]) -> str:
+    spec = disk.get("disk_spec") or disk.get("diskSpec") or disk
+    return str(
+        spec.get("type_id")
+        or spec.get("typeId")
+        or spec.get("type")
+        or disk.get("type")
+        or ""
+    ).lower()
+
+
+def instance_nrd_gib(instance: Dict[str, Any]) -> Optional[float]:
+    """NRD size from the VM disks, or the ghrun footprint when Cloud omits size."""
+    disks: List[Dict[str, Any]] = []
+    boot = instance.get("boot_disk") or instance.get("bootDisk")
+    if isinstance(boot, dict):
+        disks.append(boot)
+    extra = instance.get("secondary_disks") or instance.get("secondaryDisks") or []
+    if isinstance(extra, list):
+        disks.extend(item for item in extra if isinstance(item, dict))
+    total = 0.0
+    found = False
+    for disk in disks:
+        size = _disk_size_gib(disk)
+        if size is None:
+            continue
+        dtype = _disk_type(disk)
+        if "nonreplicated" in dtype or "nrd" in dtype:
+            total += size
+            found = True
+    if found:
+        return total
+    if not is_ghrun(instance):
+        return None
+    ram = instance_ram_gib(instance) or 0.0
+    cores = instance_cores(instance) or 0.0
+    if ram <= 16 and cores <= 8:
+        return 186.0
+    return _RELW_SIZE["nrd_ssd_gb"]
 
 
 def age_sec(now: datetime, moment: Optional[datetime]) -> Optional[float]:
@@ -630,6 +679,7 @@ def append_runner_summary(
             free_value=float(len(idle)),
             cores=sum(item["cores"] or 0 for item in busy),
             ram_gib=sum(item["ram"] or 0 for item in busy),
+            nrd_gib=sum(item["nrd"] or 0 for item in busy),
             limit_value=sum(item["ram"] or 0 for item in ghruns),
         )
     )
@@ -642,6 +692,7 @@ def append_runner_summary(
             usage_value=float(len(idle)),
             cores=sum(item["cores"] or 0 for item in idle),
             ram_gib=sum(item["ram"] or 0 for item in idle),
+            nrd_gib=sum(item["nrd"] or 0 for item in idle),
         )
     )
     rows.append(
@@ -695,6 +746,7 @@ def build_snapshot_rows(
         name = unique_name(instance, used)
         cores = instance_cores(instance)
         ram = instance_ram_gib(instance)
+        nrd = instance_nrd_gib(instance)
         created = parse_datetime(instance.get("created_at"))
         zone = instance_zone(instance) or None
         if is_ghrun(instance):
@@ -706,6 +758,7 @@ def build_snapshot_rows(
                 "state": state,
                 "cores": cores,
                 "ram": ram,
+                "nrd": nrd,
                 "zone": zone or "",
             })
             rows.append(
@@ -723,6 +776,7 @@ def build_snapshot_rows(
                     zone=zone,
                     cores=cores,
                     ram_gib=ram,
+                    nrd_gib=nrd,
                     created_at=created,
                     age_sec=age_sec(sampled_at, created),
                 )
@@ -738,6 +792,7 @@ def build_snapshot_rows(
                     job_name=instance.get("_folder_name") or None,
                     cores=cores,
                     ram_gib=ram,
+                    nrd_gib=nrd,
                     created_at=created,
                     age_sec=age_sec(sampled_at, created),
                 )

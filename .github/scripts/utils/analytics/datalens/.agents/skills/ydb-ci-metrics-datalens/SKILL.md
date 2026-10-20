@@ -1,45 +1,47 @@
 ---
 name: ydb-ci-metrics-datalens
-description: "Edit, pull, or publish the CI metrics DataLens dashboard, charts, and datasets in .github/scripts/utils/analytics/datalens. Adding measurements to analytics/ci_metrics belongs in github_actions."
+description: "Pull, edit, or publish the live CI metrics DataLens dashboard. Chart JS and SQL are not in git: pull first. Adding rows to analytics/ci_metrics or analytics/ci_capacity belongs in github_actions."
 ---
 
 # CI metrics DataLens
 
 Live dashboard: https://datalens.ru/135ob2ntmr0ok-ci-metrics
-Workbook `ev4an7f2ncmk2`, org `bpfssp32nspchhs4df3c`.
-CLI: `.github/scripts/utils/analytics/datalens/dl.py`.
-Do not invent RPC payloads; the CLI already has the working shapes.
+CLI: `.github/scripts/utils/analytics/datalens/dl.py` from the repo root.
+Do not invent RPC payloads; use `dl.py`. Do not commit `objects/`.
 
 ## Source map
 
-Paths are relative to `.github/scripts/utils/analytics/datalens/`.
-
 | Responsibility | Source |
 |---|---|
-| Object ids | `manifest.json` |
-| Duration / Gantt / p-diff JS | `objects/charts/<name>/{sources,prepare}.js` |
-| Dataset YQL | `objects/datasets/<name>/query.sql` |
-| Selectors and layout | `objects/dashboard/entry.json` |
-| Pull, diff, publish, YDB | `dl.py` |
+| Object ids | `.github/scripts/utils/analytics/datalens/manifest.json` |
+| Tabs, charts, tables | [dashboard.md](references/dashboard.md) |
 | Must-not-break rules | [requirements.md](references/requirements.md) |
-| Table that feeds the dash | `../github_actions/ci_metrics.py`, `../github_actions/README.md` |
+| Pull, diff, publish, YDB | `.github/scripts/utils/analytics/datalens/dl.py` |
+| Job and step timings | `.github/scripts/utils/analytics/github_actions/` → `analytics/ci_metrics` |
+| Runner quota snapshots | `.github/scripts/utils/analytics/github_actions/export_runner_capacity.py` → `analytics/ci_capacity` |
 
 ## Trace the changed contract
 
-1. `python3 dl.py pull` (or `pull <name>`) so `objects/` matches live.
-2. Edit SQL or JS in `objects/`. Keep `(run_id, run_attempt)` as one run.
-3. `python3 dl.py check` then `python3 dl.py diff`.
-4. `python3 dl.py publish --apply <name>`. Charts: save, then publish with the draft `revId`. Datasets: `data.dataset`, not a root `dataset`.
-5. A new dataset or editor chart: `python3 dl.py create dataset <name> --title "..." --apply`, then `python3 dl.py create chart <name> --title "..." --dataset <name> --apply`. A new dashboard tab: `python3 dl.py create tab --tab-id <id> --title "..." --widget widgetId|title|chartName|height --apply`. Do not post createDataset / createEditorChart bodies yourself.
-6. After publish, `python3 dl.py pull <name>` and confirm your marker is in the published object (`getEditorChart` without `revId` is published).
+`PY=.github/scripts/utils/analytics/datalens/dl.py`
 
-To read `analytics/ci_metrics`: `python3 dl.py table-info`, then `query` / `describe`, or MCP `user-ydb-qa` `ydb_query`. Do not use `test_results/test_runs_column` as the only source for a fresh PR-check job.
+1. `python3 "$PY" pull` (or `pull <name>`) so `objects/` matches live.
+2. Edit the pulled SQL or JS under `.github/scripts/utils/analytics/datalens/objects/`. Each `(run_id, run_attempt)` is its own run; do not merge attempts.
+3. `python3 "$PY" check` then `python3 "$PY" diff`.
+4. `python3 "$PY" publish --apply <name>`. `dl.py` saves, then publishes with the draft `revId`.
+5. After publish, `python3 "$PY" pull <name>` and confirm the edit is in the pulled file.
+6. Leave `objects/` untracked.
+
+A name that is not in `manifest.json`: `python3 "$PY" create dataset <name> --title "..." --apply` needs `objects/datasets/<name>/query.sql` first, then `create chart <name> --title "..." --dataset <name> --apply`. A new tab: `create tab --tab-id <id> --title "..." --widget widgetId|title|chartName|height --apply` after `pull dashboard`. Do not create a name that already has an id.
+
+To read `analytics/ci_metrics`: `python3 "$PY" table-info`, then `query` / `describe`, or MCP `user-ydb-qa` `ydb_query`. `describe analytics/ci_capacity` for the runner table. Do not use `test_results/test_runs_column` as the only source for a fresh PR-check job.
 
 Auth: `DATALENS_TOKEN` or `yc iam create-token`. YDB: `YDB_TOKEN`, `YDB_SA_KEY_FILE`, or `yc`. Never commit a token.
 
 ## Validation
 
 ```bash
-python3 -m unittest discover -s .github/scripts/utils/tests/analytics/datalens -p 'test_*.py'
-python3 .github/scripts/utils/analytics/datalens/dl.py check
+PY=.github/scripts/utils/analytics/datalens/dl.py
+python3 "$PY" pull
+python3 "$PY" check
+python3 "$PY" diff
 ```

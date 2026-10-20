@@ -1,7 +1,8 @@
 # Requirements (do not revert)
 
 A GitHub re-run keeps `run_id` and increments `run_attempt`. Duration, Gantt,
-p90, and the Run selector treat `(run_id, run_attempt)` as separate runs.
+p90, and the Run selector treat each `(run_id, run_attempt)` as its own run.
+Do not merge attempts.
 
 ## Duration dataset (`duration-ds`)
 
@@ -34,10 +35,12 @@ Do not put the icon first. Join `started_at` and `run_icon` on `(run_id, run_att
 
 - Job status selector is dataset-backed. Default `success` and `failure`. Do not preselect `in_progress`.
 - Run selector (`selrun`) reads `run_label` from `pickers-ds`. Width 520px.
-- Keep the Capacity tab. Zone selector default is `ru-central1-d`.
+- Keep the Runners capacity tab (`captab01`). Zone selector default is `ru-central1-d`.
+- Dates uses the same `interval` param on both tabs. Default last 4 days. Capacity `sources.js` apply it before the row limit.
 
 ## Publish
 
 - `getEditorChart` without `revId` is published.
 - Chart and dashboard publish: `mode=save`, then `mode=publish` with the draft `revId` on the entry. Do not use `entry.id` as a revision.
 - Dataset update: `{datasetId, workbookId, data: {dataset}}`. A root `dataset` field is 400.
+- Do not commit `objects/`.

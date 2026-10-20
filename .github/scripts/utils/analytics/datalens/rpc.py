@@ -131,7 +131,12 @@ def update_dashboard(token, org_id, entry, mode, rev_id=None, workbook_id=None, 
         body["workbookId"] = workbook_id
     if dashboard_id:
         body["dashboardId"] = dashboard_id
-    return rpc("updateDashboard", body, token, org_id)
+    try:
+        return rpc("updateDashboard", body, token, org_id)
+    except DataLensError as exc:
+        if exc.status != 400 or ("workbookId" not in body and "dashboardId" not in body):
+            raise
+        return rpc("updateDashboard", {"mode": mode, "entry": _with_rev_id(entry, rev_id)}, token, org_id)
 
 
 def validate_dataset(token, org_id, dataset, workbook_id, dataset_id):

@@ -20,7 +20,6 @@ OBJECT_DIRS = {
     "capacity-use": OBJECTS / "charts" / "capacity-use",
     "capacity-pool": OBJECTS / "charts" / "capacity-pool",
     "capacity-queue": OBJECTS / "charts" / "capacity-queue",
-    "capacity-demand": OBJECTS / "charts" / "capacity-demand",
     "duration-ds": OBJECTS / "datasets" / "duration",
     "gantt-ds": OBJECTS / "datasets" / "gantt",
     "pickers-ds": OBJECTS / "datasets" / "pickers",

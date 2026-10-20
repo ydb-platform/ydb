@@ -20,6 +20,7 @@ from github_actions.export_runner_capacity import (
     github_jobs_incomplete,
     hosts_that_fit,
     index_runner_jobs,
+    instance_nrd_gib,
     enrich_run_pull,
     is_ghrun,
     is_github_hosted_job,
@@ -58,6 +59,24 @@ def vm(name, cores, ram_gib, created, labels=None, status="RUNNING", zone=""):
     if zone:
         row["zoneId"] = zone
     return row
+
+
+class DiskSizeTest(unittest.TestCase):
+    def test_ghrun_defaults_to_relw_nrd(self):
+        self.assertEqual(instance_nrd_gib(vm("ghrun-a", 64, 256, "2026-10-02T14:23:23Z", {"ghrun": "a"})), 2417.0)
+
+    def test_tiny_ghrun_defaults_to_186(self):
+        self.assertEqual(instance_nrd_gib(vm("ghrun-tiny", 4, 8, "2026-10-02T14:23:23Z", {"ghrun": "tiny"})), 186.0)
+
+    def test_explicit_nrd_disk_wins(self):
+        row = vm("ghrun-a", 64, 256, "2026-10-02T14:23:23Z", {"ghrun": "a"})
+        row["secondary_disks"] = [{
+            "disk_spec": {"type_id": "network-ssd-nonreplicated", "size": str(int(186 * (1024 ** 3)))},
+        }]
+        self.assertEqual(instance_nrd_gib(row), 186.0)
+
+    def test_other_vm_without_disks_has_no_nrd(self):
+        self.assertIsNone(instance_nrd_gib(vm("cachesrv", 32, 96, "2026-10-02T14:23:23Z")))
 
 
 class QuotaMathTest(unittest.TestCase):
@@ -128,6 +147,7 @@ class SnapshotRowsTest(unittest.TestCase):
         }, True)
         by_key = {(row["kind"], row["name"]): row for row in rows}
         self.assertEqual(by_key[("runner", "ghrun-busy")]["state"], "busy")
+        self.assertEqual(by_key[("runner", "ghrun-busy")]["nrd_gib"], 2417.0)
         self.assertEqual(by_key[("runner", "ghrun-busy")]["workflow"], "PR-check")
         self.assertEqual(by_key[("runner", "ghrun-idle")]["state"], "idle")
         self.assertEqual(by_key[("runner", "ghrun-new")]["state"], "idle")

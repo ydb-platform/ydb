@@ -1,50 +1,29 @@
 # CI metrics DataLens
 
-Source of the live dashboard [CI metrics](https://datalens.ru/135ob2ntmr0ok-ci-metrics).
-Charts, datasets, and dashboard JSON live here. Measurements into
-`analytics/ci_metrics` stay in [`../github_actions/`](../github_actions/README.md).
+Live dashboard [CI metrics](https://datalens.ru/135ob2ntmr0ok-ci-metrics).
+Chart JS, dataset SQL, and dashboard JSON are not stored here. Pull them,
+edit, publish. Measurements stay in [`../github_actions/`](../github_actions/README.md).
 
-## Layout
-
-| Path | What |
-| --- | --- |
-| `manifest.json` | org, workbook, object ids |
-| `objects/charts/*/sources.js` + `prepare.js` | editor-chart JS |
-| `objects/datasets/*/query.sql` | dataset YQL |
-| `objects/dashboard/entry.json` | tabs, selectors, params |
-| `dl.py` | pull / diff / publish / YDB |
-
-Auth for DataLens: `DATALENS_TOKEN` or `yc iam create-token`.
-Auth for YDB: `YDB_TOKEN`, `YDB_SA_KEY_FILE`, or `yc`. Endpoint comes from
-`.github/config/ydb_qa_config.json`.
+What each tab and chart is: [dashboard.md](.agents/skills/ydb-ci-metrics-datalens/references/dashboard.md).
+How an agent must work: [`AGENTS.md`](AGENTS.md) and
+[the skill](.agents/skills/ydb-ci-metrics-datalens/SKILL.md).
 
 ## CLI
+
+From the repo root:
 
 ```bash
 PY=.github/scripts/utils/analytics/datalens/dl.py
 python3 "$PY" list
-python3 "$PY" pull                 # live → objects/
-python3 "$PY" check                # local invariants, no network
-python3 "$PY" diff                 # local vs live
-python3 "$PY" publish              # dry-run
+python3 "$PY" pull                 # live → objects/ (do not commit)
+python3 "$PY" check
+python3 "$PY" diff
 python3 "$PY" publish --apply gantt duration-ds
-python3 "$PY" create dataset capacity-ds --title "CI capacity" --apply
-python3 "$PY" create chart capacity-tight --title "Quota" --dataset capacity-ds --apply
-python3 "$PY" create tab --tab-id captab01 --title Capacity --widget "captight01|Quota|capacity-tight|14" --apply
-python3 "$PY" sql gantt-ds
 python3 "$PY" table-info
 python3 "$PY" query --preset run
 python3 "$PY" describe analytics/ci_metrics
 ```
 
-`getEditorChart` without `revId` is the **published** revision. Publish is
-save, then publish with the draft `revId`. `updateDataset` wraps the body as
-`{datasetId, workbookId, data: {dataset}}`. New datasets and editor charts
-are `dl.py create` (`validateDataset` + `createDataset`, `createEditorChart`).
-Do not post those RPC bodies by hand.
-
-## Agent instructions
-
-Read [`AGENTS.md`](AGENTS.md) and
-[`.agents/skills/ydb-ci-metrics-datalens/SKILL.md`](.agents/skills/ydb-ci-metrics-datalens/SKILL.md).
-Invariants: [`references/requirements.md`](.agents/skills/ydb-ci-metrics-datalens/references/requirements.md).
+`create` is only for a name that is not already in `manifest.json`.
+Auth for DataLens: `DATALENS_TOKEN` or `yc iam create-token`.
+Auth for YDB: `YDB_TOKEN`, `YDB_SA_KEY_FILE`, or `yc`.

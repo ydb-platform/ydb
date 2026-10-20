@@ -142,7 +142,7 @@ def check_texts(texts=None):
     if pdiff_src and "'run_attempt'" not in pdiff_src:
         errors.append("pdiff: sources.js must select run_attempt")
 
-    for name in ("duration", "pdiff"):
+    for name in ("duration", "pdiff", "capacity-use", "capacity-pool", "capacity-tight", "capacity-queue"):
         src = (texts.get(name) or {}).get("sources") or ""
         if not src:
             continue
@@ -174,8 +174,10 @@ def check_texts(texts=None):
         if IN_PROGRESS_COALESCE.search(dash):
             errors.append("dashboard: do not invent in_progress via COALESCE")
         if '"id": "selrun"' in dash and "captab01" not in dash:
-            errors.append("dashboard: keep the Capacity tab")
+            errors.append("dashboard: keep the Runners capacity tab")
         if "selcapzone" in dash and "ru-central1-d" not in dash:
             errors.append("dashboard: cap_zone default must be ru-central1-d")
+        if "selcapdates" in dash and "__interval___relative_-4d___relative_+0d" not in dash:
+            errors.append("dashboard: Capacity Dates default must be last 4 days")
 
     return errors

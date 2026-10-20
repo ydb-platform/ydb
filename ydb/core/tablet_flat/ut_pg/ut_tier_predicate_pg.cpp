@@ -129,12 +129,47 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(!int8.Matches("-863999", seconds, now, offset));
     }
 
-    Y_UNIT_TEST(DateThresholdBeforeEpoch) {
-        // Pg date thresholds before the epoch are not supported yet, it must be reported
-        TPgCase pg(DATEOID);
-        const auto predicate = pg.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO,
-            TInstant::Days(10), TDuration::Days(20));
-        UNIT_ASSERT_VALUES_EQUAL(predicate.GetUnrepresentableTierIds(), TVector<ui32>{1});
+    Y_UNIT_TEST(ThresholdsBeforeEpoch) {
+        // now - offset is 1969-12-22T00:00:00, before both the Unix and the Postgres epochs
+        const TInstant now = TInstant::Days(10);
+        const TDuration offset = TDuration::Days(20);
+
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("1969-12-21", {}, now, offset));
+        UNIT_ASSERT(date.Matches("1969-12-22", {}, now, offset));
+        UNIT_ASSERT(!date.Matches("1969-12-23", {}, now, offset));
+        UNIT_ASSERT(!date.Matches("2000-01-01", {}, now, offset));
+        UNIT_ASSERT(date.Matches("0001-01-01", {}, now, offset));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("1969-12-22 00:00:00", {}, now, offset));
+        UNIT_ASSERT(!timestamp.Matches("1969-12-22 00:00:00.000001", {}, now, offset));
+    }
+
+    Y_UNIT_TEST(AroundPostgresEpoch) {
+        // Postgres stores dates and timestamps relative to 2000-01-01
+        const TInstant now = TInstant::Seconds(946684800) + TDuration::Days(1);
+        const TDuration offset = TDuration::Days(1);
+
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("1999-12-31", {}, now, offset));
+        UNIT_ASSERT(date.Matches("2000-01-01", {}, now, offset));
+        UNIT_ASSERT(!date.Matches("2000-01-02", {}, now, offset));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("1999-12-31 23:59:59.999999", {}, now, offset));
+        UNIT_ASSERT(timestamp.Matches("2000-01-01 00:00:00", {}, now, offset));
+        UNIT_ASSERT(!timestamp.Matches("2000-01-01 00:00:00.000001", {}, now, offset));
+    }
+
+    Y_UNIT_TEST(IntegerRangeEdges) {
+        const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+        TPgCase int4(INT4OID);
+        UNIT_ASSERT(int4.Matches(ToString(Min<i32>()), seconds));
+        UNIT_ASSERT(!int4.Matches(ToString(Max<i32>()), seconds));
+        TPgCase int8(INT8OID);
+        UNIT_ASSERT(int8.Matches(ToString(Min<i64>()), seconds));
+        UNIT_ASSERT(!int8.Matches(ToString(Max<i64>()), seconds));
     }
 
     Y_UNIT_TEST(Unsupported) {

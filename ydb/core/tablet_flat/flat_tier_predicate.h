@@ -99,9 +99,6 @@ namespace NTable {
          * Tier ids of rules whose threshold could not be converted into the
          * column type on the last Bind(). Such rules never match, so callers
          * should report them instead of silently skipping tiering.
-         *
-         * Thresholds before the epoch are not supported for Pg date/timestamp
-         * columns and are reported here.
          */
         TVector<ui32> GetUnrepresentableTierIds() const;
 
@@ -130,6 +127,7 @@ namespace NTable {
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
+        ui32 PgTypeId = 0; // Postgres type oid of a Pg column
         TPos Pos = Max<TPos>();
         TVector<TThreshold> Thresholds;
         bool Bound = false;

@@ -4,6 +4,10 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/cast.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
+
+#include <type_traits>
 
 namespace NKikimr {
 namespace NTable {
@@ -23,6 +27,20 @@ namespace {
         Int4,
         Int8,
     };
+
+    // Postgres dates and timestamps count from 2000-01-01
+    constexpr i64 PgEpochDays = 10957;
+    constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
+
+    // Pg columns hold the Postgres binary (send/recv) format: the supported
+    // types are big-endian integers of a fixed width, so they are compared
+    // as integers without decoding them through Postgres (which allocates)
+    template <typename T>
+    T ReadPgInteger(const TCell& cell) {
+        Y_ENSURE(cell.Size() == sizeof(T), "Unexpected Pg value size " << cell.Size());
+        using TUnsigned = std::make_unsigned_t<T>;
+        return static_cast<T>(InetToHost(ReadUnaligned<TUnsigned>(cell.Data())));
+    }
 
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
     constexpr ui32 PgInt8Oid = 20;
@@ -156,6 +174,7 @@ namespace {
 
         Type = info->TypeInfo;
         Pos = info->Pos;
+        PgTypeId = Type.GetTypeId() == NScheme::NTypeIds::Pg ? NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()) : 0;
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
@@ -213,14 +232,6 @@ namespace {
             }
         };
 
-        auto toPg = [&](const TString& text) -> TMaybe<TString> {
-            auto converted = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
-            if (converted.Error) {
-                return Nothing();
-            }
-            return std::move(converted.Str);
-        };
-
         switch (Type.GetTypeId()) {
             case NScheme::NTypeIds::Date:
                 setUnsigned(FloorDiv(thresholdUs, MicrosPerDay));
@@ -261,11 +272,24 @@ namespace {
                 break;
             case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
-                    case EPgKind::Date:
+                    case EPgKind::Date: {
+                        // A date denotes the start of its day
+                        const i64 days = FloorDiv(thresholdUs, MicrosPerDay) - PgEpochDays;
+                        if (days > Max<i32>()) {
+                            result.Kind = EKind::AlwaysMatch;
+                        } else if (days < Min<i32>()) {
+                            result.Kind = EKind::NeverMatch;
+                        } else {
+                            setSigned(days);
+                        }
+                        break;
+                    }
                     case EPgKind::Timestamp:
-                        // TInstant cannot express moments before the epoch
-                        if (thresholdUs >= 0) {
-                            setSerialized(toPg(TInstant::MicroSeconds(thresholdUs).ToString()));
+                        if (thresholdUs < Min<i64>() + PgEpochMicros) {
+                            // Every value is after such a threshold
+                            result.Kind = EKind::NeverMatch;
+                        } else {
+                            setSigned(thresholdUs - PgEpochMicros);
                         }
                         break;
                     case EPgKind::Int4:
@@ -293,7 +317,7 @@ namespace {
                         } else if (value < typeMin) {
                             result.Kind = EKind::NeverMatch;
                         } else {
-                            setSerialized(toPg(ToString(value)));
+                            setSigned(value);
                         }
                         break;
                     }
@@ -336,10 +360,16 @@ namespace {
             case NScheme::NTypeIds::DyNumber:
                 return cell.AsBuf() <= TStringBuf(threshold.Serialized);
             case NScheme::NTypeIds::Pg:
-                return NPg::PgNativeBinaryCompare(
-                    cell.Data(), cell.Size(),
-                    threshold.Serialized.data(), threshold.Serialized.size(),
-                    Type.GetPgTypeDesc()) <= 0;
+                switch (PgTypeId) {
+                    case PgDateOid:
+                    case PgInt4Oid:
+                        return ReadPgInteger<i32>(cell) <= threshold.Signed;
+                    case PgTimestampOid:
+                    case PgInt8Oid:
+                        return ReadPgInteger<i64>(cell) <= threshold.Signed;
+                    default:
+                        Y_ENSURE(false, "Unreachable");
+                }
             default:
                 Y_ENSURE(false, "Unreachable");
         }

@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/config/yq_issue.h>
 
 #include <library/cpp/uri/uri.h>
+#include <library/cpp/json/json_reader.h>
 #include <util/string/ascii.h>
 #include <util/string/cast.h>
 
@@ -52,11 +53,27 @@ NYql::TIssues ValidateExternalService(const FederatedQuery::ExternalService& ser
     }
 
     const auto& auth = service.auth();
-    if (service.has_auth() == service.has_tvm_auth()) {
-        error("Exactly one of external_service.auth and external_service.tvm_auth must be specified");
+    if (int(service.has_auth()) + int(service.has_tvm_auth()) + int(service.has_wasm_auth()) != 1) {
+        error("Exactly one of external_service.auth, external_service.tvm_auth and external_service.wasm_auth must be specified");
     }
     if (service.has_auth() && auth.identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
         error("external_service.auth is not specified");
+    }
+    if (service.has_wasm_auth() && (service.wasm_auth().provider().empty() || service.wasm_auth().provider().size() > 128 ||
+                                       service.wasm_auth().parameters().empty() || service.wasm_auth().parameters().size() > 65536)) {
+        error("Invalid external_service.wasm_auth");
+    }
+    if (service.has_wasm_auth()) {
+        NJson::TJsonValue params;
+        if (!NJson::ReadJsonTree(service.wasm_auth().parameters(), &params) || !params.IsMap() || params.GetMap().size() > 16) {
+            error("Invalid external_service.wasm_auth parameters");
+        } else {
+            for (const auto& [name, value] : params.GetMap()) {
+                if (name.empty() || name.size() > 128 || !value.IsString() || value.GetString().size() > 4096) {
+                    error("Invalid external_service.wasm_auth parameter");
+                }
+            }
+        }
     }
     if (service.has_tvm_auth()) {
         const auto& tvm = service.tvm_auth();

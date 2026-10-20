@@ -129,6 +129,18 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         {
             return status;
         }
+    } else if (authMethod == "WASM") {
+        const auto provider = GetOrEmpty(settings, "auth_provider");
+        const auto parameters = GetOrEmpty(settings, "auth_parameters");
+        if (sourceType != "ExternalService" || provider.empty() || parameters.empty()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST,
+                "WASM requires ExternalService, AUTH_PROVIDER and AUTH_PARAMETERS");
+        }
+        auto& properties = *externalDataSourceDesc.MutableProperties()->MutableProperties();
+        properties["auth_provider"] = provider;
+        properties["auth_parameters"] = parameters;
+        // Provider-specific references are resolved at runtime, under the executing user.
+        externalDataSourceDesc.MutableAuth()->MutableNone();
     } else if (authMethod == "TVM") {
         const auto sourceId = GetOrEmpty(settings, "tvm_source_id");
         const auto destinationId = GetOrEmpty(settings, "tvm_destination_id");
@@ -176,6 +188,8 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
         "database_id",   // managed YDB
         "use_tls",
         "ca_certificate",   // ExternalService
+        "auth_provider",   // ExternalService
+        "auth_parameters",   // ExternalService
         "tvm_source_id",   // ExternalService
         "tvm_destination_id",   // ExternalService
         "schema",   // managed PG, GP

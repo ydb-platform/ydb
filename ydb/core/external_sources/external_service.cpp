@@ -37,6 +37,17 @@ void TServiceConnectionSettings::Validate() const {
     }
     Require(CaCertificate.size() <= 65536 && (UseTls || CaCertificate.empty()),
         "ExternalService CA_CERTIFICATE requires TLS and must not exceed 65536 bytes");
+    Require(AuthProvider.empty() == AuthParameters.empty(), "WASM auth requires provider and parameters");
+    if (!AuthProvider.empty()) {
+        NJson::TJsonValue parameters;
+        Require(AuthProvider.size() <= 128 && AuthParameters.size() <= 65536 && NJson::ReadJsonTree(AuthParameters, &parameters) &&
+                    parameters.IsMap(), "Invalid WASM auth parameters");
+        Require(SecretReference.empty() && !TvmSourceId && !TvmDestinationId, "WASM auth cannot be combined with other credentials");
+        for (const auto& [name, value] : parameters.GetMap()) {
+            Require(!name.empty() && name.size() <= 128 && value.IsString() && value.GetString().size() <= 4096, "Invalid WASM auth parameter");
+        }
+        Require(parameters.GetMap().size() <= 16, "Too many WASM auth parameters");
+    }
     Require((!TvmSourceId && !TvmDestinationId) || (TvmSourceId && TvmDestinationId && !SecretReference.empty()),
         "ExternalService TVM requires nonzero source/destination ids and a secret reference");
 }
@@ -56,6 +67,8 @@ TServiceConnectionSettings ParseServiceConnection(const NKikimrSchemeOp::TExtern
     Require(tls == "true" || tls == "false", "ExternalService USE_TLS must be true or false");
     settings.UseTls = tls == "true";
     settings.CaCertificate = get("ca_certificate");
+    settings.AuthProvider = get("auth_provider");
+    settings.AuthParameters = get("auth_parameters");
     if (description.GetAuth().has_token()) {
         settings.SecretReference = description.GetAuth().GetToken().GetTokenSecretName();
         Require(!settings.SecretReference.empty(), "ExternalService requires a secret reference");
@@ -80,6 +93,8 @@ TString TServiceConnectionSettings::Serialize() const {
     value["tls"] = UseTls;
     value["ca"] = CaCertificate;
     value["secret_ref"] = SecretReference;
+    value["auth_provider"] = AuthProvider;
+    value["auth_parameters"] = AuthParameters;
     value["tvm_source"] = TvmSourceId;
     value["tvm_destination"] = TvmDestinationId;
     return NJson::WriteJson(value, false);
@@ -94,6 +109,12 @@ TServiceConnectionSettings TServiceConnectionSettings::Deserialize(const TString
     settings.UseTls = value["tls"].GetBooleanSafe();
     settings.CaCertificate = value["ca"].GetStringSafe();
     settings.SecretReference = value["secret_ref"].GetStringSafe();
+    if (value.Has("auth_provider")) {
+        settings.AuthProvider = value["auth_provider"].GetStringSafe();
+    }
+    if (value.Has("auth_parameters")) {
+        settings.AuthParameters = value["auth_parameters"].GetStringSafe();
+    }
     const auto source = value["tvm_source"].GetUIntegerSafe();
     const auto destination = value["tvm_destination"].GetUIntegerSafe();
     Require(source <= Max<ui32>() && destination <= Max<ui32>(), "Invalid ExternalService TVM ids");

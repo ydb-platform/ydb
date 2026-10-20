@@ -22,6 +22,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/base64
     library/cpp/containers/absl
     library/cpp/html/pcdata
     library/cpp/protobuf/interop

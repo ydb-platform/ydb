@@ -241,7 +241,9 @@ Y_UNIT_TEST_SUITE(TWasmAuthModuleTest) {
     }
 
     Y_UNIT_TEST(AsyncSecretNetworkAndCompartmentCache) {
-        TExecutorFixture executor;
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto metrics = std::make_shared<TRequestMetrics>(counters);
+        TExecutorFixture executor({}, metrics);
         THttpMock issuer;
         auto application = CreateRegistryCompartment({});
         auto artifact = std::make_shared<TWasmModuleArtifact>();
@@ -317,6 +319,13 @@ Y_UNIT_TEST_SUITE(TWasmAuthModuleTest) {
         UNIT_ASSERT(future.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
         UNIT_ASSERT(future.get() == EOperationStatus::Ready);
         cancel();
+        Eventually([&] {
+            return metrics->Get("auth.test", EMetricKind::Http)->InFlight->Val() == 0 &&
+                   metrics->Get("auth.test", EMetricKind::Internal)->InFlight->Val() == 0;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Get("auth.test", EMetricKind::Http)->Started->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Get("auth.test", EMetricKind::Internal)->Started->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Get("app.call", EMetricKind::Http)->Started->Val(), 1);
         UNIT_ASSERT(secretCancelled);   // Ready secret operation also releases its owner.
         module->Close();
         UNIT_ASSERT_VALUES_EQUAL(module->Stats().Bytes, 0);

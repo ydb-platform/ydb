@@ -18,6 +18,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/base64
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider

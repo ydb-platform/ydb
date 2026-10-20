@@ -11,6 +11,8 @@ PEERDIR(
 DEPENDS(ydb/tests/tools/fqrun)
 
 DATA(
+    arcadia/ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm
+    arcadia/ydb/udfs/wasm/auth_test/manifest.json
     arcadia/ydb/tests/tools/fqrun/configuration/app_config.conf
     arcadia/ydb/udfs/wasm/profile/ut/data/profile.wasm
     arcadia/ydb/udfs/wasm/profile/manifest.json

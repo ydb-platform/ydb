@@ -18,7 +18,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_port_allocator import KikimrPortManagerPortAllocator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.fq_runner.fq_client import FederatedQueryClient
-from test_query import query, start
+from test_query import query, start, batch_query
 
 
 def wait_for_store_storage(endpoint, database):
@@ -91,7 +91,7 @@ def trace_collector():
 
 
 @pytest.fixture
-def store_server(trace_collector):
+def store_server(trace_collector, services, request):
     ports = KikimrPortManagerPortAllocator()
     config = KikimrConfigGenerator(
         port_allocator=ports, extra_feature_flags=['enable_wasm_compile_controller'],
@@ -116,6 +116,12 @@ def store_server(trace_collector):
         settings = config.yaml_config['federated_query_config']
         settings.update(enabled=True, enable_task_counters=True)
         settings['wasm_services'] = {'enabled': True, 'call_timeout_ms': 180000, 'trace_sample_per_million': 1000000}  # UDF_STORE is the default.
+        if getattr(request, 'param', False):
+            settings['wasm_services'].update(
+                auth_secret_database=database,
+                auth_providers=[{'provider': 'TEST_AUTH', 'module': 'TestAuth',
+                                 'endpoint': f'http://127.0.0.1:{services.http.server_port}', 'alias': 'auth.test'}],
+            )
         settings['common']['keep_internal_errors'] = True
         settings['control_plane_storage'].update(
             available_connection=['EXTERNAL_SERVICE'], super_users=['root@builtin'],
@@ -324,3 +330,111 @@ def test_kqp_service_store_http_and_grpc(store_server, services):
                      dict(subsystem='wasm_services', component='requests', protocol=protocol,
                           call_alias='profile.lookup', sensor='RequestsCompleted', outcome='success').items())]
         assert len(completed) == 1 and completed[0] >= 1, sensors
+
+
+@pytest.mark.parametrize('store_server', [True], indirect=True)
+@pytest.mark.parametrize('engine', ['kqp', 'fq'])
+def test_wasm_auth_store_full_flow(store_server, services, trace_collector, engine):
+    """Actual ydbd: Store upload -> secret/connection -> auth WASM -> service -> SQL."""
+    endpoint, database, monitoring_port = store_server
+    services.auth_secret = b'public-ydbd-auth-secret'
+    metadata = (('x-ydb-database', database),)
+    with grpc.insecure_channel(endpoint) as channel:
+        stub = UdfServiceStub(channel)
+        for directory, artifact in (('profile', 'profile'), ('auth_test', 'auth_test')):
+            base = 'ydb/udfs/wasm/' + directory
+            with open(yatest.common.source_path(base + '/manifest.json')) as source:
+                manifest = json.load(source)
+            with open(yatest.common.source_path(base + '/ut/data/' + artifact + '.wasm'), 'rb') as source:
+                upload(stub, metadata, manifest, source.read())
+            wait_for_module(stub, metadata, manifest['module_name'])
+
+    class DatabaseClient(FederatedQueryClient):
+        def _create_meta(self):
+            return super()._create_meta() + [('x-ydb-database', database)]
+
+    client = DatabaseClient('my_folder', endpoint) if engine == 'fq' else None
+    try:
+        with ydb.Driver(endpoint='grpc://' + endpoint, database=database,
+                        credentials=ydb.AccessTokenCredentials('root@builtin')) as driver:
+            driver.wait(timeout=30)
+            with ydb.QuerySessionPool(driver, size=1) as pool:
+                pool.execute_with_retries("CREATE SECRET auth_secret WITH (value='public-ydbd-auth-secret');")
+                for protocol, address in (('HTTP', f'http://127.0.0.1:{services.http.server_port}'),
+                                          ('GRPC', f'127.0.0.1:{services.grpc_port}')):
+                    name = 'auth_' + protocol.lower()
+                    parameters = json.dumps({'secret': database + '/auth_secret'})
+                    if engine == 'kqp':
+                        pool.execute_with_retries(f"""CREATE EXTERNAL DATA SOURCE `{name}` WITH (
+                            SOURCE_TYPE='ExternalService', LOCATION='{address}', PROTOCOL='{protocol}',
+                            USE_TLS='false', AUTH_METHOD='WASM', AUTH_PROVIDER='TEST_AUTH',
+                            AUTH_PARAMETERS='{parameters}');""")
+                        alias = database + '/' + name
+                    else:
+                        request = fq.CreateConnectionRequest()
+                        request.content.name = name
+                        request.content.acl.visibility = fq.Acl.Visibility.PRIVATE
+                        service = request.content.setting.external_service
+                        service.endpoint = address
+                        service.protocol = getattr(fq.ExternalService, protocol)
+                        service.insecure = True
+                        service.wasm_auth.provider = 'TEST_AUTH'
+                        service.wasm_auth.parameters = parameters
+                        client.create_connection(request)
+                        alias = name
+
+                    # A new query/compartment after rotation must resolve the current
+                    # schema secret, not reuse a secret or ticket from the last query.
+                    for rotated in (False, True):
+                        secret = b'public-ydbd-rotated-secret' if rotated else b'public-ydbd-auth-secret'
+                        services.auth_secret = secret
+                        pool.execute_with_retries("ALTER SECRET auth_secret WITH (value='%s');" % secret.decode())
+                        before = len(services.auth_requests)
+                        before_calls = len(services.requests)
+                        sql = batch_query(alias, range(1000, 1200))
+                        deadline = time.monotonic() + 90
+                        while True:
+                            if engine == 'kqp':
+                                try:
+                                    results = pool.execute_with_retries(sql)
+                                    rows = [(row.id, row.name, row.score) for row in results[0].rows]
+                                    break
+                                except ydb.Error as error:
+                                    issues = str(error)
+                            else:
+                                query_id = start(client, sql)
+                                client.wait_query_status(query_id, [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED])
+                                description = client.describe_query(query_id).result.query
+                                if description.meta.status == fq.QueryMeta.COMPLETED:
+                                    results = client.get_result_data(query_id, limit=200).result.result_set
+                                    rows = [(row.items[0].uint64_value, row.items[1].text_value, row.items[2].uint32_value)
+                                            for row in results.rows]
+                                    assert secret.decode() not in str(description)
+                                    assert 'synthetic-auth-ticket' not in str(description)
+                                    break
+                                issues = str(description.issue)
+                            assert time.monotonic() < deadline, issues
+                            assert 'Unknown' in issues or 'not loaded' in issues, issues
+                            time.sleep(0.5)
+                        assert sorted(rows) == [(id, 'Ada', 97) for id in range(1000, 1200)]
+                        requests = services.auth_requests[before:]
+                        assert requests and all(value == secret for value in requests)
+                        assert len(requests) < len(services.requests) - before_calls
+                        assert len(services.auth_headers) == len(services.requests)
+                        assert all(ticket == 'synthetic-auth-ticket' for _, ticket in services.auth_headers)
+    finally:
+        if client:
+            client.channel.close()
+
+    assert {'http', 'grpc'} <= {kind for kind, _, _ in services.requests}
+    from urllib.request import urlopen
+    group = 'kqp' if engine == 'kqp' else 'yq'
+    with urlopen(f'http://localhost:{monitoring_port}/counters/counters={group}/json', timeout=10) as response:
+        counters = response.read().decode()
+    for value in ('public-ydbd-auth-secret', 'public-ydbd-rotated-secret', 'synthetic-auth-ticket'):
+        assert value not in counters
+    sensors = json.loads(counters)['sensors']
+    for protocol, alias in (('http', 'profile.lookup'), ('grpc', 'profile.lookup'), ('http', 'auth.test')):
+        assert any(s.get('value', 0) > 0 and all(s['labels'].get(k) == v for k, v in
+                   dict(subsystem='wasm_services', component='requests', protocol=protocol,
+                        call_alias=alias, sensor='RequestsCompleted', outcome='success').items()) for s in sensors)

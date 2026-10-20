@@ -673,6 +673,34 @@ def test_streaming_mode_with_checkpoints(service, tmp_path, protocol, execution,
     assert all(request[0] == protocol for request in service.requests)
 
 
+@pytest.mark.parametrize('protocol', ['HTTP', 'GRPC'])
+def test_wasm_auth_file_secret(service, tmp_path, protocol):
+    service.auth_secret = b'public-test-secret'
+    runner = Runner(tmp_path, service)
+    auth_root = Path(yatest.common.source_path('ydb/udfs/wasm/auth_test'))
+    config = ('Modules { ModulePath: %s ManifestPath: %s } '
+              'AuthProviders { Provider: "TEST_AUTH" Module: "TestAuth" Endpoint: %s Alias: "auth.test" }') % (
+        json.dumps(str(auth_root / 'ut/data/auth_test.wasm')),
+        json.dumps(str(auth_root / 'manifest.json')),
+        json.dumps('http://127.0.0.1:%d' % service.http.server_port))
+    runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { ' + config, 1))
+    endpoint = 'http://127.0.0.1:%d' % service.http.server_port if protocol == 'HTTP' else '127.0.0.1:%d' % service.grpc_port
+    ddl = connection_ddl('auth_service', endpoint, protocol, auth='WASM')
+    ddl = ddl.replace("AUTH_METHOD = \"WASM\"", 'AUTH_METHOD = "WASM", AUTH_PROVIDER = "TEST_AUTH", AUTH_PARAMETERS = ' +
+                      json.dumps(json.dumps({'secret': 'key'})))
+    (tmp_path / 'auth.sql').write_text(ddl)
+    (tmp_path / 'auth-secrets.json').write_text(json.dumps({'key': service.auth_secret.decode()}))
+    options = ['--init-query=' + str(tmp_path / 'auth.sql'), '--secrets-file=' + str(tmp_path / 'auth-secrets.json')]
+    assert runner.wait(runner.start('', sql=profile_query('auth_service', range(1000, 1200)), extra=options)) == 0, runner.output()
+    assert len(runner.rows()) == 200
+    assert service.auth_requests and all(value == service.auth_secret for value in service.auth_requests)
+    assert len(service.auth_requests) < len(service.requests)
+    assert len(service.auth_headers) == len(service.requests)
+    assert all(ticket == 'synthetic-auth-ticket' for _, ticket in service.auth_headers)
+    assert 'public-test-secret' not in runner.output()
+    assert 'synthetic-auth-ticket' not in runner.output()
+
+
 @pytest.mark.parametrize('protocol', ['http', 'grpc'])
 @pytest.mark.parametrize('default_rows,sql_rows', [(1, 8), (1, 64), (64, 1), (8, None), (0, None)])
 def test_sql_batch_size(service, tmp_path, protocol, default_rows, sql_rows):

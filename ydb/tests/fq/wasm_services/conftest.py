@@ -2,6 +2,7 @@ import concurrent.futures
 import http.server
 import json
 import ssl
+import struct
 import threading
 
 import grpc
@@ -21,6 +22,9 @@ from ydb.tests.tools.fq_runner.kikimr_utils import (
 class MockServices:
     def __init__(self, tls=False):
         self.requests = []
+        self.auth_secret = None
+        self.auth_requests = []
+        self.auth_headers = []
         self.lock = threading.Lock()
         self.started = threading.Event()
         self.release = threading.Event()
@@ -32,6 +36,22 @@ class MockServices:
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if self.path == '/auth':
+                    with owner.lock:
+                        owner.auth_requests.append(body)
+                    accepted = body == owner.auth_secret
+                    ticket = b'synthetic-auth-ticket'
+                    payload = struct.pack('<IIQ', 1, len(ticket), 60000) + ticket if accepted else b''
+                    self.send_response(200 if accepted else 403)
+                    self.send_header('Content-Length', str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
+                if not owner.check_wasm_auth('http', self.headers.get('X-Auth-Test')):
+                    self.send_response(401)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 if owner.pause_all:
                     owner.started.set()
                     owner.release.wait(owner.delay_timeout)
@@ -97,7 +117,16 @@ class MockServices:
             self.grpc.add_insecure_port('127.0.0.1:0')
         self.grpc.start()
 
+    def check_wasm_auth(self, protocol, ticket):
+        if self.auth_secret is None:
+            return True
+        with self.lock:
+            self.auth_headers.append((protocol, ticket))
+        return ticket == 'synthetic-auth-ticket'
+
     def lookup(self, request, context):
+        if not self.check_wasm_auth('grpc', dict(context.invocation_metadata()).get('x-auth-test')):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing test auth header')
         with self.lock:
             self.requests.append(('grpc', request.id, dict(context.invocation_metadata()).get('authorization')))
         if request.id == 999:
@@ -108,6 +137,8 @@ class MockServices:
         return profile_pb2.ProfileReply(payload=profile.SerializeToString())
 
     def lookup_batch(self, request, context):
+        if not self.check_wasm_auth('grpc', dict(context.invocation_metadata()).get('x-auth-test')):
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, 'Missing test auth header')
         with self.lock:
             self.requests.append(('grpc', tuple(request.ids), dict(context.invocation_metadata()).get('authorization')))
         if 999 in request.ids:

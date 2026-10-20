@@ -1,5 +1,6 @@
 #include "module_source.h"
 
+#include <ydb/public/lib/udf/manifest/manifest.h>
 #include <ydb/services/udf_store/wasm/compile.h>
 
 #include <util/generic/yexception.h>
@@ -28,7 +29,7 @@ public:
 
     TWasmModuleArtifactPtr Load(const TString& name) override {
         auto module = GetWasmModuleCatalog().FindByModuleName(name);
-        Y_ENSURE(module && module->Manifest.Services, "WASM service module is not loaded in UDF Store");
+        Y_ENSURE(module && (module->Manifest.Services || module->Manifest.Auth), "WASM service/auth module is not loaded in UDF Store");
         return module;
     }
 };
@@ -38,6 +39,8 @@ class TLocalModuleSource final: public IServiceModuleSource {
         TString Path;
         TWasmManifest Manifest;
         TWasmModuleArtifactPtr Loaded;
+        bool IsLibrary = false;
+        std::optional<NYdb::NWasm::TModuleBytecode> Bytecode;
     };
 
     THashMap<TString, TEntry> Modules;
@@ -50,11 +53,17 @@ public:
             Y_ENSURE(!path.empty() && !manifestPath.empty(), "WASM service module and manifest paths are required");
             const TFile file(manifestPath, RdOnly);
             Y_ENSURE(file.GetLength() <= 65536, "WASM service manifest exceeds byte limit");
-            auto manifest = ParseManifest(TFileInput(file).ReadAll());
-            Y_ENSURE(manifest.Services, "Expected a WASM service module manifest");
-            Y_ENSURE(manifest.RequiredLibraries.empty(), "Local WASM services require self-contained modules");
-            const auto name = manifest.ModuleName;
-            Y_ENSURE(Modules.emplace(name, TEntry{ path, std::move(manifest), {} }).second, "Duplicate WASM service module name");
+            const auto json = TFileInput(file).ReadAll();
+            const auto common = NYdb::NUdfManifest::Parse(json);
+            Y_ENSURE(common.Kind == NYdb::NUdfManifest::EModuleKind::Wasm, "Expected a WASM artifact manifest");
+            const bool library = common.Type == NYdb::NUdfManifest::EModuleType::Library;
+            TWasmManifest manifest;
+            if (!library) {
+                manifest = ParseManifest(json);
+                Y_ENSURE(manifest.Services || manifest.Auth, "Expected a WASM service/auth module manifest");
+            }
+            manifest.ModuleName = common.Name;
+            Y_ENSURE(Modules.emplace(common.Name, TEntry{ path, std::move(manifest), {}, library, {} }).second, "Duplicate WASM artifact name");
         };
         if (!config.GetModulePath().empty()) {
             add(config.GetModulePath(), config.GetModulePath() + ".manifest.json");
@@ -63,12 +72,22 @@ public:
             add(module.GetModulePath(), module.GetManifestPath());
         }
         Y_ENSURE(!Modules.empty(), "WASM service modules are required");
+        for (const auto& [_, entry] : Modules) {
+            THashSet<TString> unique;
+            for (const auto& name : entry.Manifest.RequiredLibraries) {
+                const auto library = Modules.find(name);
+                Y_ENSURE(unique.insert(name).second && library != Modules.end() && library->second.IsLibrary,
+                    "Required local WASM library is missing or invalid");
+            }
+        }
     }
 
     TVector<TServiceManifest> Describe() const override {
         TVector<TServiceManifest> result;
         for (const auto& [_, entry] : Modules) {
-            result.push_back(*entry.Manifest.Services);
+            if (entry.Manifest.Services) {
+                result.push_back(*entry.Manifest.Services);
+            }
         }
         return result;
     }
@@ -78,13 +97,23 @@ public:
         const auto it = Modules.find(name);
         Y_ENSURE(it != Modules.end(), "Unknown local WASM service module");
         auto& entry = it->second;
+        Y_ENSURE(!entry.IsLibrary, "A WASM library is not a service/auth module");
+        auto compile = [](TEntry& item) -> const NYdb::NWasm::TModuleBytecode& {
+            if (!item.Bytecode) {
+                const auto bytes = TFileInput(item.Path).ReadAll();
+                const auto object = CompileModuleObjectCode(bytes, NYdb::NWasm::EBytecodeFormat::Binary);
+                item.Bytecode = MakeModuleBytecode(bytes, object, NYdb::NWasm::EBytecodeFormat::Binary);
+            }
+            return *item.Bytecode;
+        };
         if (!entry.Loaded) {
             auto artifact = std::make_shared<TWasmModuleArtifact>();
             artifact->ModuleName = name;
             artifact->Manifest = entry.Manifest;
-            const auto bytes = TFileInput(entry.Path).ReadAll();
-            const auto object = CompileModuleObjectCode(bytes, NYdb::NWasm::EBytecodeFormat::Binary);
-            artifact->ModuleBytecode = MakeModuleBytecode(bytes, object, NYdb::NWasm::EBytecodeFormat::Binary);
+            for (const auto& name : entry.Manifest.RequiredLibraries) {
+                artifact->Libraries.push_back({ name, compile(Modules.at(name)) });
+            }
+            artifact->ModuleBytecode = compile(entry);
             entry.Loaded = std::move(artifact);
         }
         return entry.Loaded;

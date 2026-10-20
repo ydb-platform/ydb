@@ -3,6 +3,7 @@
 
 #include <ydb/services/udf_store/wasm/compile.h>
 #include <ydb/services/udf_store/wasm/module_catalog.h>
+#include <ydb/udfs/wasm/sdk/services/auth.h>
 
 #include <library/cpp/http/server/http_ex.h>
 #include <library/cpp/resource/resource.h>
@@ -31,7 +32,29 @@ class TEchoServer: public THttpServer::ICallBack {
                 return true;
             }
             ++Server.Requests;
+            if (Server.AuthIssuer) {
+                const TString secret(Buf.AsCharPtr(), Buf.Size());
+                if (secret == "test-token") {
+                    ++Server.Authenticated;
+                }
+                if (secret == "rotated-token") {
+                    ++Server.Rotated;
+                }
+                const TString ticket = "synthetic-auth-ticket";
+                NYdb::NWasm::NAuth::TResult result;
+                result.TicketBytes = ticket.size();
+                result.LifetimeMs = 60000;
+                Output().EnableCompressionHeader(false);
+                Output() << "HTTP/1.1 200 OK\r\nContent-Length: " << sizeof(result) + ticket.size() << "\r\nConnection: close\r\n\r\n";
+                Output().Write(&result, sizeof(result));
+                Output().Write(ticket);
+                Output().Finish();
+                return true;
+            }
             for (const auto& header : ParsedHeaders) {
+                if ((header.first == "x-auth-test" || header.first == "X-Auth-Test") && header.second == "synthetic-auth-ticket") {
+                    ++Server.WasmAuthenticated;
+                }
                 if (header.first == "Authorization" && header.second == "Bearer test-token") {
                     ++Server.Authenticated;
                 }
@@ -54,6 +77,8 @@ class TEchoServer: public THttpServer::ICallBack {
     THttpServer Server;
 
 public:
+    bool AuthIssuer = false;
+    std::atomic<size_t> WasmAuthenticated = 0;
     std::atomic<size_t> Requests = 0;
     std::atomic<size_t> Authenticated = 0;
     std::atomic<size_t> Rotated = 0;
@@ -80,10 +105,14 @@ public:
 struct TFixture {
     TTempFileHandle Module;
     TTempFileHandle Manifest;
-    TEchoServer Service;
+    TEchoServer Service, Issuer;
+    TTempFileHandle AuthModule, AuthManifest;
+    bool Auth = false;
     std::unique_ptr<TKikimrRunner> Runner;
 
-    explicit TFixture(bool store = false, ui32 batchRows = 1) {
+    explicit TFixture(bool store = false, ui32 batchRows = 1, bool auth = false)
+        : Auth(auth)
+    {
         TFileOutput(Module.Name()).Write(NResource::Find("/echo.wasm"));
         TFileOutput(Manifest.Name()).Write(NResource::Find("/echo.manifest"));
         NKikimrConfig::TAppConfig config;
@@ -106,6 +135,29 @@ struct TFixture {
             module.SetModulePath(Module.Name());
             module.SetManifestPath(Manifest.Name());
         }
+        if (auth) {
+            Issuer.AuthIssuer = true;
+            auto* provider = services.AddAuthProviders();
+            provider->SetProvider("TEST_AUTH");
+            provider->SetModule("TestAuth");
+            provider->SetEndpoint(Issuer.Url());
+            const auto bytes = NResource::Find("/auth.wasm");
+            const auto manifest = NResource::Find("/auth.manifest");
+            if (store) {
+                auto artifact = std::make_shared<TWasmModuleArtifact>();
+                artifact->ModuleName = "TestAuth";
+                artifact->Manifest = ParseManifest(manifest);
+                artifact->ModuleBytecode = MakeModuleBytecode(
+                    bytes, CompileModuleObjectCode(bytes, NYdb::NWasm::EBytecodeFormat::Binary), NYdb::NWasm::EBytecodeFormat::Binary);
+                GetWasmModuleCatalog().Register(artifact);
+            } else {
+                TFileOutput(AuthModule.Name()).Write(bytes);
+                TFileOutput(AuthManifest.Name()).Write(manifest);
+                auto* module = services.AddModules();
+                module->SetModulePath(AuthModule.Name());
+                module->SetManifestPath(AuthManifest.Name());
+            }
+        }
         NKikimrConfig::TFeatureFlags flags;
         flags.SetEnableExternalDataSources(true);
         flags.SetEnableScriptExecutionOperations(true);
@@ -120,6 +172,7 @@ struct TFixture {
     ~TFixture() {
         Runner.reset();
         GetWasmModuleCatalog().Unregister("Echo");
+        GetWasmModuleCatalog().Unregister("TestAuth");
     }
 
     void Scheme(const TString& sql) {
@@ -128,6 +181,13 @@ struct TFixture {
     }
 
     void CreateConnection(const TString& url) {
+        if (Auth) {
+            Scheme(
+                TStringBuilder()
+                << "CREATE EXTERNAL DATA SOURCE `/Root/service` WITH (SOURCE_TYPE='ExternalService', LOCATION='" << url
+                << R"(', PROTOCOL='HTTP', USE_TLS='false', AUTH_METHOD='WASM', AUTH_PROVIDER='TEST_AUTH', AUTH_PARAMETERS='{"secret":"/Root/service_token"}');)");
+            return;
+        }
         Scheme(TStringBuilder() << "CREATE EXTERNAL DATA SOURCE `/Root/service` WITH (SOURCE_TYPE='ExternalService', "
                                 << "LOCATION='" << url
                                 << "', PROTOCOL='HTTP', USE_TLS='false', AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='/Root/service_token');");
@@ -143,6 +203,47 @@ struct TFixture {
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpWasmServices) {
+    Y_UNIT_TEST_TWIN(AuthWasmLocalAndStoreWithRuntimeSecret, Store) {
+        TFixture fixture(Store, 1, true);
+        auto client = fixture.Runner->GetQueryClient();
+        for (size_t i = 0; i < 2; ++i) {
+            if (i) {
+                fixture.Scheme("ALTER SECRET `/Root/service_token` WITH (value='rotated-token');");
+            }
+            auto result = client
+                              .ExecuteQuery(TFixture::Query("SELECT 'one' AS message UNION ALL SELECT 'two' AS message"), TTxControl::NoTx(),
+                                  TExecuteQuerySettings().StatsMode(EStatsMode::Full))
+                              .GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 2);
+            const auto plan = result.GetStats()->GetPlan();
+            UNIT_ASSERT(plan && plan->find("synthetic-auth-ticket") == std::string::npos && plan->find("rotated-token") == std::string::npos);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Service.WasmAuthenticated.load(), 4);
+        UNIT_ASSERT(fixture.Issuer.Authenticated.load() > 0 && fixture.Issuer.Rotated.load() > 0);
+    }
+    Y_UNIT_TEST(AuthWasmSecretAccessRevocation) {
+        TFixture fixture(false, 1, true);
+        fixture.Scheme("GRANT 'ydb.database.connect', 'ydb.granular.describe_schema' ON `/Root` TO `reader@builtin`;");
+        fixture.Scheme("GRANT 'ydb.granular.select_row' ON `/Root/service` TO `reader@builtin`;");
+        auto client = fixture.Runner->GetQueryClient(TClientSettings().AuthToken("reader@builtin"));
+        auto denied = client.ExecuteQuery(TFixture::Query(), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!denied.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Issuer.Requests.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Requests.load(), 0);
+        fixture.Scheme("GRANT 'ydb.granular.select_row' ON `/Root/service_token` TO `reader@builtin`;");
+        auto allowed = client.ExecuteQuery(TFixture::Query(), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(allowed.IsSuccess(), allowed.GetIssues().ToString());
+        fixture.Scheme("REVOKE 'ydb.granular.select_row' ON `/Root/service_token` FROM `reader@builtin`;");
+        const auto issued = fixture.Issuer.Requests.load();
+        const auto called = fixture.Service.Requests.load();
+        denied = client.ExecuteQuery(TFixture::Query(), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT(!denied.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Issuer.Requests.load(), issued);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Requests.load(), called);
+        UNIT_ASSERT(denied.GetIssues().ToString().find("test-token") == std::string::npos);
+    }
+
     Y_UNIT_TEST_TWIN(LocalAndStoreModuleExecution, Store) {
         TFixture fixture(Store);
         auto result = fixture.Runner->GetQueryClient().ExecuteQuery(TFixture::Query(), TTxControl::NoTx()).GetValueSync();

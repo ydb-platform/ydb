@@ -468,3 +468,35 @@ shutdown. `MaxTraceSpansPerTransform` controls detail generation; its default is
 4096. Local files remain the module source. See
 [tracing and sampling](../../../core/fq/libs/wasm_services/MONITORING.md#query-tracing)
 for ydbd/UDF Store, Wilson/OTLP configuration and lifecycle semantics.
+
+### Authorization through a WASM module
+
+`AUTH_METHOD='WASM'` selects an explicitly approved auth provider. Its parameters are JSON strings; fields declared as `Secret` in the auth manifest contain references, never secret bytes. The module has a private memory/import realm in the application compartment. The host applies its returned credential header to HTTP/gRPC requests. A compartment-local cache coalesces refreshes; after checkpoint recovery the cache is empty.
+
+Example connection (use `/Root/profiles` and a schema secret path with KQP):
+
+```sql
+CREATE EXTERNAL DATA SOURCE profiles WITH (
+    SOURCE_TYPE='ExternalService', PROTOCOL='HTTP',
+    LOCATION='http://127.0.0.1:8080', USE_TLS=FALSE,
+    AUTH_METHOD='WASM', AUTH_PROVIDER='TEST_AUTH',
+    AUTH_PARAMETERS='{"secret":"test_secret"}'
+);
+```
+
+Add the synthetic `ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm` and its `manifest.json` to `WasmServices.Modules`, alongside the application module. The operator config also needs:
+
+```protobuf
+AuthProviders {
+    Provider: "TEST_AUTH"
+    Module: "TestAuth"
+    Endpoint: "http://127.0.0.1:8081"
+    Alias: "auth.test"
+}
+```
+
+The synthetic issuer accepts `POST /auth` containing the test secret and responds with the envelope defined in `ydb/udfs/wasm/sdk/services/auth.h`. It is exercised by the runner tests' local HTTP server. It is not a TVM protocol or client.
+
+In fqrun pass `--secrets-file` with `{"test_secret":"local-test-value"}`. WASM auth rereads that file asynchronously at every refresh; replace it atomically to rotate secrets. In kqprun use the existing `CREATE SECRET` and an absolute path in `AUTH_PARAMETERS`, as on ydbd; an explicit `AuthSecretsFile` config is available for trusted local tests. No resolver falls back to a previously read secret. A valid cached ticket remains usable until its TTL.
+
+Kqprun local mode uses repeated `--wasm-service-module` options for application/auth artifacts (each with its adjacent manifest). Store mode uses `--wasm-service-store` and existing UDF upload APIs for both artifacts. Uploading an auth artifact does not approve it: `AuthProviders` is always operator configuration. No real TVM code or artifacts are shipped in these examples.

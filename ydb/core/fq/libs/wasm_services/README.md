@@ -94,6 +94,15 @@ acquisition is integrated. Authorization is
 derived from `auth`, never a user-supplied header override. Extra headers are
 sensitive and, like bearer tokens, omitted from public connection responses.
 
+Service and auth modules may declare `required_libraries: ["sdk"]`. UDF Store
+loads the dependency through its existing library artifacts. In `LOCAL_FILES`
+mode, include the SDK binary and its `module_type: "library"` manifest as another
+`Modules` entry. Libraries are linked in manifest order and are not exposed as SQL
+services. Missing dependencies fail loading; they are never replaced with an
+implicit minimal SDK. Auth libraries are instantiated in the private auth realm,
+with the same memory limit and without access to application module exports.
+Modules with no declared libraries retain the existing minimal-runtime behavior.
+
 `ModulePath` is retained as a single-module configuration shorthand: it requires
 an adjacent `<ModulePath>.manifest.json`. Do not combine it with `Modules`.
 Rebuild old modules: service row ABI version 2 derives dispatch IDs from method

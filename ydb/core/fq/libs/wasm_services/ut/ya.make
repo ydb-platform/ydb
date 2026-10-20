@@ -4,7 +4,7 @@ YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
 
-SRCS(auth_ut.cpp tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
+SRCS(auth_query_ut.cpp auth_ut.cpp tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
 
 PEERDIR(
     library/cpp/http/server

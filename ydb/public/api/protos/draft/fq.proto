@@ -587,6 +587,12 @@ message ExternalServiceTvmAuth {
     string secret = 3 [(Ydb.length).le = 4096, (Ydb.sensitive) = true];
 }
 
+// Parameters contain public values or secret references, never secret bytes.
+message ExternalServiceWasmAuth {
+    string provider = 1;
+    string parameters = 2;
+}
+
 // Host-owned transport settings for external service adapters.
 message ExternalService {
     enum Protocol {
@@ -608,6 +614,7 @@ message ExternalService {
     map<string, string> headers = 7 [(Ydb.sensitive) = true];
     // Exactly one of auth and tvm_auth must be set.
     ExternalServiceTvmAuth tvm_auth = 8;
+    ExternalServiceWasmAuth wasm_auth = 9;
 }
 
 message ConnectionSetting {

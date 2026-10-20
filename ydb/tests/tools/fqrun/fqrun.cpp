@@ -676,6 +676,9 @@ protected:
         } else {
             Y_ENSURE(SecretsFile.empty(), "--secrets-file requires --init-query");
         }
+        if (!SecretsFile.empty()) {
+            RunnerOptions.FqSettings.AppConfig.MutableFederatedQueryConfig()->MutableWasmServices()->SetAuthSecretsFile(SecretsFile);
+        }
         ValidateWasmServices();
 
         RunnerOptions.FqSettings.YqlToken = YqlToken;

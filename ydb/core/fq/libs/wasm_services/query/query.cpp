@@ -1,3 +1,4 @@
+#include "auth.h"
 #include "execution.h"
 #include "module_source.h"
 
@@ -111,6 +112,8 @@ struct TPreparedConfig {
     NYdb::NWasm::TModuleBytecode Module;
     TVector<TNamedModuleBytecode> Libraries;
     TServiceManifest Manifest;
+    std::optional<TAuthModuleConfig> Auth;
+    TString AuthAlias;
     ui32 MaxRows = 65536;
     ui64 MaxBufferedBytes = 64 << 20;
     ui32 MaxTraceSpans = 4096;
@@ -265,6 +268,16 @@ public:
             query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
             TTransportLimits limits;
             limits.MaxPayloadBytes = Config->BatchBytes;
+            if (Config->Auth) {
+                Auth = std::make_shared<TAuthModule>(*query->Compartment, *Config->Auth, SharedTransport->Get(),
+                    [system = NActors::TActivationContext::ActorSystem(), owner = SelfId()] {
+                        system->Send(new NActors::IEventHandle(owner, owner, new TEvReady));
+                    });
+                Binding.AuthProvider = Auth;
+                Binding.AuthHeader = Config->Auth->Module->Manifest.Auth->Header;
+                Binding.AuthAlias = Config->AuthAlias;
+                Binding.AuthConnection.reset();
+            }
             Transport = std::make_shared<TTransport>(TVector<TBinding>{ Binding }, SharedTransport->Get(), limits);
             auto wasmAlloc = std::make_shared<TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), false);
             Runtime = std::make_unique<NAsync::TRuntime>(std::move(query), std::move(wasmAlloc), Transport, NAsync::TLimits{},
@@ -378,7 +391,10 @@ private:
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        if (Runtime && Call && ev->Get()->Tag == Call) {
+        if (ev->Get()->Tag == 0 && Auth) {
+            AuthDeadline = TInstant::Max();
+            Pump();
+        } else if (Runtime && Call && ev->Get()->Tag == Call) {
             Runtime->Expire(TInstant::Now());
             Pump();
         }
@@ -429,6 +445,14 @@ private:
             return;
         }
         try {
+            if (Auth) {
+                Auth->Process();
+                const auto deadline = Auth->NextDeadline();
+                if (deadline < AuthDeadline) {
+                    AuthDeadline = deadline;
+                    Schedule(std::max(TDuration::Zero(), deadline - TInstant::Now()), new NActors::TEvents::TEvWakeup(0));
+                }
+            }
             // All WASM entries happen on this mailbox. Native I/O only sends TEvReady.
             if (Call) {
                 Runtime->TakeReady();
@@ -490,6 +514,9 @@ private:
                     InvocationTrace->Attribute("batch_rows", i64(ActiveCount));
                 }
                 Transport->SetTraceContext(InvocationTrace ? InvocationTrace->Context() : TTraceContext{});
+                if (Auth) {
+                    Auth->SetTraceContext(InvocationTrace ? InvocationTrace->Context() : TTraceContext{});
+                }
                 InvocationDeadline = TInstant::Now() + Config->Timeout;
                 Call = Runtime->Start(TStringBuf(bytes.data(), bytes.size()), InvocationDeadline);
                 Schedule(Config->Timeout, new NActors::TEvents::TEvWakeup(Call));
@@ -540,6 +567,9 @@ private:
         if (TransformTrace) {
             TransformTrace->Complete(outcome);
         }
+        if (Auth) {
+            Auth->Close();
+        }
         Runtime.reset();
         Pending.clear();
         Results.clear();
@@ -557,6 +587,9 @@ private:
         if (TransformTrace) {
             TransformTrace->Complete(outcome);
         }
+        if (Auth) {
+            Auth->Close();
+        }
         Runtime.reset();
         Transport.reset();
         auto guard = Guard(*Alloc);
@@ -565,7 +598,9 @@ private:
 
     const std::shared_ptr<const TPreparedConfig> Config;
     const TServiceMethod& Method;
-    const TBinding Binding;
+    TBinding Binding;
+    std::shared_ptr<TAuthModule> Auth;
+    TInstant AuthDeadline = TInstant::Max();
     const std::shared_ptr<TSharedTransport> SharedTransport;
     const ui64 Index;
     IDqOutputConsumer::TPtr Output;
@@ -635,6 +670,7 @@ void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NCo
             source->Load(manifest.Name);
         }
     }
+    ValidateAuthProviders(config, *source);
     auto sharedTransport = std::make_shared<TSharedTransport>();
     sharedTransport->UserPool = userPool;
     if (counters) {
@@ -654,6 +690,7 @@ void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NCo
             NJson::TJsonValue invocation;
             Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(), "Invalid WASM service invocation");
             const auto module = source->Load(invocation["module"].GetStringSafe());
+            Y_ENSURE(module->Manifest.Services, "Auth modules cannot be invoked as application services");
             auto prepared = std::make_shared<TPreparedConfig>();
             if (config.GetMaxTraceSpansPerTransform()) {
                 prepared->MaxTraceSpans = config.GetMaxTraceSpansPerTransform();
@@ -683,6 +720,15 @@ void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NCo
             Y_ENSURE(method != prepared->Manifest.Methods.end(), "Unknown WASM service method");
             ValidateMethod(method->second, prepared->BatchBytes, prepared->BatchRows, prepared->MaxBufferedBytes);
             auto binding = resolver(settings.GetInvokeUrl(), args.SecureParams);
+            if (binding.AuthConnection) {
+                prepared->Auth = PrepareAuthModule(config, *source, *binding.AuthConnection);
+                prepared->AuthAlias = "auth.wasm";
+                for (const auto& provider : config.GetAuthProviders()) {
+                    if (provider.GetProvider() == binding.AuthConnection->Provider && !provider.GetAlias().empty()) {
+                        prepared->AuthAlias = provider.GetAlias();
+                    }
+                }
+            }
             auto* actor = new TServiceTransform(prepared, method->second, std::move(binding), sharedTransport, std::move(args));
             return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);
         });

@@ -14,6 +14,8 @@ PEERDIR(
 DEPENDS(ydb/tests/tools/kqprun)
 
 DATA(
+    arcadia/ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm
+    arcadia/ydb/udfs/wasm/auth_test/manifest.json
     arcadia/ydb/udfs/wasm/profile/ut/data/profile.wasm
     arcadia/ydb/udfs/wasm/profile/manifest.json
 )

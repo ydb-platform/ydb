@@ -133,8 +133,9 @@ def test_local_module_option_independent_of_config_order(service, tmp_path):
     assert len(runner.rows()) == 2
 
 
+@pytest.mark.parametrize('wasm_auth', [False, True])
 @pytest.mark.parametrize('sql_batch_size', [None, 8])
-def test_udf_store_upload_after_start(service, tmp_path, sql_batch_size):
+def test_udf_store_upload_after_start(service, tmp_path, wasm_auth, sql_batch_size):
     import time
     import grpc
     import ydb
@@ -145,6 +146,15 @@ def test_udf_store_upload_after_start(service, tmp_path, sql_batch_size):
 
     database = '/Root/services'
     runner = Runner(tmp_path, service)
+    if wasm_auth:
+        service.auth_secret = b'public-test-secret'
+        provider = 'AuthProviders { Provider: "TEST_AUTH" Module: "TestAuth" Endpoint: %s }' % json.dumps(
+            'http://127.0.0.1:%d' % service.http.server_port)
+        runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { ' + provider))
+        ddl = connection_ddl('/Root/profiles', 'http://127.0.0.1:%d' % service.http.server_port, auth='WASM')
+        ddl = ddl.replace('AUTH_METHOD = "WASM"', 'AUTH_METHOD = "WASM", AUTH_PROVIDER = "TEST_AUTH", AUTH_PARAMETERS = ' +
+                          json.dumps(json.dumps({'secret': '/Root/auth_secret'})))
+        runner.scheme.write_text("CREATE SECRET `/Root/auth_secret` WITH (value='public-test-secret');\n" + ddl)
     command = [yatest.common.binary_path('ydb/tests/tools/kqprun/kqprun'), '-c', str(runner.config),
                '--wasm-service-store', '--dedicated', 'services', '-D', database, '-G', '0', '--log-default=warn', '--log-file', str(runner.log)]
     with runner.stdout.open('wb') as out, runner.stderr.open('wb') as err:
@@ -161,25 +171,29 @@ def test_udf_store_upload_after_start(service, tmp_path, sql_batch_size):
         with grpc.insecure_channel(endpoint) as channel:
             grpc.channel_ready_future(channel).result(timeout=90)
             stub = UdfServiceStub(channel)
-            body = runner.module.read_bytes()
-            manifest = Path(str(runner.module) + '.manifest.json').read_text()
+            artifacts = [(runner.module.read_bytes(), Path(str(runner.module) + '.manifest.json').read_text())]
+            if wasm_auth:
+                auth_root = Path(yatest.common.source_path('ydb/udfs/wasm/auth_test'))
+                artifacts.append(((auth_root / 'ut/data/auth_test.wasm').read_bytes(), (auth_root / 'manifest.json').read_text()))
             metadata = (('x-ydb-database', database),)
-            chunks = [udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
-                params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body))),
-                udf.UploadModuleChunk(data=body)]
-            responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=60))
-            assert len(responses) == 1 and responses[0].operation.status == StatusIds.SUCCESS, responses
-            deadline = time.monotonic() + 120
-            while True:
-                response = stub.DescribeModule(udf.DescribeModuleRequest(name='WASM_PROFILE'), metadata=metadata, timeout=15)
-                result = udf.DescribeModuleResult()
-                assert response.operation.result.Unpack(result), response
-                assert all(platform.status != udf.FAILED for platform in result.platforms), result
-                if result.platforms and all(platform.status == udf.READY for platform in result.platforms):
-                    break
-                assert time.monotonic() < deadline, result
-                time.sleep(0.5)
-        with ydb.Driver(endpoint=endpoint, database=database) as driver:
+            for body, manifest in artifacts:
+                chunks = [udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
+                    params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body))),
+                    udf.UploadModuleChunk(data=body)]
+                responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=60))
+                assert len(responses) == 1 and responses[0].operation.status == StatusIds.SUCCESS, responses
+                deadline = time.monotonic() + 120
+                while True:
+                    response = stub.DescribeModule(udf.DescribeModuleRequest(name=json.loads(manifest)['module_name']), metadata=metadata, timeout=15)
+                    result = udf.DescribeModuleResult()
+                    assert response.operation.result.Unpack(result), response
+                    assert all(platform.status != udf.FAILED for platform in result.platforms), result
+                    if result.platforms and all(platform.status == udf.READY for platform in result.platforms):
+                        break
+                    assert time.monotonic() < deadline, result
+                    time.sleep(0.5)
+        credentials = ydb.AccessTokenCredentials("root@builtin") if wasm_auth else None
+        with ydb.Driver(endpoint=endpoint, database=database, credentials=credentials) as driver:
             driver.wait(timeout=30)
             with ydb.QuerySessionPool(driver) as pool:
                 pool.execute_with_retries(runner.scheme.read_text().replace('/Root/', database + '/'))
@@ -203,6 +217,11 @@ def test_udf_store_upload_after_start(service, tmp_path, sql_batch_size):
                     assert any(len(request) > 1 for request in calls)
                 received = [value for request in calls for value in (request if isinstance(request, tuple) else (request,))]
                 assert sorted(received) == list(range(1000, 1200))
+                if wasm_auth:
+                    assert service.auth_requests and all(value == service.auth_secret for value in service.auth_requests)
+                    assert service.auth_headers and all(ticket == 'synthetic-auth-ticket' for _, ticket in service.auth_headers)
+                    assert 'public-test-secret' not in runner.output()
+                    assert 'synthetic-auth-ticket' not in runner.output()
     finally:
         process.terminate()
         try:
@@ -250,6 +269,32 @@ def test_store_restores_persistent_tenant(service, tmp_path):
                                 env=dict(os.environ, YQL_TOKEN='kqprun-test-token'))
         assert result.returncode == 0, result.stdout + result.stderr
     assert (storage / 'kqprun_storage_meta.conf').exists()
+
+
+@pytest.mark.parametrize('protocol', ['HTTP', 'GRPC'])
+def test_wasm_auth_schema_secret(service, tmp_path, protocol):
+    service.auth_secret = b'public-test-secret'
+    runner = Runner(tmp_path, service, protocol)
+    root = Path(yatest.common.source_path('ydb/udfs/wasm/auth_test'))
+    module = tmp_path / 'auth.wasm'
+    shutil.copyfile(root / 'ut/data/auth_test.wasm', module)
+    shutil.copyfile(root / 'manifest.json', str(module) + '.manifest.json')
+    provider = 'AuthProviders { Provider: "TEST_AUTH" Module: "TestAuth" Endpoint: %s Alias: "auth.test" }' % json.dumps(
+        'http://127.0.0.1:%d' % service.http.server_port)
+    runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { ' + provider))
+    endpoint = 'http://127.0.0.1:%d' % service.http.server_port if protocol == 'HTTP' else '127.0.0.1:%d' % service.grpc_port
+    ddl = connection_ddl('/Root/profiles', endpoint, protocol, auth='WASM')
+    ddl = ddl.replace('AUTH_METHOD = "WASM"', 'AUTH_METHOD = "WASM", AUTH_PROVIDER = "TEST_AUTH", AUTH_PARAMETERS = ' +
+                      json.dumps(json.dumps({'secret': '/Root/auth_secret'})))
+    runner.scheme.write_text("CREATE SECRET `/Root/auth_secret` WITH (value='public-test-secret');\n" + ddl)
+    assert runner.wait(runner.start(ids=range(1000, 1200), extra=['--wasm-service-module', str(module), '--threads=1'])) == 0, runner.output()
+    assert len(runner.rows()) == 200
+    assert service.auth_requests and all(value == service.auth_secret for value in service.auth_requests)
+    assert len(service.auth_requests) < len(service.requests)
+    assert len(service.auth_headers) == len(service.requests)
+    assert all(ticket == 'synthetic-auth-ticket' for _, ticket in service.auth_headers)
+    assert 'public-test-secret' not in runner.output()
+    assert 'synthetic-auth-ticket' not in runner.output()
 
 
 @pytest.mark.parametrize('protocol', ['http', 'grpc'])

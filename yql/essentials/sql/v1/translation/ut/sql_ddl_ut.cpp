@@ -533,6 +533,32 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateExternalServiceWithWasmAuth) {
+    const auto result = SqlToYql(R"sql(
+            USE plato; CREATE EXTERNAL DATA SOURCE service WITH (
+                SOURCE_TYPE="ExternalService", LOCATION="https://example.org", PROTOCOL="HTTP",
+                AUTH_METHOD="WASM", AUTH_PROVIDER="TEST_AUTH", AUTH_PARAMETERS='{"secret":"/Root/secret"}'
+            );
+        )sql");
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
+Y_UNIT_TEST(WasmAuthRequiresProviderAndRejectsOtherCredentials) {
+    for (const auto& extra : {TString(), TString(", TOKEN_SECRET_NAME='secret'")}) {
+        const auto result = SqlToYql(TStringBuilder() << "USE plato; CREATE EXTERNAL DATA SOURCE service WITH (SOURCE_TYPE='ExternalService', LOCATION='https://example.org', "
+                                                         "AUTH_METHOD='WASM', AUTH_PARAMETERS='{}'"
+                                                      << (extra.empty() ? "" : ", AUTH_PROVIDER='TEST_AUTH'") << extra << ");");
+        UNIT_ASSERT(!result.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), extra.empty() ? "AUTH_PROVIDER requires key" : "not supported for AUTH_METHOD");
+    }
+    const auto wrongSource = SqlToYql(R"sql(
+            USE plato; CREATE EXTERNAL DATA SOURCE service WITH (SOURCE_TYPE="ObjectStorage", LOCATION="bucket",
+                AUTH_METHOD="WASM", AUTH_PROVIDER="TEST_AUTH", AUTH_PARAMETERS='{}');
+        )sql");
+    UNIT_ASSERT(!wrongSource.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(wrongSource), "WASM authorization requires SOURCE_TYPE=ExternalService");
+}
+
 Y_UNIT_TEST(CreateExternalServiceWithTvm) {
     auto res = SqlToYql(R"sql(
         USE plato;

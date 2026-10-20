@@ -16,6 +16,8 @@ TEST_SRCS(test_query.py test_store.py test_streaming.py)
 PY_SRCS(conftest.py)
 
 DATA(
+    arcadia/ydb/udfs/wasm/auth_test/ut/data/auth_test.wasm
+    arcadia/ydb/udfs/wasm/auth_test/manifest.json
     arcadia/ydb/udfs/wasm/profile/ut/data/profile.wasm
     arcadia/ydb/udfs/wasm/profile/manifest.json
     arcadia/ydb/udfs/wasm/echo/ut/data/echo.wasm

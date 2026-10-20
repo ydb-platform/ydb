@@ -3,6 +3,7 @@
 
 #include <ydb/core/fq/libs/common/external_service.h>
 #include <ydb/core/fq/libs/common/util.h>
+#include <ydb/core/fq/libs/wasm_services/query/auth.h>
 #include <ydb/core/fq/libs/wasm_services/query/module_source.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 
@@ -148,6 +149,11 @@ struct TQueryTransformEnv {
             } else {
                 (*entry->mutable_headers())[key] = value;
             }
+        }
+        if (binding.AuthConnection) {
+            entry->clear_auth();
+            entry->mutable_wasm_auth()->set_provider(binding.AuthConnection->Provider);
+            entry->mutable_wasm_auth()->set_parameters(binding.AuthConnection->Parameters);
         }
         if (binding.Protocol == EProtocol::Grpc) {
             entry->set_protocol(FederatedQuery::ExternalService::GRPC);

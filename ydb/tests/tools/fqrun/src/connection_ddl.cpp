@@ -81,7 +81,8 @@ TConnectionDdl DecodeWrite(const TAstNode& write, const THashMap<TString, TStrin
         Y_UNUSED(value);
         Y_ENSURE(name == "source_type" || name == "protocol" || name == "location" || name == "auth_method" || name == "token_secret_name" ||
                      name == "use_tls" || name == "ca_certificate" || name == "tvm_source_id" || name == "tvm_destination_id" ||
-                     name == "tvm_secret_name", "Unsupported ExternalService property: " << to_upper(name));
+                     name == "tvm_secret_name" || name == "auth_provider" ||
+                     name == "auth_parameters", "Unsupported ExternalService property: " << to_upper(name));
     }
     Y_ENSURE(Required(properties, "source_type") == "ExternalService", "SOURCE_TYPE must be ExternalService");
     auto& service = *result.Content.mutable_setting()->mutable_external_service();
@@ -102,6 +103,9 @@ TConnectionDdl DecodeWrite(const TAstNode& write, const THashMap<TString, TStrin
         service.mutable_auth()->mutable_none();
     } else if (auth == "CURRENT_IAM") {
         service.mutable_auth()->mutable_current_iam();
+    } else if (auth == "WASM") {
+        service.mutable_wasm_auth()->set_provider(Required(properties, "auth_provider"));
+        service.mutable_wasm_auth()->set_parameters(Required(properties, "auth_parameters"));
     } else if (auth == "TVM") {
         auto& tvm = *service.mutable_tvm_auth();
         ui32 source = 0, destination = 0;

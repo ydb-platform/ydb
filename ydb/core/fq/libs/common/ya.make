@@ -18,6 +18,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json
     library/cpp/uri
     ydb/core/fq/libs/config
     ydb/core/fq/libs/control_plane_storage/events

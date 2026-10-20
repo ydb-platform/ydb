@@ -13,6 +13,8 @@ struct TServiceConnectionSettings {
     bool UseTls = true;
     TString CaCertificate;
     TString SecretReference;
+    TString AuthProvider;
+    TString AuthParameters;
     ui32 TvmSourceId = 0;
     ui32 TvmDestinationId = 0;
 

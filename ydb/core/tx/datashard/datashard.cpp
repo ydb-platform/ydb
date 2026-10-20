@@ -965,7 +965,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
             NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
@@ -1044,7 +1044,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
             .Step = record.GetStep(),
             .TxId = record.GetTxId(),
             .PathId = record.GetPathId(),
-            .BodySize = record.GetBody().size(),
+            .BodySize = record.GetBodySize(),
             .TableId = record.GetTableId(),
             .SchemaVersion = record.GetSchemaVersion(),
             .LockId = record.GetLockId(),
@@ -1054,7 +1054,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         db.Table<Schema::LockChangeRecords>().Key(record.GetLockId(), record.GetLockOffset()).Update(
             NIceDb::TUpdate<Schema::LockChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBody().size()),
+            NIceDb::TUpdate<Schema::LockChangeRecords::BodySize>(record.GetBodySize()),
             NIceDb::TUpdate<Schema::LockChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
             NIceDb::TUpdate<Schema::LockChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
             NIceDb::TUpdate<Schema::LockChangeRecords::TablePathId>(record.GetTableId().LocalPathId));

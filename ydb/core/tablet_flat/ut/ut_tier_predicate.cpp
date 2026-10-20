@@ -270,6 +270,39 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         }
     }
 
+    // TODO(https://github.com/ydb-platform/ydb/issues/56231): enable once DyNumber comparison
+    // orders negative numbers with a common mantissa prefix (e.g. -1000 and -1001) correctly
+    Y_UNIT_TEST(DyNumberOrder) {
+        return;
+
+        // Cross-check DyNumber comparison with plain integer comparison
+        TVector<i64> values;
+        for (i64 base : {i64(0), i64(1), i64(9), i64(10), i64(100), i64(101), i64(1000), i64(1001),
+                i64(157766400), i64(157766401), i64(1000000000000)})
+        {
+            values.push_back(base);
+            values.push_back(-base);
+        }
+
+        const auto micros = NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS;
+        for (i64 value : values) {
+            const TString encoded = DyNumber(value);
+
+            // The encoding round-trips through the DyNumber library
+            const auto text = NDyNumber::DyNumberToString(encoded);
+            UNIT_ASSERT(text);
+            UNIT_ASSERT_VALUES_EQUAL(NDyNumber::ParseDyNumberString(*text), encoded);
+
+            for (i64 bound : values) {
+                // now - offset == bound
+                const TInstant now = bound >= 0 ? TInstant::MicroSeconds(bound) : TInstant::Zero();
+                const TDuration offset = bound >= 0 ? TDuration::Zero() : TDuration::MicroSeconds(-bound);
+                const bool matches = SingleRuleMatches(NScheme::NTypeIds::DyNumber, micros, offset, encoded, now);
+                UNIT_ASSERT_VALUES_EQUAL_C(matches, value <= bound, "value# " << value << " bound# " << bound);
+            }
+        }
+    }
+
     Y_UNIT_TEST(EquivalenceWithTtl) {
         const TDuration offset = TDuration::Days(1);
         const TInstant wallClock = Now - offset;

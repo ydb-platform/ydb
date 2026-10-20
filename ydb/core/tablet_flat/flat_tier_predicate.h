@@ -116,9 +116,8 @@ namespace NTable {
             };
 
             EKind Kind = EKind::Unrepresentable;
-            i64 Signed = 0;
-            ui64 Unsigned = 0;
-            TString Serialized;
+            // Threshold in the native cell representation of the column type
+            TString Raw;
         };
 
         TThreshold MakeThreshold(i64 thresholdUs) const;
@@ -127,7 +126,7 @@ namespace NTable {
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
-        ui32 PgTypeId = 0; // Postgres type oid of a Pg column
+        NScheme::TTypeInfoOrder TypeOrder;
         TPos Pos = Max<TPos>();
         TVector<TThreshold> Thresholds;
         bool Bound = false;

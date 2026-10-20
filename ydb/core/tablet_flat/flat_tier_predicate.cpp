@@ -5,7 +5,6 @@
 
 #include <util/string/cast.h>
 #include <util/system/byteorder.h>
-#include <util/system/unaligned_mem.h>
 
 #include <algorithm>
 #include <type_traits>
@@ -32,16 +31,6 @@ namespace {
     // Postgres dates and timestamps count from 2000-01-01
     constexpr i64 PgEpochDays = 10957;
     constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
-
-    // Pg columns hold the Postgres binary (send/recv) format: the supported
-    // types are big-endian integers of a fixed width, so they are compared
-    // as integers without decoding them through Postgres (which allocates)
-    template <typename T>
-    T ReadPgInteger(const TCell& cell) {
-        Y_ENSURE(cell.Size() == sizeof(T), "Unexpected Pg value size " << cell.Size());
-        using TUnsigned = std::make_unsigned_t<T>;
-        return static_cast<T>(InetToHost(ReadUnaligned<TUnsigned>(cell.Data())));
-    }
 
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
     constexpr ui32 PgInt8Oid = 20;
@@ -175,7 +164,7 @@ namespace {
 
         Type = info->TypeInfo;
         Pos = info->Pos;
-        PgTypeId = Type.GetTypeId() == NScheme::NTypeIds::Pg ? NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()) : 0;
+        TypeOrder = NScheme::TTypeInfoOrder(Type);
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
@@ -209,19 +198,39 @@ namespace {
 
         TThreshold result;
 
-        auto setUnsigned = [&](i64 value) {
-            // Unsigned columns cannot hold values below zero, nothing matches
-            if (value >= 0) {
-                result.Kind = EKind::Value;
-                result.Unsigned = static_cast<ui64>(value);
-            } else {
+        // The threshold is kept in the native cell representation of the column type
+        auto setRaw = [&](auto value) {
+            result.Kind = EKind::Value;
+            result.Raw = TString(reinterpret_cast<const char*>(&value), sizeof(value));
+        };
+
+        // Clamps to the column range: values above the range match everything,
+        // values below the range match nothing
+        auto setUnsigned = [&]<typename T>(T, i64 value) {
+            if (value < 0) {
                 result.Kind = EKind::NeverMatch;
+            } else if (static_cast<ui64>(value) > Max<T>()) {
+                result.Kind = EKind::AlwaysMatch;
+            } else {
+                setRaw(static_cast<T>(value));
             }
         };
 
-        auto setSigned = [&](i64 value) {
+        auto setSigned = [&]<typename T>(T, i64 value) {
+            if (value > Max<T>()) {
+                result.Kind = EKind::AlwaysMatch;
+            } else if (value < Min<T>()) {
+                result.Kind = EKind::NeverMatch;
+            } else {
+                setRaw(static_cast<T>(value));
+            }
+        };
+
+        // Postgres binary (send/recv) representation of fixed-width types is big-endian
+        auto setPg = [&]<typename T>(T, i64 value) {
             result.Kind = EKind::Value;
-            result.Signed = value;
+            const auto raw = HostToInet(static_cast<std::make_unsigned_t<T>>(static_cast<T>(value)));
+            result.Raw = TString(reinterpret_cast<const char*>(&raw), sizeof(raw));
         };
 
         auto setSerialized = [&](TMaybe<TString> serialized) {
@@ -229,44 +238,58 @@ namespace {
                 static_cast<int>(Type.GetTypeId()));
             if (serialized) {
                 result.Kind = EKind::Value;
-                result.Serialized = std::move(*serialized);
+                result.Raw = std::move(*serialized);
             }
         };
 
         switch (Type.GetTypeId()) {
             case NScheme::NTypeIds::Date:
-                setUnsigned(FloorDiv(thresholdUs, MicrosPerDay));
+                setUnsigned(ui16(), FloorDiv(thresholdUs, MicrosPerDay));
                 break;
             case NScheme::NTypeIds::Datetime:
-                setUnsigned(FloorDiv(thresholdUs, MicrosPerSecond));
+                setUnsigned(ui32(), FloorDiv(thresholdUs, MicrosPerSecond));
                 break;
             case NScheme::NTypeIds::Timestamp:
-                setUnsigned(thresholdUs);
+                setUnsigned(ui64(), thresholdUs);
                 break;
             case NScheme::NTypeIds::Date32:
-                setSigned(FloorDiv(thresholdUs, MicrosPerDay));
+                setSigned(i32(), FloorDiv(thresholdUs, MicrosPerDay));
                 break;
             case NScheme::NTypeIds::Datetime64:
-                setSigned(FloorDiv(thresholdUs, MicrosPerSecond));
+                setSigned(i64(), FloorDiv(thresholdUs, MicrosPerSecond));
                 break;
             case NScheme::NTypeIds::Timestamp64:
-                setSigned(thresholdUs);
+                setSigned(i64(), thresholdUs);
                 break;
             case NScheme::NTypeIds::Uint32:
-            case NScheme::NTypeIds::Uint64:
+            case NScheme::NTypeIds::Uint64: {
+                const ui64 typeMax = Type.GetTypeId() == NScheme::NTypeIds::Uint32 ? Max<ui32>() : Max<ui64>();
+                ui64 value;
                 if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
                     // TTL compares whole microseconds: value / 1000 <= threshold
-                    if (thresholdUs >= 0) {
-                        result.Kind = EKind::Value;
-                        const ui64 us = static_cast<ui64>(thresholdUs);
-                        result.Unsigned = us > (Max<ui64>() - 999) / 1000 ? Max<ui64>() : us * 1000 + 999;
-                    } else {
+                    if (thresholdUs < 0) {
                         result.Kind = EKind::NeverMatch;
+                        break;
                     }
+                    const ui64 us = static_cast<ui64>(thresholdUs);
+                    value = us > (Max<ui64>() - 999) / 1000 ? Max<ui64>() : us * 1000 + 999;
                 } else {
-                    setUnsigned(MicrosToUnitFloor(thresholdUs, Policy.Unit));
+                    const i64 units = MicrosToUnitFloor(thresholdUs, Policy.Unit);
+                    if (units < 0) {
+                        result.Kind = EKind::NeverMatch;
+                        break;
+                    }
+                    value = static_cast<ui64>(units);
+                }
+                if (value >= typeMax) {
+                    result.Kind = EKind::AlwaysMatch;
+                } else if (Type.GetTypeId() == NScheme::NTypeIds::Uint32) {
+                    setRaw(static_cast<ui32>(value));
+                } else {
+                    setRaw(value);
                 }
                 break;
+            }
             case NScheme::NTypeIds::DyNumber:
                 // DyNumber has arbitrary precision, so any threshold is representable
                 setSerialized(NDyNumber::ParseDyNumberString(MicrosToUnitString(thresholdUs, Policy.Unit)));
@@ -282,15 +305,15 @@ namespace {
                         if (days > Max<i32>()) {
                             result.Kind = EKind::AlwaysMatch;
                         } else {
-                            setSigned(std::max<i64>(days, Min<i32>()));
+                            setPg(i32(), std::max<i64>(days, Min<i32>()));
                         }
                         break;
                     }
                     case EPgKind::Timestamp:
                         if (thresholdUs < Min<i64>() + PgEpochMicros) {
-                            setSigned(Min<i64>());
+                            setPg(i64(), Min<i64>());
                         } else {
-                            setSigned(thresholdUs - PgEpochMicros);
+                            setPg(i64(), thresholdUs - PgEpochMicros);
                         }
                         break;
                     case EPgKind::Int4:
@@ -317,8 +340,10 @@ namespace {
                             result.Kind = EKind::AlwaysMatch;
                         } else if (value < typeMin) {
                             result.Kind = EKind::NeverMatch;
+                        } else if (GetPgKind(Type) == EPgKind::Int4) {
+                            setPg(i32(), value);
                         } else {
-                            setSigned(value);
+                            setPg(i64(), value);
                         }
                         break;
                     }
@@ -344,36 +369,12 @@ namespace {
                 return false;
         }
 
-        switch (Type.GetTypeId()) {
-            case NScheme::NTypeIds::Date:
-                return cell.AsValue<ui16>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Datetime:
-            case NScheme::NTypeIds::Uint32:
-                return cell.AsValue<ui32>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Timestamp:
-            case NScheme::NTypeIds::Uint64:
-                return cell.AsValue<ui64>() <= threshold.Unsigned;
-            case NScheme::NTypeIds::Date32:
-                return cell.AsValue<i32>() <= threshold.Signed;
-            case NScheme::NTypeIds::Datetime64:
-            case NScheme::NTypeIds::Timestamp64:
-                return cell.AsValue<i64>() <= threshold.Signed;
-            case NScheme::NTypeIds::DyNumber:
-                return cell.AsBuf() <= TStringBuf(threshold.Serialized);
-            case NScheme::NTypeIds::Pg:
-                switch (PgTypeId) {
-                    case PgDateOid:
-                    case PgInt4Oid:
-                        return ReadPgInteger<i32>(cell) <= threshold.Signed;
-                    case PgTimestampOid:
-                    case PgInt8Oid:
-                        return ReadPgInteger<i64>(cell) <= threshold.Signed;
-                    default:
-                        Y_ENSURE(false, "Unreachable");
-                }
-            default:
-                Y_ENSURE(false, "Unreachable");
-        }
+        // TODO(https://github.com/ydb-platform/ydb/issues/56230): Pg cells are compared via
+        // PgNativeBinaryCompare, which allocates on every call.
+        // TODO(https://github.com/ydb-platform/ydb/issues/56231): DyNumber cells are compared
+        // bytewise, which mis-orders negative numbers with a common mantissa prefix.
+        const TCell bound(threshold.Raw.data(), threshold.Raw.size());
+        return CompareTypedCells(cell, bound, TypeOrder) <= 0;
     }
 
     TTierDecision TTierPredicate::Evaluate(const TRowState& row) const {

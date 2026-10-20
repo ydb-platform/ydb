@@ -167,7 +167,7 @@ namespace NKikimr::NStorage {
             throw TExError() << "Can't get base config: " << *error;
         }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
-        if (AddedBridgePileId) {
+        if (BridgePileOpPileId) {
             AddBridgePileWithBaseConfig();
         } else {
             CheckReassignGroupDisk();
@@ -341,7 +341,12 @@ namespace NKikimr::NStorage {
                 break;
             }
         }
-        Y_ABORT_UNLESS(0 < actualGroupGeneration && vdiskId.GroupGeneration < actualGroupGeneration);
+        // the group may have been removed along with the pile it was a part of, then its VDisks are destroyed ones
+        const bool groupRemoved = !actualGroupGeneration;
+        if (groupRemoved && isDropDonor) {
+            throw TExError() << "Group not found";
+        }
+        Y_ABORT_UNLESS(groupRemoved || vdiskId.GroupGeneration < actualGroupGeneration);
 
         for (size_t i = 0; i < ss->VDisksSize(); ++i) {
             if (const auto& vdisk = ss->GetVDisks(i); vdisk.HasVDiskID() && vdisk.HasVDiskLocation()) {
@@ -381,8 +386,12 @@ namespace NKikimr::NStorage {
                     continue; // doesn't match our pdisk
                 }
 
+                if (groupRemoved && vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
+                    continue; // VDisk of the removed group can only be a destroyed one
+                }
+
                 // this must be the obsolete disk (donor has generation from the past, destroyed disks too)
-                Y_ABORT_UNLESS(currentVDiskId.GroupGeneration < actualGroupGeneration);
+                Y_ABORT_UNLESS(groupRemoved || currentVDiskId.GroupGeneration < actualGroupGeneration);
 
                 if (!isDropDonor) {
                     // destroying slot on this disk

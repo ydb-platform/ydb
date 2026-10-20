@@ -21,6 +21,9 @@ using TEvConvertToBridgeRequest =
 using TEvAddPileRequest =
     TGrpcRequestOperationCall<Ydb::Bridge::AddPileRequest,
         Ydb::Bridge::AddPileResponse>;
+using TEvRemovePileRequest =
+    TGrpcRequestOperationCall<Ydb::Bridge::RemovePileRequest,
+        Ydb::Bridge::RemovePileResponse>;
 
 using namespace NActors;
 using namespace Ydb;
@@ -82,6 +85,10 @@ void CopyFromInternalClusterStateDetails(const NKikimrBridge::TClusterStateDetai
         switch (op.GetKind()) {
             case TOperation::ADD:
                 pb->set_kind(Ydb::Bridge::PendingPileOperation::ADD);
+                break;
+
+            case TOperation::REMOVE:
+                pb->set_kind(Ydb::Bridge::PendingPileOperation::REMOVE);
                 break;
 
             case NKikimrBridge::TClusterStateDetails_TPendingPileOperation_EKind_TClusterStateDetails_TPendingPileOperation_EKind_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -461,8 +468,11 @@ private:
     }
 };
 
-class TAddPileRequest : public TBridgeRequestGrpc<TAddPileRequest, TEvAddPileRequest, Ydb::Bridge::AddPileResult> {
-    using TBase = TBridgeRequestGrpc<TAddPileRequest, TEvAddPileRequest, Ydb::Bridge::AddPileResult>;
+// request of the operation changing the set of piles; it waits (watching storage config on this node) until BSC
+// finishes its part of the operation, or reports an error
+template<typename TDerived, typename TEvRequest, typename TResultRecord>
+class TPileOperationRequest : public TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord> {
+    using TBase = TBridgeRequestGrpc<TDerived, TEvRequest, TResultRecord>;
 
     bool Subscribed = false;
 
@@ -470,14 +480,14 @@ public:
     using TBase::TBase;
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        return CheckAdministrator(status, issues);
+        return this->CheckAdministrator(status, issues);
     }
 
     void SendRequest(const TActorContext& ctx) {
         // all the preconditions are checked by distconf on the root node
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableAddBridgePile()->SetPileName(GetProtoRequest()->pile_name());
-        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+        static_cast<TDerived*>(this)->FillCommand(request->Record, this->GetProtoRequest()->pile_name());
+        ctx.Send(MakeBlobStorageNodeWardenID(this->SelfId().NodeId()), request.release());
     }
 
     STFUNC(StateFunc) {
@@ -488,46 +498,78 @@ public:
         }
     }
 
+protected:
+    // reply when the operation on the pile is finished as the config tells; pile is nullptr when it isn't listed there
+    void CheckFinished(const NKikimrBlobStorage::TStorageConfig& config, const TBridgeInfo::TPile *pile, bool finished,
+            const char *what) {
+        const auto& details = config.GetClusterStateDetails();
+        if (pile && NBridge::GetPendingPileOperationPileId(details) == pile->BridgePileId) {
+            if (const auto& op = details.GetPendingPileOperation(); op.HasErrorReason()) {
+                this->Reply(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder() << what << " (this is retried until it"
+                    " succeeds): " << op.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, this->ActorContext());
+            }
+        } else if (finished) {
+            this->ReplyWithResult(Ydb::StatusIds::SUCCESS, TResultRecord(), this->ActorContext());
+        }
+    }
+
 private:
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() == TResult::OK) {
-            // the pile is added, wait for BSC to create its parts of storage groups watching the config
+            // the operation has started, wait for BSC to perform its part watching the config
             Subscribed = true;
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
+            this->Send(MakeBlobStorageNodeWardenID(this->SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(true));
         } else {
-            ReplyWithInvokeError(record);
+            this->ReplyWithInvokeError(record);
         }
     }
 
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
-        const auto& config = *ev->Get()->Config;
-        const auto& bridgeInfo = ev->Get()->BridgeInfo;
-        if (!bridgeInfo) {
-            return; // wait for the config with bridge info
-        }
-        const auto *pile = bridgeInfo->ResolvePile(GetProtoRequest()->pile_name());
-        if (!pile || pile->State == NKikimrBridge::TClusterState::INACTIVE) {
-            return; // this node has not got the config with the pile added yet
-        }
-
-        const auto& details = config.GetClusterStateDetails();
-        if (NBridge::GetPendingPileOperationPileId(details) != pile->BridgePileId) {
-            ReplyWithResult(Ydb::StatusIds::SUCCESS, Ydb::Bridge::AddPileResult(), ActorContext());
-        } else if (const auto& op = details.GetPendingPileOperation(); op.HasErrorReason()) {
-            Reply(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder() << "Pile is added to the cluster, but its parts of"
-                " storage groups can't be created (this is retried until it succeeds): " << op.GetErrorReason(),
-                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+        if (const auto& bridgeInfo = ev->Get()->BridgeInfo) { // wait for the config with bridge info otherwise
+            static_cast<TDerived*>(this)->Check(*ev->Get()->Config,
+                bridgeInfo->ResolvePile(this->GetProtoRequest()->pile_name()));
         }
     }
 
     void PassAway() override {
         if (Subscribed) {
-            Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvUnsubscribe);
+            this->Send(MakeBlobStorageNodeWardenID(this->SelfId().NodeId()), new TEvents::TEvUnsubscribe);
         }
         TBase::PassAway();
+    }
+};
+
+class TAddPileRequest : public TPileOperationRequest<TAddPileRequest, TEvAddPileRequest, Ydb::Bridge::AddPileResult> {
+public:
+    using TPileOperationRequest::TPileOperationRequest;
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record, const TString& pileName) {
+        record.MutableAddBridgePile()->SetPileName(pileName);
+    }
+
+    void Check(const NKikimrBlobStorage::TStorageConfig& config, const TBridgeInfo::TPile *pile) {
+        // INACTIVE pile means this node has not got the config with the pile added yet
+        CheckFinished(config, pile, pile && pile->State != NKikimrBridge::TClusterState::INACTIVE,
+            "Pile is added to the cluster, but its parts of storage groups can't be created");
+    }
+};
+
+class TRemovePileRequest : public TPileOperationRequest<TRemovePileRequest, TEvRemovePileRequest,
+        Ydb::Bridge::RemovePileResult> {
+public:
+    using TPileOperationRequest::TPileOperationRequest;
+
+    void FillCommand(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot& record, const TString& pileName) {
+        record.MutableRemoveBridgePile()->SetPileName(pileName);
+    }
+
+    void Check(const NKikimrBlobStorage::TStorageConfig& config, const TBridgeInfo::TPile *pile) {
+        // the pile can be dropped from the config only when it is INACTIVE
+        CheckFinished(config, pile, !pile || pile->State == NKikimrBridge::TClusterState::INACTIVE,
+            "Pile is being removed from the cluster, but its parts of storage groups can't be deleted");
     }
 };
 
@@ -545,6 +587,10 @@ void DoConvertToBridge(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider
 
 void DoAddPile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TAddPileRequest(p.release()));
+}
+
+void DoRemovePile(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TRemovePileRequest(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

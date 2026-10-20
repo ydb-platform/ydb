@@ -131,6 +131,11 @@ class BridgeClient(object):
         request.pile_name = pile_name
         return self.invoke(request, 'AddPile')
 
+    def remove_pile(self, pile_name):
+        request = bridge_api.RemovePileRequest()
+        request.pile_name = pile_name
+        return self.invoke(request, 'RemovePile')
+
     @property
     def per_pile_state(self):
         """

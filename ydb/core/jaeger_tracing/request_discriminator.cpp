@@ -102,6 +102,7 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
     {"Bridge.ConvertToBridge", ERequestType::BRIDGE_CONVERTTOBRIDGE},
     {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},
+    {"Bridge.RemovePile", ERequestType::BRIDGE_REMOVEPILE},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

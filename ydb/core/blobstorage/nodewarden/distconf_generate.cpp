@@ -415,6 +415,28 @@ namespace NKikimr::NStorage {
             }
         }
 
+        // static VDisks take slot ids below the ones BSC allocates from (its PDisks start with NextVSlotId of 1000), as
+        // BSC (of older versions) doesn't check VSlots of static VDisks, and VSlots of BSC being deleted are not even
+        // listed in base config; ids of the destroyed static VDisks are kept until they are slain; when static ids have
+        // already reached BSC's range, new ones go above every VSlot listed
+        static constexpr ui32 MinBscVSlotId = 1000;
+        THashMap<TPDiskId, ui32> maxStaticVSlotId;
+        if (bsConfig->HasServiceSet()) {
+            for (const auto& vdisk : bsConfig->GetServiceSet().GetVDisks()) {
+                const auto& location = vdisk.GetVDiskLocation();
+                auto& maxId = maxStaticVSlotId[TPDiskId(location.GetNodeID(), location.GetPDiskID())];
+                maxId = Max(maxId, location.GetVDiskSlotID());
+            }
+        }
+        auto allocateVSlotId = [&](TPDiskId pdiskId) {
+            ui32& id = maxStaticVSlotId[pdiskId];
+            if (++id >= MinBscVSlotId) {
+                id = Max(id, maxVSlotId[pdiskId] + 1);
+            }
+            maxVSlotId[pdiskId] = Max(maxVSlotId[pdiskId], id);
+            return id;
+        };
+
         // build PDisk locator map (nodeId:path -> pdiskId)
         THashSet<std::tuple<ui32, TString>> pdiskLocations;
         for (const auto& [pdiskId, item] : pdisks) {
@@ -599,7 +621,7 @@ namespace NKikimr::NStorage {
             } else {
                 sLoc->SetNodeID(pdiskId.NodeId);
                 sLoc->SetPDiskID(pdiskId.PDiskId);
-                sLoc->SetVDiskSlotID(++maxVSlotId[pdiskId]); // keep VDiskSlotID for unchanged items
+                sLoc->SetVDiskSlotID(allocateVSlotId(pdiskId)); // keep VDiskSlotID for unchanged items
                 sLoc->SetPDiskGuid(pdisk.GetPDiskGuid());
 
                 auto *sDisk = sSet->AddVDisks();

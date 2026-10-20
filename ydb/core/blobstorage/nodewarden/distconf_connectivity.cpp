@@ -1,5 +1,12 @@
 #include "distconf.h"
 
+#include <ydb/core/base/nameservice.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
+#include <ydb/library/actors/interconnect/interconnect.h>
+
+#include <array>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -19,14 +26,19 @@ namespace NKikimr::NStorage {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
-        // peers which haven't reported in the handshake of their session that they take pile ids from pile registry;
-        // the sessions are not checked again, so they are disconnected once the list of piles has been changed
-        THashSet<ui32> PileListChangeIncapablePeers;
+        // bridge feature levels reported by peers in the handshakes of their sessions (absent for the ones reporting
+        // nothing); the sessions are not checked again, so the peers are disconnected once the config requires more
+        THashMap<ui32, ui32> PeerFeatureLevels;
 
-        static constexpr TStringBuf DistconfKey = "distconf";
-        // the payload is sent with this key once the list of piles has been changed; older versions don't know it, so
-        // they treat such peer as not bridge-capable one and neither connect, nor take its configuration
-        static constexpr TStringBuf PileListChangedDistconfKey = "distconf-pile-list-changed";
+        // the payload is sent with the key of the bridge feature level the config requires; older versions don't know the
+        // keys of the levels they don't support, so they treat such peer as not bridge-capable one and neither connect,
+        // nor take its configuration
+        static constexpr std::array<TStringBuf, 3> DistconfKeys{
+            "distconf",
+            "distconf-pile-list-changed", // BridgeFeatureLevelPileList
+            "distconf-pile-ops", // BridgeFeatureLevelPileOps
+        };
+        static_assert(DistconfKeys.size() == BridgeFeatureLevel + 1);
 
         using TClusterState = NKikimrBridge::TClusterState;
 
@@ -75,10 +87,13 @@ namespace NKikimr::NStorage {
                 Receive(temp);
             }
 
-            // peers of older versions can't work with the configuration once the list of piles has been changed
-            if (IsPileListChanged(*StorageConfig)) {
-                for (const ui32 peerNodeId : std::exchange(PileListChangeIncapablePeers, {})) {
-                    DisconnectIncapablePeer(peerNodeId);
+            // peers of older versions can't work with the configuration requiring the features they don't support
+            const ui32 required = GetRequiredBridgeFeatureLevel(*StorageConfig);
+            for (auto it = PeerFeatureLevels.begin(); it != PeerFeatureLevels.end(); ) {
+                const auto [peerNodeId, level] = *it++;
+                if (level < required) {
+                    DisconnectIncapablePeer(peerNodeId, level);
+                    PeerFeatureLevels.erase(peerNodeId);
                 }
             }
 
@@ -136,9 +151,8 @@ namespace NKikimr::NStorage {
         THashMap<TString, TString> CreateParams(const NKikimrBlobStorage::TConnectivityPayload& outgoing) {
             THashMap<TString, TString> res;
             if (outgoing.ByteSizeLong()) {
-                const TStringBuf key = StorageConfig && IsPileListChanged(*StorageConfig)
-                    ? PileListChangedDistconfKey
-                    : DistconfKey;
+                const ui32 required = StorageConfig ? GetRequiredBridgeFeatureLevel(*StorageConfig) : 0;
+                const TStringBuf key = DistconfKeys[Min<ui32>(required, BridgeFeatureLevel)];
                 const bool success = outgoing.SerializeToString(&res[key]);
                 Y_ABORT_UNLESS(success);
             }
@@ -148,34 +162,39 @@ namespace NKikimr::NStorage {
         // returns false if the payload is present, but can't be parsed
         static bool ParsePayload(const THashMap<TString, TString>& params,
                 NKikimrBlobStorage::TConnectivityPayload *incoming) {
-            for (const TStringBuf key : {PileListChangedDistconfKey, DistconfKey}) {
-                if (const auto it = params.find(key); it != params.end()) {
-                    return incoming->ParseFromString(it->second);
+            for (auto it = DistconfKeys.rbegin(); it != DistconfKeys.rend(); ++it) {
+                if (const auto jt = params.find(*it); jt != params.end()) {
+                    return incoming->ParseFromString(jt->second);
                 }
             }
             return true;
         }
 
-        // peer of older version can't work with the configuration once the list of piles has been changed
-        bool IsPeerIncompatible(const NKikimrBlobStorage::TConnectivityPayload& incoming) const {
-            return StorageConfig && IsPileListChanged(*StorageConfig) && !incoming.GetPileListChangeCapable();
+        static ui32 GetPeerFeatureLevel(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            return GetReportedBridgeFeatureLevel(incoming.GetBridgeFeatureLevel(), incoming.GetPileListChangeCapable());
         }
 
-        // remember whether the peer of just established session can work with the changed list of piles
+        // peer of older version can't work with the configuration requiring the features it doesn't support
+        bool IsPeerIncompatible(const NKikimrBlobStorage::TConnectivityPayload& incoming) const {
+            return StorageConfig && GetPeerFeatureLevel(incoming) < GetRequiredBridgeFeatureLevel(*StorageConfig);
+        }
+
+        // remember bridge feature level of the peer of just established session
         void RegisterPeer(ui32 peerNodeId, const NKikimrBlobStorage::TConnectivityPayload& incoming) {
-            if (incoming.GetPileListChangeCapable()) {
-                PileListChangeIncapablePeers.erase(peerNodeId);
+            if (const ui32 level = GetPeerFeatureLevel(incoming); level >= BridgeFeatureLevel) {
+                PeerFeatureLevels.erase(peerNodeId); // no feature can be required beyond this version's level
             } else if (IsPeerIncompatible(incoming)) {
-                DisconnectIncapablePeer(peerNodeId);
+                DisconnectIncapablePeer(peerNodeId, level);
             } else {
-                PileListChangeIncapablePeers.insert(peerNodeId);
+                PeerFeatureLevels[peerNodeId] = level;
             }
         }
 
-        void DisconnectIncapablePeer(ui32 peerNodeId) {
-            YDB_LOG_WARN("Disconnecting peer running version not supporting changes of the list of piles",
+        void DisconnectIncapablePeer(ui32 peerNodeId, ui32 level) {
+            YDB_LOG_WARN("Disconnecting peer running version not supporting bridge features of the config",
                 {"marker", "NWDCC08"},
-                {"peerNodeId", peerNodeId});
+                {"peerNodeId", peerNodeId},
+                {"bridgeFeatureLevel", level});
             TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
                 TActivationContext::InterconnectProxy(peerNodeId), {}, nullptr, 0));
         }
@@ -238,7 +257,9 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
             NKikimrBlobStorage::TConnectivityPayload outgoing;
-            outgoing.SetPileListChangeCapable(true); // the peer takes our config only if we report it
+            // the peer takes our config only if we report the features it requires
+            outgoing.SetPileListChangeCapable(true);
+            outgoing.SetBridgeFeatureLevel(BridgeFeatureLevel);
 
             const ui32 peerNodeId = ev->Get()->PeerNodeId;
 
@@ -271,7 +292,7 @@ namespace NKikimr::NStorage {
                 }
                 error = "missing mandatory peer bridge pile id";
             } else if (IsPeerIncompatible(incoming)) {
-                error = "peer runs version not supporting changes of the list of piles, it has to be upgraded";
+                error = "peer runs version not supporting bridge features of the config, it has to be upgraded";
             } else if (const auto value = ResolvePeerPile(incoming); !value) {
                 error = "can't resolve peer bridge pile";
             } else if (peerBridgePileId && peerBridgePileId != value) {
@@ -338,6 +359,7 @@ namespace NKikimr::NStorage {
         void FillInSelfPile(NKikimrBlobStorage::TConnectivityPayload *outgoing) {
             SelfBridgePileId.CopyToProto(outgoing, &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
             outgoing->SetPileListChangeCapable(true);
+            outgoing->SetBridgeFeatureLevel(BridgeFeatureLevel);
             if (SelfBridgePileName) {
                 outgoing->SetBridgePileName(*SelfBridgePileName);
             }

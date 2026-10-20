@@ -620,6 +620,7 @@ namespace NKikimr::NStorage {
 
         std::unordered_map<ui32, TGroupRecord> Groups;
         std::unordered_set<ui32> EjectedGroups;
+        std::unordered_set<ui32> StaticGroupIds; // static groups of the last static service set
         using TGroupPendingQueue = THashMap<ui32, std::deque<std::tuple<TMonotonic, std::unique_ptr<IEventHandle>>>>;
         TGroupPendingQueue GroupPendingQueue;
         std::set<std::tuple<TMonotonic, TGroupPendingQueue::value_type*>> TimeoutToQueue;
@@ -645,8 +646,13 @@ namespace NKikimr::NStorage {
         // issue GetGroup request to BSC/GroupResolver actor
         void RequestGroupConfig(ui32 groupId, TGroupRecord& group);
 
-        // process group information from the configuration message
-        void ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
+        // process group information from the configuration message; static groups missing in the comprehensive static
+        // service set are ejected (they go away along with the pile being removed, their ids are never reused)
+        void ApplyGroupInfoFromServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic,
+            bool comprehensive);
+
+        // stop the proxy of the group that has been destroyed and forget the group
+        void EjectGroup(ui32 groupId);
 
         // process group information obtained by one of managed entities
         void Handle(TEvBlobStorage::TEvUpdateGroupInfo::TPtr ev);

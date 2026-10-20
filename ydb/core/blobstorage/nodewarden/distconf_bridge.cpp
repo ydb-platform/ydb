@@ -41,6 +41,17 @@ namespace NKikimr::NStorage {
             }
         }
 
+        // bump the generation of the static bridge proxy group along with its inline pile, if it has one; the new
+        // generation of the inline pile is recorded to make its VDisks follow it
+        void BumpBridgeProxyGroupGeneration(NKikimrBlobStorage::TGroupInfo *group, THashMap<TGroupId, ui32>& bumped) {
+            const auto groupId = TGroupId::FromProto(group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            group->SetGroupGeneration(group->GetGroupGeneration() + 1);
+            if (auto *inlinePile = NBridge::FindGroupPileByGroupId(group->MutableBridgeGroupState(), groupId)) {
+                inlinePile->SetGroupGeneration(group->GetGroupGeneration());
+                bumped.emplace(groupId, group->GetGroupGeneration());
+            }
+        }
+
     } // anonymous
 
     bool TDistributedConfigKeeper::UpdateBridgeConfig(NKikimrBlobStorage::TStorageConfig *config) {
@@ -117,8 +128,9 @@ namespace NKikimr::NStorage {
         // with the list of piles changed or reordered; the change is the one of pile ids, or of positions of piles
         // (against the ones in the current config, or the ones matching pile ids when it is unknown)
         const auto implied = NBridge::MakeImpliedPileRegistry(bridgeConfig);
-        auto positions = next; // PileListChanged flag is not a matter of positions
+        auto positions = next; // flags of the registry are not a matter of positions
         positions.ClearPileListChanged();
+        positions.ClearRequiredFeatureLevel();
         *pileListChanged = !equals(next, *registry) || !equals(implied, currentBridgeConfig
             ? NBridge::MakeImpliedPileRegistry(*currentBridgeConfig)
             : positions);
@@ -386,6 +398,13 @@ namespace NKikimr::NStorage {
         auto *op = details->MutablePendingPileOperation();
         pileId.CopyToProto(op, &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::SetBridgePileId);
         op->SetKind(NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD);
+        // nodes of older versions (the ones of the pile being added too, as they were not asked) can't work with pending
+        // pile operations, and the list of piles may have been changed by the version not setting PileListChanged
+        auto *pileRegistry = details->MutablePileRegistry();
+        pileRegistry->SetPileListChanged(true);
+        pileRegistry->SetRequiredFeatureLevel(Max<ui32>(pileRegistry->GetRequiredFeatureLevel(),
+            BridgeFeatureLevelPileOps));
+        op->SetOperationId(config->GetGeneration() + 1); // the generation of the config being proposed
 
         // allocate the part of every bridged static group in the pile; the part is unsynced, so it is synced from the
         // very beginning when the pile rejoins the cluster
@@ -402,6 +421,9 @@ namespace NKikimr::NStorage {
             pileGroupTypes.emplace(groupId, TBlobStorageGroupType(static_cast<TBlobStorageGroupType::EErasureSpecies>(
                 group.GetErasureSpecies())));
         }
+        if (const ui32 next = details->GetNextStaticGroupId()) {
+            nextGroupId = Max(nextGroupId, TGroupId::FromValue(next - 1)); // ids of the removed groups are not reused
+        }
         auto findGroup = [&](TGroupId groupId) -> NKikimrBlobStorage::TGroupInfo* {
             for (auto& group : *ss->MutableGroups()) {
                 if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
@@ -413,12 +435,13 @@ namespace NKikimr::NStorage {
         THashMap<TGroupId, ui32> bumpedGenerations; // inline piles which get their generation bumped along with proxy
         for (const TGroupId proxyGroupId : proxyGroupIds) {
             std::optional<TBlobStorageGroupType> groupType;
-            NBridge::ForEachGroupPile(findGroup(proxyGroupId)->GetBridgeGroupState(), [&](TBridgePileId,
+            NBridge::FindGroupPile(findGroup(proxyGroupId)->GetBridgeGroupState(), [&](TBridgePileId,
                     const NKikimrBridge::TGroupState::TPile& pile) {
                 const auto it = pileGroupTypes.find(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                if (!groupType && it != pileGroupTypes.end()) {
+                if (it != pileGroupTypes.end()) {
                     groupType = it->second;
                 }
+                return groupType.has_value();
             });
             if (!groupType) {
                 return TStringBuilder() << "can't find erasure of bridged static group GroupId# " << proxyGroupId;
@@ -447,11 +470,7 @@ namespace NKikimr::NStorage {
             pile->SetBecameUnsyncedGeneration(generation);
 
             // proxy group gets new generation to make its users pick up the new pile
-            proxyGroup->SetGroupGeneration(proxyGroup->GetGroupGeneration() + 1);
-            if (auto *inlinePile = NBridge::FindGroupPileByGroupId(proxyGroup->MutableBridgeGroupState(), proxyGroupId)) {
-                inlinePile->SetGroupGeneration(proxyGroup->GetGroupGeneration());
-                bumpedGenerations.emplace(proxyGroupId, proxyGroup->GetGroupGeneration());
-            }
+            BumpBridgeProxyGroupGeneration(proxyGroup, bumpedGenerations);
         }
         UpdateStaticVDiskGenerations(ss, bumpedGenerations);
 
@@ -495,6 +514,80 @@ namespace NKikimr::NStorage {
 #undef ADD_RING_GROUP
 
         return std::nullopt;
+    }
+
+    std::optional<TString> TDistributedConfigKeeper::RemoveBridgePileFromConfig(NKikimrBlobStorage::TStorageConfig *config,
+            TBridgePileId pileId) {
+        auto *clusterState = config->MutableClusterState();
+        if (NBridge::GetPileState(*clusterState, pileId) != NKikimrBridge::TClusterState::DISCONNECTED) {
+            return "pile is not DISCONNECTED";
+        }
+        clusterState->SetPerPileState(pileId.GetPileIndex(), NKikimrBridge::TClusterState::INACTIVE);
+
+        auto *details = config->MutableClusterStateDetails();
+        EraseIf(*details->MutablePileSyncState(), [&](const auto& pss) {
+            return TBridgePileId::FromProto(&pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                pileId;
+        });
+        details->ClearPendingPileOperation();
+        auto *registry = details->MutablePileRegistry();
+        if (TBridgePileId::FromProto(registry, &NKikimrBridge::TPileRegistry::GetImplicitPileId) == pileId) {
+            registry->ClearImplicitPileId(); // nodes and groups of the cluster all have their piles now
+        }
+
+        // drop the part in the pile of every bridged static group; inline pile keeps serving as bridge proxy group only
+        auto *ss = config->MutableBlobStorageConfig()->MutableServiceSet();
+        for (const auto& group : ss->GetGroups()) {
+            details->SetNextStaticGroupId(Max(details->GetNextStaticGroupId(), group.GetGroupID() + 1));
+        }
+        THashSet<TGroupId> removedGroupIds;
+        THashMap<TGroupId, ui32> bumpedGenerations; // inline piles which get their generation bumped along with proxy
+        for (auto& group : *ss->MutableGroups()) {
+            if (!group.HasBridgeGroupState()) {
+                continue;
+            }
+            auto *state = group.MutableBridgeGroupState();
+            const auto *pile = NBridge::GetGroupPile(*state, pileId);
+            if (!pile) {
+                continue;
+            }
+            const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            const auto pileGroupId = TGroupId::FromProto(pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            removedGroupIds.insert(pileGroupId);
+            NBridge::RemoveGroupPile(state, pileId);
+            if (pileGroupId == groupId) {
+                // the group stops being an inline pile, it is the same as bridge proxy group of native cluster now
+                group.ClearRings();
+                group.ClearErasureSpecies();
+                group.ClearBridgePileId();
+                group.ClearBridgeProxyGroupId();
+            }
+
+            // proxy group gets new generation to make its users forget the removed pile
+            BumpBridgeProxyGroupGeneration(&group, bumpedGenerations);
+        }
+        EraseIf(*ss->MutableGroups(), [&](const auto& group) {
+            const auto groupId = TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID);
+            return removedGroupIds.contains(groupId) && !group.HasBridgeGroupState();
+        });
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            if (removedGroupIds.contains(VDiskIDFromVDiskID(vdisk.GetVDiskID()).GroupID)) {
+                // the VDisk is destroyed by its node when the node gets this config; its slot stays occupied meanwhile
+                vdisk.ClearDonorMode();
+                vdisk.ClearDonors();
+                vdisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+            }
+        }
+        UpdateStaticVDiskGenerations(ss, bumpedGenerations);
+
+        // state storage replicas of the pile
+        return ForEachStateStorageConfig(config, [&](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+            EraseIf(*pb->MutableRingGroups(), [&](const auto& ringGroup) {
+                return TBridgePileId::FromProto(&ringGroup, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId) ==
+                    pileId;
+            });
+            return std::nullopt;
+        });
     }
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState) {

@@ -21,6 +21,9 @@ SORTS = frozenset({BOOL, INT})
 _SYMBOL = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 # Keep structural interning bounded; larger scopes retain exact identity sharing.
 _MAX_STRUCTURAL_CSE_SCOPE_NODES = 16_384
+# Preserve wide shared Boolean guards instead of copying every leaf into each
+# consumer. This changes only associative grouping, never the truth condition.
+_MAX_FLATTENED_JUNCTION_CHILDREN = 32
 # Retain at most one rendered obligation for repeated check/model queries.
 _MAX_RENDERED_BODY_BYTES = 128 * 1024 * 1024
 
@@ -638,7 +641,10 @@ def _junction(operation: str, neutral: Term, terminal: Term, terms: tuple[Term, 
             return terminal
         if term == neutral:
             continue
-        if term.operation == operation:
+        if (
+            term.operation == operation
+            and len(term.arguments) <= _MAX_FLATTENED_JUNCTION_CHILDREN
+        ):
             if id(term) in expanded:
                 continue
             expanded.add(id(term))

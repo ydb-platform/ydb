@@ -728,6 +728,47 @@ class SmtTest(unittest.TestCase):
                         with self.assertRaises(smt.SmtError):
                             connective(*args)  # type: ignore[arg-type]
 
+    def test_shared_boolean_prefixes_have_linear_storage(self):
+        for connective in (smt.and_, smt.or_):
+            prefix = connective(*(smt.symbol(f"base_{i}", smt.BOOL) for i in range(64)))
+            guards = [prefix]
+            for i in range(1024):
+                prefix = connective(prefix, smt.symbol(f"extra_{i}", smt.BOOL))
+                guards.append(prefix)
+            pending = list(guards)
+            seen = set()
+            edges = 0
+            while pending:
+                term = pending.pop()
+                if id(term) in seen:
+                    continue
+                seen.add(id(term))
+                edges += len(term.arguments)
+                pending.extend(term.arguments)
+            self.assertLess(edges, 50 * len(guards))
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_bounded_boolean_flattening_preserves_wide_and_negated_guards(self):
+        for operation, connective in (("and", smt.and_), ("or", smt.or_)):
+            script = smt.Script(timeout_ms=2000)
+            terms = tuple(script.fresh_constant(f"term_{i}", smt.BOOL) for i in range(96))
+            shared = connective(*terms[:64])
+            second = connective(*terms[32:])
+            cases = (
+                (shared, second, terms[0]),
+                (shared, shared, smt.not_(terms[4])),
+                (smt.not_(shared), terms[4], shared),
+                (smt.not_(second), shared, terms[95]),
+            )
+            differences = tuple(smt.not_(smt.eq(
+                smt.Term(smt.BOOL, operation, inputs), connective(*inputs),
+            )) for inputs in cases)
+            script.assert_term(smt.or_(*differences))
+            solved = subprocess.run((SOLVER, "-in"), input=script.render(), text=True,
+                                    capture_output=True, check=False, timeout=10)
+            self.assertEqual(solved.returncode, 0, solved.stderr)
+            self.assertEqual(solved.stdout.strip(), "unsat")
+
     def test_boolean_complements_and_shared_junctions(self):
         first = smt.symbol("first", smt.BOOL)
         second = smt.symbol("second", smt.BOOL)

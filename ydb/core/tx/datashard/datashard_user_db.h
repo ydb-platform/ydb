@@ -248,7 +248,7 @@ public:
     bool PrechargeRow(
         const TTableId& tableId,
         const TArrayRef<const TRawTypeValue> key,
-        bool operationNeedsRowState);
+        bool needsMvccRead);
 
 private:
     void EnsureVolatileTxId();

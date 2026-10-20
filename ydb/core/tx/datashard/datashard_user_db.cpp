@@ -359,16 +359,14 @@ void TDataShardUserDb::EraseRow(
 bool TDataShardUserDb::PrechargeRow(
     const TTableId& tableId,
     const TArrayRef<const TRawTypeValue> key,
-    bool operationNeedsRowState)
+    bool needsMvccRead)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
 
-    const auto* collector = GetChangeCollector(tableId);
-    const bool includeHistory = operationNeedsRowState || (collector && collector->NeedToReadKeys());
     // Finite versions enable history for row-state reads. Conflict checks only
     // inspect the latest version and can use Max().
-    const auto version = includeHistory ? MvccVersion : TRowVersion::Max();
+    const auto version = needsMvccRead ? MvccVersion : TRowVersion::Max();
     return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>(),
         NTable::EDirection::Forward, version).Ready;
 }

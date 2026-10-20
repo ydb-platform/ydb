@@ -36,6 +36,38 @@ def _structurally_repeated_successor_comparison(name):
 
 
 class SmtTest(unittest.TestCase):
+    def test_repeated_render_preserves_branches_models_and_later_declarations(self):
+        def exercise():
+            script = smt.Script(timeout_ms=100)
+            predicate = script.fresh_defined_function(
+                "shared definition", (smt.INT,), smt.BOOL,
+                lambda args: _structurally_repeated_successor_comparison(args[0].atom),
+            )
+            value = script.fresh_constant("value", smt.INT)
+            script.assert_obligation(predicate(value))
+            formulas = [script.render(), script.render(values=(value,), timeout_ms=7)]
+            extra = script.fresh_defined_function(
+                "later definition", (smt.INT,), smt.BOOL,
+                lambda args: smt.not_(predicate(args[0])),
+            )
+            script.assert_term(smt.not_(smt.lt(value, smt.ZERO)))
+            branch = extra(value)
+            formulas.extend((script.render_branch(branch), script.render_branch(branch), script.render()))
+            script.assert_global(smt.lt(value, smt.int_value(10)))
+            formulas.append(script.render())
+            return formulas, script
+
+        cached, script = exercise()
+        self.assertIsNotNone(script._rendered_body)
+        with mock.patch.object(smt, "_MAX_RENDERED_BODY_BYTES", 0):
+            uncached, script = exercise()
+        self.assertEqual(cached, uncached)
+        self.assertIsNone(script._rendered_body)
+        with mock.patch.object(smt, "_MAX_RENDERED_BODY_BYTES", 1):
+            limited, script = exercise()
+        self.assertEqual(cached, limited)
+        self.assertIsNone(script._rendered_body)
+
     def test_term_structural_hash_is_cached_for_deep_shared_dags(self):
         first = _deep_shared_term(smt.symbol("value", smt.INT))
         second = _deep_shared_term(smt.symbol("value", smt.INT))

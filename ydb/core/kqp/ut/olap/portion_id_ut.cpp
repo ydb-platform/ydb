@@ -856,6 +856,85 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
             FROM `/Root/ColumnTable`
         )");
     }
+
+    // _yql_portion_id sits at Max<ui32>() - 998, and TGraph seeds new resource ids at max(column id) + 1.
+    // OptimizeConditionsForIndexes takes 3 ids per `column = const` node. Past the remaining ui32 range the scan
+    // fails with "resource id limit exceeded" instead of wrapping onto a real column id.
+    TString BuildEqualityDisjunction(const ui32 terms, const bool withPortionId) {
+        TStringBuilder query;
+        query << "PRAGMA kikimr.EnableSystemColumns = \"true\";\n";
+        query << "SELECT Key";
+        if (withPortionId) {
+            query << ", _yql_portion_id AS PortionId";
+        }
+        query << "\nFROM `/Root/ColumnTable`\nWHERE ";
+        for (ui32 i = 0; i < terms; ++i) {
+            if (i) {
+                query << " OR ";
+            }
+            query << "V = " << i << "ul";
+        }
+        return query;
+    }
+
+    Y_UNIT_TEST(PortionIdResourceIdWrap) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session
+                                .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    V Uint64,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                .GetValueSync();
+        UNIT_ASSERT_C(scheme.GetStatus() == NYdb::EStatus::SUCCESS, scheme.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                    INSERT INTO `/Root/ColumnTable` (Key, V) VALUES (1u, 0ul);
+                )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // 300 comparisons stay under the ui32 wrap. The same 399 without portion id never starts the counter at the top.
+        {
+            auto rows = ExecuteScanQuery(tableClient, BuildEqualityDisjunction(300, true), false);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        }
+        {
+            auto rows = ExecuteScanQuery(tableClient, BuildEqualityDisjunction(399, false), false);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        }
+        {
+            auto it = tableClient.StreamExecuteScanQuery(BuildEqualityDisjunction(399, true)).GetValueSync();
+            TString issues;
+            if (it.IsSuccess()) {
+                for (;;) {
+                    auto streamPart = it.ReadNext().GetValueSync();
+                    if (streamPart.EOS()) {
+                        break;
+                    }
+                    if (!streamPart.IsSuccess()) {
+                        issues = streamPart.GetIssues().ToString();
+                        break;
+                    }
+                }
+            } else {
+                issues = it.GetIssues().ToString();
+            }
+            UNIT_ASSERT_C(issues.Contains("resource id limit exceeded"), issues);
+        }
+    }
 }
 
 }   // namespace NKikimr::NKqp

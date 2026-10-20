@@ -1,30 +1,16 @@
 #!/usr/bin/env python3
-"""Local layout of CI metrics DataLens objects."""
+"""Local layout of pulled DataLens objects."""
 
 from __future__ import annotations
 
 import json
-import uuid
 from pathlib import Path
+
 HERE = Path(__file__).resolve().parent
 OBJECTS = HERE / "objects"
 MANIFEST_PATH = HERE / "manifest.json"
 QUERY_PLACEHOLDER = "$QUERY_SQL"
 DATASET_DROP = frozenset(["component_errors"])
-OBJECT_DIRS = {
-    "dashboard": OBJECTS / "dashboard",
-    "duration": OBJECTS / "charts" / "duration",
-    "gantt": OBJECTS / "charts" / "gantt",
-    "pdiff": OBJECTS / "charts" / "pdiff",
-    "capacity-tight": OBJECTS / "charts" / "capacity-tight",
-    "capacity-use": OBJECTS / "charts" / "capacity-use",
-    "capacity-pool": OBJECTS / "charts" / "capacity-pool",
-    "capacity-queue": OBJECTS / "charts" / "capacity-queue",
-    "duration-ds": OBJECTS / "datasets" / "duration",
-    "gantt-ds": OBJECTS / "datasets" / "gantt",
-    "pickers-ds": OBJECTS / "datasets" / "pickers",
-    "capacity-ds": OBJECTS / "datasets" / "capacity-ds",
-}
 
 
 def load_manifest(path=None):
@@ -43,8 +29,6 @@ def object_names(manifest, names=None):
 
 
 def object_dir(name, manifest=None):
-    if name in OBJECT_DIRS:
-        return OBJECT_DIRS[name]
     spec = (manifest or load_manifest())["objects"].get(name) or {}
     kind = spec.get("kind")
     if kind == "chart":
@@ -56,134 +40,6 @@ def object_dir(name, manifest=None):
     raise KeyError(name)
 
 
-def save_manifest(manifest, path=None):
-    write_json(path or MANIFEST_PATH, manifest)
-
-
-def ydb_connection_id(dataset_name="duration-ds"):
-    dataset = read_json(object_dir(dataset_name) / "dataset.json")
-    for source in dataset.get("sources") or []:
-        if source.get("connection_id"):
-            return source["connection_id"]
-    raise SystemExit("%s has no connection_id" % dataset_name)
-
-
-def ydb_subselect_dataset(title, sql, connection_id, description=""):
-    """Minimal YDB subquery dataset. validateDataset fills raw_schema and result_schema."""
-    source_id = str(uuid.uuid4())
-    avatar_id = str(uuid.uuid4())
-    return {
-        "sources": [
-            {
-                "id": source_id,
-                "title": title,
-                "connection_id": connection_id,
-                "source_type": "YDB_SUBSELECT",
-                "managed_by": "user",
-                "valid": True,
-                "virtual": False,
-                "parameters": {"subsql": sql, "manual": True},
-                "raw_schema": [],
-                "index_info_set": None,
-            }
-        ],
-        "source_avatars": [
-            {
-                "id": avatar_id,
-                "source_id": source_id,
-                "title": title,
-                "is_root": True,
-                "managed_by": "user",
-                "valid": True,
-                "virtual": False,
-            }
-        ],
-        "avatar_relations": [],
-        "result_schema": [],
-        "result_schema_aux": {"inter_dependencies": {"deps": []}},
-        "obligatory_filters": [],
-        "rls": {},
-        "rls2": {},
-        "template_enabled": False,
-        "preview_enabled": True,
-        "load_preview_by_default": True,
-        "data_export_forbidden": False,
-        "description": description,
-    }
-
-
-def chart_create_entry(name, title, workbook_id, dataset_id):
-    entry = chart_entry(name, "")
-    entry.pop("entryId", None)
-    entry["workbookId"] = workbook_id
-    entry["name"] = title
-    if not entry.get("annotation"):
-        entry["annotation"] = {"description": title}
-    raw = (entry.get("data") or {}).get("meta") or ""
-    try:
-        parsed = json.loads(raw) if str(raw).strip() else {}
-    except ValueError:
-        parsed = {}
-    if not isinstance(parsed, dict):
-        parsed = {}
-    links = parsed.get("links") if isinstance(parsed.get("links"), dict) else {}
-    links["dataset"] = dataset_id
-    parsed["links"] = links
-    entry["data"]["meta"] = json.dumps(parsed, indent=4) + "\n"
-    return entry
-
-
-def chart_widget(widget_id, title, chart_id):
-    return {
-        "id": widget_id,
-        "data": {
-            "tabs": [
-                {
-                    "id": "t" + widget_id,
-                    "title": title,
-                    "params": {},
-                    "chartId": chart_id,
-                    "isDefault": True,
-                    "autoHeight": False,
-                    "enableActionParams": False,
-                }
-            ],
-            "hideTitle": False,
-        },
-        "type": "widget",
-        "namespace": "default",
-    }
-
-
-def dashboard_tab(tab_id, title, widgets):
-    items = []
-    layout = []
-    y = 0
-    for spec in widgets:
-        items.append(chart_widget(spec["widget_id"], spec["title"], spec["chart_id"]))
-        height = int(spec["height"])
-        layout.append({"h": height, "i": spec["widget_id"], "w": 36, "x": 0, "y": y})
-        y += height
-    return {
-        "id": tab_id,
-        "title": title,
-        "items": items,
-        "layout": layout,
-        "aliases": {"default": []},
-        "connections": [],
-    }
-
-
-def upsert_dashboard_tab(entry, tab):
-    data = entry.setdefault("data", {})
-    tabs = [item for item in (data.get("tabs") or []) if item.get("id") != tab["id"]]
-    tabs.append(tab)
-    data["tabs"] = tabs
-    settings = data.setdefault("settings", {})
-    settings["hideTabs"] = False
-    return entry
-
-
 def write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
@@ -192,7 +48,6 @@ def write_json(path, payload):
 
 
 def normalize_text(text):
-    """Same trailing newline as write_text, so pull/diff do not false-positive."""
     if text is None:
         return ""
     text = str(text)
@@ -209,11 +64,6 @@ def write_text(path, text):
 def read_json(path):
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def dump_preview(payload, limit=400):
-    text = json.dumps(payload, ensure_ascii=False, sort_keys=True) if not isinstance(payload, str) else payload
-    return text if len(text) <= limit else text[:limit] + "…"
 
 
 def _entry(payload):
@@ -252,11 +102,10 @@ def write_chart(name, payload):
 
 def read_chart(name):
     dest = object_dir(name)
-    meta = read_json(dest / "meta.json")
     return {
         "sources": (dest / "sources.js").read_text(encoding="utf-8"),
         "prepare": (dest / "prepare.js").read_text(encoding="utf-8"),
-        "meta": meta,
+        "meta": read_json(dest / "meta.json"),
     }
 
 
@@ -316,10 +165,8 @@ def write_dataset(name, payload):
 
 def read_dataset(name):
     dest = object_dir(name)
-    return {
-        "sql": (dest / "query.sql").read_text(encoding="utf-8"),
-        "dataset": inject_sql(read_json(dest / "dataset.json"), (dest / "query.sql").read_text(encoding="utf-8")),
-    }
+    sql = (dest / "query.sql").read_text(encoding="utf-8")
+    return {"sql": sql, "dataset": inject_sql(read_json(dest / "dataset.json"), sql)}
 
 
 def extract_dashboard(payload):
@@ -399,25 +246,3 @@ def live_fingerprint(kind, payload):
         data = extract_dashboard(payload).get("data") or {}
         return {"tabs": data.get("tabs"), "settings": data.get("settings")}
     raise ValueError("unknown kind %s" % kind)
-
-
-def collect_texts():
-    """name -> {sql, js, dashboard} strings for local invariant checks."""
-    out = {}
-    for name, dest in OBJECT_DIRS.items():
-        texts = {}
-        sql = dest / "query.sql"
-        if sql.is_file():
-            texts["sql"] = sql.read_text(encoding="utf-8")
-        prepare = dest / "prepare.js"
-        if prepare.is_file():
-            texts["prepare"] = prepare.read_text(encoding="utf-8")
-        sources = dest / "sources.js"
-        if sources.is_file():
-            texts["sources"] = sources.read_text(encoding="utf-8")
-        entry = dest / "entry.json"
-        if entry.is_file():
-            texts["dashboard"] = entry.read_text(encoding="utf-8")
-        if texts:
-            out[name] = texts
-    return out

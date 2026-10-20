@@ -8,7 +8,6 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
-from typing import Any
 
 API_ROOT = "https://api.datalens.tech/rpc"
 API_VERSION = "2"
@@ -60,7 +59,6 @@ def rpc(method, body, token, org_id, timeout=120):
 
 
 def walk_rev_id(payload):
-    """Draft revId after mode=save. Prefer entry.revId / savedId. Never entry.id (object id)."""
     if not isinstance(payload, dict):
         return None
     entry = payload.get("entry") if isinstance(payload.get("entry"), dict) else payload
@@ -86,12 +84,10 @@ def get_dashboard(token, org_id, dashboard_id, workbook_id=None):
     return rpc("getDashboard", body, token, org_id)
 
 
-def get_editor_chart(token, org_id, chart_id, workbook_id=None, rev_id=None):
+def get_editor_chart(token, org_id, chart_id, workbook_id=None):
     body = {"chartId": chart_id}
     if workbook_id:
         body["workbookId"] = workbook_id
-    if rev_id:
-        body["revId"] = rev_id
     return rpc("getEditorChart", body, token, org_id)
 
 
@@ -107,7 +103,6 @@ def update_editor_chart(token, org_id, entry, mode, rev_id=None, workbook_id=Non
 
 
 def publish_editor_chart(token, org_id, entry, workbook_id=None):
-    """Save creates a draft. Publish must put that draft revId on the entry."""
     saved = update_editor_chart(token, org_id, entry, "save", workbook_id=workbook_id)
     draft = walk_rev_id(saved)
     if not draft:
@@ -139,96 +134,7 @@ def update_dashboard(token, org_id, entry, mode, rev_id=None, workbook_id=None, 
         return rpc("updateDashboard", {"mode": mode, "entry": _with_rev_id(entry, rev_id)}, token, org_id)
 
 
-def validate_dataset(token, org_id, dataset, workbook_id, dataset_id):
-    """Fill result_schema from the SQL source. datasetId is required."""
-    return rpc(
-        "validateDataset",
-        {"datasetId": dataset_id, "workbookId": workbook_id, "data": {"dataset": dataset}},
-        token,
-        org_id,
-    )
-
-
-def refresh_dataset_fields(token, org_id, dataset, workbook_id, dataset_id):
-    """Re-read the SQL source and rebuild fields. A plain validate leaves raw_schema empty."""
-    sources = dataset.get("sources") or []
-    if not sources or not sources[0].get("id"):
-        raise DataLensError("validateDataset", 0, "dataset has no source id to refresh")
-    return rpc(
-        "validateDataset",
-        {
-            "datasetId": dataset_id,
-            "workbookId": workbook_id,
-            "data": {
-                "dataset": dataset,
-                "updates": [
-                    {
-                        "action": "refresh_source",
-                        "order_index": 0,
-                        "source": {"id": sources[0]["id"], "force_update_fields": True},
-                    }
-                ],
-            },
-        },
-        token,
-        org_id,
-    )
-
-
-def dataset_from_validate(payload):
-    if not isinstance(payload, dict):
-        return None
-    if isinstance(payload.get("dataset"), dict):
-        return payload["dataset"]
-    data = payload.get("data")
-    if isinstance(data, dict) and isinstance(data.get("dataset"), dict):
-        return data["dataset"]
-    return None
-
-
-def create_dataset(token, org_id, name, dataset, workbook_id):
-    """createDataset. Public docs use workbook_id; retry workbookId on HTTP 400."""
-    body = {"name": name, "dataset": dataset, "workbook_id": workbook_id}
-    try:
-        return rpc("createDataset", body, token, org_id)
-    except DataLensError as exc:
-        if exc.status != 400:
-            raise
-        return rpc(
-            "createDataset",
-            {"name": name, "dataset": dataset, "workbookId": workbook_id},
-            token,
-            org_id,
-        )
-
-
-def dataset_id_from(payload):
-    if not isinstance(payload, dict):
-        return None
-    for key in ("id", "datasetId", "entryId"):
-        if payload.get(key):
-            return payload[key]
-    dataset = payload.get("dataset") if isinstance(payload.get("dataset"), dict) else {}
-    return dataset.get("id") or dataset.get("dataset_id")
-
-
-def create_editor_chart(token, org_id, entry, mode="publish"):
-    """createEditorChart. mode is save or publish."""
-    return rpc("createEditorChart", {"mode": mode, "entry": entry}, token, org_id)
-
-
-def entry_id_from(payload):
-    if not isinstance(payload, dict):
-        return None
-    entry = payload.get("entry") if isinstance(payload.get("entry"), dict) else payload
-    return entry.get("entryId") or entry.get("id")
-
-
 def publish_dashboard(token, org_id, entry, workbook_id=None, dashboard_id=None):
-    """Save creates a draft. Publish that revision by putting revId on the entry.
-
-    updateDashboard rejects a root-level revId.
-    """
     saved = update_dashboard(token, org_id, entry, "save", workbook_id=workbook_id, dashboard_id=dashboard_id)
     draft = walk_rev_id(saved)
     if not draft:

@@ -2,9 +2,6 @@
   "org_id": "bpfssp32nspchhs4df3c",
   "workbook_id": "ev4an7f2ncmk2",
   "dashboard_url": "https://datalens.ru/135ob2ntmr0ok-ci-metrics",
-  "ydb_table": "analytics/ci_metrics",
-  "ydb_config": ".github/config/ydb_qa_config.json",
-  "ydb_database_key": "main",
   "objects": {
     "dashboard": {
       "kind": "dashboard",

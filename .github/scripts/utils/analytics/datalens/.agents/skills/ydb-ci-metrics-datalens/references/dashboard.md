@@ -12,9 +12,7 @@ Cron: `.github/workflows/collect_analytics_fast.yml`.
 | `analytics/ci_metrics_state` | `export_github_job_metrics.py` | Nobody on the dash. Export watermark only. |
 | `analytics/ci_capacity` | `export_runner_capacity.py` | Tab **Runners capacity**: Free quota, Who holds the RAM, Runners |
 
-`python3 .github/scripts/utils/analytics/datalens/dl.py table-info` prints `analytics/ci_metrics` only.
-`describe analytics/ci_capacity` for the runner table.
-More columns: `.github/scripts/utils/analytics/github_actions/README.md`.
+Schema: `.github/scripts/utils/analytics/github_actions/README.md`. Read rows with MCP `user-ydb-qa` `ydb_query`.
 
 ## Tab CI (`citab01`)
 

@@ -50,7 +50,7 @@ FIT_PRESETS = {
 JOB_RANK = {"in_progress": 2, "queued": 1}
 # GitHub-hosted images. They do not wait for ghrun and must not count as demand.
 GITHUB_HOSTED_PREFIXES = ("ubuntu-", "windows-", "macos-")
-GHRUN_NAME_PREFIXES = ("ghrun-", "static-")
+GHRUN_NAME_PREFIXES = ("ghrun-", "static-", "tiny-worker-", "analytic-node-")
 # GitHub's status filter often returns a short page even when more runs exist.
 # Stop only on an empty page, not on len(batch) < per_page.
 RUN_PAGE_SIZE = 100
@@ -150,7 +150,7 @@ def _size_from_raw(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dic
 
 def _parse_footprints_yaml(text: str) -> Dict[str, Any]:
     """Read footprints / default_footprint when PyYAML is not installed."""
-    data: Dict[str, Any] = {"footprints": {}, "default_footprint": {}}
+    data: Dict[str, Any] = {"footprints": {}, "default_footprint": {}, "static_runners": {}}
     section = None
     current = None
     for raw in text.splitlines():
@@ -164,12 +164,18 @@ def _parse_footprints_yaml(text: str) -> Dict[str, Any]:
                 section = "footprints"
             elif line.startswith("default_footprint:"):
                 section = "default"
+            elif line.startswith("static_runners:"):
+                section = "static"
             else:
                 section = None
             continue
         if section == "footprints" and indent == 2 and line.endswith(":"):
             current = line[:-1].strip()
             data["footprints"][current] = {}
+            continue
+        if section == "static" and indent == 2 and line.endswith(":"):
+            current = line[:-1].strip()
+            data["static_runners"][current] = {"footprint": {}}
             continue
         if ":" not in line:
             continue
@@ -181,6 +187,8 @@ def _parse_footprints_yaml(text: str) -> Dict[str, Any]:
             data["default_footprint"][key.strip()] = number
         elif section == "footprints" and current and indent >= 4:
             data["footprints"][current][key.strip()] = number
+        elif section == "static" and current and indent >= 6:
+            data["static_runners"][current].setdefault("footprint", {})[key.strip()] = number
     return data
 
 
@@ -370,12 +378,20 @@ def instance_nrd_gib(instance: Dict[str, Any]) -> Optional[float]:
         return total
     if not is_ghrun(instance):
         return None
-    ram = instance_ram_gib(instance) or 0.0
-    cores = instance_cores(instance) or 0.0
     specs, default = load_label_footprints()
-    if ram <= 16 and cores <= 8:
-        return (specs.get("build-preset-analytic-node") or {}).get("nrd_ssd_gb")
-    return (default or specs.get("build-preset-relwithdebinfo") or {}).get("nrd_ssd_gb")
+    name = instance.get("name") or ""
+    if name.startswith("tiny-worker-"):
+        spec = specs.get("tiny-worker") or {}
+    elif name.startswith("analytic-node-"):
+        spec = specs.get("build-preset-analytic-node") or {}
+    else:
+        ram = instance_ram_gib(instance) or 0.0
+        cores = instance_cores(instance) or 0.0
+        if ram <= 16 and cores <= 8:
+            spec = specs.get("tiny-worker") or specs.get("build-preset-analytic-node") or {}
+        else:
+            spec = default or specs.get("build-preset-relwithdebinfo") or {}
+    return spec.get("nrd_ssd_gb")
 
 
 def age_sec(now: datetime, moment: Optional[datetime]) -> Optional[float]:
@@ -485,6 +501,12 @@ def load_label_footprints(path: Optional[Path] = None):
     for label, raw in (data.get("footprints") or {}).items():
         if isinstance(raw, dict):
             specs[str(label)] = _size_from_raw(raw, default)
+    for label, raw in (data.get("static_runners") or {}).items():
+        if not isinstance(raw, dict):
+            continue
+        spec = _size_from_raw(raw.get("footprint") or raw, default)
+        if spec:
+            specs[str(label)] = spec
     return specs, default
 
 

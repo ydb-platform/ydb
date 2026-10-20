@@ -20,7 +20,7 @@ static_runners:
     footprint:
       vcpu: 4
       ram_gb: 8
-      nrd_ssd_gb: 200
+      nrd_ssd_gb: 186
   cachesrv:
     count: 1
     footprint:
@@ -62,8 +62,8 @@ footprints:
     ram_gb: 256
     nrd_ssd_gb: 2417
   build-preset-analytic-node:
-    vcpu: 4
-    ram_gb: 8
+    vcpu: 8
+    ram_gb: 64
     nrd_ssd_gb: 186
 
 default_footprint:

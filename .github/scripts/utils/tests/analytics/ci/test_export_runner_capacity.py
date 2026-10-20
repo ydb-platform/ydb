@@ -67,6 +67,10 @@ class FootprintsYamlTest(unittest.TestCase):
         self.assertEqual(default, {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0})
         self.assertEqual(
             specs["build-preset-analytic-node"],
+            {"vcpu": 8.0, "ram_gb": 64.0, "nrd_ssd_gb": 186.0},
+        )
+        self.assertEqual(
+            specs["tiny-worker"],
             {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0},
         )
 
@@ -77,6 +81,10 @@ class DiskSizeTest(unittest.TestCase):
 
     def test_tiny_ghrun_defaults_to_186(self):
         self.assertEqual(instance_nrd_gib(vm("ghrun-tiny", 4, 8, "2026-10-02T14:23:23Z", {"ghrun": "tiny"})), 186.0)
+
+    def test_tiny_worker_and_analytic_node_nrd(self):
+        self.assertEqual(instance_nrd_gib(vm("tiny-worker-2026-10-12", 4, 8, "2026-10-12T00:00:00Z")), 186.0)
+        self.assertEqual(instance_nrd_gib(vm("analytic-node-2026-10-2", 8, 64, "2026-10-02T00:00:00Z")), 186.0)
 
     def test_explicit_nrd_disk_wins(self):
         row = vm("ghrun-a", 64, 256, "2026-10-02T14:23:23Z", {"ghrun": "a"})
@@ -178,9 +186,13 @@ class SnapshotRowsTest(unittest.TestCase):
     def test_static_prefix_counts_in_the_ghrun_pool(self):
         old = "2026-10-02T14:23:23Z"
         self.assertTrue(is_ghrun(vm("static-relw-1", 64, 256, old)))
+        self.assertTrue(is_ghrun(vm("tiny-worker-2026-10-12", 4, 8, old)))
+        self.assertTrue(is_ghrun(vm("analytic-node-2026-10-2", 8, 64, old)))
         self.assertFalse(is_ghrun(vm("cachesrv", 32, 96, old)))
         instances = [
             vm("static-relw-1", 64, 256, old),
+            vm("tiny-worker-2026-10-12", 4, 8, old),
+            vm("analytic-node-2026-10-2", 8, 64, old),
             vm("cachesrv", 32, 96, old),
         ]
         pairs = [
@@ -188,15 +200,21 @@ class SnapshotRowsTest(unittest.TestCase):
                 {"name": "PR-check"},
                 {"status": "in_progress", "runner_name": "static-relw-1", "name": "Build and test relwithdebinfo"},
             ),
+            (
+                {"name": "Collect-analytics-fast-run"},
+                {"status": "in_progress", "runner_name": "analytic-node-2026-10-2", "name": "GitHub job metrics"},
+            ),
         ]
         rows = build_snapshot_rows(NOW, limits(), instances, pairs, {
             "relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
         }, True)
         by_key = {(row["kind"], row["name"]): row for row in rows}
         self.assertEqual(by_key[("runner", "static-relw-1")]["state"], "busy")
+        self.assertEqual(by_key[("runner", "tiny-worker-2026-10-12")]["state"], "idle")
+        self.assertEqual(by_key[("runner", "analytic-node-2026-10-2")]["state"], "busy")
         self.assertEqual(by_key[("runner", "cachesrv")]["state"], "other")
-        self.assertEqual(by_key[("summary", "runners.ghrun")]["usage_value"], 1)
-        self.assertEqual(by_key[("summary", "runners.ghrun")]["free_value"], 0)
+        self.assertEqual(by_key[("summary", "runners.ghrun")]["usage_value"], 3)
+        self.assertEqual(by_key[("summary", "runners.ghrun")]["free_value"], 1)
 
     def test_zone_scoped_quota_and_runners(self):
         old = "2026-10-02T14:23:23Z"
@@ -325,11 +343,21 @@ class SnapshotRowsTest(unittest.TestCase):
             "labels": ["self-hosted", "auto-provisioned", "build-preset-analytic-node"],
         }
         size = job_footprint(job, specs, default)
-        self.assertEqual(size, {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0})
+        self.assertEqual(size, {"vcpu": 8.0, "ram_gb": 64.0, "nrd_ssd_gb": 186.0})
         rows = queue_jobs([({"name": "Update Muted tests"}, job)], NOW, specs, default)
-        self.assertEqual(rows[0]["cores"], 4)
-        self.assertEqual(rows[0]["ram"], 8)
+        self.assertEqual(rows[0]["cores"], 8)
+        self.assertEqual(rows[0]["ram"], 64)
         self.assertEqual(rows[0]["nrd"], 186)
+
+    def test_tiny_worker_queue_uses_tiny_size(self):
+        specs, default = load_label_footprints()
+        job = {
+            "id": 2,
+            "status": "queued",
+            "name": "PR-check",
+            "labels": ["self-hosted", "tiny-worker"],
+        }
+        self.assertEqual(job_footprint(job, specs, default), {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0})
 
     def test_enrich_keeps_pr_and_target_branch(self):
         run = {

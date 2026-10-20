@@ -88,6 +88,9 @@ private:
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings, grpcPort, Settings.VerbosityLevel >= EVerbosity::InitLogs);
 
+        // This embedded KQP serves FQ metadata/storage. WASM calls execute in
+        // the separately configured FQ proxy, which selects LOCAL_FILES below.
+        serverSettings.AppConfig->MutableFederatedQueryConfig()->MutableWasmServices()->SetEnabled(false);
         serverSettings.SetEnableYqGrpc(true);
 
         return serverSettings;

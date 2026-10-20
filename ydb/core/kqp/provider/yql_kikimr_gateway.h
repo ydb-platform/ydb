@@ -1754,6 +1754,11 @@ public:
             return *this;
         }
 
+        TLoadTableMetadataSettings& WithRequiredAccess(ui32 access) {
+            RequiredAccess = access;
+            return *this;
+        }
+
         TLoadTableMetadataSettings& WithAuthInfo(bool enable) {
             RequestAuthInfo_ = enable;
             return *this;
@@ -1781,6 +1786,7 @@ public:
 
         NKikimr::NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
         THashMap<TString, TString> ReadAttributes;
+        ui32 RequiredAccess = 0;
         bool RequestStats_ = false;
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;

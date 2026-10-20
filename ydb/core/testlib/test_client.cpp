@@ -23,6 +23,7 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/formats/clickhouse_block.h>
 #include <ydb/core/fq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
@@ -102,6 +103,7 @@
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/viewer/viewer.h>
+
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
@@ -149,15 +151,13 @@
 #include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ymq/grpc_service.h>
 
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <util/system/env.h>
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 
@@ -1482,22 +1482,14 @@ namespace Tests {
                 s3ReadActorFactoryConfig.EnableScheduling = Settings->AppConfig->GetFeatureFlags().GetEnableS3Scheduling();
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
-                    NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
-                    connectorClient,
-                    Settings->CredentialsFactory,
-                    databaseAsyncResolver,
-                    queryServiceConfig.GetS3(),
-                    queryServiceConfig.GetGeneric(),
+                    NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters), connectorClient,
+                    Settings->CredentialsFactory, databaseAsyncResolver, queryServiceConfig.GetS3(), queryServiceConfig.GetGeneric(),
                     queryServiceConfig.GetYt(),
                     Settings->YtGateway ? Settings->YtGateway : NKqp::MakeYtGateway(GetFunctionRegistry(), queryServiceConfig),
-                    queryServiceConfig.GetSolomon(),
-                    Settings->ComputationFactory,
-                    s3ReadActorFactoryConfig,
-                    Settings->DqTaskTransformFactory,
-                    NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
-                    actorSystemPtr,
-                    FederatedQuerySetupDriver_);
+                    queryServiceConfig.GetSolomon(), Settings->ComputationFactory, s3ReadActorFactoryConfig, Settings->DqTaskTransformFactory,
+                    NYql::TPqGatewayConfig{}, Settings->PqGateway ? NYql::CreatePqFileGatewayFactory(Settings->PqGateway) : pqGatewayFactory,
+                    actorSystemPtr, FederatedQuerySetupDriver_, Settings->AppConfig->GetFederatedQueryConfig().GetWasmServices(),
+                    Settings->WasmTvmProvider);
 
                 federatedQuerySetupFactory->SetScriptExecutionSettings({
                         .EnableBackgroundLeaseChecks = Settings->EnableScriptExecutionBackgroundChecks,

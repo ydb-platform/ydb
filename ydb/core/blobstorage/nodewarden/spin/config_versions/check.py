@@ -52,6 +52,7 @@ SCENARIOS = {
     34: "legacy_repair_requires_persistent_current_body",
     35: "legacy_repair_must_not_bypass_higher_proposed_quorum",
     36: "legacy_repair_requires_stateful_read_quorum",
+    37: "proposal_quorum_OK_then_failover_and_next_write",
 }
 COMPATIBILITY_SCENARIOS = {6, 8, 15, 16, 17, 28, 29}
 LEGACY_SCENARIOS = set(range(30, 37))
@@ -66,6 +67,7 @@ VIOLATIONS = {
     7: "recovery_does_not_distinguish_published_and_unpublished_proposed",
     8: "blank_refill_accepts_unauthorized_or_stale_query_reply",
     9: "legacy_query_refill_enables_loss_of_last_quorum_committed_copy",
+    10: "learned_value_does_not_extend_acknowledged_one",
 }
 
 

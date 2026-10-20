@@ -27,6 +27,10 @@
 #ifndef LEGACY_REPAIR
 #define LEGACY_REPAIR 1
 #endif
+/* Negative control: 0 keeps only quorum-backed and published recovery. */
+#ifndef ADOPT_POSSIBLY_CHOSEN
+#define ADOPT_POSSIBLY_CHOSEN 1
+#endif
 #ifndef LEGACY_CLOSURE
 #define LEGACY_CLOSURE 0
 #endif
@@ -53,6 +57,8 @@
 #endif
 
 byte generation[5];
+/* The value the root had applied when it built this one (PrevConfig). */
+byte base[5];
 byte disk_c[N];
 byte disk_p[N];
 byte memory_c[N];
@@ -131,6 +137,10 @@ byte recovered;
 bool blocked;
 bool accepted;
 byte observed_max;
+byte ancestor;
+byte unknown;
+byte adopted;
+bool ambiguous;
 #if SCENARIO == 19 || SCENARIO == 20
 bool first_published;
 bool same_generation_attempts;
@@ -445,7 +455,7 @@ inline complete_vote(node) {
 }
 
 inline start_write(value) {
-    assert(value > BASE); last_admin = value; expected = NONE;
+    assert(value > BASE); last_admin = value; expected = NONE; base[value] = applied[root];
     operation = value; op_cookie++; votes = 0; learned = false; replied = false;
     i = 0;
     do :: i < N -> voted[i] = false; i++ :: else -> break od;
@@ -471,16 +481,45 @@ inline learn() {
     legacy_granted = false;
     recovery_needed = false; applied_conflict = false; applied_floor = operation;
 #endif
-    assert(votes >= Q); learned = true; apply_publication(operation)
+    assert(votes >= Q); learned = true; check_acknowledged_ancestry(); apply_publication(operation)
+}
+
+/* Every value acknowledged at a lower generation is an ancestor of the
+ * learned one, so the change it made is not lost. */
+inline check_acknowledged_ancestry() {
+    j = 1;
+    do
+    :: j <= MAX_GEN ->
+        if
+        :: ok_value[j] != NONE && j < GEN(operation) ->
+            ancestor = base[operation];
+            do :: ancestor != NONE && GEN(ancestor) > j -> ancestor = base[ancestor] :: else -> break od;
+            require(ancestor == ok_value[j], 10)
+        :: else -> skip
+        fi;
+        j++
+    :: else -> break
+    od;
+    j = 0; ancestor = NONE
+}
+
+inline record_ok() {
+    require(ok_value[GEN(operation)] == NONE || ok_value[GEN(operation)] == operation, 1);
+    ok_value[GEN(operation)] = operation; ok_count++;
+    if :: last_admin == operation -> expected = operation :: else -> skip fi;
+    replied = true
 }
 
 inline reply_ok() {
     assert(operation != NONE && learned && !replied);
     if :: root_new -> count_reads(); assert(committed_copies[operation] >= Q) :: else -> assert(votes >= Q) fi;
-    require(ok_value[GEN(operation)] == NONE || ok_value[GEN(operation)] == operation, 1);
-    ok_value[GEN(operation)] = operation; ok_count++;
-    if :: last_admin == operation -> expected = operation :: else -> skip fi;
-    replied = true
+    record_ok()
+}
+
+/* Commands other than Replace reply once the proposal quorum is learned. */
+inline reply_proposed_ok() {
+    assert(operation != NONE && learned && !replied && votes >= Q);
+    record_ok()
 }
 
 inline abandon_request() {
@@ -598,6 +637,41 @@ inline answer_refill_queries(value) {
 #endif
 }
 
+/* A value could have been chosen by a quorum including the nodes that were not
+ * read or had no metadata, and its root could have acknowledged it. It has to
+ * extend the recovered value; otherwise an obsolete root proposed it. */
+inline adopt_possibly_chosen() {
+    unknown = 0; i = 0;
+    do
+    :: i < N ->
+        if :: !received[i] || (read_c[i] == NONE && read_p[i] == NONE) -> unknown++ :: else -> skip fi;
+        i++
+    :: else -> break
+    od;
+    adopted = NONE; ambiguous = false; i = 1;
+    do
+    :: i < 5 ->
+        if
+        :: (chosen != NONE && copies[i] != 0 && copies[i] + unknown >= Q && GEN(i) > GEN(chosen)
+            && (base[i] == chosen || GEN(base[i]) > GEN(chosen))) ->
+            if
+            :: adopted == NONE || GEN(i) > GEN(adopted) -> adopted = i; ambiguous = false
+            :: GEN(i) == GEN(adopted) -> ambiguous = true
+            :: else -> skip
+            fi
+        :: else -> skip
+        fi;
+        i++
+    :: else -> break
+    od;
+    if
+    :: ambiguous -> blocked = true
+    :: !ambiguous && adopted != NONE -> chosen = adopted
+    :: else -> skip
+    fi;
+    unknown = 0; adopted = NONE; ambiguous = false
+}
+
 inline select_recovery() {
     count_reads(); chosen = NONE; blocked = count < Q;
     i = 1;
@@ -626,6 +700,9 @@ inline select_recovery() {
         /* A read body matching already published metadata can survive solely
          * as proposed. Metadata alone never supplies a body for recovery. */
         if :: copies[applied_floor] != 0 && GEN(applied_floor) > GEN(chosen) -> chosen = applied_floor :: else -> skip fi;
+#if ADOPT_POSSIBLY_CHOSEN
+        adopt_possibly_chosen();
+#endif
         if :: applied_conflict || GEN(chosen) < GEN(applied_floor) -> blocked = true :: else -> skip fi
     :: else -> skip
     fi;
@@ -1261,7 +1338,8 @@ init {
         stop_node(A); change_root(C, true);
         known[A] = NONE; known[B] = BASE; applied_floor = BASE;
         feedback[B] = true; defer_feedback[B] = true;
-        collect_mask(6); select_recovery(); assert(!blocked && memory_c[root] == BASE);
+        /* B's proposed body together with unread A could have been a quorum. */
+        collect_mask(6); select_recovery(); assert(!blocked && memory_c[root] == X);
         drain_disk(B); assert(expected == X && ok_count == 0);
         restart_node(A); defer_feedback[A] = true;
         format_node(B); defer_feedback[B] = false;
@@ -1355,6 +1433,16 @@ init {
         :: else -> assert(disk_c[A] == X && disk_c[B] == NONE && disk_c[C] == BASE)
         fi;
         assert(max_bad == 1);
+#elif SCENARIO == 37
+        /* Commands other than Replace are acknowledged at the proposal quorum.
+         * The commit stays on the failed root; the next write of the new root
+         * must extend the acknowledged value. */
+        assert(!ALL_OLD && root_new);
+        start_write(X); complete_vote(A); complete_vote(B); learn(); reply_proposed_ok();
+        complete_commit(A); stop_node(A); lose_commits(B); lose_commits(C); change_root(B, true);
+        collect_mask(6); select_recovery(); collect_mask(6);
+        start_write(Y); complete_vote(B); complete_vote(C); learn(); reply_proposed_ok();
+        complete_commit(B); complete_commit(C); restart_node(A); abandon_request();
 #else
 #error Unknown SCENARIO
 #endif

@@ -1,7 +1,11 @@
 # Configuration versions
 
 [distconf.pml](distconf.pml) checks recovery, FIFO metadata writes, committed-quorum
-acknowledgment, refill and replacement of an old same-generation conflict.
+and proposal-quorum acknowledgment, refill and replacement of an old
+same-generation conflict. Recovery adopts the newest value that could have been
+chosen by a quorum including unread or blank nodes, if it extends the recovered
+one; every learned value must extend the values acknowledged at lower
+generations. Cases 6 and 37 built with `-DADOPT_POSSIBLY_CHOSEN=0` violate that.
 [check.py](check.py) has candidate, compatibility and legacy suites; compatibility
 compares participant rules with the same history under `ALL_OLD=1`, not binaries.
 

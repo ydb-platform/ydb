@@ -332,11 +332,9 @@ namespace {
 
 } // namespace
 
-    TTierPredicate::TTierPredicate(const TTieringPolicy& policy)
-        : Policy(policy)
-    {
+    void TTierPredicate::Validate(const TTieringPolicy& policy) {
         std::optional<bool> relative;
-        for (const auto& rule : Policy.Rules) {
+        for (const auto& rule : policy.Rules) {
             Y_ENSURE(rule.TierId != Max<ui32>(), "Invalid tier id");
             Y_ENSURE(!rule.Ranges.empty(), "Tiering rule for tier " << rule.TierId << " has no ranges");
 
@@ -356,7 +354,7 @@ namespace {
             // Relative rules come only from Interval(...): a single inclusive upper bound,
             // ordered from the coldest tier to the warmest, so offsets must strictly decrease
             TMaybe<TDuration> prevOffset;
-            for (const auto& rule : Policy.Rules) {
+            for (const auto& rule : policy.Rules) {
                 const bool interval = rule.Ranges.size() == 1
                     && !rule.Ranges[0].From && rule.Ranges[0].To && rule.Ranges[0].ToInclusive;
                 Y_ENSURE(interval, "Relative tiering rule for tier " << rule.TierId
@@ -368,7 +366,7 @@ namespace {
                 prevOffset = bound.Offset;
             }
         } else {
-            for (const auto& rule : Policy.Rules) {
+            for (const auto& rule : policy.Rules) {
                 for (const auto& range : rule.Ranges) {
                     if (range.From && range.To) {
                         const i64 from = std::get<TTierAbsoluteBound>(*range.From).Micros;
@@ -380,13 +378,13 @@ namespace {
             }
 
             // Ranges of different rules must not overlap, so the rule order does not matter
-            for (size_t i = 0; i < Policy.Rules.size(); ++i) {
-                for (size_t j = i + 1; j < Policy.Rules.size(); ++j) {
-                    for (const auto& left : Policy.Rules[i].Ranges) {
-                        for (const auto& right : Policy.Rules[j].Ranges) {
+            for (size_t i = 0; i < policy.Rules.size(); ++i) {
+                for (size_t j = i + 1; j < policy.Rules.size(); ++j) {
+                    for (const auto& left : policy.Rules[i].Ranges) {
+                        for (const auto& right : policy.Rules[j].Ranges) {
                             Y_ENSURE(!TAbsoluteSpan(left).Overlaps(TAbsoluteSpan(right)),
-                                "Tiering ranges of tiers " << Policy.Rules[i].TierId
-                                << " and " << Policy.Rules[j].TierId << " overlap");
+                                "Tiering ranges of tiers " << policy.Rules[i].TierId
+                                << " and " << policy.Rules[j].TierId << " overlap");
                         }
                     }
                 }
@@ -394,11 +392,13 @@ namespace {
         }
     }
 
-    void TTierPredicate::Bind(TInstant now, const TRowScheme& scheme) {
-        Bound = false;
+    TTierPredicate::TTierPredicate(const TTieringPolicy& policy, TInstant now, const TRowScheme& scheme)
+        : Policy(policy)
+    {
+        Validate(Policy);
 
         // Column position may change between schemes (e.g. after a column is dropped),
-        // so it is resolved on every bind
+        // so a predicate is valid only for the scheme it was created with
         const auto* info = scheme.ColInfo(Policy.ColumnTag);
         Y_ENSURE(info, "Tiering column " << Policy.ColumnTag << " is not found");
         Y_ENSURE(IsSupportedType(info->TypeInfo), "Unsupported tiering column type " << info->TypeInfo.GetTypeId());
@@ -410,7 +410,6 @@ namespace {
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
-        Compiled.clear();
         Compiled.reserve(Policy.Rules.size());
 
         for (const auto& rule : Policy.Rules) {
@@ -427,13 +426,9 @@ namespace {
                 }
             }
         }
-
-        Bound = true;
     }
 
     TVector<ui32> TTierPredicate::GetUnrepresentableTierIds() const {
-        Y_ENSURE(Bound);
-
         auto unrepresentable = [](const std::optional<TThreshold>& threshold) {
             return threshold && threshold->Kind == TThreshold::EKind::Unrepresentable;
         };
@@ -647,7 +642,6 @@ namespace {
     }
 
     TTierDecision TTierPredicate::Evaluate(const TRowState& row) const {
-        Y_ENSURE(Bound, "Tier predicate must be bound before evaluation");
         Y_ENSURE(Pos < row.Size());
 
         if (row != ERowOp::Upsert && row != ERowOp::Reset) {

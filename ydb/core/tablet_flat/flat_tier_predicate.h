@@ -102,30 +102,34 @@ namespace NTable {
     /**
      * Evaluates the desired tier of a row according to a tiering policy.
      *
-     * Bind() resolves the column in the given scheme and converts range bounds
-     * into the column's native representation once, so Evaluate() does a couple
-     * of comparisons per range without allocations. Rows passed to Evaluate()
-     * must follow the layout of the scheme from the last Bind() call.
+     * The constructor validates the policy, resolves the column in the given
+     * scheme and converts range bounds into the column's native representation
+     * once, so Evaluate() does a couple of comparisons per range without
+     * allocations. A predicate is created for a single compaction: rows passed
+     * to Evaluate() must follow the layout of the given scheme, and both the
+     * policy and the scheme may change between compactions.
      * An inclusive upper bound matches row table TTL (value <= now - offset).
      */
     class TTierPredicate {
     public:
         static constexpr ui32 DefaultTierId = 0;
 
-        explicit TTierPredicate(const TTieringPolicy& policy);
+        TTierPredicate(const TTieringPolicy& policy, TInstant now, const TRowScheme& scheme);
 
-        void Bind(TInstant now, const TRowScheme& scheme);
+        /**
+         * Validates the policy alone, without a scheme (e.g. when the policy is altered)
+         */
+        static void Validate(const TTieringPolicy& policy);
 
         TTierDecision Evaluate(const TRowState& row) const;
 
         TPos GetColumnPos() const {
-            Y_ENSURE(Bound);
             return Pos;
         }
 
         /**
          * Tier ids of rules with a bound that could not be converted into the
-         * column type on the last Bind(). Ranges with such bounds never match,
+         * column type. Ranges with such bounds never match,
          * so callers should report them instead of silently skipping tiering.
          *
          * Pg date/timestamp bounds before year 1 AD are reported here.
@@ -173,7 +177,6 @@ namespace NTable {
         NScheme::TTypeInfo Type;
         TPos Pos = Max<TPos>();
         TVector<TVector<TCompiledRange>> Compiled;
-        bool Bound = false;
     };
 
 }

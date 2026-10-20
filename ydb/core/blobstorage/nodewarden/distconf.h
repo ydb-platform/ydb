@@ -578,6 +578,13 @@ namespace NKikimr::NStorage {
         TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
             std::optional<TString> selfAssemblyUUID, bool dryRun = false, bool allowConflictingGenerationAdvance = false);
 
+        // Find the newest collected configuration that could have been accepted by a quorum including the disks that
+        // weren't read, so its root could have applied it and acknowledged the change. It has to extend the latest
+        // configuration in effect; otherwise it was proposed by an obsolete root and couldn't have been chosen.
+        // Ambiguous is set when different configurations match at the newest generation.
+        const NKikimrBlobStorage::TStorageConfig *FindPossiblyChosenConfig(const TEvGather::TCollectConfigs& collected,
+            const NKikimrBlobStorage::TStorageConfig& latest, bool *ambiguous) const;
+
         void ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
         bool IsBelowKnownAppliedConfig(const NKikimrBlobStorage::TStorageConfig& config) const;
         bool IsConflictingGenerationAdvance(const TProposition& proposition) const;

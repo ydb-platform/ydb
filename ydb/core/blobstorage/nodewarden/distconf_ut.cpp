@@ -3100,6 +3100,72 @@ selector_config: []
         UNIT_ASSERT(QueryKeeper(fixture.Runtime, fixture.Root()).HasScepter());
     }
 
+    // the proposal could have been accepted by a quorum including the disk that wasn't read, so its root could have
+    // applied it and acknowledged the change
+    void CheckRecoveryAdoptsPossiblyChosenProposal(bool lostBase) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        const ui32 rootNodeId = fixture.Root().NodeId();
+        const ui32 sourceNodeId = rootNodeId % 3 + 1;
+        const auto updated = lostBase
+            ? MakeNextConfig(MakeNextConfig(fixture.Config), 3) // based on the configuration that left no trace
+            : MakeNextConfig(fixture.Config);
+        auto collected = MakeCollectedConfigs(fixture.Config, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, fixture.Config, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, updated, {sourceNodeId}, false);
+
+        const auto result = ProcessCollectedConfigs(fixture, collected);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
+                                 updated.GetFingerprint());
+        CheckDurableConfigConverges(fixture, updated);
+    }
+
+    Y_UNIT_TEST(RecoveryAdoptsPossiblyChosenProposal) {
+        CheckRecoveryAdoptsPossiblyChosenProposal(false);
+    }
+
+    Y_UNIT_TEST(RecoveryAdoptsPossiblyChosenProposalOverLostBase) {
+        CheckRecoveryAdoptsPossiblyChosenProposal(true);
+    }
+
+    // the proposal based on the configuration older than the committed one comes from an obsolete root
+    Y_UNIT_TEST(RecoveryIgnoresProposalOfObsoleteRoot) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        const ui32 rootNodeId = fixture.Root().NodeId();
+        const ui32 sourceNodeId = rootNodeId % 3 + 1;
+        const auto committed = MakeNextConfig(fixture.Config);
+        auto collected = MakeCollectedConfigs(fixture.Config, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, committed, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, MakeNextConfig(fixture.Config, 3), {sourceNodeId}, false);
+
+        const auto result = ProcessCollectedConfigs(fixture, collected);
+        UNIT_ASSERT_C(!result.ErrorReason, result.ErrorReason.value_or(""));
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetFingerprint(),
+                                 committed.GetFingerprint());
+        CheckDurableConfigConverges(fixture, committed);
+    }
+
+    Y_UNIT_TEST(RecoveryRejectsAmbiguousPossiblyChosenProposals) {
+        TCommitConfirmationFixture fixture(true);
+        fixture.Start(true);
+        const ui32 rootNodeId = fixture.Root().NodeId();
+        const ui32 sourceNodeId = rootNodeId % 3 + 1;
+        const auto first = MakeNextConfig(fixture.Config);
+        auto second = first;
+        second.MutableSelfManagementConfig()->SetAutomaticBootstrap(!first.GetSelfManagementConfig().GetAutomaticBootstrap());
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&second);
+        auto collected = MakeCollectedConfigs(fixture.Config, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, fixture.Config, {rootNodeId, sourceNodeId});
+        AddCollectedConfig(collected, first, {rootNodeId}, false);
+        AddCollectedConfig(collected, second, {sourceNodeId}, false);
+
+        const auto result = ProcessCollectedConfigs(fixture, collected, true);
+        UNIT_ASSERT_C(result.ErrorReason, "one of the configurations that could have been chosen was adopted");
+        UNIT_ASSERT_VALUES_EQUAL(QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig().GetGeneration(), 1);
+    }
+
     Y_UNIT_TEST(AdvanceCollectsMinorityProposal) {
         TCommitConfirmationFixture fixture(true);
         fixture.Start(true);
@@ -3341,6 +3407,91 @@ selector_config: []
         const auto committed = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetSelfAssemblyUUID(), "partial-bootstrap-test");
         CheckDurableConfigConverges(fixture, committed);
+    }
+
+    // The change is acknowledged after the proposal quorum, while its commit hasn't left the root yet. The quorum turns
+    // over without the root, and the new root has to recover the acknowledged configuration instead of building the next
+    // one upon the previous one.
+    Y_UNIT_TEST(QuorumTurnoverKeepsAcknowledgedConfig) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        TCommitConfirmationFixture fixture(true);
+        fixture.State.RequiredRootNodeId = 1;
+        auto& runtime = fixture.Runtime;
+        fixture.Keepers.resize(3);
+        std::optional<ui64> holdCommitsAbove;
+        bool pauseRoot = false;
+        TActorId edge;
+        std::optional<TResult> response;
+        std::vector<std::unique_ptr<IEventHandle>> heldRootEvents;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (edge && CaptureInvokeResult(*ev, edge, response)) {
+                return false;
+            }
+            if (holdCommitsAbove && nodeId != 1 && ev->Sender.NodeId() == 1
+                && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType
+                && ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetCommittedStorageConfig().GetGeneration()
+                   > *holdCommitsAbove) {
+                return false;
+            }
+            if (pauseRoot && ev->GetRecipientRewrite() == fixture.Keepers.front()) {
+                heldRootEvents.push_back(std::move(ev));
+                return false;
+            }
+            return true;
+        };
+        const auto invoke = [&](ui32 nodeId, auto&& fill) {
+            for (ui32 attempt = 0; attempt < 10; ++attempt) {
+                response.reset();
+                edge = runtime.AllocateEdgeActor(nodeId);
+                auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                fill(request->Record);
+                runtime.Send(new IEventHandle(fixture.Keepers[nodeId - 1], edge, request.release()), nodeId);
+                UNIT_ASSERT_C(SimUntil(runtime, [&] { return response.has_value(); }, TDuration::Seconds(65)),
+                    "no response to the configuration change");
+                if (response->GetStatus() != TResult::RACE) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
+        };
+
+        runtime.Start();
+        for (ui32 id : {1, 2}) {
+            fixture.Keepers[id - 1] = RegisterKeeper(runtime, fixture.Config, id, fixture.State);
+        }
+        const std::vector<TActorId> oldKeepers(fixture.Keepers.begin(), fixture.Keepers.begin() + 2);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, oldKeepers) == 1; }));
+        const auto base = QueryKeeper(runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig();
+        const bool automaticBootstrap = !base.GetSelfManagementConfig().GetAutomaticBootstrap();
+        holdCommitsAbove = base.GetGeneration();
+        invoke(1, [&](auto& record) {
+            auto *config = record.MutableUpdateConfig()->MutableConfig();
+            config->CopyFrom(base);
+            config->MutableSelfManagementConfig()->SetAutomaticBootstrap(automaticBootstrap);
+        });
+        const ui64 acknowledgedGeneration = QueryKeeper(runtime, fixture.Keepers[0]).GetQueryConfig().GetConfig()
+            .GetGeneration();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetProposedStorageConfig().GetGeneration(), acknowledgedGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(2).GetCommittedStorageConfig().GetGeneration(), base.GetGeneration());
+
+        pauseRoot = true;
+        fixture.State.RequiredRootNodeId = 3;
+        fixture.State.RequiredParentNodeIds[1] = 0; // the old root stays out of the new quorum
+        fixture.Keepers[2] = RegisterKeeper(runtime, fixture.Config, 3, fixture.State);
+        const std::vector<TActorId> newKeepers(fixture.Keepers.begin() + 1, fixture.Keepers.end());
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, newKeepers) == 3; },
+            TDuration::Seconds(180)), "the quorum did not turn over to the new root");
+        invoke(3, [](auto& record) { record.MutableAdvanceGeneration(); });
+        const auto advanced = QueryKeeper(runtime, fixture.Keepers[2]).GetQueryConfig().GetConfig();
+        UNIT_ASSERT(advanced.GetGeneration() > acknowledgedGeneration);
+        UNIT_ASSERT_VALUES_EQUAL_C(advanced.GetSelfManagementConfig().GetAutomaticBootstrap(), automaticBootstrap,
+            "the acknowledged configuration change was lost");
+
+        pauseRoot = false;
+        holdCommitsAbove.reset();
+        fixture.State.RequiredParentNodeIds.clear();
+        ReplayDelayedEvents(runtime, heldRootEvents);
+        CheckDurableConfigConverges(fixture, advanced);
     }
 
     Y_UNIT_TEST(BootstrapIgnoresMinorityProposal) {
@@ -3647,18 +3798,10 @@ selector_config: []
         NStorage::TDistributedConfigKeeper::UpdateFingerprint(&expanded);
 
         auto& runtime = fixture.Runtime;
-        bool rejectedBinding = false;
         TActorId edge;
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (HandleReplaceEvent(runtime, nodeId, *ev, edge, response)) {
-                return false;
-            }
-            if (nodeId >= 4 && ev->GetTypeRewrite() == NStorage::TEvNodeConfigReversePush::EventType
-                && ev->Sender.NodeId() == 1 && ev->Get<NStorage::TEvNodeConfigReversePush>()->Record.GetRejected()) {
-                rejectedBinding = true;
-            }
-            return true;
+            return !HandleReplaceEvent(runtime, nodeId, *ev, edge, response);
         };
         for (ui32 nodeId : {1, 2, 3}) {
             runtime.StopNode(nodeId);
@@ -3676,10 +3819,13 @@ selector_config: []
             runtime.StartNode(nodeId);
             fixture.Keepers[nodeId - 1] = RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State);
         }
-        UNIT_ASSERT(SimUntil(runtime, [&] { return rejectedBinding; }));
-        for (ui32 nodeId : {1, 2, 3}) {
-            UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 2);
-        }
+        // the proposal of the old nodes together with the unread disks of the new ones could have been a quorum (it
+        // actually was), so the restarted old nodes recover the expansion
+        UNIT_ASSERT(SimUntil(runtime, [&] {
+            return std::ranges::all_of(std::initializer_list<ui32>{1, 2, 3}, [&](ui32 nodeId) {
+                return fixture.Metadata(nodeId).GetCommittedStorageConfig().GetFingerprint() == expanded.GetFingerprint();
+            });
+        }));
 
         edge = runtime.AllocateEdgeActor(1);
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
@@ -5569,8 +5715,10 @@ selector_config: []
         std::vector<TActorId> healthy(fixture.Keepers.begin() + 1, fixture.Keepers.end());
         UNIT_ASSERT_C(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, healthy) == 8; },
             TDuration::Seconds(180)), "the healthy bridge quorum did not replace the paused root");
+        // the old proposal had its physical quorum and its root could have acknowledged it, so the complete collection
+        // recovers it
         auto recovered = QueryKeeper(runtime, fixture.Keepers[7]).GetQueryConfig().GetConfig();
-        UNIT_ASSERT_VALUES_EQUAL(recovered.GetGeneration(), 1);
+        UNIT_ASSERT(recovered.GetGeneration() == 1 || recovered.GetFingerprint() == oldProposal.GetFingerprint());
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
         const auto update = [&](bool advanceOnly) {
             newResponse.reset();
@@ -5602,11 +5750,18 @@ selector_config: []
             holdReads = false;
             ReplayDelayedEvents(runtime, heldReads);
         }
-        update(false);
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
+            update(false);
+            if (newResponse->GetStatus() != TResult::RACE) {
+                break;
+            }
+            recovered = QueryKeeper(runtime, fixture.Keepers[7]).GetQueryConfig().GetConfig();
+        }
         UNIT_ASSERT_C(newResponse->GetStatus() == TResult::OK, newResponse->DebugString());
         const auto winner = QueryKeeper(runtime, fixture.Keepers[7]).GetQueryConfig().GetConfig();
         UNIT_ASSERT(winner.GetGeneration() > oldProposal.GetGeneration());
         UNIT_ASSERT(winner.GetFingerprint() != oldProposal.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(winner.GetPrevConfig().GetFingerprint(), oldProposal.GetFingerprint());
         UNIT_ASSERT(SimUntil(runtime, [&] {
             return std::ranges::all_of(healthy, [&](TActorId id) {
                 return fixture.Metadata(id.NodeId()).GetCommittedStorageConfig().GetFingerprint() == winner.GetFingerprint();

@@ -310,6 +310,9 @@ namespace NKikimr::NStorage {
 
     void TInvokeRequestHandlerActor::UpdateConfig(TQuery::TUpdateConfig *request) {
         RunCommonChecks();
+        if (request->GetConfig().GetGeneration() < Self->StorageConfig->GetGeneration()) {
+            throw TExRace() << "Config generation is older than the current one";
+        }
         StartProposition(request->MutableConfig());
     }
 
@@ -454,6 +457,17 @@ namespace NKikimr::NStorage {
             TStringStream err;
             if (!HasConfigQuorum(quorumConfig, successfulDisks, TBridgePileId(), *Self->Cfg, false, &err)) {
                 throw TExNoQuorum() << "No quorum for bridge configuration collection:" << err.Str();
+            }
+            // a newer configuration could have been chosen and acknowledged by its root, so we adopt it
+            bool ambiguous = false;
+            if (const auto *config = Self->FindPossiblyChosenConfig(collected, *Self->StorageConfig, &ambiguous); ambiguous) {
+                throw TExNoQuorum() << "Different bridge configurations could have been chosen at the newest generation";
+            } else if (config) {
+                if (const auto error = ValidateConfig(*config)) {
+                    throw TExError() << "Invalid bridge configuration: " << *error;
+                }
+                InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *config);
+                throw TExRace() << "Configuration was recovered; retry the configuration update";
             }
             callback();
         });

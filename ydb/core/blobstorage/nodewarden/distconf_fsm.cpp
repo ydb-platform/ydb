@@ -501,6 +501,17 @@ namespace NKikimr::NStorage {
         for (auto& [generation, item] : configsWithQuorum) {
             persistedConfig = std::get<1>(item); // we pick the latest
         }
+        // a newer configuration could have been chosen and acknowledged by its root, so we adopt it
+        std::optional<NKikimrBlobStorage::TStorageConfig> possiblyChosenConfig;
+        if (persistedConfig && persistedConfig->GetGeneration()
+            && !conflictingGenerations.contains(persistedConfig->GetGeneration())) {
+            bool ambiguous = false;
+            if (const auto *config = FindPossiblyChosenConfig(*res, *persistedConfig, &ambiguous); ambiguous) {
+                return {.ErrorReason = "Different configurations could have been chosen at the newest generation"};
+            } else if (config) {
+                persistedConfig = &possiblyChosenConfig.emplace(*config);
+            }
+        }
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
             return {.ErrorReason = "Couldn't obtain quorum for configuration that was seen in effect"};
         }
@@ -616,6 +627,56 @@ namespace NKikimr::NStorage {
             result.AutomaticBootstrap = automaticBootstrap;
         }
 
+        return result;
+    }
+
+    const NKikimrBlobStorage::TStorageConfig *TDistributedConfigKeeper::FindPossiblyChosenConfig(
+            const TEvGather::TCollectConfigs& collected, const NKikimrBlobStorage::TStorageConfig& latest,
+            bool *ambiguous) const {
+        // disks without metadata may have lost it, so they are not counted as read
+        THashSet<std::tuple<ui32, TString>> readDisks;
+        THashMap<TStorageConfigMeta, std::tuple<const NKikimrBlobStorage::TStorageConfig*, std::vector<TSuccessfulDisk>>> candidates;
+        for (const auto *field : {&collected.GetCommittedConfigs(), &collected.GetProposedConfigs()}) {
+            for (const auto& item : *field) {
+                for (const auto& disk : item.GetDisks()) {
+                    readDisks.emplace(disk.GetNodeId().GetNodeId(), disk.GetPath());
+                }
+                const auto& config = item.GetConfig();
+                const auto& prev = config.GetPrevConfig();
+                if (config.GetGeneration() <= latest.GetGeneration() || !config.HasPrevConfig()
+                        || IsBootstrapProposition(config) || !CheckFingerprint(config)
+                        || prev.GetGeneration() < latest.GetGeneration()
+                        || (prev.GetGeneration() == latest.GetGeneration()
+                            && TStorageConfigMeta(prev) != TStorageConfigMeta(latest))) {
+                    continue;
+                }
+                auto& [ptr, disks] = candidates[config];
+                ptr = &config;
+                for (const auto& disk : item.GetDisks()) {
+                    disks.emplace_back(disk.GetNodeId(), disk.GetPath(),
+                        disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
+                }
+            }
+        }
+
+        const NKikimrBlobStorage::TStorageConfig *result = nullptr;
+        *ambiguous = false;
+        for (auto& [config, disks] : candidates | std::views::values) {
+            EnumerateConfigDrives(*config, 0, [&](const auto& node, const auto& drive) {
+                if (!readDisks.contains(std::make_tuple(node.GetNodeId(), drive.GetPath()))) {
+                    disks.emplace_back(TNodeIdentifier(node), drive.GetPath(), std::nullopt);
+                }
+            });
+            if (!HasConfigQuorum(*config, disks, TBridgePileId(), *Cfg, false)) {
+                continue;
+            }
+            if (!result || result->GetGeneration() < config->GetGeneration()) {
+                result = config;
+                *ambiguous = false;
+            } else if (result->GetGeneration() == config->GetGeneration()) {
+                *ambiguous = true;
+            }
+        }
         return result;
     }
 

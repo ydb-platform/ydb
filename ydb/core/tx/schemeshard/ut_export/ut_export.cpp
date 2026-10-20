@@ -2098,7 +2098,9 @@ namespace {
             Mixed,
         };
 
-        void CheckMultiTableSqlExport(EMultiTableSqlFailure failure, bool encrypted, bool reboot) {
+        void CheckMultiTableSqlExport(EMultiTableSqlFailure failure, bool encrypted, bool reboot,
+            const TString& failedCleanupFile = {})
+        {
             Env();
             auto& flags = Runtime().GetAppData().FeatureFlags;
             flags.SetEnableTableBackupAsSql(true);
@@ -2199,8 +2201,25 @@ namespace {
             }
             forgetExport(oldExportId);
 
+            // Item 1 fails its SQL upload in the mixed scenario; its siblings
+            // include both healthy SQL uploads and successful fallback cleanups.
+            const ui32 failedCleanupItem = 1;
+            const bool cleanupFails = !failedCleanupFile.empty();
+            UNIT_ASSERT(!cleanupFails || failure == EMultiTableSqlFailure::Mixed);
+            auto deletes = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvDeleteObjectRequest>([&](auto& ev) {
+                if (cleanupFails && ev->Get()->Request.GetKey()
+                    == items[failedCleanupItem].Prefix.substr(1) + "/" + failedCleanupFile)
+                {
+                    FailS3Delete(ev);
+                    ev.Reset();
+                }
+            });
+            ui32 completionWrites = 0;
             auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
                 const TString key(ev->Get()->Request.GetKey().c_str());
+                if (key.EndsWith("/export_complete.json")) {
+                    ++completionWrites;
+                }
                 for (const auto& item : items) {
                     if (item.Failure == EMultiTableSqlFailure::None) {
                         continue;
@@ -2218,18 +2237,33 @@ namespace {
             TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
                 return ev->Get()->ExportId == exportId;
             });
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backups(Runtime(), [cleanupFails](const auto& ev) {
+                const auto& record = ev->Get()->Record;
+                return cleanupFails && record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+            });
             const auto checkBeforeDataBackup = [&] {
                 Runtime().WaitFor("all table SQL uploads or cleanups finish", [&] { return results.size() >= items.size(); });
                 UNIT_ASSERT_VALUES_EQUAL(results.size(), items.size());
                 THashSet<ui32> completedItems;
                 for (const auto& result : results) {
-                    UNIT_ASSERT_C(result->Get()->Success, result->Get()->Error);
+                    const bool failed = cleanupFails && result->Get()->ItemIdx == failedCleanupItem;
+                    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Success, !failed, result->Get()->Error);
+                    if (failed) {
+                        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Cannot invalidate CREATE TABLE SQL");
+                        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, failedCleanupFile);
+                    }
                     UNIT_ASSERT(result->Get()->ItemIdx < items.size());
                     UNIT_ASSERT(completedItems.insert(result->Get()->ItemIdx).second);
                 }
                 for (ui32 i = 0; i < items.size(); ++i) {
                     const auto& item = items[i];
-                    if (item.Failure == EMultiTableSqlFailure::None) {
+                    if (cleanupFails && i == failedCleanupItem) {
+                        bool remaining = false;
+                        for (const TString file : {"create_table.sql.sha256", "create_table.sql", "create_table.sql.enc"}) {
+                            remaining |= file == failedCleanupFile;
+                            UNIT_ASSERT_VALUES_EQUAL_C(HasS3File(item.Prefix + "/" + file), remaining, file);
+                        }
+                    } else if (item.Failure == EMultiTableSqlFailure::None) {
                         CheckSqlBackup(item.Prefix, item.Sql, encrypted);
                     } else {
                         CheckSqlArtifactsAbsent(item.Prefix);
@@ -2247,6 +2281,36 @@ namespace {
                 results.clear();
                 RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
                 checkBeforeDataBackup();
+            }
+            if (cleanupFails) {
+                // Deliver the failure first, then delayed sibling successes.
+                // None may start data backup or resurrect the cancelled export.
+                auto failedResult = FindIf(results, [](const auto& result) { return !result->Get()->Success; });
+                UNIT_ASSERT(failedResult != results.end());
+                std::swap(results.front(), *failedResult);
+                results.Unblock(1);
+                const auto cancelled = WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
+                UNIT_ASSERT_C(cancelled.GetResponse().GetEntry().IssuesSize(), cancelled.DebugString());
+                UNIT_ASSERT_STRING_CONTAINS(cancelled.GetResponse().GetEntry().GetIssues(0).message(), failedCleanupFile);
+                results.Stop().Unblock();
+                Runtime().SimulateSleep(TDuration::MilliSeconds(100));
+                if (reboot) {
+                    RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+                }
+                TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+                UNIT_ASSERT(backups.empty());
+                UNIT_ASSERT_VALUES_EQUAL(completionWrites, 0u);
+                for (const auto& item : items) {
+                    UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(item.Prefix + "/scheme.pb" + suffix), item.OldScheme);
+                    UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(item.Prefix + "/data_00.csv" + suffix), item.OldData);
+                    if (item.Failure == EMultiTableSqlFailure::None) {
+                        CheckSqlBackup(item.Prefix, item.Sql, encrypted);
+                    }
+                }
+                UNIT_ASSERT(HasS3File(items[failedCleanupItem].Prefix + "/" + failedCleanupFile));
+                UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), items.size());
+                forgetExport(exportId);
+                return;
             }
             results.Stop().Unblock();
             WaitTableSqlExport(exportId);
@@ -4318,6 +4382,18 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
 
     Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesMixedFallback, Encrypted, Reboot) {
         CheckMultiTableSqlExport(EMultiTableSqlFailure::Mixed, Encrypted, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesCleanupChecksumFailure, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Mixed, Encrypted, Reboot, "create_table.sql.sha256");
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesCleanupPlainSqlFailure, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Mixed, Encrypted, Reboot, "create_table.sql");
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesCleanupEncryptedSqlFailure, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Mixed, Encrypted, Reboot, "create_table.sql.enc");
     }
 
     Y_UNIT_TEST(TableBackupAsSqlMultiItemKeepsAndForgetsSchemeSnapshots) {

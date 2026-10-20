@@ -38,6 +38,7 @@ namespace {
     enum class ESqlCleanupOutcome {
         Fallback,
         DeleteFailure,
+        NonEmptyDirectory,
         Cancel,
     };
 
@@ -139,6 +140,15 @@ namespace {
                 response.Release(), request->Flags, request->Cookie), 0, true);
             deletes.Stop();
             deletes.clear();
+        } else if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+            // Exercise a real filesystem error instead of synthesizing an S3 response.
+            const TFsPath blockedPath(sqlPath + ".enc");
+            blockedPath.DeleteIfExists();
+            blockedPath.MkDir();
+            TFileOutput child((blockedPath / "keep").GetPath());
+            child << "must survive failed cleanup";
+            child.Finish();
+            deletes.Stop().Unblock();
         } else {
             TestCancelExport(runtime, ++txId, "/MyRoot", exportId);
             env.TestWaitNotification(runtime, exportId);
@@ -163,7 +173,10 @@ namespace {
         } else {
             UNIT_ASSERT_C(result.GetResponse().GetEntry().IssuesSize(), result.DebugString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(),
-                outcome == ESqlCleanupOutcome::DeleteFailure ? "Cannot invalidate" : "Cancelled manually");
+                outcome == ESqlCleanupOutcome::Cancel ? "Cancelled manually" : "Cannot invalidate");
+            if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetResponse().GetEntry().GetIssues(0).message(), "create_table.sql.enc");
+            }
             if (reboot) {
                 RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
             }
@@ -172,6 +185,9 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(sqlAttempts, 1u);
             UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/scheme.pb"), "old scheme.pb");
             UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(directory + "/data_00.csv"), "old data_00.csv");
+            if (outcome == ESqlCleanupOutcome::NonEmptyDirectory) {
+                UNIT_ASSERT_VALUES_EQUAL(ReadFileContent(sqlPath + ".enc/keep"), "must survive failed cleanup");
+            }
         }
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
         env.TestWaitNotification(runtime, exportId);
@@ -546,6 +562,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
 
     Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupFailureCancelsFsExport, Encrypted, Reboot) {
         CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::DeleteFailure, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlCleanupNonEmptyDirectoryCancelsFsExport, Encrypted, Reboot) {
+        CheckFsSqlCleanup(Encrypted, ESqlCleanupOutcome::NonEmptyDirectory, Reboot);
     }
 
     Y_UNIT_TEST_QUAD(TableBackupAsSqlCancelDuringFsCleanup, Encrypted, Reboot) {

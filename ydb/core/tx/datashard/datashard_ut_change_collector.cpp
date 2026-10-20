@@ -882,7 +882,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             // Image modes must still read the current row behind the frontier.
             TUserTable::TPtr images = new TUserTable(*shard.GetUserTables().at(tableId.PathId.LocalPathId));
             images->CdcStreams.at(streamId).Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages;
-            shard.SetUserTable(tableId.PathId, images);
+            shard.AddUserTable(tableId.PathId, images);
             UNIT_ASSERT(!collect(7, 256));
             UNIT_ASSERT_VALUES_EQUAL(db.SnapshotReads, 2);
             UNIT_ASSERT_VALUES_EQUAL(db.CurrentReads, 1);
@@ -938,7 +938,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             replacement->Columns.erase(valueTag);
             replacement->Columns.emplace(valueTag + 1,
                 TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "extra"));
-            shard.SetUserTable(tableId.PathId, replacement);
+            shard.AddUserTable(tableId.PathId, replacement);
             UNIT_ASSERT(collect(1, 3));
             UNIT_ASSERT_VALUES_EQUAL(db.LastTags.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(db.LastTags[0], valueTag + 1);

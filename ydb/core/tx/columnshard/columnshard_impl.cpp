@@ -182,6 +182,14 @@ void TColumnShard::RescheduleWaitingReads() {
         TActivationContext::Send(it->second.Release());
         it = WaitingScans.erase(it);
     }
+    for (auto it = WaitingBuildIndexRequests.begin(); it != WaitingBuildIndexRequests.end();) {
+        if (maxReadVersion < it->first) {
+            minWaitingStep = Min(minWaitingStep, it->first.GetPlanStep());
+            break;
+        }
+        TActivationContext::Send(it->second.Release());
+        it = WaitingBuildIndexRequests.erase(it);
+    }
     if (minWaitingStep != Max<ui64>()) {
         WaitPlanStep(minWaitingStep);
     }
@@ -1317,6 +1325,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BuildIndexPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
@@ -1983,6 +1992,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
         HFunc(TEvDataShard::TEvKqpScan, Handle);
+        HFunc(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
+        HFunc(TEvDataShard::TEvBuildIndexProgressResponse, Handle);
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);
         HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);

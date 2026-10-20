@@ -354,9 +354,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
 
     if (buildInfo.IsBuildIndex()) {
         auto path = TPath::Init(buildInfo.TablePathId, ss);
-        const auto& tableInfo = ss->Tables.at(path->PathId);
-        // For TIndexBuildInfo::FillIndexPresharding()
-        buildInfo.IndexPartitions = tableInfo->GetPartitionStore().size();
+        if (ss->ColumnTables.contains(path->PathId)) {
+            buildInfo.IndexPartitions = ss->ColumnTables.GetVerified(path->PathId)->GetColumnShards().size();
+        } else {
+            const auto& tableInfo = ss->Tables.at(path->PathId);
+            // For TIndexBuildInfo::FillIndexPresharding()
+            buildInfo.IndexPartitions = tableInfo->GetPartitionStore().size();
+        }
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
     } else if (buildInfo.IsBuildColumns()) {
@@ -3305,7 +3309,7 @@ public:
                     }
                 } else {
                     if (buildInfo.IsBuildSimpleIndex() && !buildInfo.HasPartitionSettings() &&
-                        !buildInfo.IsRebuild) {
+                        !buildInfo.IsRebuild && !Self->ColumnTables.contains(buildInfo.TablePathId)) {
                         ChangeState(BuildId, TIndexBuildInfo::EState::GatheringStatistics);
                     } else {
                         ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
@@ -3862,6 +3866,18 @@ public:
         YDB_LOG_DEBUG(LogPrefix << "InitiateShards table",
             {"table", path.PathString()},
         );
+
+        if (Self->ColumnTables.contains(path->PathId)) {
+            const auto columnInfo = Self->ColumnTables.GetVerified(path->PathId);
+            for (const auto& shardIdx : columnInfo->BuildOwnedColumnShardsVerified()) {
+                Y_ENSURE(Self->ShardInfos.contains(shardIdx));
+                auto [it, emplaced] = buildInfo.Shards.emplace(shardIdx, TIndexBuildShardStatus{TSerializedTableRange(), ""});
+                Y_ENSURE(emplaced);
+                Self->PersistBuildIndexShardStatusInitiate(db, BuildId, shardIdx, it->second);
+            }
+            Y_ENSURE(!buildInfo.Shards.empty());
+            return true;
+        }
 
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 

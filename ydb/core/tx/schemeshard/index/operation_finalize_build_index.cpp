@@ -41,6 +41,25 @@ public:
         Y_ABORT_UNLESS(txState->BuildIndexId);
 
         TPathId pathId = txState->TargetPathId;
+        if (context.SS->ColumnTables.contains(pathId)) {
+            NIceDb::TNiceDb db(context.GetDB());
+            if (context.SS->TablesWithSnapshots.contains(pathId)) {
+                const TTxId snapshotTxId = context.SS->TablesWithSnapshots.at(pathId);
+                context.SS->SnapshotsStepIds.erase(snapshotTxId);
+                if (auto* tables = context.SS->SnapshotTables.FindPtr(snapshotTxId)) {
+                    tables->erase(pathId);
+                    if (tables->empty()) {
+                        context.SS->SnapshotTables.erase(snapshotTxId);
+                    }
+                }
+                context.SS->TablesWithSnapshots.erase(pathId);
+                context.SS->PersistDropSnapshot(db, snapshotTxId, pathId);
+                context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+            }
+            context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+            context.OnComplete.ActivateTx(OperationId);
+            return false;
+        }
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
@@ -195,7 +214,8 @@ public:
             {"txType", TTxState::TypeName(txState->TxType)},
         );
 
-        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+        if (context.SS->Tables.contains(txState->TargetPathId) &&
+            NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             YDB_LOG_INFO_CTX(context.Ctx, "SourceTablePartitioningChangedForModification",
                 {"txType", TTxState::TypeName(txState->TxType)},
             );
@@ -279,9 +299,13 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsTable()
                 .NotUnderDeleting()
                 .NotUnderOperation();
+            if (path.IsResolved() && path->IsColumnTable()) {
+                checks.IsColumnTable();
+            } else {
+                checks.IsTable();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -351,6 +375,13 @@ public:
         }
 
         context.SS->PersistTxState(db, OperationId);
+
+        if (path.IsResolved() && path->IsColumnTable()) {
+            context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
+            context.OnComplete.ActivateTx(OperationId);
+            SetState(NextState());
+            return result;
+        }
 
         TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
         Y_ABORT_UNLESS(table->GetSplitOpsInFlight().empty());

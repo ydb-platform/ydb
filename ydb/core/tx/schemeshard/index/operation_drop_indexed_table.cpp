@@ -301,10 +301,19 @@ public:
             checks
                 .NotEmpty()
                 .IsResolved()
-                .NotDeleted()
-                .IsTable()
-                .IsUnderOperation()
-                .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                .NotDeleted();
+
+            if (checks) {
+                if (parentTable.Base()->IsColumnTable()) {
+                    checks.IsColumnTable();
+                } else {
+                    checks.IsTable();
+                }
+                // allowed only as part of consistent operations (drop table or alter)
+                checks
+                    .IsUnderOperation()
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());

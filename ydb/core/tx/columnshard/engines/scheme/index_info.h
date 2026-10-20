@@ -114,6 +114,7 @@ private:
 
     TPresetId PresetId;
     ui64 Version = 0;
+    ui64 MinWriteSchemaVersion = 0;
     std::vector<ui32> SchemaColumnIdsWithSpecials;
     std::shared_ptr<NArrow::TSchemaLite> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> PrimaryKey;
@@ -513,6 +514,10 @@ public:
 
     ui64 GetVersion() const {
         return Version;
+    }
+
+    ui64 GetMinWriteSchemaVersion() const {
+        return MinWriteSchemaVersion;
     }
 
     TConclusionStatus CheckCompatible(const TIndexInfo& other) const;

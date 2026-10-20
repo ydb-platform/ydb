@@ -1786,7 +1786,8 @@ bool TPath::IsInsideTableIndexPath(bool failOnUnresolved) const {
     }
 
     ++item;
-    if (!(*item)->IsTable()) {
+    // The indexed table is either a row table or a column table with a row impl index.
+    if (!(*item)->IsTable() && !(*item)->IsColumnTable()) {
         return false;
     }
 

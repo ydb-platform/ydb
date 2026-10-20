@@ -368,6 +368,7 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
     }
 
     Version = schema.GetVersion();
+    MinWriteSchemaVersion = schema.GetMinWriteSchemaVersion();
     Precalculate();
     Validate();
     return true;
@@ -691,6 +692,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
 
     DeserializeOptionsFromProto(diff.GetSchemaOptions());
     Version = diff.GetVersion();
+    MinWriteSchemaVersion = original.GetMinWriteSchemaVersion();
     PrimaryKey = original.PrimaryKey;
     if (diff.GetCompressionOptions()) {
         DeserializeDefaultCompressionFromProto(*diff.GetCompressionOptions());

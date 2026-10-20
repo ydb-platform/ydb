@@ -71,6 +71,7 @@ bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tabl
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
     Version = tableSchema.GetVersion();
+    MinWriteSchemaVersion = tableSchema.GetMinWriteSchemaVersion();
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);
@@ -87,6 +88,9 @@ void TOlapSchema::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchemaExt)
     NKikimrSchemeOp::TColumnTableSchema resultLocal;
     resultLocal.SetNextColumnId(NextColumnId);
     resultLocal.SetVersion(Version);
+    if (MinWriteSchemaVersion != 0) {
+        resultLocal.SetMinWriteSchemaVersion(MinWriteSchemaVersion);
+    }
 
     Columns.Serialize(resultLocal);
     Indexes.Serialize(resultLocal);

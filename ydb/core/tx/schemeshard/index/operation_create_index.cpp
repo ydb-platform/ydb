@@ -131,8 +131,21 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
-                .IsTable();
+                .IsCommonSensePath();
+
+            // A column table may own a global synchronous index. The index rows live in a
+            // row impl table; local column indexes stay on the column schema path.
+            const bool columnTableParent = parentPath.IsResolved() && parentPath.Base()->IsColumnTable();
+            if (columnTableParent) {
+                if (tableIndexCreation.GetType() != NKikimrSchemeOp::EIndexTypeGlobal) {
+                    result->SetError(NKikimrScheme::StatusInvalidParameter,
+                        "Only global synchronous indexes are supported for column tables");
+                    return result;
+                }
+                checks.IsColumnTable();
+            } else {
+                checks.IsTable();
+            }
 
             // A new replica can have an async index maintained locally from
             // its base table. Adding one later still requires an index build.

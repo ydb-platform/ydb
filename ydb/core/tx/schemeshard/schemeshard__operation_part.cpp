@@ -234,6 +234,25 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
     return nullptr;
 }
 
+void AppendDropGlobalSyncIndex(TVector<ISubOperation::TPtr>& result, const TOperationId& nextId, const TPath& indexPath) {
+    auto dropIndex = TransactionTemplate(indexPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+    dropIndex.MutableDrop()->SetName(indexPath.LeafName());
+    result.push_back(CreateDropTableIndex(NextPartId(nextId, result), dropIndex));
+
+    for (const auto& [implName, implPathId] : indexPath.Base()->GetChildren()) {
+        Y_UNUSED(implPathId);
+        TPath implPath = indexPath.Child(implName);
+        if (!implPath.IsResolved() || implPath.IsDeleted()) {
+            continue;
+        }
+        Y_ABORT_UNLESS(implPath.Base()->IsTable());
+
+        auto dropImpl = TransactionTemplate(indexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
+        dropImpl.MutableDrop()->SetName(implPath.LeafName());
+        result.push_back(CreateDropTable(NextPartId(nextId, result), dropImpl));
+    }
+}
+
 }
 
 #undef YDB_LOG_THIS_FILE_COMPONENT

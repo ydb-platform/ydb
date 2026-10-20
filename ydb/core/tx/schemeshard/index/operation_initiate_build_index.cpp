@@ -13,6 +13,14 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
+NKikimrSchemeOp::TColumnTableSchema BumpedColumnSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
+    NKikimrSchemeOp::TColumnTableSchema bumped = schema;
+    const ui64 nextVersion = bumped.GetVersion() + 1;
+    bumped.SetVersion(nextVersion);
+    bumped.SetMinWriteSchemaVersion(nextVersion);
+    return bumped;
+}
+
 class TConfigureParts: public TSubOperationState {
     virtual const char* Name() const override final { return "TConfigureParts"; }
 
@@ -24,6 +32,10 @@ public:
         : OperationId(id)
     {
         IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
+    }
+
+    bool HandleReply(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
+        return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
@@ -44,6 +56,32 @@ public:
         TPathId pathId = txState->TargetPathId;
         Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+
+        if (context.SS->ColumnTables.contains(pathId)) {
+            auto columnInfo = context.SS->ColumnTables.GetVerified(pathId);
+            Y_ABORT_UNLESS(columnInfo->IsStandalone());
+            const auto bumpedSchema = BumpedColumnSchema(columnInfo->Description.GetSchema());
+
+            txState->ClearShardsInProgress();
+            auto seqNo = context.SS->StartRound(*txState);
+            for (ui32 i = 0; i < txState->Shards.size(); ++i) {
+                const TShardIdx shardIdx = txState->Shards[i].Idx;
+                const TTabletId tabletId = context.SS->ShardInfos[shardIdx].TabletID;
+
+                NKikimrTxColumnShard::TSchemaTxBody schemaTx;
+                schemaTx.MutableSeqNo()->SetGeneration(seqNo.Generation);
+                schemaTx.MutableSeqNo()->SetRound(seqNo.Round);
+                auto* alter = schemaTx.MutableAlterTable();
+                alter->SetPathId(pathId.LocalPathId);
+                *alter->MutableSchema() = bumpedSchema;
+
+                auto event = context.SS->MakeColumnShardProposal(
+                    pathId, OperationId, seqNo, schemaTx.SerializeAsString(), context.Ctx);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shardIdx, event.Release());
+            }
+            txState->UpdateShardsInProgress();
+            return false;
+        }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
@@ -121,6 +159,7 @@ public:
         IgnoreMessages({
             TEvHive::TEvCreateTabletReply::EventType,
             TEvDataShard::TEvProposeTransactionResult::EventType,
+            TEvColumnShard::TEvProposeTransactionResult::EventType,
         });
     }
 
@@ -150,9 +189,15 @@ public:
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
-        const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
-        tableInfo->AlterVersion += 1;
-        context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+        if (context.SS->ColumnTables.contains(txState->TargetPathId)) {
+            const auto columnInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
+            *columnInfo->Description.MutableSchema() = BumpedColumnSchema(columnInfo->Description.GetSchema());
+            context.SS->PersistColumnTable(db, txState->TargetPathId, *columnInfo);
+        } else {
+            const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
+            tableInfo->AlterVersion += 1;
+            context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
+        }
 
         auto tablePath = context.SS->PathsById.at(txState->TargetPathId);
         context.SS->ClearDescribePathCaches(tablePath);
@@ -202,7 +247,8 @@ public:
             {"txType", TTxState::TypeName(txState->TxType)},
         );
 
-        if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
+        if (context.SS->Tables.contains(txState->TargetPathId) &&
+            NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
             YDB_LOG_INFO_CTX(context.Ctx, "SourceTablePartitioningChangedForModification",
                 {"txType", TTxState::TypeName(txState->TxType)},
             );
@@ -294,6 +340,7 @@ public:
         }
 
         NSchemeShard::TPath dstPath = parentPath.Child(tableName);
+        const bool columnTable = dstPath.IsResolved() && dstPath->IsColumnTable();
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks
@@ -301,8 +348,12 @@ public:
                 .IsResolved()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .IsCommonSensePath()
-                .IsTable();
+                .IsCommonSensePath();
+            if (columnTable) {
+                checks.IsColumnTable();
+            } else {
+                checks.IsTable();
+            }
 
             if (!checks) {
                 result->SetError(checks.GetStatus(), checks.GetError());
@@ -338,15 +389,36 @@ public:
         context.DbChanges.PersistTableSnapshot(tablePathId, OperationId.GetTxId());
         context.DbChanges.PersistTxState(OperationId);
 
+        if (columnTable) {
+            const auto columnInfo = context.SS->ColumnTables.GetVerified(tablePathId);
+            if (!columnInfo->IsStandalone()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
+                    "Building a synchronous index is supported for standalone column tables");
+                return result;
+            }
+            if (columnInfo->BuildOwnedColumnShardsVerified().empty()) {
+                result->SetError(NKikimrScheme::StatusSchemeError, "Column table has no shards to snapshot");
+                return result;
+            }
+        }
+
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxInitializeBuildIndex, tablePathId);
         txState.State = TTxState::CreateParts;
 
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
-        for (auto splitTx: table->GetSplitOpsInFlight()) {
-            context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+        if (columnTable) {
+            const auto columnInfo = context.SS->ColumnTables.GetVerified(tablePathId);
+            for (const auto& shardIdx : columnInfo->BuildOwnedColumnShardsVerified()) {
+                const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+                txState.Shards.emplace_back(shardIdx, shardInfo.TabletType, TTxState::ConfigureParts);
+            }
+        } else {
+            TTableInfo::TPtr table = context.SS->Tables.at(tablePathId);
+            for (auto splitTx: table->GetSplitOpsInFlight()) {
+                context.OnComplete.Dependence(splitTx.GetTxId(), OperationId.GetTxId());
+            }
         }
 
         context.SS->TablesWithSnapshots.emplace(tablePathId, OperationId.GetTxId());

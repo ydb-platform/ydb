@@ -795,6 +795,32 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         return false;
     }
 
+    for (const auto& index : metadata->Indexes) {
+        switch (index.Type) {
+            case TIndexDescription::EType::LocalBloomFilter:
+            case TIndexDescription::EType::LocalBloomNgramFilter:
+            case TIndexDescription::EType::LocalMinMax:
+                break;
+            case TIndexDescription::EType::GlobalSync: {
+                auto* desc = tableDesc.AddTableIndexes();
+                desc->SetName(index.Name);
+                desc->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+                desc->SetState(NKikimrSchemeOp::EIndexStateReady);
+                for (const auto& column : index.KeyColumns) {
+                    desc->AddKeyColumnNames(column);
+                }
+                for (const auto& column : index.DataColumns) {
+                    desc->AddDataColumnNames(column);
+                }
+                break;
+            }
+            default:
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "This index is not supported for column tables";
+                return false;
+        }
+    }
+
     if (!FillMultiColumnStatisticsDesc(tableDesc, metadata->MultiColumnStatistics, code, error)) {
         return false;
     }
@@ -2622,7 +2648,17 @@ public:
                     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                     return MakeFuture(errResult);
                 }
-                phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+                if (schemeTx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild) {
+                    auto* buildOp = phyTx.MutableSchemeOperation()->MutableBuildOperation();
+                    if (!BuildAlterTableAddIndexRequest(&req, buildOp, 0, code, error)) {
+                        IKqpGateway::TGenericResult errResult;
+                        errResult.AddIssue(NYql::TIssue(error));
+                        errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                        return MakeFuture(errResult);
+                    }
+                } else {
+                    phyTx.MutableSchemeOperation()->MutableAlterColumnTable()->Swap(&schemeTx);
+                }
             } catch (yexception& e) {
                 return MakeFuture(ResultFromException<TGenericResult>(e));
             }

@@ -100,6 +100,9 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::CurrentSchemeShardId, Self->CurrentSchemeShardId)) {
         return false;
     }
+    if (!Self->LoadBuildIndexScans(db)) {
+        return false;
+    }
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastSchemaSeqNoGeneration, Self->LastSchemaSeqNo.Generation)) {
         return false;
     }
@@ -194,7 +197,9 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
 
 bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) && Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
+    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) &&
+        Schema::Precharge<Schema::IndexBuildScans>(db, txc.DB.GetScheme()) &&
+        Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
 }
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {

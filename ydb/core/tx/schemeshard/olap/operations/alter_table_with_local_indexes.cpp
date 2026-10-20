@@ -111,6 +111,47 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
 
     bool hasIndexChanges = !newIndexNames.empty() || !droppedIndexNames.empty() || !movedIndexNames.empty();
 
+    // Global synchronous indexes are row impl tables, not column-schema indexes.
+    // Drop them after the column table is under this alter, and do not pass their names
+    // to the column schema update (it only knows local indexes).
+    TVector<TPath> globalSyncDrops;
+    THashSet<TString> globalSyncDropNames;
+    if (hasAlterSchema) {
+        for (const auto& dropIdx : tx.GetAlterColumnTable().GetAlterSchema().GetDropIndexes()) {
+            TPath childPath = tablePath.Child(dropIdx);
+            if (!childPath.IsResolved() || childPath.IsDeleted() || !childPath.Base()->IsTableIndex()) {
+                continue;
+            }
+            auto indexIt = context.SS->Indexes.find(childPath.Base()->PathId);
+            if (indexIt == context.SS->Indexes.end() || !indexIt->second
+                || TTableIndexInfo::IsLocalIndex(indexIt->second->Type)) {
+                continue;
+            }
+            if (indexIt->second->Type != NKikimrSchemeOp::EIndexTypeGlobal) {
+                return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+                    TStringBuilder() << "Index '" << dropIdx << "' is not a global synchronous index")};
+            }
+            globalSyncDrops.push_back(std::move(childPath));
+            globalSyncDropNames.insert(dropIdx);
+        }
+    }
+
+    if (!globalSyncDrops.empty()) {
+        if (!newIndexNames.empty() || !movedIndexNames.empty() || droppedIndexNames.size() != globalSyncDropNames.size()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter,
+                "Cannot mix a global synchronous index drop with other index changes")};
+        }
+
+        auto alterTx = tx;
+        auto* drops = alterTx.MutableAlterColumnTable()->MutableAlterSchema()->MutableDropIndexes();
+        drops->Clear();
+        result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), alterTx));
+        for (const auto& indexPath : globalSyncDrops) {
+            AppendDropGlobalSyncIndex(result, nextId, indexPath);
+        }
+        return result;
+    }
+
     if (!hasIndexChanges || !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
         result.push_back(CreateAlterColumnTable(NextPartId(nextId, result), tx));
         return result;

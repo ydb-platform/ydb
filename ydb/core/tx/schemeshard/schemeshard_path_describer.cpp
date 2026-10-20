@@ -638,7 +638,6 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
     const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
-    Y_UNUSED(pathEl);
 
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
@@ -667,6 +666,35 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     }
 
     description->SetIsRestore(tableInfo->IsRestore);
+
+    // Global synchronous indexes are scheme children with a row impl table.
+    // Describe them the same way as row-table indexes so scheme cache and KQP see entry.Indexes.
+    // Local column indexes stay in the column schema and must not be duplicated here.
+    description->ClearTableIndexes();
+    bool returnConfig = Params.GetReturnPartitionConfig();
+    bool returnIndexTableBoundaries = Params.GetOptions().GetReturnIndexTableBoundaries();
+    if (Params.HasOptions()) {
+        returnConfig = Params.GetOptions().GetReturnPartitionConfig();
+    }
+    for (const auto& child : pathEl->GetChildren()) {
+        const auto& childName = child.first;
+        const auto& childPathId = child.second;
+
+        Y_ABORT_UNLESS(Self->PathsById.contains(childPathId));
+        auto childPath = Self->PathsById.at(childPathId);
+        if (childPath->Dropped() || !childPath->IsCreateFinished() || !childPath->IsTableIndex()) {
+            continue;
+        }
+
+        const auto* indexInfo = Self->Indexes.FindPtr(childPathId);
+        if (!indexInfo || !*indexInfo || TTableIndexInfo::IsLocalIndex((*indexInfo)->Type)) {
+            continue;
+        }
+
+        Self->DescribeTableIndex(
+            childPathId, childName, returnConfig, returnIndexTableBoundaries, *description->AddTableIndexes()
+        );
+    }
 
     DescribeChildren(TPath::Init(pathId, Self));
 }

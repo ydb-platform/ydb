@@ -783,6 +783,10 @@ ISubOperation::TPtr CreateRestoreIncrementalBackupAtTable(TOperationId id, TTxSt
 // returns Reject in case of error, nullptr otherwise
 ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& result, const TOperationId& id, const TPath& table);
 
+// Drops a global synchronous index path and its row impl tables.
+// The parent table must already be under this operation.
+void AppendDropGlobalSyncIndex(TVector<ISubOperation::TPtr>& result, const TOperationId& nextId, const TPath& indexPath);
+
 TVector<ISubOperation::TPtr> CreateRestoreIncrementalBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 bool CreateRestoreMultipleIncrementalBackups(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, bool dstCreatedInSameOp, TVector<ISubOperation::TPtr>& result);

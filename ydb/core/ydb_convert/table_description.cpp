@@ -1642,6 +1642,30 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             return false;
         }
 
+        if (index.type_case() == Ydb::Table::TableIndex::kGlobalIndex) {
+            if (!index.index_columns_size()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "At least one column must be specified";
+                return false;
+            }
+            // The row impl is filled by the index builder (WriteOnly, shadow, snapshot scan).
+            // PrepareAlterColumnTable turns this modify scheme into a build operation.
+            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
+            auto* build = modifyScheme->MutableInitiateIndexBuild();
+            build->SetTable(path);
+            auto* indexConfig = build->MutableIndex();
+            indexConfig->SetName(index.name());
+            indexConfig->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+            indexConfig->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+            for (const auto& column : index.index_columns()) {
+                indexConfig->AddKeyColumnNames(column);
+            }
+            for (const auto& column : index.data_columns()) {
+                indexConfig->AddDataColumnNames(column);
+            }
+            return true;
+        }
+
         if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
             if (index.index_columns_size() != 1) {
                 status = Ydb::StatusIds::BAD_REQUEST;
@@ -1742,6 +1766,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = TStringBuilder() << "Got empty index in modify scheme operation";
                 return false;
             }
+            case Ydb::Table::TableIndex::kGlobalIndex:
+                status = Ydb::StatusIds::INTERNAL_ERROR;
+                error = "Global index on a column table is started before the column-schema index switch";
+                return false;
             case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
                 if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
                     status = Ydb::StatusIds::UNSUPPORTED;

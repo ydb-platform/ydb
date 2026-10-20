@@ -7,6 +7,18 @@
 
 namespace NKikimr::NStorage {
 
+    void UpdateStaticVDiskGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss,
+            const THashMap<TGroupId, ui32>& newGenerations) {
+        for (auto& vdisk : *ss->MutableVDisks()) {
+            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
+            if (const auto it = newGenerations.find(vdiskId.GroupID); it != newGenerations.end() &&
+                    it->second == vdiskId.GroupGeneration + 1) {
+                vdiskId.GroupGeneration = it->second;
+                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
+            }
+        }
+    }
+
     namespace {
 
         // apply the callback to every state storage, state storage board and scheme board config present in the storage
@@ -27,19 +39,6 @@ namespace NKikimr::NStorage {
                 }
             }
             return std::nullopt;
-        }
-
-        // make VDisks of the static groups follow their new generations (each one is bumped by one); donors keep theirs
-        void UpdateStaticVDiskGenerations(NKikimrBlobStorage::TNodeWardenServiceSet *ss,
-                const THashMap<TGroupId, ui32>& newGenerations) {
-            for (auto& vdisk : *ss->MutableVDisks()) {
-                auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (const auto it = newGenerations.find(vdiskId.GroupID); it != newGenerations.end() &&
-                        it->second == vdiskId.GroupGeneration + 1) {
-                    vdiskId.GroupGeneration = it->second;
-                    VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-                }
-            }
         }
 
         // bump the generation of the static bridge proxy group along with its inline pile, if it has one; the new
@@ -645,7 +644,7 @@ namespace NKikimr::NStorage {
         for (auto& group : *ss->MutableGroups()) {
             groupMap.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), &group);
         }
-        THashSet<TGroupId> changedGroupIds;
+        THashMap<TGroupId, ui32> changedGroupIds;
         for (const auto& [groupId, group] : groupMap) {
             if (!group->HasBridgeGroupState()) {
                 continue;
@@ -664,20 +663,11 @@ namespace NKikimr::NStorage {
                 Y_ABORT_UNLESS(refGroup->GetGroupGeneration() == pile.GetGroupGeneration());
                 refGroup->SetGroupGeneration(refGroup->GetGroupGeneration() + 1);
                 pile.SetGroupGeneration(refGroup->GetGroupGeneration());
-                changedGroupIds.insert(refGroupId);
+                changedGroupIds.emplace(refGroupId, refGroup->GetGroupGeneration());
             });
             BumpBridgeProxyGeneration(group, [&](TGroupId id) { return changedGroupIds.contains(id); });
         }
-        for (auto& vdisk : *ss->MutableVDisks()) {
-            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (!changedGroupIds.contains(vdiskId.GroupID)) {
-                continue;
-            }
-            auto *group = groupMap[vdiskId.GroupID];
-            Y_ABORT_UNLESS(group);
-            vdiskId.GroupGeneration = group->GetGroupGeneration();
-            VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-        }
+        UpdateStaticVDiskGenerations(ss, changedGroupIds);
     }
 
     void UpdateClusterStateGuid(NKikimrBridge::TClusterState *clusterState) {

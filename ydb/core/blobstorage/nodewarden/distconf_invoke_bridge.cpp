@@ -264,13 +264,7 @@ namespace NKikimr::NStorage {
         });
 
         // update vdisk generations
-        for (auto& vdisk : *ss->MutableVDisks()) {
-            auto vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-            if (const auto it = referencedGroups.find(vdiskId.GroupID); it != referencedGroups.end()) {
-                vdiskId.GroupGeneration = it->second;
-                VDiskIDFromVDiskID(vdiskId, vdisk.MutableVDiskID());
-            }
-        }
+        UpdateStaticVDiskGenerations(ss, referencedGroups);
 
         StartProposition(&config);
     }

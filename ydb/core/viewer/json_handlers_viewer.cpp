@@ -281,7 +281,12 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
+<<<<<<< HEAD
     handlers.AddHandler("/viewer/nodes", new THttpHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 20);
+=======
+    handlers.AddHandler("/viewer/nodes", new THttpHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 22);
+    handlers.Capabilities["/viewer/nodes/alive"] = 1;
+>>>>>>> 33ceee36507 (Fix viewer/nodes usability by filtering alive nodes (#56096))
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {

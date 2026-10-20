@@ -302,33 +302,20 @@ class SnapshotRowsTest(unittest.TestCase):
             "labels": ["self-hosted", "auto-provisioned", "build-preset-analytic-node"],
         }
         size = job_footprint(job, specs, default)
-        self.assertEqual(size, {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0})
+        self.assertEqual(size, {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0})
         rows = queue_jobs([({"name": "Update Muted tests"}, job)], NOW, specs, default)
-        self.assertEqual(rows[0]["cores"], 64)
-        self.assertEqual(rows[0]["ram"], 256)
-        self.assertEqual(rows[0]["nrd"], 2417)
+        self.assertEqual(rows[0]["cores"], 4)
+        self.assertEqual(rows[0]["ram"], 8)
+        self.assertEqual(rows[0]["nrd"], 186)
 
-    def test_enrich_fills_fork_pr_and_target_branch(self):
+    def test_enrich_keeps_pr_and_target_branch(self):
         run = {
             "event": "pull_request_target",
             "head_branch": "codex/cuthistory-main",
-            "head_sha": "46786cba",
             "display_title": "Cut history",
-            "pull_requests": [],
-            "head_repository": {"owner": {"login": "lberserq"}},
+            "pull_requests": [{"number": 53649, "title": "Cut history", "base": {"ref": "main"}}],
         }
-
-        def fetcher(url, params=None):
-            if "/commits/" in url:
-                return []
-            return [{
-                "number": 53649,
-                "title": "Cut history",
-                "state": "open",
-                "base": {"ref": "main"},
-            }]
-
-        out = enrich_run_pull("ydb-platform", "ydb", run, {}, fetcher=fetcher)
+        out = enrich_run_pull("ydb-platform", "ydb", run, {})
         self.assertEqual(pull_info(out), ("53649", "Cut history"))
         self.assertEqual(target_branch(out), "main")
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)

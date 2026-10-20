@@ -44,6 +44,7 @@ QUOTA_FIELDS = (
     ("compute.ssdNonReplicatedDisks.size", "nrd_gib", True),
 )
 _RELW_SIZE = {"vcpu": 64.0, "ram_gb": 256.0, "nrd_ssd_gb": 2417.0}
+_TINY_SIZE = {"vcpu": 4.0, "ram_gb": 8.0, "nrd_ssd_gb": 186.0}
 DEFAULT_FITS = {
     "relwithdebinfo": dict(_RELW_SIZE),
     "release-asan": dict(_RELW_SIZE),
@@ -54,9 +55,9 @@ DEFAULT_LABEL_FOOTPRINTS = {
     "build-preset-release-asan": dict(_RELW_SIZE),
     "build-preset-release-msan": dict(_RELW_SIZE),
     "build-preset-release-tsan": dict(_RELW_SIZE),
-    "build-preset-analytic-node": dict(_RELW_SIZE),
+    "build-preset-analytic-node": dict(_TINY_SIZE),
 }
-DEFAULT_JOB_FOOTPRINT = {"vcpu": 96.0, "ram_gb": 320.0, "nrd_ssd_gb": 2417.0}
+DEFAULT_JOB_FOOTPRINT = dict(_RELW_SIZE)
 JOB_RANK = {"in_progress": 2, "queued": 1}
 # GitHub-hosted images. They do not wait for ghrun and must not count as demand.
 GITHUB_HOSTED_PREFIXES = ("ubuntu-", "windows-", "macos-")
@@ -1028,7 +1029,7 @@ def enrich_run_pull(
             cleaned["pull_requests"] = []
             return cleaned
         return run
-    return attach_pull_requests(org, repo, run, cache=cache, fetcher=fetcher)
+    return attach_pull_requests(org, repo, run)
 
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:

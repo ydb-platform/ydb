@@ -247,6 +247,12 @@ public:
 #endif
     }
 
+    void ClosePipes() noexcept {
+        Stdin.Reset();
+        Stdout.Reset();
+        Stderr.Reset();
+    }
+
     virtual void Kill() {
         ProcessState.Kill();
     }
@@ -2223,6 +2229,12 @@ private:
     }
 
     void StopJobsOnError(THolder<TChildProcess> process, TList<THolder<TChildProcess>> stopList = {}) noexcept {
+        if (process) {
+            process->ClosePipes();
+        }
+        for (const auto& job : stopList) {
+            job->ClosePipes();
+        }
         try {
             if (process) {
                 stopList.push_back(std::move(process));

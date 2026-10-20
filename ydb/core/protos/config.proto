@@ -1641,6 +1641,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        reserved "EnableSplitMergeFairScheduling"; reserved 20;  // for future EnableSplitMergeFairScheduling
+        optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
+            Description: "Enables merge by size",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTCMallocControls {

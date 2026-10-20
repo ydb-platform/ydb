@@ -31,16 +31,20 @@ public:
     }
 
     void Compile(TString, IStatsRegistry*) override {
-        Compiled_ = true;
+        // A mock built with a zero code size stands for a pattern that does not fit into the codegen limits.
+        Status_ = Size_ ? ECompileStatus::Compiled : ECompileStatus::RejectedBySize;
     }
-    bool IsCompiled() const override {
-        return Compiled_;
+    ECompileStatus GetCompileStatus() const override {
+        return Status_;
     }
     size_t CompiledCodeSize() const override {
         return Size_;
     }
     void RemoveCompiledCode() override {
-        Compiled_ = false;
+        if (Status_ != ECompileStatus::Compiled) {
+            return;
+        }
+        Status_ = ECompileStatus::NoCompilationStarted;
     }
     THolder<IComputationGraph> Clone(const TComputationOptsFull&) override {
         return {};
@@ -51,7 +55,7 @@ public:
 
 private:
     const size_t Size_;
-    bool Compiled_ = false;
+    ECompileStatus Status_ = ECompileStatus::NoCompilationStarted;
 };
 
 TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
@@ -571,6 +575,78 @@ Y_UNIT_TEST_TWIN(MapJoin, UseLLVM) {
 }
 } // Y_UNIT_TEST_SUITE(ComputationGraphDataRace)
 
+Y_UNIT_TEST_SUITE(ComputationPatternCompilation) {
+// Compiled code is published to and withdrawn from the pattern while other
+// threads keep cloning it, so a clone must produce the same result no matter
+// which compilation state it was made in.
+Y_UNIT_TEST(ClonesSurviveCompilationStateChanges) {
+    constexpr size_t vecSize = 100;
+
+    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+
+    auto entry = std::make_shared<TPatternCacheEntry>();
+    TScopedAlloc& alloc = entry->Alloc;
+    TTypeEnvironment& typeEnv = entry->Env;
+
+    TProgramBuilder pb(typeEnv, *functionRegistry);
+
+    TRuntimeNode progReturn;
+    with_lock (alloc) {
+        progReturn = CreateFilter<false>(pb, vecSize, /*list=*/nullptr);
+    }
+
+    TExploringNodeVisitor explorer;
+    explorer.Walk(progReturn.GetNode(), typeEnv);
+
+    TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
+                                 NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
+                                 /*optLLVM=*/"", EGraphPerProcess::Multi);
+
+    {
+        auto guard = entry->Env.BindAllocator();
+        entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
+    }
+
+    auto& pattern = *entry->Pattern;
+
+    auto runClone = [&]() {
+        auto randomProvider = CreateDeterministicRandomProvider(1);
+        auto timeProvider = CreateDeterministicTimeProvider(10000000);
+        TScopedAlloc graphAlloc(__LOCATION__);
+
+        TComputationPatternOpts cloneOpts(entry->Alloc.Ref(), entry->Env, GetListTestFactory(),
+                                          functionRegistry.Get(), NUdf::EValidateMode::Lazy,
+                                          NUdf::EValidatePolicy::Exception, /*optLLVM=*/"", EGraphPerProcess::Multi);
+
+        auto graph = pattern.Clone(cloneOpts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
+
+        ui64 acc = 0;
+        for (TUnboxedValue v = graph->GetValue(); v.HasValue(); v = graph->GetValue()) {
+            acc += v.Get<ui64>();
+        }
+        return acc;
+    };
+
+    const ui64 expected = runClone();
+
+    if (pattern.GetCompileStatus() != ECompileStatus::Compiled) {
+        // No codegen in this build or on this platform, or the program has not fit into its limits
+        return;
+    }
+
+    // Dropping the compiled code takes the pattern back to interpreted mode.
+    pattern.RemoveCompiledCode();
+    UNIT_ASSERT(pattern.GetCompileStatus() == ECompileStatus::NoCompilationStarted);
+    UNIT_ASSERT_VALUES_EQUAL(pattern.CompiledCodeSize(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(runClone(), expected);
+
+    // And compiling it again builds the code from scratch.
+    pattern.Compile(/*optLLVM=*/"", /*stats=*/nullptr);
+    UNIT_ASSERT(pattern.GetCompileStatus() == ECompileStatus::Compiled);
+    UNIT_ASSERT_VALUES_EQUAL(runClone(), expected);
+}
+} // Y_UNIT_TEST_SUITE(ComputationPatternCompilation)
+
 Y_UNIT_TEST_SUITE(ComputationPatternCache) {
 Y_UNIT_TEST(Smoke) {
     const ui32 cacheSize = 10'000'000;
@@ -901,7 +977,7 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
     for (const auto& key : keys) {
         auto entry = cache.Find(key);
         UNIT_ASSERT(entry);
-        UNIT_ASSERT(entry->Pattern->IsCompiled());
+        UNIT_ASSERT(entry->Pattern->GetCompileStatus() == ECompileStatus::Compiled);
     }
 
     // Resize down past current compiled usage: oldest compiled code evicted.
@@ -916,7 +992,7 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
     for (const auto& key : keys) {
         auto entry = cache.Find(key);
         UNIT_ASSERT(entry);
-        if (entry->Pattern->IsCompiled()) {
+        if (entry->Pattern->GetCompileStatus() == ECompileStatus::Compiled) {
             ++stillCompiled;
         }
     }
@@ -969,7 +1045,7 @@ Y_UNIT_TEST(TripletKeyNotifyPatternCompiled) {
 
     auto found = cache.Find(key);
     UNIT_ASSERT_EQUAL(found, entry);
-    UNIT_ASSERT(found->Pattern->IsCompiled());
+    UNIT_ASSERT(found->Pattern->GetCompileStatus() == ECompileStatus::Compiled);
 }
 
 Y_UNIT_TEST(TripletKeyNotifyPatternMissing) {
@@ -1016,6 +1092,202 @@ Y_UNIT_TEST(TripletKeyFindOrSubscribeDistinctKeys) {
     UNIT_ASSERT(future2.Initialized() && future2.HasValue());
     UNIT_ASSERT_EQUAL(future1.GetValue(), entry1);
     UNIT_ASSERT_EQUAL(future2.GetValue(), entry2);
+}
+
+Y_UNIT_TEST(PatternWithoutCompiledCodeIsNotTracked) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto sizeCompiledItems = counters->GetCounter("PatternCache/SizeCompiledItems", /*derivative=*/false);
+    auto sizeCompiledBytes = counters->GetCounter("PatternCache/SizeCompiledBytes", /*derivative=*/false);
+
+    constexpr size_t maxBytes = 1000;
+    TComputationPatternLRUCache cache({maxBytes, maxBytes}, counters);
+
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+
+    // A pattern that has not fit into the codegen limits holds no code at all.
+    auto entry = MakeMockEntry(/*codeSize=*/0);
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    UNIT_ASSERT(entry->Pattern->GetCompileStatus() == ECompileStatus::RejectedBySize);
+
+    cache.EmplacePattern(key, entry);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledItems), 0);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), 0);
+
+    // The same holds for the pattern reported as compiled after it got into the cache.
+    cache.NotifyPatternCompiled(key);
+    cache.UpdatePatternCurrentUsageInfo();
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledItems), 0);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*sizeCompiledBytes), 0);
+}
+
+Y_UNIT_TEST(EvictedCompiledCodeIsNotCompiledAgain) {
+    constexpr size_t patternSize = 100;
+    constexpr size_t accessTimesBeforeCompile = 2;
+
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto compiledCodeEvictions = counters->GetCounter("PatternCache/CompiledCodeEvictions", /*derivative=*/true);
+
+    // The compiled code budget only fits a single pattern.
+    TComputationPatternLRUCache cache({10 * patternSize, patternSize, accessTimesBeforeCompile}, counters);
+
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    auto entry = MakeMockEntry(patternSize);
+    cache.EmplacePattern(key, entry);
+
+    // Accessing the pattern often enough queues it for compilation ...
+    for (size_t i = 0; i < accessTimesBeforeCompile; ++i) {
+        cache.FindOrSubscribe(key);
+    }
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompile;
+    cache.GetPatternsToCompile(toCompile);
+    UNIT_ASSERT_VALUES_EQUAL(toCompile.size(), 1);
+
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    cache.NotifyPatternCompiled(key);
+    UNIT_ASSERT(entry->Pattern->GetCompileStatus() == ECompileStatus::Compiled);
+
+    // ... and its code is dropped as soon as another pattern needs the budget.
+    auto otherEntry = MakeMockEntry(patternSize);
+    otherEntry->Pattern->Compile("", /*stats=*/nullptr);
+    cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "other"}, otherEntry);
+    UNIT_ASSERT(entry->Pattern->GetCompileStatus() == ECompileStatus::NoCompilationStarted);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*compiledCodeEvictions), 1);
+
+    // Once the code has been evicted, the pattern must not be queued for compilation over and over again.
+    for (size_t i = 0; i < 10 * accessTimesBeforeCompile; ++i) {
+        cache.FindOrSubscribe(key);
+    }
+
+    THashMap<TProgramKey, TPatternCacheEntryPtr> toCompileAgain;
+    cache.GetPatternsToCompile(toCompileAgain);
+    UNIT_ASSERT(toCompileAgain.empty());
+}
+
+Y_UNIT_TEST(EvictedEntryIsMarkedAsNotCached) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto sizeBytes = counters->GetCounter("PatternCache/SizeBytes", /*derivative=*/false);
+    auto evictions = counters->GetCounter("PatternCache/Evictions", /*derivative=*/true);
+    auto evictedUnused = counters->GetCounter("PatternCache/EvictedUnused", /*derivative=*/true);
+
+    constexpr size_t accessTimesBeforeCompile = 1;
+    constexpr size_t initialMaxBytes = 100'000'000;
+    TComputationPatternLRUCache cache({initialMaxBytes, initialMaxBytes, accessTimesBeforeCompile}, counters);
+
+    auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
+
+    auto makeEntry = [&]() {
+        auto entry = std::make_shared<TPatternCacheEntry>();
+        TScopedAlloc& alloc = entry->Alloc;
+        TTypeEnvironment& typeEnv = entry->Env;
+
+        TProgramBuilder pb(typeEnv, *functionRegistry);
+
+        TRuntimeNode progReturn;
+        with_lock (alloc) {
+            progReturn = NTest::ConvertValueToLiteralNode(pb, TStringBuf("qwerty"));
+        }
+
+        TExploringNodeVisitor explorer;
+        explorer.Walk(progReturn.GetNode(), typeEnv);
+
+        TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetBuiltinFactory(), functionRegistry.Get(),
+                                     NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
+                                     "OFF", EGraphPerProcess::Multi);
+        {
+            auto guard = entry->Env.BindAllocator();
+            entry->Pattern = MakeComputationPattern(explorer, progReturn, {}, opts);
+        }
+
+        // See the comment in the Smoke test above on why the free pages are released here.
+        alloc.ReleaseFreePages();
+        return entry;
+    };
+
+    const TProgramKey firstKey{NYql::UnknownLangVersion, {}, "first"};
+    auto first = makeEntry();
+    cache.EmplacePattern(firstKey, first);
+    UNIT_ASSERT(first->IsInCache.load());
+
+    // Shrink the cache down to a single entry, so that the next one pushes this one out. The limit is given some
+    // headroom, so that the second entry is guaranteed to fit on its own once the first one is gone.
+    const size_t oneEntryBytes = *sizeBytes;
+    UNIT_ASSERT(oneEntryBytes > 0);
+    cache.UpdateConfiguration({oneEntryBytes + oneEntryBytes / 2, initialMaxBytes, accessTimesBeforeCompile});
+
+    auto second = makeEntry();
+    cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "second"}, second);
+
+    // The evicted entry has never been compiled, so it is exactly the one that may be sitting in the compilation
+    // queue - and IsInCache is what stops it from being compiled after it has left the cache.
+    UNIT_ASSERT(!cache.Find(firstKey));
+    UNIT_ASSERT(!first->IsInCache.load());
+    UNIT_ASSERT(second->IsInCache.load());
+
+    // Nobody ever got the evicted entry out of the cache, so building it was work done for nothing.
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictions), 1);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*evictedUnused), 1);
+}
+
+Y_UNIT_TEST(WastedCompilationsAreCounted) {
+    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto wastedCompilations = counters->GetCounter("PatternCache/WastedCompilations", /*derivative=*/true);
+
+    constexpr size_t maxBytes = 1'000'000;
+    TComputationPatternLRUCache cache({maxBytes, maxBytes}, counters);
+
+    // Compiled by the service after the entry had left the cache: there is nothing to attribute the code to.
+    cache.NotifyPatternCompiled(TProgramKey{NYql::UnknownLangVersion, {}, "gone"});
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 1);
+
+    // Compiled by the service while a new entry has taken the key: the code belongs to the old entry, which is not
+    // the one the cache holds now.
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "replaced"};
+    cache.EmplacePattern(key, MakeMockEntry());
+    cache.NotifyPatternCompiled(key);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 2);
+
+    // And a compilation that does land in the cache is not counted.
+    auto entry = MakeMockEntry();
+    entry->Pattern->Compile("", /*stats=*/nullptr);
+    const TProgramKey liveKey{NYql::UnknownLangVersion, {}, "live"};
+    cache.EmplacePattern(liveKey, entry);
+    cache.NotifyPatternCompiled(liveKey);
+    UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*wastedCompilations), 2);
+}
+
+Y_UNIT_TEST(DuplicateEmplaceKeepsTheCachedEntry) {
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto cachedEntry = MakeMockEntry();
+    cache.EmplacePattern(key, cachedEntry);
+
+    // Emplacing a duplicate for a known key keeps the entry already in the cache ...
+    auto duplicateEntry = MakeMockEntry();
+    cache.EmplacePattern(key, duplicateEntry);
+
+    UNIT_ASSERT_EQUAL(cache.Find(key), cachedEntry);
+    UNIT_ASSERT(cachedEntry->IsInCache.load());
+
+    // ... and the duplicate is dropped on the floor, so nobody may be handed it as if it were cached.
+    UNIT_ASSERT(!duplicateEntry->IsInCache.load());
+}
+
+Y_UNIT_TEST(CleanCacheMarksEntriesAsNotCached) {
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
+    auto entry = MakeMockEntry();
+
+    {
+        constexpr size_t maxBytes = 1000;
+        TComputationPatternLRUCache cache({maxBytes, maxBytes});
+        cache.EmplacePattern(key, entry);
+        UNIT_ASSERT(entry->IsInCache.load());
+    }
+
+    // The entry outlives the cache it was stored in, and the cache has to walk its LRU lists before dropping the
+    // holders those lists point at.
+    UNIT_ASSERT(!entry->IsInCache.load());
 }
 
 } // Y_UNIT_TEST_SUITE(ComputationPatternCache)

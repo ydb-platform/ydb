@@ -1151,15 +1151,9 @@ public:
             NeedLimit = false;
         }
         FieldsRequested = FieldsRequired; // no dependent fields
-<<<<<<< HEAD
-=======
         if (AliveOnly) {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
-            FieldsRequired.set(+ENodeFields::PDisks);
-        }
->>>>>>> 33ceee36507 (Fix viewer/nodes usability by filtering alive nodes (#56096))
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<ENodeFields>(field));
@@ -1281,7 +1275,7 @@ public:
 
     bool HasPendingFilters() const {
         return (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty()
-            || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
+            || ProblemNodesOnly || AliveOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
     }
 
     bool PreFilterDone() const {
@@ -1517,11 +1511,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-<<<<<<< HEAD
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
-=======
             NeedFilter = HasPendingFilters();
->>>>>>> 33ceee36507 (Fix viewer/nodes usability by filtering alive nodes (#56096))
             FoundNodes = NodeView.size();
         }
     }

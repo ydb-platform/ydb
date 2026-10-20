@@ -656,6 +656,19 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         const TTierRange range{ .From = TTierAbsoluteBound{ Date(2025).Micros + 500000 } };
         UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {range}, DyNumber(ToString(from) + ".4")));
         UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {range}, DyNumber(ToString(from) + ".5")));
+
+        // Inclusive absolute upper bounds are exact too: a single point [0.5s, 0.5s]
+        const TTierRange point{
+            .From = TTierAbsoluteBound{ 500000 },
+            .To = TTierAbsoluteBound{ 500000 },
+            .ToInclusive = true,
+        };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.5"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.4"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {point}, DyNumber(TStringBuf("0.6"))));
+        const TTierRange upTo{ .To = TTierAbsoluteBound{ 1500000 }, .ToInclusive = true };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {upTo}, DyNumber(TStringBuf("1.5"))));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, seconds, {upTo}, DyNumber(TStringBuf("1.6"))));
     }
 
     Y_UNIT_TEST(AbsoluteOpenAndInclusiveRanges) {

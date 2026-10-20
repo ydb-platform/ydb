@@ -165,7 +165,8 @@ namespace NTable {
             std::optional<TThreshold> To;
         };
 
-        TThreshold MakeThreshold(i64 micros, ECmp cmp) const;
+        // ttlRounding keeps row table TTL rounding of relative (Interval) bounds
+        TThreshold MakeThreshold(i64 micros, ECmp cmp, bool ttlRounding) const;
         i64 ToMicros(const TTierBound& bound, i64 nowUs) const;
         bool Matches(const TCell& cell, const TThreshold& threshold) const;
         int Compare(const TCell& cell, const TThreshold& threshold) const;

@@ -392,11 +392,12 @@ namespace {
             for (const auto& range : rule.Ranges) {
                 auto& compiled = ranges.emplace_back();
                 if (range.From) {
-                    compiled.From = MakeThreshold(ToMicros(*range.From, nowUs), ECmp::GreaterOrEqual);
+                    compiled.From = MakeThreshold(ToMicros(*range.From, nowUs), ECmp::GreaterOrEqual,
+                        IsRelative(*range.From));
                 }
                 if (range.To) {
                     compiled.To = MakeThreshold(ToMicros(*range.To, nowUs),
-                        range.ToInclusive ? ECmp::LessOrEqual : ECmp::Less);
+                        range.ToInclusive ? ECmp::LessOrEqual : ECmp::Less, IsRelative(*range.To));
                 }
             }
         }
@@ -428,7 +429,7 @@ namespace {
         return std::get<TTierAbsoluteBound>(bound).Micros;
     }
 
-    TTierPredicate::TThreshold TTierPredicate::MakeThreshold(i64 micros, ECmp cmp) const {
+    TTierPredicate::TThreshold TTierPredicate::MakeThreshold(i64 micros, ECmp cmp, bool ttlRounding) const {
         using EKind = TThreshold::EKind;
 
         TThreshold result;
@@ -527,9 +528,10 @@ namespace {
                 setUnsigned(unitBound(EScale::NanosWholeMicros), Max<ui64>());
                 break;
             case NScheme::NTypeIds::DyNumber:
-                // DyNumber has arbitrary precision, so any bound is representable. An inclusive
-                // upper bound keeps TTL rounding, other bounds are exact (values may be fractional).
-                setSerialized(NDyNumber::ParseDyNumberString(lessOrEqual
+                // DyNumber has arbitrary precision, so any bound is representable. A relative
+                // inclusive upper bound (Interval) keeps TTL rounding, other bounds are exact
+                // (values may be fractional, e.g. an absolute point [0.5s, 0.5s]).
+                setSerialized(NDyNumber::ParseDyNumberString(lessOrEqual && ttlRounding
                     ? MicrosToUnitFloorString(micros, Policy.Unit)
                     : MicrosToUnitExactString(micros, Policy.Unit)));
                 break;

@@ -9,6 +9,9 @@ struct TBridgePileInfo {
     bool IsPromoted = false;
     bool Drain = false;
     TVector<TActorId> DrainInitiators; // Currently always empty
+    THiveDrain* DrainActor = nullptr;
+    bool DrainRetry = false; // StartPileDrain was called while DrainActor ran
+    ui64 DrainEpoch = 0; // counts started drains; only the latest one's switch-off may clear Drain
 
     TBridgePileInfo(const TBridgeInfo::TPile& wardenPileInfo)
         : Id(wardenPileInfo.BridgePileId)

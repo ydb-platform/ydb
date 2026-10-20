@@ -22,7 +22,7 @@ public:
     std::unordered_set<TNodeId> operator()(TBridgePileId pileId) const {
         std::unordered_set<TNodeId> nodes;
         for (const auto& [nodeId, node] : Hive->Nodes) {
-            if (node.BridgePileId == pileId) {
+            if (node.BridgePileId == pileId && !node.Drain) { // a node drain owns it
                 nodes.insert(nodeId);
             }
         }

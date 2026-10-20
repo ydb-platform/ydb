@@ -79,9 +79,7 @@ public:
                 pileInfo.Drain = true;
                 db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
             }
-            if (pileInfo.Drain) {
-                Self->StartHiveDrain(pileId, TDrainSettings{.DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN, .Forward = false});
-            }
+            Self->StartPileDrain(pileInfo);
         }
 
         for (auto* tablet : TabletsToRestart) {

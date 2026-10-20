@@ -349,6 +349,12 @@ public:
                 pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
                 pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
                 pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                pileInfo.Drain = bridgePileRowset.GetValueOrDefault<Schema::BridgePile::Drain>();
+                if (pileInfo.Drain && Self->BridgeInfo && Self->IsPrimaryPile(pileId)) {
+                    // stale: the drained pile is primary again
+                    pileInfo.Drain = false;
+                    db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(false);
+                }
                 if (!bridgePileRowset.Next()) {
                     return false;
                 }

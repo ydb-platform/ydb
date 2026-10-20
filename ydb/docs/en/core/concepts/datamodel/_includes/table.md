@@ -199,7 +199,7 @@ For a column group, attributes that affect data storage and caching are set:
 * Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm compression);
 * caching mode.
 
-For compression settings and algorithm choice, see [{#T}](../../compression.md).
+For table data compression, see [{#T}](../../compression.md).
 
 Column group attributes are set during table creation and can be modified later. Storage attribute changes aren't immediately applied to existing data; instead, they take effect during subsequent background [LSM compaction](../../glossary.md#compaction). Caching attribute changes take effect immediately.
 
@@ -255,8 +255,8 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
 
-* You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later. See also [{#T}](../../compression.md).
-* You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md#encoding) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#encoding) it later.
+* You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md) it later. See also [{#T}](../../compression.md).
+* You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md) it later.
 
 Let's recreate the `article` table, this time in column-oriented format, using the following YQL command:
 

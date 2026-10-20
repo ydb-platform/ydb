@@ -5,6 +5,8 @@
 #include <ydb/services/udf_store/wasm/host.h>
 #include <ydb/services/udf_store/wasm/invocation_context.h>
 #include <ydb/services/udf_store/wasm/registry_helpers.h>
+#include <ydb/udfs/wasm/sdk/services/auth.h>
+#include <ydb/udfs/wasm/sdk/services/transport.h>
 
 #include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -70,16 +72,16 @@ struct TEnv {
     TQueryCompartmentHandle* Query = nullptr;
     std::unique_ptr<TRuntime> Runtime;
 
-    explicit TEnv(TLimits limits = {}, TStringBuf wat = {}) {
+    explicit TEnv(TLimits limits = {}, TStringBuf wat = {}, bool binary = false, IWebAssemblyCompartment* parent = nullptr) {
         EnsureUdfHostIntrinsicsRegistered();
         KeepAsyncHostIntrinsicsLinked();
         auto query = std::make_unique<TQueryCompartmentHandle>();
         query->Generation = 17;
         query->BridgeNodes = std::make_unique<TWasmBridgeNodeTable>(query->Generation);
-        query->Compartment = CreateRegistryCompartment({});
+        query->Compartment = CreateRegistryCompartment({}, parent);
         const auto bytes = wat.empty() ? NResource::Find("/async_coroutine.wasm") : TString(wat);
         UNIT_ASSERT(!bytes.empty());
-        const auto format = wat.empty() ? EBytecodeFormat::Binary : EBytecodeFormat::HumanReadable;
+        const auto format = (wat.empty() || binary) ? EBytecodeFormat::Binary : EBytecodeFormat::HumanReadable;
         const auto object = CompileModuleObjectCode(bytes, format);
         AddPrecompiledModule(query->Compartment.get(), MakeModuleBytecode(bytes, object, format), "AsyncFixture");
         query->Resident = std::make_unique<TCompartmentResidentCache>(query->Compartment.get());
@@ -477,5 +479,74 @@ Y_UNIT_TEST_SUITE(TWasmAsyncRuntimeTest) {
         env.Runtime->Drop(call);
         UNIT_ASSERT_VALUES_EQUAL(env.Runtime->Stats().BufferedBytes, 0);
         UNIT_ASSERT_VALUES_EQUAL(env.Runtime->Stats().Operations, 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TWasmAuthAccessTest) {
+    Y_UNIT_TEST(SecretImportRequiresHostPrivilege) {
+        const TString wat = R"WAST((module
+            (import "env" "WasmAuthSecretStart" (func $secret (param i64) (result i64)))
+            (func (export "WasmAsyncAbiVersion") (result i32) (i32.const 1))
+            (func (export "WasmAsyncCallStart") (param i64 i64) (result i64) (i64.const 1))
+            (func (export "WasmAsyncCallPoll") (param i64) (drop (call $secret (i64.const 1))))
+            (func (export "WasmAsyncCallCancel") (param i64))
+            (func (export "WasmAsyncCallDrop") (param i64))
+        ))WAST";
+        TEnv app({}, wat);
+        const auto call = app.Runtime->Start({}, TInstant::Now() + TDuration::Seconds(1));
+        UNIT_ASSERT_EXCEPTION(app.Runtime->Poll(call), yexception);
+        UNIT_ASSERT(app.Transport->Requests.empty());
+        UNIT_ASSERT(app.Runtime->IsPoisoned());
+    }
+
+    Y_UNIT_TEST(CompiledAuthModuleUsesPrivateRealmAndAsyncSecret) {
+        namespace Auth = NYdb::NWasm::NAuth;
+        namespace Services = NYdb::NWasm::NServices;
+        auto application = CreateRegistryCompartment({});
+        TLimits limits;
+        limits.AllowSecrets = true;
+        TEnv env(limits, NResource::Find("/auth_test.wasm"), true, application.get());
+        Auth::TRequest request;
+        request.ParametersBytes = 2;
+        request.SecretCount = 1;
+        const TString arguments = TString(reinterpret_cast<const char*>(&request), sizeof(request)) + "{}" + Encode(1);
+        auto call = env.Runtime->Start(arguments, TInstant::Now() + TDuration::Seconds(10));
+        UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+        UNIT_ASSERT_VALUES_EQUAL(env.Transport->Requests.size(), 1);
+        UNIT_ASSERT(env.Transport->Requests[0]->Kind == EOperationKind::Secret);
+        UNIT_ASSERT_VALUES_EQUAL(Decode(env.Transport->Requests[0]->Payload), 1);
+        UNIT_ASSERT(env.Transport->Requests[0]->Completion(EOperationStatus::Ready, "test-secret"));
+        env.Runtime->TakeReady();
+        UNIT_ASSERT(env.Runtime->Poll(call).Status == ECallStatus::Waiting);
+        UNIT_ASSERT_VALUES_EQUAL(env.Transport->Requests.size(), 2);
+        UNIT_ASSERT(env.Transport->Requests[1]->Kind == EOperationKind::Request);
+        UNIT_ASSERT(env.Transport->Requests[1]->Payload.Contains("test-secret"));
+        Auth::TResult result;
+        result.TicketBytes = 11;
+        result.LifetimeMs = 60000;
+        const TString payload = TString(reinterpret_cast<const char*>(&result), sizeof(result)) + "fake-ticket";
+        Services::TResponseHeader response;
+        response.Code = 200;
+        response.PayloadBytes = payload.size();
+        const TString wire = TString(reinterpret_cast<const char*>(&response), sizeof(response)) + payload;
+        UNIT_ASSERT(env.Transport->Requests[1]->Completion(EOperationStatus::Ready, wire));
+        env.Runtime->TakeReady();
+        const auto completed = env.Runtime->Poll(call);
+        UNIT_ASSERT(completed.Status == ECallStatus::Completed);
+        Auth::TResult decoded;
+        std::string_view ticket;
+        UNIT_ASSERT(Auth::ReadResult({ completed.Data.data(), completed.Data.size() }, decoded, ticket));
+        UNIT_ASSERT_VALUES_EQUAL(ticket, "fake-ticket");
+        env.Runtime->Drop(call);
+        UNIT_ASSERT_VALUES_EQUAL(env.Runtime->Stats().BufferedBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Runtime->Stats().Operations, 0);
+    }
+
+    Y_UNIT_TEST(AuthOnlyManifestAcceptedByStore) {
+        const auto manifest = ParseManifest(R"({"module_name":"TestAuth","module_kind":"wasm","module_type":"module",
+            "auth_provider":{"name":"TEST_AUTH","abi_version":1,"header":"x-auth-test","parameters":[]}})");
+        UNIT_ASSERT(manifest.Auth);
+        UNIT_ASSERT(manifest.Functions.empty());
+        UNIT_ASSERT(!manifest.Services);
     }
 }

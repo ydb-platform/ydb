@@ -169,5 +169,63 @@ TEST(TWasmLinking, RejectsOverflowingActiveSegment)
         (func $f) (elem (i64.const -1) func $f)))")), std::exception);
 }
 
+TString ManyGlobals(size_t count)
+{
+    TStringBuilder wat;
+    wat << "(module";
+    for (size_t i = 0; i < count; ++i) {
+        wat << "(global (mut i64) (i64.const 0))";
+    }
+    wat << "(func (export \"value\") (result i64) (i64.const 42)))";
+    return wat;
+}
+
+TEST(TWasmLinking, ReleasedRealmReturnsMutableGlobalSlots)
+{
+    auto parent = CreateEmptyImage();
+    auto sibling = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+    sibling->AddModule(ManyGlobals(100));
+    for (unsigned iteration = 0; iteration < 4; ++iteration) {
+        auto realm = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+        Load(realm.get(), ManyGlobals(600), iteration % 2);
+        EXPECT_EQ(Call(realm.get(), "value"), 42u);
+        EXPECT_EQ(Call(sibling.get(), "value"), 42u);
+    }
+    EXPECT_EQ(Call(sibling.get(), "value"), 42u);
+}
+
+TEST(TWasmLinking, MutableGlobalExhaustionFailsWithoutCrashing)
+{
+    auto parent = CreateEmptyImage();
+    auto occupied = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+    occupied->AddModule(ManyGlobals(600));
+    for (bool precompiled : { false, true }) {
+        auto realm = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+        EXPECT_THROW(Load(realm.get(), ManyGlobals(600), precompiled), std::exception);
+        EXPECT_EQ(Call(occupied.get(), "value"), 42u);
+    }
+    occupied.reset();
+    auto recovered = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+    recovered->AddModule(ManyGlobals(600));
+    EXPECT_EQ(Call(recovered.get(), "value"), 42u);
+}
+
+TEST(TWasmLinking, IntrinsicFunctionPointerInIsolatedRealm)
+{
+    for (bool precompiled : { false, true }) {
+        auto parent = CreateEmptyImage();
+        auto realm = parent->CreateIsolatedRealm(64 * 1024 * 1024);
+        Load(realm.get(), R"((module
+            (type $trace (func (param i64)))
+            (import "env" "__indirect_function_table" (table i64 1 funcref))
+            (import "GOT.func" "emscripten_dbg_backtrace" (global $trace (mut i64)))
+            (func (export "call") (result i64)
+                (call_indirect (type $trace) (i64.const 0) (global.get $trace))
+                (i64.const 42))))", precompiled);
+        EXPECT_EQ(Call(realm.get(), "call"), 42u);
+        EXPECT_EQ(parent->GetFunction("call"), nullptr);
+    }
+}
+
 }   // namespace
 }   // namespace NYdb::NWasm

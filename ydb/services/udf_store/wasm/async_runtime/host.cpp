@@ -23,6 +23,11 @@ ui32 Poll(ui64 operation) {
     return static_cast<ui32>(ctx.Runtime->PollOperation(ctx.Call, operation));
 }
 
+ui64 Secret(ui64 handle) {
+    auto& ctx = Current();
+    return ctx.Runtime->StartSecret(ctx.Call, handle);
+}
+
 ui64 Timer(ui64 delayMicroseconds) {
     auto& ctx = Current();
     return ctx.Runtime->StartTimer(ctx.Call, delayMicroseconds);
@@ -61,6 +66,7 @@ void Complete(ui64 result, ui64 size, ui32 status) {
 
 WASM_INTRINSIC(WasmAsyncOperationStart, Start, decltype(Start))
 WASM_INTRINSIC(WasmAsyncTimerStart, Timer, decltype(Timer))
+WASM_INTRINSIC(WasmAuthSecretStart, Secret, decltype(Secret))
 WASM_INTRINSIC(WasmAsyncOperationPoll, Poll, decltype(Poll))
 WASM_INTRINSIC(WasmAsyncOperationSize, Size, decltype(Size))
 WASM_INTRINSIC(WasmAsyncOperationRead, Read, decltype(Read))

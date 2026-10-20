@@ -139,5 +139,12 @@ TEST(TWasmClock, StandardLibraryAndConstructors)
     CheckStandardLibrary(compartment.get());
 }
 
+TEST(TWasmClock, StandardLibraryInIsolatedAuthRealm)
+{
+    auto application = CreateEmptyImage();
+    auto auth = application->CreateIsolatedRealm(64 * 1024 * 1024);
+    CheckStandardLibrary(auth.get());
+}
+
 }   // namespace
 }   // namespace NYdb::NWasm

@@ -48,7 +48,7 @@ after physical cancellation and guest heap quotas require further integration.
 Guest code reads time with `time()`, `std::chrono::system_clock::now()` or
 `std::chrono::steady_clock::now()`. The common host implements WASI
 `clock_time_get` for realtime and monotonic clocks, including during module
-constructors. Reads are immediate and do not depend
+constructors and in isolated auth realms. Reads are immediate and do not depend
 on an active async invocation. Realtime is Unix epoch time and may jump; use
 monotonic time for elapsed durations. This does not change runtime deadlines or
 async/auth ABI v1. Other system calls keep their existing restrictions.

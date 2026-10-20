@@ -106,7 +106,8 @@ void AddPrecompiledModule(IWebAssemblyCompartment* compartment, const TModuleByt
     compartment->AddPrecompiledModule(bytecode, name);
 }
 
-std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(const TVector<TNamedModuleBytecode>& libraries)
+std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
+    const TVector<TNamedModuleBytecode>& libraries, IWebAssemblyCompartment* parent, size_t maxRealmMemoryBytes)
 {
     // CreateImageFromSdk clones from a process-wide cache (first call is slow,
     // later Acquires are cheap). MinimalRuntime must not be used — it lacks
@@ -128,7 +129,10 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(const TVector
         sdkBytecode = &libraries.front().Bytecode;
     }
 
-    auto compartment = CreateImageFromSdk(*sdkBytecode);
+    auto compartment = parent ? parent->CreateIsolatedRealm(maxRealmMemoryBytes) : CreateImageFromSdk(*sdkBytecode);
+    if (parent) {
+        compartment->AddSdk(*sdkBytecode);
+    }
     for (size_t i = 1; i < libraries.size(); ++i) {
         AddPrecompiledModule(compartment.get(), libraries[i].Bytecode, libraries[i].Name);
     }

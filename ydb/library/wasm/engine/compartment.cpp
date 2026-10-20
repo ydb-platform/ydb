@@ -114,8 +114,9 @@ Runtime::Global* CreateCheckedGlobal(Runtime::Compartment* compartment, IR::Glob
     return global;
 }
 
-TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
+TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment, size_t maxMemoryBytes = MaxMemorySize)
 {
+    THROW_ERROR_EXCEPTION_IF(maxMemoryBytes < MinMemorySize || maxMemoryBytes > MaxMemorySize, "Invalid WASM realm memory limit");
     static const auto mutableI64Global = IR::GlobalType{ IR::ValueType::i64, true };
     static const auto immutableI64Global = IR::GlobalType{ IR::ValueType::i64, false };
     static const auto immutableI32Global = IR::GlobalType{ IR::ValueType::i32, false };
@@ -127,7 +128,7 @@ TMemoryLayoutData BuildMemoryLayoutData(Runtime::Compartment* compartment)
             IR::MemoryType{
                 /*isShared*/ false,
                 /*indexType*/ IR::IndexType::i64,
-                /*size*/ IR::SizeConstraints{MinMemorySize / PageSize, MaxMemorySize / PageSize}
+                /*size*/ IR::SizeConstraints{MinMemorySize / PageSize, maxMemoryBytes / PageSize}
             },
             "__linear_memory"),
         .GlobalOffsetTable = Runtime::createTable(
@@ -368,8 +369,16 @@ public:
         Context_ = nullptr;
         TMemoryLayoutData::Clear(&MemoryLayoutData_);
 
-        auto collected = Runtime::tryCollectCompartment(std::move(Compartment_));
-        YT_ASSERT(collected);
+        if (Compartment_ && RealmLifetime_.use_count() == 1) {
+            auto collected = Runtime::tryCollectCompartment(std::move(Compartment_));
+            YT_ASSERT(collected);
+        } else if (Compartment_) {
+            // Released realms must return globals/memory even while their parent
+            // remains alive. Waiting for the final realm exhausts WAVM slots on
+            // repeated SDK loads. Live realms retain their own GC roots.
+            Runtime::collectCompartmentGarbage(Compartment_);
+            Compartment_ = nullptr;
+        }
     }
 
     void AddModule(TRef bytecode, TStringBuf name = "") override {
@@ -440,7 +449,7 @@ public:
 
     void AddSdk(const TModuleBytecode& bytecode) override {
         YT_ASSERT(!RuntimeLibraryInstance_);
-        YT_ASSERT(Compartment_->instances.size() == 1);
+        YT_ASSERT(Modules_.empty());
 
         if (bytecode.ObjectCode) {
             AddPrecompiledModule(bytecode, "env");
@@ -709,6 +718,8 @@ public:
         return MemoryLayoutData_.GlobalOffsetTable;
     }
 
+    std::unique_ptr<IWebAssemblyCompartment> CreateIsolatedRealm(size_t maxMemoryBytes) override;
+
     // This function is only declared here, because TLinker has not yet been defined.
     Runtime::LinkResult LinkModule(const IR::Module& irModule);
 
@@ -724,6 +735,8 @@ private:
 
     static constexpr int TypicalModuleCount = 5;
 
+    // Every realm roots the same WAVM compartment. The final realm collects it.
+    std::shared_ptr<bool> RealmLifetime_ = std::make_shared<bool>(false);
     Runtime::GCPointer<Runtime::Compartment> Compartment_;
     Runtime::GCPointer<Runtime::Context> Context_;
 
@@ -1257,6 +1270,7 @@ void TWebAssemblyCompartment::ApplyDataRelocationsAndCallConstructors(Runtime::I
 
 void TWebAssemblyCompartment::Clone(const TWebAssemblyCompartment& source, TWebAssemblyCompartment* destination)
 {
+    THROW_ERROR_EXCEPTION_IF(*source.RealmLifetime_, "Cannot clone a WASM compartment with isolated realms");
     destination->Compartment_ = Runtime::cloneCompartment(source.Compartment_);
     destination->Context_ = Runtime::cloneContext(source.Context_, destination->Compartment_);
 
@@ -1373,6 +1387,23 @@ void CheckStackDepth()
 }
 
 }   // namespace
+
+std::unique_ptr<IWebAssemblyCompartment> TWebAssemblyCompartment::CreateIsolatedRealm(size_t maxMemoryBytes)
+{
+    auto realm = std::make_unique<TWebAssemblyCompartment>();
+    realm->RealmLifetime_ = RealmLifetime_;
+    *RealmLifetime_ = true;
+    realm->Compartment_ = Compartment_;
+    realm->Context_ = Runtime::createContext(Compartment_);
+    Runtime::setCheckStackDepthCallback(realm->Context_, CheckStackDepth);
+    realm->MemoryLayoutData_ = BuildMemoryLayoutData(Compartment_, maxMemoryBytes);
+    realm->IntrinsicsInstance_ = Intrinsics::instantiateModule(Compartment_, { WAVM_INTRINSIC_MODULE_REF(standard) }, "env");
+    // GOT.func imports also search Instances_, not only direct env imports.
+    realm->Instances_.push_back(realm->IntrinsicsInstance_);
+    realm->ExceptionType_ =
+        Runtime::createExceptionType(Compartment_, IR::ExceptionType{ IR::TypeTuple{ IR::ValueType::i64 } }, "__cpp_exception");
+    return realm;
+}
 
 std::unique_ptr<TWebAssemblyCompartment> CreateImage(EKnownImage image)
 {

@@ -147,6 +147,10 @@ public:
         return Handle_;
     }
 
+    static TOperation Secret(uint64_t secretHandle) {
+        return TOperation(WasmAuthSecretStart(secretHandle));
+    }
+
     static TOperation Timer(uint64_t delayMicroseconds) {
         return TOperation(WasmAsyncTimerStart(delayMicroseconds));
     }

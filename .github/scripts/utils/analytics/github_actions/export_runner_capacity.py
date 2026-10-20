@@ -6,15 +6,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
-import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+try:
+    from ydb.iam import ServiceAccountCredentials
+except ImportError:
+    ServiceAccountCredentials = None
 
 _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
@@ -49,6 +55,10 @@ GHRUN_NAME_PREFIXES = ("ghrun-", "static-", "tiny-worker-", "analytic-node-")
 PR_EVENTS = ("pull_request", "pull_request_target")
 RUN_PAGE_SIZE = 100
 RUN_MAX_PAGES = 30
+METADATA_TOKEN_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
+QUOTA_URL = "https://quota-manager.api.cloud.yandex.net/quota-manager/v1/quotaLimits"
+FOLDERS_URL = "https://resource-manager.api.cloud.yandex.net/resource-manager/v1/folders"
+INSTANCES_URL = "https://compute.api.cloud.yandex.net/compute/v1/instances"
 SIZE_KEYS = ("vcpu", "ram_gb", "nrd_ssd_gb")
 OPTIONAL = (
     "workflow", "job_name", "branch", "run_url", "pr_number", "pr_title",
@@ -195,7 +205,7 @@ def _quotas(limits: List[Dict[str, Any]]):
     for row in limits:
         if not isinstance(row, dict):
             continue
-        quota_id = row.get("quota_id") or ""
+        quota_id = row.get("quota_id") or row.get("quotaId") or ""
         limit, usage = as_float(row.get("limit")), as_float(row.get("usage"))
         if limit is None or usage is None:
             continue
@@ -515,7 +525,7 @@ def build_snapshot_rows(
             continue
         name = unique_name(instance, used)
         cores, ram, nrd = instance_cores(instance), instance_ram_gib(instance), instance_nrd_gib(instance, label_specs, label_default)
-        created, zone = parse_datetime(instance.get("created_at")), instance_zone(instance) or None
+        created, zone = parse_datetime(_pick(instance, "created_at", "createdAt")), instance_zone(instance) or None
         if is_ghrun(instance):
             state = runner_state(name, jobs, github_ok)
             job = (jobs or {}).get(name) or {}
@@ -582,59 +592,93 @@ def snapshot_summary(rows: List[Dict[str, Any]]) -> str:
     )
 
 
-def yc_json(args: List[str], env: Dict[str, str]) -> Any:
-    proc = subprocess.run(["yc", *args, "--format", "json"], env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-        raise RuntimeError(detail[-1] if detail else "yc exited %s" % proc.returncode)
-    return json.loads(proc.stdout)
-
-
-def open_yc(cloud_id: str):
-    env = os.environ.copy()
+def iam_token() -> str:
+    for name in ("YC_TOKEN", "YC_IAM_TOKEN"):
+        token = (os.environ.get(name) or "").strip()
+        if token:
+            return token
     try:
-        configured = subprocess.check_output(["yc", "config", "get", "cloud-id"], env=env, text=True, stderr=subprocess.DEVNULL).strip()
+        req = urllib.request.Request(METADATA_TOKEN_URL, headers={"Metadata-Flavor": "Google"})
+        with urllib.request.urlopen(req, timeout=2) as resp:
+            payload = json.loads(resp.read().decode())
+        token = (payload.get("access_token") or "").strip()
+        if token:
+            return token
+    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
+        pass
+    key = os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS") or os.environ.get("YC_SA_KEY_FILE") or ""
+    if key and os.path.isfile(key):
+        if ServiceAccountCredentials is None:
+            raise RuntimeError('install "ydb[yc]" to mint an IAM token from a service-account key')
+        token = (ServiceAccountCredentials.from_file(key).get_auth_token() or "").strip()
+        if token:
+            return token
+    try:
+        token = subprocess.check_output(["yc", "iam", "create-token"], text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
-        configured = ""
-    if configured:
-        return env, None, configured
-    key = os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS") or ""
-    if not key or not os.path.isfile(key):
-        raise RuntimeError("yc has no cloud-id and the CI service-account key file is missing")
-    home = tempfile.mkdtemp(prefix="yc-capacity-")
-    env = os.environ.copy()
-    env["HOME"] = home
-    env.pop("YC_TOKEN", None)
-    try:
-        for args in (["yc", "config", "set", "service-account-key", key], ["yc", "config", "set", "cloud-id", cloud_id]):
-            subprocess.check_call(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        shutil.rmtree(home, ignore_errors=True)
-        raise
-    return env, home, cloud_id
+        token = ""
+    if token:
+        return token
+    raise RuntimeError("no Cloud IAM token: set YC_TOKEN, run on a Compute VM, or provide a service-account key")
 
 
-def fetch_quota(env: Dict[str, str], cloud_id: str) -> List[Dict[str, Any]]:
-    payload = yc_json(
-        ["quota-manager", "quota-limit", "list", "--service", "compute",
-         "--resource-type", "resource-manager.cloud", "--resource-id", cloud_id],
-        env,
+def cloud_get(url: str, token: str, params: Dict[str, str]) -> Any:
+    query = urllib.parse.urlencode({key: value for key, value in params.items() if value not in (None, "")})
+    req = urllib.request.Request(
+        "%s?%s" % (url, query) if query else url,
+        headers={"Authorization": "Bearer %s" % token},
     )
-    return list((payload.get("quota_limits") if isinstance(payload, dict) else payload) or [])
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = (exc.read() or b"").decode("utf-8", "replace").strip().splitlines()
+        raise RuntimeError(body[-1] if body else "%s %s" % (exc.code, url)) from exc
 
 
-def fetch_instances(env: Dict[str, str], cloud_id: str) -> List[Dict[str, Any]]:
-    folders = yc_json(["resource-manager", "folder", "list", "--cloud-id", cloud_id], env)
-    if isinstance(folders, dict):
-        folders = folders.get("folders") or []
+def cloud_list(url: str, token: str, params: Dict[str, str], key: str) -> List[Any]:
+    items, page = [], None
+    snake = "".join("_" + ch.lower() if ch.isupper() else ch for ch in key).lstrip("_")
+    while True:
+        query = dict(params)
+        if page:
+            query["pageToken"] = page
+        payload = cloud_get(url, token, query)
+        if isinstance(payload, list):
+            return payload
+        if not isinstance(payload, dict):
+            return items
+        items.extend(payload.get(key) or payload.get(snake) or [])
+        page = payload.get("nextPageToken") or payload.get("next_page_token")
+        if not page:
+            return items
+
+
+def fetch_quota(cloud_id: str, token: Optional[str] = None) -> List[Dict[str, Any]]:
+    token = token or iam_token()
+    rows = []
+    for row in cloud_list(QUOTA_URL, token, {
+        "resource.id": cloud_id,
+        "resource.type": "resource-manager.cloud",
+        "service": "compute",
+        "pageSize": "1000",
+    }, "quotaLimits"):
+        if isinstance(row, dict):
+            rows.append({
+                "quota_id": row.get("quota_id") or row.get("quotaId") or "",
+                "limit": row.get("limit"),
+                "usage": row.get("usage"),
+            })
+    return rows
+
+
+def fetch_instances(cloud_id: str, token: Optional[str] = None) -> List[Dict[str, Any]]:
+    token = token or iam_token()
     instances = []
-    for folder in folders:
+    for folder in cloud_list(FOLDERS_URL, token, {"cloudId": cloud_id, "pageSize": "1000"}, "folders"):
         if not isinstance(folder, dict) or folder.get("status") not in (None, "ACTIVE"):
             continue
-        batch = yc_json(["compute", "instance", "list", "--folder-id", folder["id"]], env)
-        if isinstance(batch, dict):
-            batch = batch.get("instances") or []
-        for instance in batch:
+        for instance in cloud_list(INSTANCES_URL, token, {"folderId": folder["id"], "pageSize": "1000"}, "instances"):
             if isinstance(instance, dict):
                 copied = dict(instance)
                 copied["_folder_id"] = folder.get("id") or ""
@@ -729,13 +773,9 @@ def parse_args(argv=None) -> argparse.Namespace:
 def main(argv=None) -> int:
     args = parse_args(argv)
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    env, home, cloud_id = open_yc(args.cloud_id)
-    try:
-        limits = fetch_quota(env, cloud_id)
-        instances = fetch_instances(env, cloud_id)
-    finally:
-        if home:
-            shutil.rmtree(home, ignore_errors=True)
+    token = iam_token()
+    limits = fetch_quota(args.cloud_id, token)
+    instances = fetch_instances(args.cloud_id, token)
     github_ok, pairs = True, []
     try:
         if not ensure_github_token():

@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
@@ -16,7 +18,10 @@ from github_actions.export_runner_capacity import (
     build_create_capacity_table_sql,
     build_snapshot_rows,
     bytes_to_gib,
+    cloud_list,
     count_assigned_and_queued,
+    fetch_quota,
+    iam_token,
     github_jobs_incomplete,
     hosts_that_fit,
     index_runner_jobs,
@@ -444,6 +449,49 @@ class SnapshotRowsTest(unittest.TestCase):
         self.assertEqual(second, "unnamed@f1")
         self.assertEqual(third, "unnamed@f1.3")
         self.assertEqual(len({first, second, third}), 3)
+
+
+class CloudApiTest(unittest.TestCase):
+    def test_iam_token_uses_env(self):
+        with mock.patch.dict(os.environ, {"YC_TOKEN": "t-from-env"}, clear=False):
+            self.assertEqual(iam_token(), "t-from-env")
+
+    def test_quota_accepts_camel_case_id(self):
+        headroom = quota_headroom([
+            {"quotaId": "compute.instanceCores.count", "limit": 10, "usage": 3},
+        ])
+        self.assertEqual(headroom["cores"]["free"], 7)
+
+    def test_fetch_quota_normalizes_rest_rows(self):
+        with mock.patch("github_actions.export_runner_capacity.cloud_list", return_value=[
+            {"quotaId": "compute.instanceCores.count", "limit": "10", "usage": "3"},
+        ]):
+            rows = fetch_quota("cloud", token="t")
+        self.assertEqual(rows, [{"quota_id": "compute.instanceCores.count", "limit": "10", "usage": "3"}])
+
+    def test_cloud_list_follows_page_token(self):
+        pages = [
+            {"folders": [{"id": "1"}], "nextPageToken": "p2"},
+            {"folders": [{"id": "2"}]},
+        ]
+
+        def getter(_url, _token, params):
+            return pages[0 if "pageToken" not in params else 1]
+
+        with mock.patch("github_actions.export_runner_capacity.cloud_get", side_effect=getter):
+            self.assertEqual(cloud_list("https://example", "t", {"cloudId": "c"}, "folders"), [
+                {"id": "1"}, {"id": "2"},
+            ])
+
+    def test_snapshot_reads_created_at_camel_case(self):
+        instance = vm("ghrun-a", 64, 256, None, {"ghrun": "ghrun-a"})
+        instance.pop("created_at", None)
+        instance["createdAt"] = "2026-10-02T14:23:23Z"
+        rows = build_snapshot_rows(NOW, limits(), [instance], [], {
+            "relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+        }, True)
+        runner = next(row for row in rows if row["kind"] == "runner")
+        self.assertEqual(runner["created_at"], datetime(2026, 10, 2, 14, 23, 23, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":

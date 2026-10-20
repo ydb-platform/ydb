@@ -275,6 +275,9 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::HandleWakeup() {
+        if (RecoveryProposition) {
+            return;
+        }
         if (ConfigAwaitingCommit) {
             if (TActivationContext::Monotonic() >= CommitConfirmationDeadline) {
                 throw TExNoQuorum() << "Committed configuration quorum was not confirmed; replace may already be applied";
@@ -683,6 +686,9 @@ namespace NKikimr::NStorage {
                 auto result = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), std::nullopt, true);
                 if (result.ErrorReason || !result.RecoveredConfig) {
                     return;
+                }
+                if (result.RequiresRecoveryProposition) {
+                    return StartRecoveryProposition(result);
                 }
                 Self->ConfigRecoveryRequired = false;
                 InvokeOtherActor(*Self, &TDistributedConfigKeeper::ApplyCommittedStorageConfig, *result.RecoveredConfig);

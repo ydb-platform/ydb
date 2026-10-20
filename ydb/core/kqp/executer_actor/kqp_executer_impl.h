@@ -277,6 +277,9 @@ protected:
                 for (const auto& [shardId, _] : stageInfo.Meta.PrunedPartitions.back()) {
                     shardIds.insert(shardId);
                 }
+                // TODO: weight per-shard estimates by partition row counts instead of splitting them evenly.
+                // Take the counts from a node-local cached source, never from SchemeShard while executing
+                // a query. SchemeCache and the statistics service have no per-partition row counts yet.
                 {
                     const double totalRows = stage.GetEstimatedRows();
                     auto& shards = stageInfo.Meta.PrunedPartitions.back();
@@ -433,107 +436,6 @@ protected:
         }
 
         return true;
-    }
-
-    // Sends TEvTxUserProxy::TEvNavigate(ReturnPartitionStats=true) for each table whose
-    // estimated read row count exceeds HeavyReadEstimatedRowsThreshold.
-    // Returns true if at least one request was sent (caller should stay in WaitResolveState).
-    bool GetPartitionStats() {
-        THashSet<TString> sentPaths;
-        for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.TablePath.empty() || sentPaths.contains(stageInfo.Meta.TablePath)) {
-                continue;
-            }
-
-            const auto& stage = stageInfo.Meta.GetStage(stageId);
-
-            bool isHeavy = stage.GetEstimatedRows() > HeavyReadEstimatedRowsThreshold;
-            if (!isHeavy) {
-                for (const auto& op : stage.GetTableOps()) {
-                    if (op.GetEstimatedRows() > HeavyReadEstimatedRowsThreshold) {
-                        isHeavy = true;
-                        break;
-                    }
-                }
-            }
-            if (!isHeavy) {
-                continue;
-            }
-
-            auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
-            request->Record.MutableDescribePath()->SetPath(stageInfo.Meta.TablePath);
-            request->Record.MutableDescribePath()->MutableOptions()->SetReturnPartitionStats(true);
-            this->Send(MakeTxProxyID(), request.Release());
-            sentPaths.insert(stageInfo.Meta.TablePath);
-            ++PendingPartitionStatsRequests;
-        }
-
-        return PendingPartitionStatsRequests > 0;
-    }
-
-    // Handles one TEvDescribeSchemeResult response, populates PartitionRowCounts for
-    // matching stages, recomputes per-shard EstimatedRows using the weighted formula.
-    // Decrements PendingPartitionStatsRequests_; caller should call DoExecute() when it hits 0.
-    void ApplyPartitionStatsResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        const auto& record = ev->Get()->GetRecord();
-        --PendingPartitionStatsRequests;
-
-        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
-            YDB_LOG_WARN_COMP(NKikimrServices::KQP_EXECUTER, "DescribeScheme for partition stats returned non-success, using uniform distribution",
-                {"marker", "KQPEX"},
-                {"actorId", SelfId()},
-                {"txId", TxId},
-                {"ctx", *GetUserRequestContext()},
-                {"status", record.GetStatus()},
-                {"path", record.GetPath()},
-                {"traceId", TraceId()});
-            return;
-        }
-
-        const auto& pathDescription = record.GetPathDescription();
-        const auto& tablePartitions = pathDescription.GetTablePartitions();
-        const auto& partitionStats  = pathDescription.GetTablePartitionStats();
-
-        THashMap<ui64 /* shardId */, ui64 /* rowCount */> shardRowCounts;
-        const int count = Min(tablePartitions.size(), partitionStats.size());
-        for (int i = 0; i < count; ++i) {
-            shardRowCounts[tablePartitions.Get(i).GetDatashardId()] = partitionStats.Get(i).GetRowCount();
-        }
-
-        const TString tablePath = record.GetPath();
-        for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
-            if (stageInfo.Meta.TablePath != tablePath) {
-                continue;
-            }
-
-            stageInfo.Meta.PartitionRowCounts = shardRowCounts;
-
-            for (size_t i = 0; i < stageInfo.Meta.PrunedPartitions.size(); ++i) {
-                const double totalRows = i < stageInfo.Meta.EstimatedRowsPerTableOp.size()
-                    ? stageInfo.Meta.EstimatedRowsPerTableOp[i] : 0.0;
-                if (totalRows <= 0.0) {
-                    continue;
-                }
-
-                auto& shards = stageInfo.Meta.PrunedPartitions[i];
-
-                double totalPrunedRows = 0.0;
-                for (const auto& [shardId, _] : shards) {
-                    auto it = shardRowCounts.find(shardId);
-                    if (it != shardRowCounts.end()) {
-                        totalPrunedRows += it->second;
-                    }
-                }
-
-                if (totalPrunedRows > 0.0) {
-                    for (auto& [shardId, shardInfo] : shards) {
-                        auto it = shardRowCounts.find(shardId);
-                        const double shardRows = it != shardRowCounts.end() ? static_cast<double>(it->second) : 0.0;
-                        shardInfo.EstimatedRows = totalRows * (shardRows / totalPrunedRows);
-                    }
-                }
-            }
-        }
     }
 
     struct TEvComputeChannelDataOOB {
@@ -2284,12 +2186,6 @@ protected:
     ui32 StatementResultIndex;
 
     bool AlreadyReplied = false;
-
-    // Number of pending TEvTxUserProxy::TEvNavigate requests for per-shard row counts.
-    ui32 PendingPartitionStatsRequests = 0;
-
-    // Minimum estimated rows for a table op to trigger per-shard stats fetch.
-    static constexpr ui64 HeavyReadEstimatedRowsThreshold = 1'000'000;
 
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     TMaybe<ui8> ArrayBufferMinFillPercentage;

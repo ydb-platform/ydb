@@ -33,12 +33,14 @@ public:
     virtual TStatus ChangeConsumer(IParsedDataConsumer::TPtr consumer) = 0;
 
     virtual std::span<const ui64> GetOffsets() const = 0;
+
     // Progress of the input batch, including messages that produced no rows.
     // Available during OnParsedData(), like GetOffsets().
     virtual std::optional<ui64> GetLastMessageOffset() const {
         const auto offsets = GetOffsets();
         return offsets.empty() ? std::nullopt : std::optional<ui64>(offsets.back());
     }
+
     virtual TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) = 0;
 
     virtual void FillStatistics(TFormatHandlerStatistic& statistic) = 0;

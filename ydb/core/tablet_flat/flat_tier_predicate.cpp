@@ -469,16 +469,25 @@ namespace {
         };
 
         // Postgres stores -infinity and infinity as the minimum and the maximum of
-        // the date/timestamp type, so a bound outside of the type range saturates:
-        // below the range only -infinity is before it, above only infinity is after
+        // the date/timestamp type. A finite bound outside of the type range saturates:
+        // below the range only -infinity is before it and every other value is after it,
+        // above the range only infinity is after it and every other value is before it
         auto setPgTemporal = [&](TWide bound, i64 min, i64 max) {
-            if (CompareWide(bound, TWide::Signed(min)) < 0 && cmp != ECmp::GreaterOrEqual) {
-                result.Kind = EKind::Value;
-                result.Cmp = ECmp::LessOrEqual;
-                result.Signed = min;
-            } else if (CompareWide(bound, TWide::Signed(max)) > 0 && cmp == ECmp::GreaterOrEqual) {
-                result.Kind = EKind::Value;
-                result.Signed = max;
+            result.Kind = EKind::Value;
+            if (CompareWide(bound, TWide::Signed(min)) < 0) {
+                if (cmp == ECmp::GreaterOrEqual) {
+                    result.Signed = min + 1;
+                } else {
+                    result.Cmp = ECmp::LessOrEqual;
+                    result.Signed = min;
+                }
+            } else if (CompareWide(bound, TWide::Signed(max)) > 0) {
+                if (cmp == ECmp::GreaterOrEqual) {
+                    result.Signed = max;
+                } else {
+                    result.Cmp = ECmp::LessOrEqual;
+                    result.Signed = max - 1;
+                }
             } else {
                 setSigned(bound, min, max);
             }

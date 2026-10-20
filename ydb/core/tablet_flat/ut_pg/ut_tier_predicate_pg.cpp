@@ -270,6 +270,8 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(!timestamp.MatchesRanges("4713-01-01 00:00:00 BC", { TTierRange{ .To = minBound } }));
         UNIT_ASSERT(timestamp.MatchesRanges("4713-01-01 00:00:00 BC", { TTierRange{ .From = minBound } }));
         UNIT_ASSERT(timestamp.MatchesRanges("infinity", { TTierRange{ .From = minBound } }));
+        // The bound is finite, so -infinity is below it
+        UNIT_ASSERT(!timestamp.MatchesRanges("-infinity", { TTierRange{ .From = minBound } }));
     }
 
     Y_UNIT_TEST(AroundPostgresEpoch) {

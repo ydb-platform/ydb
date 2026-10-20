@@ -1101,6 +1101,120 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_STRING_CONTAINS(*incoming, "can't connect to each other");
     }
 
+    Y_UNIT_TEST(StalePileMapAfterRegistryGrowth) {
+        using TPileMap = TEvInterconnect::TEvNodesInfo::TPileMap;
+        class TNameservice : public TActor<TNameservice> {
+            const std::shared_ptr<const TPileMap>& PileMap;
+
+        public:
+            explicit TNameservice(const std::shared_ptr<const TPileMap>& pileMap)
+                : TActor(&TThis::StateFunc)
+                , PileMap(pileMap)
+            {}
+
+            void StateFunc(TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvInterconnect::TEvListNodes::EventType) {
+                    auto map = PileMap;
+                    Send(ev->Sender, new TEvInterconnect::TEvNodesInfo(
+                        MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>(), std::move(map)));
+                }
+            }
+        };
+
+        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        NKikimrConfig::TBridgeConfig bridge;
+        for (const char *name : {"pile0", "pile1", "pile2"}) {
+            bridge.AddPiles()->SetName(name);
+        }
+
+        TTestActorSystem runtime(7);
+        runtime.GetAppDataBridgeConfig().CopyFrom(bridge);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        auto& appData = *runtime.GetNode(1)->AppData;
+        appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
+        appData.DynamicNameserviceConfig->MaxStaticNodeId = 4;
+        const auto info = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
+            *MakeNodeWardenConfig(config, &bridge), 1);
+        runtime.RegisterService(MakeBlobStorageNodeWardenID(1), runtime.Register(new TStorageConfigProvider(
+            std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config), info), 1));
+        std::shared_ptr<const TPileMap> map = std::make_shared<TPileMap>(TPileMap{{1, 4, 5}, {2, 3, 6}});
+        const TActorId nameservice = runtime.Register(new TNameservice(map), 1);
+        runtime.RegisterService(GetNameserviceActorId(), nameservice);
+        const TActorId checker = runtime.Register(CreateDistconfBridgeConnectionCheckerActor(
+            TBridgePileId::FromPileIndex(0), "pile0"), 1);
+
+        bool holdReplies = true;
+        std::deque<std::unique_ptr<IEventHandle>> replies;
+        THashSet<ui32> disconnected;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (holdReplies && ev->GetTypeRewrite() == TEvInterconnect::TEvNodesInfo::EventType &&
+                    ev->Sender == nameservice && ev->Recipient == checker) {
+                replies.push_back(std::move(ev));
+                return false;
+            }
+            if (nodeId == 1 && ev->GetTypeRewrite() == TEvInterconnect::EvDisconnect) {
+                for (ui32 peerNodeId : {5u, 6u, 7u}) {
+                    if (ev->Recipient == runtime.GetNode(1)->ActorSystem->InterconnectProxy(peerNodeId)) {
+                        disconnected.insert(peerNodeId);
+                    }
+                }
+            }
+            return true;
+        };
+        // A reply generated for the old two-pile registry remains in flight.
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !replies.empty(); }));
+        auto stale = std::move(replies.front());
+        replies.pop_front();
+        UNIT_ASSERT_VALUES_EQUAL(stale->Get<TEvInterconnect::TEvNodesInfo>()->PileMap->size(), 2);
+
+        bool changed = false;
+        if (const auto error = NStorage::UpdatePileRegistry(bridge, &config, &bridge, nullptr, &changed)) {
+            UNIT_FAIL(*error);
+        }
+        UNIT_ASSERT(changed);
+        UNIT_ASSERT_EQUAL(config.GetClusterState().GetPerPileState(2), NKikimrBridge::TClusterState::INACTIVE);
+        config.SetGeneration(config.GetGeneration() + 1);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
+        map = std::make_shared<TPileMap>(TPileMap{{1, 4, 5}, {2, 3, 6}, {7}});
+        const auto updated = std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config);
+        const auto updatedInfo = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
+            *MakeNodeWardenConfig(config, &bridge), 1);
+        runtime.Send(new IEventHandle(checker, {},
+            new TEvNodeWardenStorageConfig(updated, true, updatedInfo, updated)), 1);
+
+        // Both disconnected piles request a fresh list after Config3 has been processed.
+        UNIT_ASSERT(SimUntil(runtime, [&] { return replies.size() == 2; }));
+        disconnected.clear();
+        holdReplies = false;
+        auto checkAlive = [&] {
+            const TActorId edge = runtime.AllocateEdgeActor(1);
+            runtime.Send(new IEventHandle(checker, edge,
+                new TEvInterconnect::TEvPrepareOutgoingConnection(4)), 1);
+            auto result = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvPrepareOutgoingConnectionResult>(edge);
+            const auto *params = std::get_if<THashMap<TString, TString>>(&result->Get()->Conclusion);
+            UNIT_ASSERT(params);
+            NKikimrBlobStorage::TConnectivityPayload payload;
+            UNIT_ASSERT(payload.ParseFromString(params->at("distconf")));
+            UNIT_ASSERT_VALUES_EQUAL(payload.GetStorageConfig().GetClusterState().PerPileStateSize(), 3);
+        };
+
+        runtime.Send(stale.release(), 1);
+        checkAlive();
+        // An absent new pile must not suppress disconnects for piles present in the old reply.
+        UNIT_ASSERT_VALUES_EQUAL(disconnected.size(), 1);
+        UNIT_ASSERT(disconnected.contains(6));
+
+        runtime.Send(replies.front().release(), 1);
+        replies.pop_front();
+        checkAlive();
+        UNIT_ASSERT_VALUES_EQUAL(disconnected.size(), 2);
+        UNIT_ASSERT(disconnected.contains(7));
+        UNIT_ASSERT(!disconnected.contains(5));
+    }
+
     // nodes take bridge config from the main config merged with the storage one, where the main config has precedence;
     // bridged cluster can't lose its bridge config
     Y_UNIT_TEST(MergedBridgeConfig) {

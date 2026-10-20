@@ -113,7 +113,10 @@ namespace NKikimr::NStorage {
                     continue;
                 }
                 const size_t index = pile.BridgePileId.GetPileIndex();
-                Y_ABORT_UNLESS(index < map->size());
+                if (index >= map->size()) {
+                    // Nameservice may still use an older configuration without recently added piles.
+                    continue;
+                }
                 for (const ui32 nodeId : map->at(index)) {
                     if (nodeId <= MaxStaticNodeId) {
                         continue; // static nodes were already processed

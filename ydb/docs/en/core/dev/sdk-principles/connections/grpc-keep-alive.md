@@ -16,7 +16,6 @@ gRPC keep-alive parameters control how often the client driver checks that the c
 
 ## The solution
 
-Optimal gRPC keep-alive settings keep the connection stable and the load balanced.
 The default settings suit most users.
 
 **Recommended settings**:

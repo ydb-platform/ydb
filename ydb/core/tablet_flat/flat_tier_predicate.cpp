@@ -209,7 +209,7 @@ namespace {
     TString MicrosToUnitFloorString(i64 micros, EUnit unit) {
         if (unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
             // Appending zeros avoids overflow of micros * 1000
-            return micros == 0 ? TString("0") : ToString(micros) + "000";
+            return ToString(micros) + "000";
         }
         return ToString(FloorDiv(micros, UnitMicros(unit)));
     }
@@ -353,13 +353,14 @@ namespace {
         }
 
         if (relative.value_or(true)) {
-            // Rules go from the coldest tier to the warmest, so interval offsets must strictly decrease
+            // Relative rules come only from Interval(...): a single inclusive upper bound,
+            // ordered from the coldest tier to the warmest, so offsets must strictly decrease
             TMaybe<TDuration> prevOffset;
             for (const auto& rule : Policy.Rules) {
-                const bool interval = rule.Ranges.size() == 1 && !rule.Ranges[0].From && rule.Ranges[0].To;
-                if (!interval) {
-                    continue;
-                }
+                const bool interval = rule.Ranges.size() == 1
+                    && !rule.Ranges[0].From && rule.Ranges[0].To && rule.Ranges[0].ToInclusive;
+                Y_ENSURE(interval, "Relative tiering rule for tier " << rule.TierId
+                    << " must be a single inclusive upper bound");
                 const auto& bound = std::get<TTierRelativeBound>(*rule.Ranges[0].To);
                 Y_ENSURE(!prevOffset || bound.Offset < *prevOffset,
                     "Tiering rules must be ordered from the coldest tier to the warmest: offset "
@@ -503,6 +504,8 @@ namespace {
             if (serialized) {
                 result.Kind = EKind::Value;
                 result.Serialized = std::move(*serialized);
+            } else {
+                result.Kind = EKind::Unrepresentable;
             }
         };
 
@@ -574,7 +577,6 @@ namespace {
                         setSigned(unitBound(EScale::NanosExact),
                             int4 ? Min<i32>() : Min<i64>(), int4 ? Max<i32>() : Max<i64>());
                         if (result.Kind == EKind::Value) {
-                            result.Kind = EKind::Unrepresentable;
                             setSerialized(toPg(ToString(result.Signed)));
                         }
                         break;

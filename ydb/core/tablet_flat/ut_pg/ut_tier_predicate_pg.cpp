@@ -81,14 +81,17 @@ namespace {
         {
             const auto predicate = MakePredicate(unit, now, std::move(ranges));
             UNIT_ASSERT(predicate.GetUnrepresentableTierIds().empty());
+            return Evaluate(predicate, text) == TTierDecision::Tier(1);
+        }
 
+        TTierDecision Evaluate(const TTierPredicate& predicate, const TString& text) const {
             auto value = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
             UNIT_ASSERT_C(!value.Error, *value.Error);
 
             TRowState row(Scheme->Tags().size());
             row.Touch(ERowOp::Upsert);
             row.Set(Scheme->ColInfo(ValueTag)->Pos, ECellOp::Set, TCell(value.Str.data(), value.Str.size()));
-            return predicate.Evaluate(row) == TTierDecision::Tier(1);
+            return predicate.Evaluate(row);
         }
     };
 
@@ -191,6 +194,14 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(date.MatchesRanges("2025-03-11", { TTierRange{ .From = noon } }));
         UNIT_ASSERT(date.MatchesRanges("2025-03-10", { TTierRange{ .To = noon } }));
         UNIT_ASSERT(!date.MatchesRanges("2025-03-11", { TTierRange{ .To = noon } }));
+
+        // Inclusive upper bounds: a single day, and a bound in the middle of a day
+        const TTierRange day{ .From = Date(2025, 3, 10), .To = Date(2025, 3, 10), .ToInclusive = true };
+        UNIT_ASSERT(!date.MatchesRanges("2025-03-09", { day }));
+        UNIT_ASSERT(date.MatchesRanges("2025-03-10", { day }));
+        UNIT_ASSERT(!date.MatchesRanges("2025-03-11", { day }));
+        UNIT_ASSERT(date.MatchesRanges("2025-03-10", { TTierRange{ .To = noon, .ToInclusive = true } }));
+        UNIT_ASSERT(!date.MatchesRanges("2025-03-11", { TTierRange{ .To = noon, .ToInclusive = true } }));
     }
 
     Y_UNIT_TEST(AbsoluteTimestampRanges) {
@@ -226,6 +237,13 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         const auto predicate = date.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO, Now,
             { TTierRange{ .To = Date(-100, 1, 1) } });
         UNIT_ASSERT_VALUES_EQUAL(predicate.GetUnrepresentableTierIds(), TVector<ui32>{1});
+
+        // Every date is after year -100, but an unrepresentable bound never matches
+        const auto after = date.MakePredicate(NKikimrSchemeOp::TTTLSettings::UNIT_AUTO, Now,
+            { TTierRange{ .From = Date(-100, 1, 1) } });
+        UNIT_ASSERT_VALUES_EQUAL(after.GetUnrepresentableTierIds(), TVector<ui32>{1});
+        UNIT_ASSERT(date.Evaluate(after, "0001-01-01") == TTierDecision::Tier(TTierPredicate::DefaultTierId));
+        UNIT_ASSERT(date.Evaluate(after, "2025-01-01") == TTierDecision::Tier(TTierPredicate::DefaultTierId));
     }
 
     Y_UNIT_TEST(Unsupported) {

@@ -625,6 +625,39 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         }
     }
 
+    Y_UNIT_TEST(DyNumberOrder) {
+        // Cross-check DyNumber comparison with plain integer comparison, including
+        // negative numbers where one mantissa is a prefix of another (e.g. -1000 and -1001)
+        TVector<i64> values;
+        for (i64 base : {i64(0), i64(1), i64(9), i64(10), i64(100), i64(101), i64(1000), i64(1001),
+                i64(157766400), i64(157766401), i64(1000000000000)})
+        {
+            values.push_back(base);
+            values.push_back(-base);
+        }
+
+        const auto micros = NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS;
+        for (i64 value : values) {
+            const TString encoded = DyNumber(value);
+            // The encoding round-trips through the DyNumber library
+            const auto text = NDyNumber::DyNumberToString(encoded);
+            UNIT_ASSERT(text);
+            UNIT_ASSERT_VALUES_EQUAL(NDyNumber::ParseDyNumberString(*text), encoded);
+            for (i64 bound : values) {
+                const bool matches = RangesMatch(NScheme::NTypeIds::DyNumber, micros,
+                    {TTierRange{ .From = TTierAbsoluteBound{ bound } }}, encoded);
+                UNIT_ASSERT_VALUES_EQUAL_C(matches, value >= bound, "value# " << value << " bound# " << bound);
+            }
+        }
+
+        // A zero bound in nanoseconds is serialized as "0000"
+        const auto nanos = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
+        const TTierRange upToZero{ .To = TTierAbsoluteBound{ 0 }, .ToInclusive = true };
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(0)));
+        UNIT_ASSERT(RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(-1)));
+        UNIT_ASSERT(!RangesMatch(NScheme::NTypeIds::DyNumber, nanos, {upToZero}, DyNumber(1)));
+    }
+
     Y_UNIT_TEST(AbsoluteFractionalDyNumber) {
         // DyNumber values may be fractional, so absolute bounds are exact
         const auto seconds = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
@@ -677,19 +710,6 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         UNIT_ASSERT(RangesMatch(type, {}, ranges, ui64(Date(2025, 6, 1).Micros)));
     }
 
-    Y_UNIT_TEST(RelativeRange) {
-        // From 3 days ago (inclusive) to 1 day ago (exclusive)
-        const TTierRange range{ .From = TTierRelativeBound{ TDuration::Days(3) }, .To = TTierRelativeBound{ TDuration::Days(1) } };
-        auto age = [&](TDuration age) {
-            return RangesMatch(NScheme::NTypeIds::Timestamp, {}, {range}, (Now - age).MicroSeconds());
-        };
-        UNIT_ASSERT(!age(TDuration::Hours(12)));
-        UNIT_ASSERT(!age(TDuration::Days(1)));
-        UNIT_ASSERT(age(TDuration::Days(2)));
-        UNIT_ASSERT(age(TDuration::Days(3)));
-        UNIT_ASSERT(!age(TDuration::Days(5)));
-    }
-
     Y_UNIT_TEST(AbsoluteRulesOrderDoesNotMatter) {
         auto lay = MakeLayout(NScheme::NTypeIds::Timestamp);
         auto decide = [&](const TTieringPolicy& policy, i64 year) {
@@ -736,6 +756,18 @@ Y_UNIT_TEST_SUITE(TTierPredicate) {
         UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{TTierRange{}}, 1}})), yexception);
         UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{TTierRange{ .From = Date(2025), .To = Date(2025) }}, 1}})), yexception);
         UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{TTierRange{ .From = Date(2026), .To = Date(2025) }}, 1}})), yexception);
+
+        // A relative rule must be a single inclusive upper bound (Interval)
+        const TTierRange from3To1Days{ .From = TTierRelativeBound{ TDuration::Days(3) }, .To = TTierRelativeBound{ TDuration::Days(1) } };
+        const TTierRange exclusive{ .To = TTierRelativeBound{ TDuration::Days(1) } };
+        const TTierRange fromOnly{ .From = TTierRelativeBound{ TDuration::Days(1) } };
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{from3To1Days}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{exclusive}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{fromOnly}, 1}})), yexception);
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{interval, Interval(TDuration::Days(3))}, 1}})), yexception);
+        // so the order is checked for every relative rule
+        UNIT_ASSERT_EXCEPTION(TTierPredicate(MakeRangePolicy({{{interval}, 1}, {{Interval(TDuration::Days(3))}, 2}})), yexception);
+        TTierPredicate(MakeRangePolicy({{{Interval(TDuration::Days(3))}, 2}, {{interval}, 1}}));
     }
 
 }

@@ -56,8 +56,9 @@ namespace NTable {
     /**
      * Tiering policy over a single column, enforced by TTierPredicate:
      * - all bounds are either relative or absolute;
-     * - relative rules are ordered from the coldest tier to the warmest one
-     *   (strictly descending offsets), the first matching rule wins;
+     * - a relative rule is a single inclusive upper bound (Interval), relative
+     *   rules are ordered from the coldest tier to the warmest one (strictly
+     *   descending offsets), the first matching rule wins;
      * - ranges of different absolute rules do not overlap, so their order
      *   does not matter.
      */

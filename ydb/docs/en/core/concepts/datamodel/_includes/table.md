@@ -199,7 +199,7 @@ For a column group, attributes that affect data storage and caching are set:
 * Data compression mode (no compression or [LZ4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)) algorithm compression);
 * caching mode.
 
-For compression settings and algorithm choice, see [{#T}](../../compression.md).
+For table data compression, see [{#T}](../../compression.md).
 
 Column group attributes are set during table creation and can be modified later. Storage attribute changes aren't immediately applied to existing data; instead, they take effect during subsequent background [LSM compaction](../../glossary.md#compaction). Caching attribute changes take effect immediately.
 

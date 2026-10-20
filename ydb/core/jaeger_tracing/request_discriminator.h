@@ -117,6 +117,8 @@ enum class ERequestType: size_t {
     // Bridge requests
     BRIDGE_GETCLUSTERSTATE,
     BRIDGE_UPDATECLUSTERSTATE,
+    BRIDGE_CONVERTTOBRIDGE,
+    BRIDGE_ADDPILE,
 
     // TestShardSet requests
     TESTSHARDSET_CREATETESTSHARDSET,

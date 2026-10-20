@@ -1864,15 +1864,19 @@ class StaticConfigGenerator(object):
 
     def _configure_default_state_storage(self, domains_config, domain_id):
         state_storage_cfg = domains_config.StateStorage.add(SSId=domain_id)
+        node_limit = {
+            types.Erasure.BLOCK_4_2: 8,
+            types.Erasure.MIRROR_3_DC: 9,
+        }.get(self.__cluster_details.static_erasure)
         if self.__n_to_select < 5 or types.FailDomainType.is_body_fail_domain(self.__cluster_details.fail_domain_type):
             state_storage_cfg.Ring.NToSelect = self.__n_to_select
-            state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
+            state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids[:node_limit])
             return
 
         if self.__cluster_details.allow_incorrect_state_storage:
             logger.warning("Using unsafe option: " "state storage in the cluster is probably broken")
             state_storage_cfg.Ring.NToSelect = self.__n_to_select
-            state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids)
+            state_storage_cfg.Ring.Node.extend(self.__cluster_details.state_storage_node_ids[:node_limit])
             return
 
         selected_ids = []
@@ -1918,7 +1922,7 @@ class StaticConfigGenerator(object):
             raise RuntimeError("Unable to build valid quorum in state storage")
 
         state_storage_cfg.Ring.NToSelect = self.__n_to_select
-        state_storage_cfg.Ring.Node.extend(selected_ids)
+        state_storage_cfg.Ring.Node.extend(selected_ids[:node_limit])
 
     def __generate_log_txt(self):
         log_config = self.__cluster_details.log_config

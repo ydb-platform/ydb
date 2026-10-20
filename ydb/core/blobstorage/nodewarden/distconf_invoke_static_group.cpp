@@ -6,6 +6,36 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
+    namespace {
+
+        // Propagate new generation of the group to the bridge group state referencing it; the referencing bridge proxy
+        // group gets its generation bumped too, unless this is an inline pile referencing itself.
+        void UpdateBridgePileGeneration(NKikimrBlobStorage::TNodeWardenServiceSet *ss, TGroupId groupId) {
+            std::optional<ui32> generation;
+            for (const auto& group : ss->GetGroups()) {
+                if (TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID) == groupId) {
+                    generation.emplace(group.GetGroupGeneration());
+                    break;
+                }
+            }
+            Y_ABORT_UNLESS(generation);
+
+            for (auto& group : *ss->MutableGroups()) {
+                if (!group.HasBridgeGroupState()) {
+                    continue;
+                }
+                NBridge::ForEachGroupPile(group.MutableBridgeGroupState(), [&](TBridgePileId,
+                        NKikimrBridge::TGroupState::TPile& pile) {
+                    if (TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId) == groupId) {
+                        pile.SetGroupGeneration(*generation);
+                        BumpBridgeProxyGeneration(&group, [&](TGroupId id) { return id == groupId; });
+                    }
+                });
+            }
+        }
+
+    }
+
     TDistributedConfigKeeper::TAllocateStaticGroupParams
     TDistributedConfigKeeper::BuildStaticGroupReassignParams(NKikimrBlobStorage::TStorageConfig *config,
                                                              const NKikimrBlobStorage::TBaseConfig *baseConfig,
@@ -197,8 +227,16 @@ namespace NKikimr::NStorage {
     }
 
     void TInvokeRequestHandlerActor::Handle(TEvNodeWardenBaseConfig::TPtr ev) {
+        if (const auto& error = ev->Get()->ErrorReason) {
+            // static groups can't be placed without knowing PDisks of BSC, they would get conflicting ones otherwise
+            throw TExError() << "Can't get base config: " << *error;
+        }
         BaseConfig.emplace(std::move(ev->Get()->BaseConfig));
-        CheckReassignGroupDisk();
+        if (AddedBridgePileId) {
+            AddBridgePileWithBaseConfig();
+        } else {
+            CheckReassignGroupDisk();
+        }
     }
 
     void TInvokeRequestHandlerActor::CheckReassignGroupDisk() {
@@ -282,6 +320,8 @@ namespace NKikimr::NStorage {
                         {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
+
+                UpdateBridgePileGeneration(config.MutableBlobStorageConfig()->MutableServiceSet(), vdiskId.GroupID);
 
                 const auto it = reassignments.find(vdiskId);
                 if (it == reassignments.end() || !it->second.SourceSlotId || !it->second.TargetSlotId) {

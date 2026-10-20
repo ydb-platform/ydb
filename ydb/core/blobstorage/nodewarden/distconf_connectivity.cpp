@@ -12,7 +12,8 @@ namespace NKikimr::NStorage {
     class TDistributedConfigKeeper::TDistconfBridgeConnectionCheckerActor
         : public TActorBootstrapped<TDistconfBridgeConnectionCheckerActor>
     {
-        const TBridgePileId SelfBridgePileId;
+        TBridgePileId SelfBridgePileId; // resolved against local bridge config until storage config is received
+        const std::optional<TString> SelfBridgePileName;
 
         TStorageConfigPtr StorageConfig;
         TStorageConfigPtr CommittedStorageConfig;
@@ -23,13 +24,21 @@ namespace NKikimr::NStorage {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEvents;
 
+        // peers which haven't reported in the handshake of their session that they take pile ids from pile registry;
+        // the sessions are not checked again, so they are disconnected once the list of piles has been changed
+        THashSet<ui32> PileListChangeIncapablePeers;
+
         static constexpr TStringBuf DistconfKey = "distconf";
+        // the payload is sent with this key once the list of piles has been changed; older versions don't know it, so
+        // they treat such peer as not bridge-capable one and neither connect, nor take its configuration
+        static constexpr TStringBuf PileListChangedDistconfKey = "distconf-pile-list-changed";
 
         using TClusterState = NKikimrBridge::TClusterState;
 
     public:
-        TDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId)
+        TDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId, std::optional<TString> selfBridgePileName)
             : SelfBridgePileId(selfBridgePileId)
+            , SelfBridgePileName(std::move(selfBridgePileName))
         {}
 
         void Bootstrap() {
@@ -57,6 +66,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(AppData()->BridgeModeEnabled);
             Y_ABORT_UNLESS(BridgeInfo);
 
+            // pile ids come from pile registry of the storage config, which may differ from the local config order
+            Y_ABORT_UNLESS(BridgeInfo->SelfNodePile);
+            SelfBridgePileId = BridgeInfo->SelfNodePile->BridgePileId;
+
             YDB_LOG_DEBUG("TEvNodeWardenStorageConfig received",
                 {"marker", "NWDCC06"},
                 {"storageConfig", StorageConfig});
@@ -67,6 +80,13 @@ namespace NKikimr::NStorage {
                 Receive(temp);
             }
 
+            // peers of older versions can't work with the configuration once the list of piles has been changed
+            if (IsPileListChanged(*StorageConfig)) {
+                for (const ui32 peerNodeId : std::exchange(PileListChangeIncapablePeers, {})) {
+                    DisconnectIncapablePeer(peerNodeId);
+                }
+            }
+
             // disconnect peers if needed
             TActorSystem* const as = TActivationContext::ActorSystem();
             for (const auto& pile : BridgeInfo->Piles) {
@@ -74,10 +94,14 @@ namespace NKikimr::NStorage {
                         NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
                     continue;
                 }
-                if (pile.BridgePileId == SelfBridgePileId) {
+                if (pile.BridgePileId == SelfBridgePileId &&
+                        NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile) {
                     continue; // do not disconnect from the same pile
                 }
                 for (const ui32 nodeId : pile.StaticNodeIds) {
+                    if (nodeId == SelfId().NodeId()) {
+                        continue;
+                    }
                     YDB_LOG_DEBUG("Disconnecting",
                         {"marker", "NWDCC00"},
                         {"peerNodeId", nodeId},
@@ -92,39 +116,73 @@ namespace NKikimr::NStorage {
 
         void Handle(TEvInterconnect::TEvNodesInfo::TPtr ev) {
             Y_ABORT_UNLESS(BridgeInfo);
-            Y_ABORT_UNLESS(ev->Get()->PileMap);
-
-            const auto& map = ev->Get()->PileMap;
             TActorSystem* const as = TActivationContext::ActorSystem();
 
-            for (const auto& pile : BridgeInfo->Piles) {
-                if (NBridge::PileStateTraits(pile.State).AllowsConnection &&
-                        NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection) {
+            // piles of dynamic nodes are resolved against our bridge info, as the pile map of the nameservice may be
+            // built against another configuration (the one before or after ours)
+            for (const auto& node : ev->Get()->Nodes) {
+                if (node.NodeId <= MaxStaticNodeId) {
+                    continue; // static nodes were already processed
+                }
+                const auto *pile = BridgeInfo->ResolvePile(node.Location.GetBridgePileName());
+                if (!pile || (NBridge::PileStateTraits(pile->State).AllowsConnection &&
+                        NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection)) {
                     continue;
                 }
-                const size_t index = pile.BridgePileId.GetPileIndex();
-                Y_ABORT_UNLESS(index < map->size());
-                for (const ui32 nodeId : map->at(index)) {
-                    if (nodeId <= MaxStaticNodeId) {
-                        continue; // static nodes were already processed
-                    }
-                    YDB_LOG_DEBUG("Disconnecting dynamic",
-                        {"marker", "NWDCC03"},
-                        {"peerNodeId", nodeId},
-                        {"bridgePileId", pile.BridgePileId});
-                    as->Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, as->InterconnectProxy(nodeId),
-                        {}, nullptr, 0));
-                }
+                YDB_LOG_DEBUG("Disconnecting dynamic",
+                    {"marker", "NWDCC03"},
+                    {"peerNodeId", node.NodeId},
+                    {"bridgePileId", pile->BridgePileId});
+                as->Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0, as->InterconnectProxy(node.NodeId),
+                    {}, nullptr, 0));
             }
         }
 
         THashMap<TString, TString> CreateParams(const NKikimrBlobStorage::TConnectivityPayload& outgoing) {
             THashMap<TString, TString> res;
             if (outgoing.ByteSizeLong()) {
-                const bool success = outgoing.SerializeToString(&res[DistconfKey]);
+                const TStringBuf key = StorageConfig && IsPileListChanged(*StorageConfig)
+                    ? PileListChangedDistconfKey
+                    : DistconfKey;
+                const bool success = outgoing.SerializeToString(&res[key]);
                 Y_ABORT_UNLESS(success);
             }
             return res;
+        }
+
+        // returns false if the payload is present, but can't be parsed
+        static bool ParsePayload(const THashMap<TString, TString>& params,
+                NKikimrBlobStorage::TConnectivityPayload *incoming) {
+            for (const TStringBuf key : {PileListChangedDistconfKey, DistconfKey}) {
+                if (const auto it = params.find(key); it != params.end()) {
+                    return incoming->ParseFromString(it->second);
+                }
+            }
+            return true;
+        }
+
+        // peer of older version can't work with the configuration once the list of piles has been changed
+        bool IsPeerIncompatible(const NKikimrBlobStorage::TConnectivityPayload& incoming) const {
+            return StorageConfig && IsPileListChanged(*StorageConfig) && !incoming.GetPileListChangeCapable();
+        }
+
+        // remember whether the peer of just established session can work with the changed list of piles
+        void RegisterPeer(ui32 peerNodeId, const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            if (incoming.GetPileListChangeCapable()) {
+                PileListChangeIncapablePeers.erase(peerNodeId);
+            } else if (IsPeerIncompatible(incoming)) {
+                DisconnectIncapablePeer(peerNodeId);
+            } else {
+                PileListChangeIncapablePeers.insert(peerNodeId);
+            }
+        }
+
+        void DisconnectIncapablePeer(ui32 peerNodeId) {
+            YDB_LOG_WARN("Disconnecting peer running version not supporting changes of the list of piles",
+                {"marker", "NWDCC08"},
+                {"peerNodeId", peerNodeId});
+            TActivationContext::Send(new IEventHandle(TEvInterconnect::EvDisconnect, 0,
+                TActivationContext::InterconnectProxy(peerNodeId), {}, nullptr, 0));
         }
 
         void Handle(TEvInterconnect::TEvPrepareOutgoingConnection::TPtr ev) {
@@ -138,7 +196,7 @@ namespace NKikimr::NStorage {
             NKikimrBlobStorage::TConnectivityPayload outgoing;
 
             // definitely fill out self pile id and our configuration to connect with peer
-            SelfBridgePileId.CopyToProto(&outgoing, &decltype(outgoing)::SetBridgePileId);
+            FillInSelfPile(&outgoing);
             if (StorageConfig) {
                 outgoing.MutableStorageConfig()->CopyFrom(*StorageConfig);
             }
@@ -154,7 +212,8 @@ namespace NKikimr::NStorage {
                 const auto *pile = BridgeInfo->GetPileForNode(peerNodeId);
                 if (!pile) {
                     // peer node is a dynamic node
-                } else if (pile == BridgeInfo->SelfNodePile && IsSelfStatic && peerNodeId <= MaxStaticNodeId) {
+                } else if (pile == BridgeInfo->SelfNodePile && IsSelfStatic && peerNodeId <= MaxStaticNodeId &&
+                        NBridge::PileStateTraits(pile->State).AllowsConnectionWithinPile) {
                     // allow connecting static nodes within the same pile, even disconnected
                 } else if (!NBridge::PileStateTraits(pile->State).AllowsConnection) {
                     error = "can't establish connection to node belonging to disconnected pile";
@@ -184,13 +243,14 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
             NKikimrBlobStorage::TConnectivityPayload outgoing;
+            outgoing.SetPileListChangeCapable(true); // the peer takes our config only if we report it
 
             const ui32 peerNodeId = ev->Get()->PeerNodeId;
 
             // extract the payload, if we have one
             NKikimrBlobStorage::TConnectivityPayload incoming;
             auto& params = ev->Get()->Params;
-            if (const auto it = params.find(DistconfKey); it != params.end() && !incoming.ParseFromString(it->second)) {
+            if (!ParsePayload(params, &incoming)) {
                 error = "failed to parse incoming connectivity check payload";
             }
 
@@ -204,12 +264,25 @@ namespace NKikimr::NStorage {
             if (error) {
                 // we already have an error, do nothing more
             } else if (!incoming.HasBridgePileId()) {
+                // peer is not bridge-capable; this is allowed only until the cluster gets converted to bridged one
+                if (!StorageConfig || !StorageConfig->HasClusterState()) {
+                    YDB_LOG_DEBUG("Accepting connection from not bridge-capable peer",
+                        {"marker", "NWDCC07"},
+                        {"peerNodeId", peerNodeId});
+                    RegisterPeer(peerNodeId, incoming);
+                    Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::nullopt, {}), 0,
+                        ev->Cookie);
+                    return;
+                }
                 error = "missing mandatory peer bridge pile id";
-            } else if (const auto value = TBridgePileId::FromProto(&incoming, &decltype(incoming)::GetBridgePileId);
-                    peerBridgePileId && peerBridgePileId != value) {
+            } else if (IsPeerIncompatible(incoming)) {
+                error = "peer runs version not supporting changes of the list of piles, it has to be upgraded";
+            } else if (const auto value = ResolvePeerPile(incoming); !value) {
+                error = "can't resolve peer bridge pile";
+            } else if (peerBridgePileId && peerBridgePileId != value) {
                 // not the one we expect from this node
                 error = "incorrect peer bridge pile id provided";
-            } else if (AppData()->BridgeConfig.PilesSize() <= value.GetPileIndex()) {
+            } else if ((BridgeInfo ? BridgeInfo->Piles.size() : AppData()->BridgeConfig.PilesSize()) <= value.GetPileIndex()) {
                 // out of bounds
                 error = "peer bridge pile id out of range";
             } else {
@@ -259,20 +332,50 @@ namespace NKikimr::NStorage {
                 {"error", error},
                 {"outgoing", outgoing});
 
+            if (!error) {
+                RegisterPeer(peerNodeId, incoming);
+            }
+
             Send(ev->Sender, new TEvInterconnect::TEvCheckIncomingConnectionResult(std::move(error),
                 CreateParams(outgoing)), 0, ev->Cookie);
+        }
+
+        void FillInSelfPile(NKikimrBlobStorage::TConnectivityPayload *outgoing) {
+            SelfBridgePileId.CopyToProto(outgoing, &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
+            outgoing->SetPileListChangeCapable(true);
+            if (SelfBridgePileName) {
+                outgoing->SetBridgePileName(*SelfBridgePileName);
+            }
+        }
+
+        TBridgePileId ResolvePeerPile(const NKikimrBlobStorage::TConnectivityPayload& incoming) {
+            const auto bridgePileId = TBridgePileId::FromProto(&incoming,
+                &NKikimrBlobStorage::TConnectivityPayload::GetBridgePileId);
+            if (!incoming.HasBridgePileName() || !BridgeInfo) {
+                // peer of older version (or the one belonging to the implicit pile) provides only the pile id, which
+                // matches pile registry until it differs from the one implied by bridge config; also we can't resolve
+                // pile names until we get storage config
+                return bridgePileId;
+            } else if (const auto *pile = BridgeInfo->ResolvePile(incoming.GetBridgePileName())) {
+                return pile->BridgePileId;
+            } else {
+                return TBridgePileId();
+            }
         }
 
         void Handle(TEvInterconnect::TEvNotifyOutgoingConnectionEstablished::TPtr ev) {
             auto& params = ev->Get()->Params;
             NKikimrBlobStorage::TConnectivityPayload incoming;
-            if (const auto it = params.find(DistconfKey); it != params.end() && incoming.ParseFromString(it->second)) {
-                if (incoming.HasStorageConfig()) {
-                    YDB_LOG_DEBUG("Applying config from TEvNotifyOutgoingConnectionEstablished",
-                        {"marker", "NWDCC04"},
-                        {"config", incoming.GetStorageConfig()});
-                    UpdateLocalConfig(incoming);
-                }
+            if (!ParsePayload(params, &incoming)) {
+                incoming.Clear(); // the peer is treated as not reporting anything
+            } else if (!IsPeerIncompatible(incoming) && incoming.HasStorageConfig()) {
+                YDB_LOG_DEBUG("Applying config from TEvNotifyOutgoingConnectionEstablished",
+                    {"marker", "NWDCC04"},
+                    {"config", incoming.GetStorageConfig()});
+                UpdateLocalConfig(incoming);
+            }
+            if (ev->Get()->Success) {
+                RegisterPeer(ev->Get()->PeerNodeId, incoming);
             }
         }
 
@@ -292,6 +395,20 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(StorageConfig);
             Y_ABORT_UNLESS(BridgeInfo);
 
+            if (!StorageConfig->HasClusterState() || !config.HasClusterState()) {
+                // at least one of parties runs config of the cluster not yet converted to bridged one; this is possible
+                // only for single-pile configuration and the party with older config will catch up through the
+                // config exchange
+                std::optional<TString> error;
+                if (StorageConfig->HasClusterState() && StorageConfig->GetGeneration() <= config.GetGeneration()) {
+                    error = "peer storage config is not bridged one while having newer generation";
+                } else if (config.HasClusterState() && config.GetGeneration() <= StorageConfig->GetGeneration()) {
+                    error = "local storage config is not bridged one while having newer generation";
+                }
+                ExchangeConfigs(incoming, outgoing);
+                return error;
+            }
+
             // obtain cluster state from other party and check if they are the same as the one we have; this may trigger
             // generation sync (but still would return error)
             if (auto error = ValidateClusterState(config)) {
@@ -306,8 +423,18 @@ namespace NKikimr::NStorage {
 
             std::optional<TString> error;
 
+            const NKikimrBlobStorage::TStorageConfig& newerConfig =
+                StorageConfig->GetGeneration() < config.GetGeneration()
+                    ? config
+                    : *StorageConfig;
+            const auto& cs = newerConfig.GetClusterState();
+
             const auto *peerPile = BridgeInfo->GetPile(peerBridgePileId);
-            if (peerPile != BridgeInfo->SelfNodePile) { // extra checks when connecting between different piles
+            if (peerPile == BridgeInfo->SelfNodePile) {
+                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnectionWithinPile) {
+                    error = "nodes of the pile not added to the cluster can't connect to each other";
+                }
+            } else { // extra checks when connecting between different piles
                 if (auto error = CheckHistoryCompatibility(*StorageConfig, config)) {
                     // histories are incompatible, connection won't ever be possible
                     return error;
@@ -317,16 +444,9 @@ namespace NKikimr::NStorage {
                     return "config fingerprint mismatch";
                 }
 
-                const NKikimrBlobStorage::TStorageConfig& newerConfig =
-                    StorageConfig->GetGeneration() < config.GetGeneration()
-                        ? config
-                        : *StorageConfig;
-
-                const auto& cs = newerConfig.GetClusterState();
-
-                if (!NBridge::PileStateTraits(cs.GetPerPileState(peerBridgePileId.GetPileIndex())).AllowsConnection) {
+                if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, peerBridgePileId)).AllowsConnection) {
                     error = "peer is not allowed to connect";
-                } else if (!NBridge::PileStateTraits(cs.GetPerPileState(SelfBridgePileId.GetPileIndex())).AllowsConnection) {
+                } else if (!NBridge::PileStateTraits(NBridge::GetPileState(cs, SelfBridgePileId)).AllowsConnection) {
                     error = "local node is not allowed to accept peer";
                 }
 
@@ -341,6 +461,14 @@ namespace NKikimr::NStorage {
                 }
             }
 
+            ExchangeConfigs(incoming, outgoing);
+
+            return error;
+        }
+
+        void ExchangeConfigs(const NKikimrBlobStorage::TConnectivityPayload& incoming,
+                NKikimrBlobStorage::TConnectivityPayload *outgoing) {
+            const NKikimrBlobStorage::TStorageConfig& config = incoming.GetStorageConfig();
             if (StorageConfig) {
                 if (config.GetGeneration() < StorageConfig->GetGeneration()) {
                     outgoing->MutableStorageConfig()->CopyFrom(*StorageConfig);
@@ -351,8 +479,6 @@ namespace NKikimr::NStorage {
                     UpdateLocalConfig(incoming);
                 }
             }
-
-            return error;
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +487,9 @@ namespace NKikimr::NStorage {
             if (!config.HasClusterState()) {
                 return "ClusterState section is missing in StorageConfig";
             }
-            const size_t numPiles = AppData()->BridgeConfig.PilesSize();
+            const auto registry = GetPileRegistry(config, &AppData()->BridgeConfig);
+            Y_ABORT_UNLESS(registry);
+            const size_t numPiles = registry->PilesSize();
             const auto& cs = config.GetClusterState();
             const auto primaryPileId = TBridgePileId::FromProto(&cs, &NKikimrBridge::TClusterState::GetPrimaryPile);
             const auto promotedPileId = TBridgePileId::FromProto(&cs, &NKikimrBridge::TClusterState::GetPromotedPile);
@@ -447,8 +575,10 @@ namespace NKikimr::NStorage {
 
 namespace NKikimr {
 
-    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId) {
-        return new NStorage::TDistributedConfigKeeper::TDistconfBridgeConnectionCheckerActor(selfBridgePileId);
+    IActor *CreateDistconfBridgeConnectionCheckerActor(TBridgePileId selfBridgePileId,
+            std::optional<TString> selfBridgePileName) {
+        return new NStorage::TDistributedConfigKeeper::TDistconfBridgeConnectionCheckerActor(selfBridgePileId,
+            std::move(selfBridgePileName));
     }
 
 } // NKikimr

@@ -5958,6 +5958,72 @@ selector_config: []
         CheckBridgeCommittedCatchup(EBridgeCommittedCatchup::ColdIntermediate);
     }
 
+    Y_UNIT_TEST(ReassignBaseConfigErrorReleasesQueue) {
+        TCommitConfirmationFixture fixture;
+        fixture.Start();
+        CheckDurableConfigConverges(fixture, fixture.Config);
+        auto& runtime = fixture.Runtime;
+        runtime.RegisterService(MakeBlobStorageVDiskID(1, 1, 0), runtime.Register(new TIgnoreActor, 1));
+        const TActorId root = fixture.Root();
+        const auto config = QueryKeeper(runtime, root).GetQueryConfig().GetConfig();
+        THashMap<ui32, std::pair<ui64, ui64>> metadataGenerations;
+        for (const TActorId keeper : fixture.Keepers) {
+            const auto& metadata = fixture.Metadata(keeper.NodeId());
+            metadataGenerations.emplace(keeper.NodeId(), std::pair{
+                metadata.GetCommittedStorageConfig().GetGeneration(),
+                metadata.GetProposedStorageConfig().GetGeneration()});
+        }
+        const TActorId reassignEdge = runtime.AllocateEdgeActor(1);
+        const TActorId queryEdge = runtime.AllocateEdgeActor(1);
+        ui32 statusRequests = 0;
+        ui32 baseConfigRequests = 0;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> reassignResponse;
+        std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> queryResponse;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (CaptureInvokeResult(*ev, reassignEdge, reassignResponse)
+                || CaptureInvokeResult(*ev, queryEdge, queryResponse)) {
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVStatus::EventType) {
+                ++statusRequests;
+                return false; // An unrelated VDisk status request must not delay a known BSC error.
+            }
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenQueryBaseConfig::EventType) {
+                ++baseConfigRequests;
+                auto result = std::make_unique<NStorage::TEvNodeWardenBaseConfig>();
+                result->ErrorReason = "BSC unavailable";
+                runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), result.release(),
+                    0, ev->Cookie), nodeId);
+                return false;
+            }
+            return true;
+        };
+        auto reassign = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        VDiskIDFromVDiskID(TVDiskID(TGroupId::Zero(), 1, 0, 0, 0),
+            reassign->Record.MutableReassignGroupDisk()->MutableVDiskId());
+        runtime.Send(new IEventHandle(root, reassignEdge, reassign.release()), 1);
+        auto query = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        query->Record.MutableQueryConfig();
+        runtime.Send(new IEventHandle(root, queryEdge, query.release()), 1);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return reassignResponse && queryResponse; }, TDuration::Seconds(1)),
+            "A BSC base config error waited for VDisk status or blocked the next configuration query");
+        UNIT_ASSERT_VALUES_EQUAL(baseConfigRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(statusRequests, 1);
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        UNIT_ASSERT_C(reassignResponse->GetStatus() == TResult::ERROR, reassignResponse->DebugString());
+        UNIT_ASSERT_C(TString(reassignResponse->GetErrorReason()).Contains("BSC unavailable"),
+            reassignResponse->DebugString());
+        UNIT_ASSERT_C(queryResponse->GetStatus() == TResult::OK, queryResponse->DebugString());
+        const auto& actualConfig = queryResponse->GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(actualConfig.GetGeneration(), config.GetGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(actualConfig.GetFingerprint(), config.GetFingerprint());
+        for (const auto& [nodeId, generations] : metadataGenerations) {
+            const auto& metadata = fixture.Metadata(nodeId);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetCommittedStorageConfig().GetGeneration(), generations.first);
+            UNIT_ASSERT_VALUES_EQUAL(metadata.GetProposedStorageConfig().GetGeneration(), generations.second);
+        }
+    }
+
     Y_UNIT_TEST(ReassignVDiskStatusTimeoutReleasesQueue) {
         TCommitConfirmationFixture fixture;
         fixture.Start();

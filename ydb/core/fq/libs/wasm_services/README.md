@@ -1,32 +1,187 @@
-# WASM service transport and module contracts
+# Experimental FQ WASM service integration
 
-This layer combines the coroutine/async network harness with a service-module
-SDK, manifest validation and example modules. This layer does not change the
-shared WASM ABI or synchronous UDF execution. It is not wired into SQL, DQ or
-the FQ control plane.
+This directory contains service-independent native HTTP/gRPC clients and an
+analytical FQ/DQ output transform. Concrete adapters live in `ydb/udfs/wasm`:
+`profile` owns its JSON/protobuf contracts and decoding; `echo` is a second
+module with different input/output schemas and two methods. Adding a module
+does not require modifying this transform or the coroutine runtime.
 
-## Native clients
+## Registration and SQL
 
-`TTransport` implements the async runtime's `ITransport` interface. Owners
-share a `TTransportExecutor` created with their actor system and user-pool ID.
-The executor uses one actor on that pool. HTTP socket readiness arrives through
-one shared OS socket waiter per executor; its thread only publishes notifications.
-The actor runs `curl_multi_socket_action`, prepares requests and processes
-responses on the user pool. gRPC uses an executor-owned completion queue with one shared
+`ydbd` obtains service modules from the existing UDF Store. Enable the Store's
+WASM loading and compile controller, upload the module and manifest through the
+existing UDF API, and enable `WasmServices`. Its default `ModuleSource` is
+`UDF_STORE`; this mode accepts no local paths. The common manifest parser accepts
+service-only modules and mixed synchronous/service modules. Only synchronous
+functions enter the ordinary UDF function registry; service contracts and compiled
+bytecode are published in the existing module catalog.
+
+Enable Store loading on each node that prepares or executes FQ queries.
+FQ resolves module/method schemas from the current node catalog for each query. A
+single generic service transform factory is registered at startup, including
+when the catalog is empty. Each new transform acquires the currently loaded
+module and libraries by name. It does not download or compile on the user pool.
+Modules may therefore arrive or be replaced after server startup.
+
+There is no service-specific version pinning, retained-version store, or
+synchronization between preparation and transform creation. An existing
+compartment keeps its loaded code; new transforms, restarted queries and different
+workers may use a newer module. A missing module or incompatible method/schema
+fails normally before network dispatch. ABI and framing checks remain mandatory.
+
+`fqrun` explicitly selects `LOCAL_FILES`, with no UDF Store dependency. For
+explicit local-file mode in a server configuration, set `ModuleSource: LOCAL_FILES`
+and install the matching files on each compiling/executing node. The manifest
+extends the common WASM fields with `service_methods`, as documented in
+`ydb/udfs/wasm/sdk/services/README.md`. The author-owned manifest supplies schemas;
+the build generates guest dispatch constants, not a separate runtime manifest.
+Local modules compile once during registration and require a restart to update.
+Both sources use the same compartment, async runtime, HTTP/gRPC transport,
+credentials, user pool, limits, deadline and cancellation paths.
+
+This example selects local modules (omit `Modules` and `ModuleSource` to use Store):
+
+```protobuf
+WasmServices {
+  Enabled: true
+  ModuleSource: LOCAL_FILES
+  Modules {
+    ModulePath: "/absolute/path/profile.wasm"
+    ManifestPath: "/absolute/path/profile/manifest.json"
+  }
+  Modules {
+    ModulePath: "/absolute/path/echo.wasm"
+    ManifestPath: "/absolute/path/echo/manifest.json"
+  }
+  MaxBatchRows: 2
+  MaxBatchBytes: 32768
+  MaxBufferedRows: 65536
+  MaxBufferedBytes: 67108864
+  MaxTransportOperations: 1024
+  MaxTransportBytes: 268435456
+  CallTimeoutMs: 30000
+}
+```
+
+Enable `EXTERNAL_SERVICE` in the existing control-plane storage connection-type
+allowlist (`AvailableConnection`). Create connections through the ordinary FQ
+`CreateConnection` API; no endpoint or credentials belong in `WasmServices`:
+
+```protobuf
+content {
+  name: "profiles_http"
+  acl { visibility: PRIVATE }
+  setting {
+    external_service {
+      protocol: HTTP
+      endpoint: "https://profiles.example.test"
+      auth { token { token: "host-owned-token" } }
+      headers { key: "Content-Type" value: "application/json" }
+      // Optional PEM trust roots, not a path to a file on the FQ server.
+      ca_certificate: "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+    }
+  }
+}
+```
+
+For gRPC use `protocol: GRPC` and `endpoint: "host:port"`; WASM supplies
+`/package.Service/Method` per call. TLS is the default; plaintext requires
+`insecure: true` for either protocol. For HTTP the URL scheme must match this
+flag. TLS verification cannot be disabled. `auth.none`, `auth.token` and
+`auth.current_iam` are supported; service-account auth is explicitly rejected
+until asynchronous initial token acquisition is integrated. Authorization is
+derived from `auth`, never a user-supplied header override. Extra headers are
+sensitive and, like bearer tokens, omitted from public connection responses.
+
+`ModulePath` is retained as a single-module configuration shorthand: it requires
+an adjacent `<ModulePath>.manifest.json`. Do not combine it with `Modules`.
+Rebuild old modules: service row ABI version 2 derives dispatch IDs from method
+names instead of manual manifest IDs. Version 1 manifests/requests are rejected.
+The underlying async ABI is unchanged. Profile's SQL spelling is preserved.
+
+```sql
+$input = SELECT 42ul AS id UNION ALL SELECT 43ul AS id;
+$profiles = PROCESS $input USING EXTERNAL FUNCTION('WASM_PROFILE', 'Profile')
+    WITH CONNECTION='profiles_http',
+         INPUT_TYPE=Struct<id:Uint64>,
+         OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>;
+SELECT id, name, score FROM $profiles;
+```
+
+For another module, select its manifest name/method and declared schemas, e.g.
+`EXTERNAL FUNCTION('Echo', 'Echo')`; see `ydb/udfs/wasm/echo/query.sql`.
+Unknown modules/methods/connections, mismatched row schemas and invalid manifests
+fail registration/query resolution before network dispatch.
+Execution byte/batch limits are checked for the selected method, so an unused
+method with a larger declared row does not disable unrelated modules.
+
+## Ownership, Batching and Limits
+
+Each transform owns a compartment, async runtime and native transport. All
+guest entries happen on its actor mailbox; native completions only wake it.
+Pending I/O frees the calling thread. Query teardown requests cancellation;
+the shared executor retains physical native I/O until cleanup completes. Endpoint authorities, PEM roots and credentials stay on the
+host; plans contain module/method/connection identities and guests receive only a
+binding index, protocol and bounded row bytes.
+
+The gateway resolves connection names only against the query's FQ connection
+snapshot, selected by existing scope/visibility rules. Private/public name
+priority is unchanged. Only connections referenced by output transforms are
+sent to compute actors through the existing private `SecureParams` channel;
+credentials are not added to saved graphs, public AST/plans or guest buffers.
+Modifying a connection affects subsequently submitted queries, not an already
+running query's snapshot. Streaming connections remain disabled for this type.
+
+`MaxBatchRows` zero/one selects scalar mode; 2..64 requests batching. Selected
+methods must declare batch support. Cardinality is capped by the method limit,
+its maximum input/output row sizes and `MaxBatchBytes` (default 32768, hard cap
+32768). The byte limit must fit a request/result header plus one declared row.
+For Profile the minimum remains 304 bytes. No timer waits for a full batch;
+DQ partitioning/input delivery can produce smaller batches, including one row.
+
+The module owns network payload construction, decoding, domain validation and
+correlation. The host validates version, exact cardinality, all field bounds,
+UTF-8, booleans and complete result framing before publishing any batch row.
+There is one active batch per transform. Deadlines/cancellation cover the
+whole call; errors fail execution without publishing partial batch results.
+The existing FQ retry policy can restart the whole query and repeat external
+calls; a restarted transform acquires the current Store module. Transport itself
+does not retry RPCs.
+Backpressure retains results and prevents further dispatch. Output row order
+follows the module contract; overall SQL order still requires `ORDER BY`.
+
+Buffered input, active rows and undelivered results count toward row quotas.
+`MaxBufferedBytes` conservatively reserves the larger declared input/output
+row size for each queued row (default 64 MiB). These are serialized-buffer
+reservations, not an RSS limit for containers or curl/gRPC/TLS internals.
+Native transport additionally reserves request/response copies and releases
+leases only after physical request handles/buffers are destroyed.
+
+All transforms registered on the FQ node share one transport executor actor on
+`appData->UserPoolId`. HTTP socket readiness wakes this actor through one shared
+OS socket waiter per executor. That waiter's thread only publishes notifications;
+`curl_multi_socket_action`, request preparation and response processing run on
+the user pool. gRPC uses an executor-owned completion queue with one shared
 waiter. Completion tags likewise only publish results
 and wake the actor. They do not resume WASM or process responses on the native
 waiter/callback thread. No transform creates its own transport thread. The gRPC
 queue outlives its channels, so releasing the last transport from a completion
 tag cannot shut down and join the thread executing that tag.
-While requests wait for network data, the user-pool thread is available for other work.
 
-Each actor turn processes at most 32 ready transport sessions before yielding.
-There is no periodic scan of pending requests. One-shot timers cover concrete
-request deadlines, libcurl timeouts and native timer operations. Owner completion
-runs on the user pool; only the owner polls/resumes WASM. Destroying a transport
-requests cancellation without waiting for network completion. The executor retains
-requests until physical cleanup. Producers must stop before actor-system
-destruction; final teardown closes the executor, cancels requests and joins the
+The executor processes at most 32 ready sessions per turn before yielding. It
+does not periodically scan pending requests. One-shot timers cover concrete
+request deadlines, libcurl timeouts and native timer operations. Pending I/O leaves the user-pool
+thread available for other work. Response processing and owner notifications
+remain on the user pool.
+
+`MaxTransportOperations` and `MaxTransportBytes` default to 1024 operations and
+256 MiB of conservative buffer reservations across these transports. Individual
+transports also retain limits of 128 operations and 64 MiB. Both sets of limits
+must admit a request; exhaustion returns `ResourceLimit` immediately. Pending
+timers and operations still undergoing cancellation consume credits. Reservations
+are released after native buffers and handles have been destroyed. These are
+separate from `MaxBufferedBytes` and WASM memory and are not a process RSS limit.
+Final actor-system teardown closes the executor, cancels requests and joins the
 shared socket waiter after user workers have stopped. It then shuts down and
 drains the shared gRPC completion queue before joining its waiter. Tags keep
 requests and reservations alive through physical completion. Ordinary query
@@ -35,123 +190,57 @@ A deterministic shutdown regression holds native completion until it is the
 last transport owner, then verifies safe destruction and release of credits;
 with the old channel-owned callback queue it aborts on a self-join.
 
-Bindings are immutable, trusted, already-resolved inputs from native code.
-The guest supplies a binding index, opaque request bytes and the HTTP method/path
-or gRPC method. Endpoint authority, credentials and TLS remain host-owned. HTTP
-checks TLS certificates/hostnames, optionally accepts a CA file, disables
-redirects and ambient proxies, and bounds decoded response bodies. gRPC uses
-the guest's method path, injected channel credentials and native metadata.
-There are no application retries; gRPC retries are disabled on the channel.
-HTTP status and gRPC status codes accompany opaque response bytes. Network
-errors are ordinary operation failures, not traps or compartment poisoning.
-The private wire-v3 response envelope classifies transport, TLS, authentication,
-deadline, cancellation, HTTP/gRPC status and resource-limit failures using enum
-and numeric codes only; it does not return backend error strings.
+TLS certificates/hostnames are checked; optional PEM trust roots
+come from the connection entity. Plaintext requires explicit `insecure: true`.
+Redirects, ambient proxies and application/gRPC retries are disabled.
+Diagnostics contain fixed text and numeric error classes, never service
+payloads, endpoints or credentials. The production HTTP gateway choice remains
+open; this prototype uses curl without changing shared HTTP APIs.
 
-The existing `IHTTPGateway` supports common HTTP verbs, but its upload/delete and
-buffered download API lacks a uniform per-request cancellation handle and
-deadline; only its streaming download exposes cancellation. The actor HTTP
-proxy supports verbs, TLS and connection reuse, but would require an actor
-adapter and a bounded decoded-response/cancellation contract. This isolated
-prototype uses the existing curl library directly without changing either
-shared API. Choosing a production HTTP integration remains a separate gate.
-
-The shared executor defaults to 1024 operations and 256 MiB of reserved buffers;
-each transport defaults to 128 operations and 64 MiB. Admission must fit both
-sets of limits and otherwise fails immediately with `ResourceLimit`. Pending
-timers and cancellations still undergoing native cleanup consume credits.
-The byte limits account for conservative owned request/response/header buffer
-reservations, not process RSS, library caches or WASM memory.
-
-Before dispatch, operation and byte quotas reserve request/header storage,
-response framing and buffer copies. A lease remains charged until the native
-request, response buffers and client handles are physically destroyed, even
-after logical cancellation/completion. These counters are conservative
-application-buffer reservations, not an RSS limit for curl/gRPC/TLS internals
-or shared connection pools. P1 separately accounts owner/guest buffers.
-
-## Tests
-
-Local HTTP and unary gRPC servers record requests and wait for explicit test
-commands to reply, fail or disconnect. Fixture setup selects local ports and
-teardown stops the servers. All waits have timeouts; tests need no external
-services. The WASM64 C++20 fixture uses the P1 SDK and runs single, sequential
-and parallel calls. Its reusable, bounded allocator exposes live object counts
-to verify coroutine/frame/buffer cleanup. Network tests complement, rather
-than replace, P1's deterministic fake-transport race tests.
-
-TLS tests cover trusted and untrusted CAs for gRPC, plus trusted, untrusted and
-hostname-mismatch certificates for HTTP. Transport tests also exercise shared
-operation/byte quotas, cleanup and progress on a single-thread user pool.
-
-Run from the repository root:
+## Verification and Remaining Gates
 
 ```bash
 ./ya make --build relwithdebinfo -tA ydb/core/fq/libs/wasm_services/ut
+./ya make --build relwithdebinfo -tA ydb/tests/fq/wasm_services \
+    --test-env=YDB_DRIVER_BINARY=/absolute/path/to/installation/ydbd
 ```
 
-The transport harness now uses the checked-in Profile module artifact at
-`ydb/udfs/wasm/profile/ut/data/profile.wasm`. It retains the byte-oriented fixture
-modes and adds typed Profile JSON/protobuf decoding. Build/regeneration commands
-are in `ydb/udfs/wasm/profile/README.md`; Echo has its own module and artifact
-under `ydb/udfs/wasm/echo`. The former `wasm_services/fixture` target and
-`ut/data/transport_coroutine.wasm` resource are no longer used.
+Tests start isolated FQ nodes and local HTTP/gRPC mocks. They leave the normal
+installation's config/storage unchanged. The installed binary must point to
+the current build. Example-module build/regeneration commands are documented
+in `ydb/udfs/wasm/profile/README.md` and `ydb/udfs/wasm/echo/README.md`.
 
-## Service-module contract
+This remains opt-in analytical FQ/DQ v1, not KQP/YQv2, synchronous robust UDF
+calls or the production WASM object ABI. Streaming/checkpoints, nested/optional
+row types, Arrow, parallel batches, automatic retries and replay guarantees
+are not implemented. Service-account credentials/refresh, connection-aware pooling and production
+tenant resource accounting
+remain separate gates. Arbitrary service endpoints need an operator-controlled
+egress policy before enabling this on shared production tenants. This does not
+add KQP external data sources or a network probe to the `TestConnection` API.
 
-`ydb/udfs/wasm/sdk/services` defines the bounded row and network envelopes,
-module exports and generated dispatch constants. The author-owned manifest
-declares the module name, service ABI version and method schemas. Its generator
-validates the contract and emits method constants derived from method names;
-the native manifest loader derives the same IDs. There are no manual method IDs
-or generated manifests. See `ydb/udfs/wasm/sdk/services/README.md` for the schema
-and supported scalar types.
+### Request routing and readiness
 
-Profile owns its JSON/protobuf payloads, strict decoding and batch correlation.
-Echo demonstrates a second module with two methods and different row types.
-These modules and manifest checks can be tested independently of SQL execution.
-SQL examples document the intended integration, which is added in a later stage.
-
-Run the generator checks with:
-
-```bash
-./ya make --build relwithdebinfo -tA ydb/udfs/wasm/sdk/services/ut
-```
-
-## Remaining Integration Gates
-
-This harness does not establish the full RFC P2 acceptance criteria:
-
-- Resolve aliases through existing YDB/FQ metadata, permissions and secrets;
-  test unknown alias, access denial and incompatible connection types.
-- Integrate credential refresh and connection identity/version-aware pooling.
-- Validate TLS with production identity sources and client authentication;
-  current tests use generated local server certificates and trusted CA files.
-- Add production worker/tenant resource accounting beyond application-buffer
-  reservations and validate diagnostics against production service behavior.
-- Connect execution to DQ/SQL through the later RFC stages. No production
-  configuration or external-network access is exposed by this prototype.
-
-`wire.h` is an internal, little-endian harness envelope, not a new public
-connection schema, DDL or typed YQL ABI. Test bindings are not a substitute
-for metadata/ACL validation.
-
-## Readiness scheduling
+Connection endpoints are HTTP origins or gRPC host:port; they contain no request
+method or application path. Wire v4 (with v3 request compatibility) carries the guest's HTTP method/path or gRPC
+method. Profile selects its single/batch routes inside WASM. Methods are syntax
+checked, with no per-service method authorization list. Authorization belongs to
+the connection identity and is independent of the route.
 
 HTTP socket readiness and gRPC completion wake only the affected transport
-session. Tests hold HTTP/gRPC responses pending and check that executor dispatches
-stop until readiness arrives, completion runs on the user pool and reservations
-are released after cleanup. Load-dependent latency validation remains follow-up
-work; this is not a production latency guarantee.
-
-Wire v4 (with v3 request compatibility) carries the guest-selected HTTP method and origin-relative path, or gRPC
-method. Bindings contain only the remote authority, TLS and host-owned credentials.
-Targets cannot override the authority; redirects remain disabled. Target validation
-checks framing and syntax, not a per-service method allowlist. Wire v2 is rejected.
+session. Native tests hold HTTP/gRPC responses pending and
+check that executor dispatches stop until readiness arrives, that completion
+runs on the user pool and that reservations are released after cleanup.
+Load-dependent latency validation remains follow-up work.
 
 HTTP `HEAD` requests finish after response headers, including when Content-Length
 describes a nonempty GET representation and the connection remains open.
 The native test harness requires empty guest TLS on callback threads, while
 allowing the runtime to notify synchronously on its owner during a poll/wait race.
+
+The WASM output transform opts out of DQ channel overcommit. Its advertised byte
+budget conservatively reserves one byte per available row because DQ row-size
+estimates can be smaller than the service wire encoding. This keeps both row and
+output-memory reservations bounded while DQ waits for capacity to become available.
 
 Per-call aliases and the common metric schema are documented in [MONITORING.md](MONITORING.md).

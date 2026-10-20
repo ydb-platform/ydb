@@ -60,17 +60,13 @@ Tab **Runners capacity** `captab01`. Self-hosted ghrun and Compute quota, not `u
 
 Do this before any get/update. The human adds the MCP in the client; you cannot.
 
-1. If DataLens tools (`list_commands`) are missing, show this config and stop until the tools appear. [README](https://github.com/datalens-tech/datalens-mcp)
+1. If DataLens tools (`list_commands`) are missing, tell the human to put this server in Cursor MCP config and stop until the tools appear. File: `~/.cursor/mcp.json` (all projects) or `<repo>/.cursor/mcp.json` (this repo only). Windows: `%USERPROFILE%\.cursor\mcp.json`. If the file already has `mcpServers`, add only the `datalens` key; do not replace the file. [Cursor MCP](https://cursor.com/docs/mcp) [README](https://github.com/datalens-tech/datalens-mcp)
 
 ```json
-{
-  "mcpServers": {
-    "datalens": {
-      "command": "npx",
-      "args": ["-y", "--prefer-online", "@datalens-tech/mcp@latest"],
-      "env": { "DATALENS_ORG_ID": "bpfssp32nspchhs4df3c" }
-    }
-  }
+"datalens": {
+  "command": "npx",
+  "args": ["-y", "--prefer-online", "@datalens-tech/mcp@latest"],
+  "env": { "DATALENS_ORG_ID": "bpfssp32nspchhs4df3c" }
 }
 ```
 

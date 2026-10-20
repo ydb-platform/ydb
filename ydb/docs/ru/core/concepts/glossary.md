@@ -442,7 +442,7 @@ JSON-индекс, как и [полнотекстовый индекс](#fullte
 
 ### OpenID Connect {#oidc}
 
-**[OpenID Connect (OIDC)](https://openid.net/specs/openid-connect-core-1_0.html)** представляет собой протокол аутентификации поверх OAuth 2.0, позволяющий приложению использовать внешнего провайдера идентификации для входа пользователей. В {{ ydb-short-name }} CLI и SDK OIDC-провайдер учётных данных получает токен доступа у внешнего сервиса и передаёт его серверу базы данных.
+**[OpenID Connect (OIDC)](https://openid.net/specs/openid-connect-core-1_0.html)** представляет собой протокол аутентификации поверх OAuth 2.0, позволяющий приложению использовать внешнего провайдера идентификации для входа пользователей. В {{ ydb-short-name }} [CLI](../reference/ydb-cli/oidc.md) и [SDK](../reference/ydb-sdk/auth.md#oidc) OIDC-провайдер учётных данных получает токен доступа у внешнего сервиса и передаёт его серверу базы данных. В {{ ydb-short-name }} [Enterprise Manager](../devops/enterprise-manager/sso.md) OIDC используется для единого входа в веб-интерфейс с корпоративной учётной записью.
 
 ### Токен пользователя {#user-token}
 

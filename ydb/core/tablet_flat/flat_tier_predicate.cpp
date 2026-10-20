@@ -38,16 +38,10 @@ namespace {
     constexpr i64 PgMinTimestamp = -211813488000000000ll;
     constexpr i64 PgEndTimestamp = 9223371331200000000ll;
 
-    // A value in the native cell representation
-    template <typename T>
-    TString RawOf(T value) {
-        return TString(reinterpret_cast<const char*>(&value), sizeof(value));
-    }
-
     // The Postgres binary (send/recv) representation of fixed-width types is big-endian
     template <typename T>
-    TString PgRawOf(T value) {
-        return RawOf(HostToInet(static_cast<std::make_unsigned_t<T>>(value)));
+    TCell PgCell(T value) {
+        return TCell::Make(HostToInet(static_cast<std::make_unsigned_t<T>>(value)));
     }
 
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
@@ -427,30 +421,31 @@ namespace {
         result.Cmp = cmp;
         const bool lessOrEqual = cmp == ECmp::LessOrEqual;
 
-        // The threshold is kept in the native cell representation of the column type
-        auto encodeRaw = [&](const TWide& value) -> TString {
+        // The threshold is kept as a cell in the native representation of the column type,
+        // fixed-width values fit into the cell itself
+        auto encodeCell = [&](const TWide& value) -> TCell {
             switch (Type.GetTypeId()) {
                 case NScheme::NTypeIds::Date:
-                    return RawOf(static_cast<ui16>(value.Abs));
+                    return TCell::Make(static_cast<ui16>(value.Abs));
                 case NScheme::NTypeIds::Datetime:
                 case NScheme::NTypeIds::Uint32:
-                    return RawOf(static_cast<ui32>(value.Abs));
+                    return TCell::Make(static_cast<ui32>(value.Abs));
                 case NScheme::NTypeIds::Timestamp:
                 case NScheme::NTypeIds::Uint64:
-                    return RawOf(value.Abs);
+                    return TCell::Make(value.Abs);
                 case NScheme::NTypeIds::Date32:
-                    return RawOf(static_cast<i32>(value.AsSigned()));
+                    return TCell::Make(static_cast<i32>(value.AsSigned()));
                 case NScheme::NTypeIds::Datetime64:
                 case NScheme::NTypeIds::Timestamp64:
-                    return RawOf(value.AsSigned());
+                    return TCell::Make(value.AsSigned());
                 case NScheme::NTypeIds::Pg:
                     switch (GetPgKind(Type)) {
                         case EPgKind::Date:
                         case EPgKind::Int4:
-                            return PgRawOf(static_cast<i32>(value.AsSigned()));
+                            return PgCell(static_cast<i32>(value.AsSigned()));
                         case EPgKind::Timestamp:
                         case EPgKind::Int8:
-                            return PgRawOf(value.AsSigned());
+                            return PgCell(value.AsSigned());
                         case EPgKind::Unsupported:
                             break;
                     }
@@ -477,7 +472,7 @@ namespace {
                     break;
             }
             if (result.Kind == EKind::Value) {
-                result.Raw = encodeRaw(bound);
+                result.Bound = encodeCell(bound);
             }
         };
 
@@ -496,20 +491,20 @@ namespace {
             result.Kind = EKind::Value;
             if (CompareWide(bound, TWide::Signed(validMin)) < 0) {
                 if (cmp == ECmp::GreaterOrEqual) {
-                    result.Raw = encodeRaw(TWide::Signed(validMin));
+                    result.Bound = encodeCell(TWide::Signed(validMin));
                 } else {
                     result.Cmp = ECmp::LessOrEqual;
-                    result.Raw = encodeRaw(TWide::Signed(minusInfinity));
+                    result.Bound = encodeCell(TWide::Signed(minusInfinity));
                 }
             } else if (CompareWide(bound, TWide::Signed(validMax)) > 0) {
                 if (cmp == ECmp::GreaterOrEqual) {
-                    result.Raw = encodeRaw(TWide::Signed(infinity));
+                    result.Bound = encodeCell(TWide::Signed(infinity));
                 } else {
                     result.Cmp = ECmp::LessOrEqual;
-                    result.Raw = encodeRaw(TWide::Signed(validMax));
+                    result.Bound = encodeCell(TWide::Signed(validMax));
                 }
             } else {
-                result.Raw = encodeRaw(bound);
+                result.Bound = encodeCell(bound);
             }
         };
 
@@ -518,7 +513,8 @@ namespace {
                 static_cast<int>(Type.GetTypeId()));
             if (serialized) {
                 result.Kind = EKind::Value;
-                result.Raw = std::move(*serialized);
+                result.Storage = std::move(*serialized);
+                result.Bound = TCell(result.Storage.data(), result.Storage.size());
             } else {
                 result.Kind = EKind::Unrepresentable;
             }
@@ -605,8 +601,7 @@ namespace {
         // PgNativeBinaryCompare, which allocates on every call.
         // TODO(https://github.com/ydb-platform/ydb/issues/56231): DyNumber cells are compared
         // bytewise, which mis-orders negative numbers with a common mantissa prefix.
-        const TCell bound(threshold.Raw.data(), threshold.Raw.size());
-        return CompareTypedCells(cell, bound, TypeOrder);
+        return CompareTypedCells(cell, threshold.Bound, TypeOrder);
     }
 
     bool TTierPredicate::Matches(const TCell& cell, const TThreshold& threshold) const {

@@ -274,6 +274,19 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(!timestamp.MatchesRanges("-infinity", { TTierRange{ .From = minBound } }));
     }
 
+    Y_UNIT_TEST(ThresholdsOutsideValidRange) {
+        // Thresholds before 4714-11-24 BC are not valid Postgres values: only -infinity is older
+        const TDuration tenThousandYears = TDuration::Days(365 * 10000);
+
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("-infinity", {}, Now, tenThousandYears));
+        UNIT_ASSERT(!date.Matches("4714-11-24 BC", {}, Now, tenThousandYears));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("-infinity", {}, Now, tenThousandYears));
+        UNIT_ASSERT(!timestamp.Matches("4714-11-24 00:00:00 BC", {}, Now, tenThousandYears));
+    }
+
     Y_UNIT_TEST(AroundPostgresEpoch) {
         // Postgres stores dates and timestamps relative to 2000-01-01
         const TInstant now = TInstant::Seconds(946684800) + TDuration::Days(1);

@@ -748,6 +748,8 @@ def build_snapshot_rows(
     pairs: Optional[List[tuple]],
     footprints: Dict[str, Dict[str, float]],
     github_ok: bool,
+    label_specs: Optional[Dict[str, Dict[str, float]]] = None,
+    label_default: Optional[Dict[str, float]] = None,
 ) -> List[Dict[str, Any]]:
     sampled_at = now.replace(microsecond=0)
     rows: List[Dict[str, Any]] = []
@@ -830,7 +832,12 @@ def build_snapshot_rows(
         append_runner_summary(rows, sampled_at, by_zone[az], az)
 
     if github_ok and pairs is not None:
-        label_specs, label_default = load_label_footprints()
+        if label_specs is None or label_default is None:
+            loaded_specs, loaded_default = load_label_footprints()
+            if label_specs is None:
+                label_specs = loaded_specs
+            if label_default is None:
+                label_default = loaded_default
         for item in queue_jobs(pairs, sampled_at, label_specs, label_default):
             rows.append(
                 _blank(
@@ -1035,13 +1042,7 @@ def list_workflow_runs(
     )
 
 
-def enrich_run_pull(
-    org: str,
-    repo: str,
-    run: Dict[str, Any],
-    cache: Dict[str, list],
-    fetcher=None,
-) -> Dict[str, Any]:
+def enrich_run_pull(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
     """Fill the PR number and target branch. Scheduled runs carry unrelated pull_requests."""
     event = run.get("event") or ""
     if event not in PR_EVENTS:
@@ -1055,13 +1056,12 @@ def enrich_run_pull(
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:
     pairs: List[tuple] = []
-    cache: Dict[str, list] = {}
     for status in ("in_progress", "queued"):
         for run in list_workflow_runs(org, repo, status):
             run_id = run.get("id")
             if run_id is None:
                 continue
-            run = enrich_run_pull(org, repo, run, cache)
+            run = enrich_run_pull(org, repo, run)
             for job in list_run_jobs(org, repo, int(run_id)):
                 pairs.append((run, job))
     return pairs

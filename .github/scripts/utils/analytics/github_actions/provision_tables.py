@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CREATE TABLE IF NOT EXISTS for analytics/ci_metrics and ci_metrics_state."""
+"""CREATE TABLE IF NOT EXISTS for analytics/ci_metrics, ci_metrics_state, and ci_capacity."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Create CI analytics tables if they do not exist")
     parser.add_argument("--metrics-table", default=None, help="Override the metrics table path")
     parser.add_argument("--state-table", default=None, help="Override the state table path")
+    parser.add_argument("--capacity-table", default=None, help="Override the capacity table path")
     parser.add_argument("--skip-metrics", action="store_true", help="Do not touch the metrics table")
     parser.add_argument("--skip-state", action="store_true", help="Do not touch the state table")
     parser.add_argument("--skip-capacity", action="store_true", help="Do not touch the capacity table")
@@ -68,6 +69,7 @@ def main(argv=None) -> int:
     return provision(
         metrics_table=args.metrics_table,
         state_table=args.state_table,
+        capacity_table=args.capacity_table,
         skip_metrics=args.skip_metrics,
         skip_state=args.skip_state,
         skip_capacity=args.skip_capacity,

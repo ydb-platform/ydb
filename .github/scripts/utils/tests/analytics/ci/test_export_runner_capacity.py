@@ -267,15 +267,28 @@ class SnapshotRowsTest(unittest.TestCase):
                 {"id": 22, "status": "queued", "name": "Build and test relwithdebinfo", "labels": ["build-preset-relwithdebinfo"], "created_at": old, "html_url": "https://github.com/ydb-platform/ydb/actions/runs/2/job/22"},
             ),
         ]
-        rows = build_snapshot_rows(NOW, limits(), [], pairs, {
-            "relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
-            "release-asan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2418},
-        }, True)
+        label_specs = {
+            "build-preset-relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+            "build-preset-release-asan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2418},
+        }
+        rows = build_snapshot_rows(
+            NOW,
+            limits(),
+            [],
+            pairs,
+            {
+                "relwithdebinfo": {"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+                "release-asan": {"vcpu": 64, "ram_gb": 320, "nrd_ssd_gb": 2418},
+            },
+            True,
+            label_specs=label_specs,
+            label_default={"vcpu": 64, "ram_gb": 256, "nrd_ssd_gb": 2417},
+        )
         queued = [row for row in rows if row["kind"] == "queue"]
         self.assertEqual(len(queued), 2)
         self.assertEqual(sum(row["usage_value"] or 0 for row in queued), 2)
         self.assertEqual(sum(row["cores"] or 0 for row in queued), 128)
-        self.assertEqual(sum(row["ram_gib"] or 0 for row in queued), 512)
+        self.assertEqual(sum(row["ram_gib"] or 0 for row in queued), 576)
         by_name = {row["name"]: row for row in queued}
         self.assertEqual(by_name["q.1.11"]["run_url"], "https://github.com/ydb-platform/ydb/actions/runs/1/job/11")
         self.assertEqual(by_name["q.2.22"]["job_name"], "Build and test relwithdebinfo")
@@ -325,7 +338,7 @@ class SnapshotRowsTest(unittest.TestCase):
             "display_title": "Cut history",
             "pull_requests": [{"number": 53649, "title": "Cut history", "base": {"ref": "main"}}],
         }
-        out = enrich_run_pull("ydb-platform", "ydb", run, {})
+        out = enrich_run_pull("ydb-platform", "ydb", run)
         self.assertEqual(pull_info(out), ("53649", "Cut history"))
         self.assertEqual(target_branch(out), "main")
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)

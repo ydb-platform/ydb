@@ -20,7 +20,7 @@ The same URL is `annotation.description`.
 | DataLens API | MCP `@datalens-tech/mcp` ([README](https://github.com/datalens-tech/datalens-mcp)) |
 | Job timings | `.github/scripts/utils/analytics/github_actions/` → `analytics/ci_metrics` |
 | Runner snapshots | `.github/scripts/utils/analytics/github_actions/export_runner_capacity.py` → `analytics/ci_capacity` |
-| Cron | `.github/workflows/collect_analytics_fast.yml` |
+| Cron | `.github/workflows/collect_analytics_fast.yml` (hourly) |
 
 ## Objects
 

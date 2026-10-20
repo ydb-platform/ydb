@@ -198,4 +198,62 @@ Y_UNIT_TEST_SUITE(BridgeRouting) {
         checker.CheckAll(nodeId);
     }
 
+    // writers which don't know that the pile takes part in data quorum skip it; syncing the pile has to start with new
+    // generations of its groups, so that such writers get refused by VDisks, both for dynamic and static groups
+    Y_UNIT_TEST(SyncStartsAfterWritersFenced) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const ui32 dynamicPileGroupId = GetPileGroups(env, groupId).at(1);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(30));
+
+        // generations of the parts in pile 1 as writers know them while the pile takes no part in data quorum
+        THashMap<ui32, ui32> generations;
+        const auto groupInfo = GetGroupInfo(env, groupId);
+        for (const auto& pile : groupInfo.GetBridgeGroupState().GetPile()) {
+            if (pile.GetGroupId() == dynamicPileGroupId) {
+                generations[pile.GetGroupId()] = pile.GetGroupGeneration();
+            }
+        }
+        const auto config = QueryStorageConfig(env);
+        for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (group.HasBridgeGroupState()) {
+                const auto& pile = group.GetBridgeGroupState().GetPile(1);
+                generations[pile.GetGroupId()] = pile.GetGroupGeneration();
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(generations.size(), 2); // the dynamic group and the static one
+
+        // the first assimilation request of the syncer of every part
+        THashMap<ui32, ui32> syncerGenerations;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate) {
+                for (const auto& [pileGroupId, generation] : generations) {
+                    if (ev->Recipient == MakeBlobStorageProxyID(pileGroupId)) {
+                        const auto *msg = ev->Get<TEvBlobStorage::TEvAssimilate>();
+                        UNIT_ASSERT(msg->ForceGroupGeneration);
+                        syncerGenerations.try_emplace(pileGroupId, *msg->ForceGroupGeneration);
+                    }
+                }
+            }
+            return true;
+        };
+
+        RejoinPile(env, 1);
+
+        for (const auto& [pileGroupId, generation] : generations) {
+            const auto it = syncerGenerations.find(pileGroupId);
+            UNIT_ASSERT_C(it != syncerGenerations.end(), "no syncer for GroupId# " << pileGroupId);
+            UNIT_ASSERT_C(generation < it->second, "syncer of GroupId# " << pileGroupId << " started with generation "
+                << it->second << " writers skipping the pile know");
+        }
+
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
+
 }

@@ -138,6 +138,10 @@ public:
         return *result;
     }
 
+    const std::shared_ptr<NAccessor::IChunkedArray>& GetOutputAccessor() const {
+        return Context.GetResources().GetAccessorVerified(OutputId);
+    }
+
     void AssertResult(const std::vector<std::optional<ui8>>& expected) const {
         const auto actual = arrow::Concatenate(Context.GetResources().GetAccessorVerified(OutputId)->GetChunkedArray()->chunks()).ValueOrDie();
         UNIT_ASSERT(actual->Equals(*NKikimr::NKernels::UInt8VecToArray(expected)));
@@ -513,5 +517,74 @@ Y_UNIT_TEST_SUITE(CoalesceKernelLogic) {
         AssertCoalesceProcessor(first, true);
     }
 }; // Y_UNIT_TEST_SUITE(CoalesceKernelLogic)
+
+Y_UNIT_TEST_SUITE(StreamLogic) {
+    void AssertNeutralOperandForwardsSparseInput(const NKernels::EOperation operation, const bool neutralFirst) {
+        auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
+        auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
+        const ui32 recordsCount = varying->GetRecordsCount();
+        auto neutral = operation == NKernels::EOperation::And
+            ? NAccessor::TSparsedArray::BuildTrueArrayUI8(recordsCount)
+            : NAccessor::TSparsedArray::BuildFalseArrayUI8(recordsCount);
+
+        TStreamLogicTest test(recordsCount, {1, 2}, 3, operation);
+        test.AddAccessor(1, neutralFirst ? neutral : varying);
+        test.AddAccessor(2, neutralFirst ? varying : neutral);
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(!test.ProcessInput(2));
+        UNIT_ASSERT_VALUES_EQUAL(test.GetOutputAccessor().get(), varying.get());
+    }
+
+    void AssertAbsorbingOperandFinishesStream(const NKernels::EOperation operation, const bool absorbingFirst) {
+        auto source = std::make_shared<NAccessor::TTrivialArray>(NKikimr::NKernels::UInt8VecToArray({ 0, 1, 0 }));
+        auto varying = NAccessor::TSparsedArray::Make(*source, std::make_shared<arrow::UInt8Scalar>(0));
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        auto absorbing = absorbingValue ? NAccessor::TSparsedArray::BuildTrueArrayUI8(varying->GetRecordsCount())
+                                        : NAccessor::TSparsedArray::BuildFalseArrayUI8(varying->GetRecordsCount());
+
+        TStreamLogicTest test(varying->GetRecordsCount(), { 1, 2 }, 3, operation);
+        test.AddAccessor(1, absorbingFirst ? absorbing : varying);
+        test.AddAccessor(2, absorbingFirst ? varying : absorbing);
+        UNIT_ASSERT_VALUES_EQUAL(test.ProcessInput(1), absorbingFirst);
+        const auto output = test.GetOutputAccessor();
+        UNIT_ASSERT_VALUES_EQUAL(test.ProcessInput(2), true);
+        if (absorbingFirst) {
+            UNIT_ASSERT_VALUES_EQUAL(test.GetOutputAccessor().get(), output.get());
+        }
+        test.AssertResult({ absorbingValue, absorbingValue, absorbingValue });
+    }
+
+    Y_UNIT_TEST(AndForwardsSparseInputAfterNeutralAccumulator) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::And, true);
+    }
+
+    Y_UNIT_TEST(OrForwardsSparseInputAfterNeutralAccumulator) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::Or, true);
+    }
+
+    Y_UNIT_TEST(AndKeepsSparseAccumulatorForNeutralInput) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::And, false);
+    }
+
+    Y_UNIT_TEST(OrKeepsSparseAccumulatorForNeutralInput) {
+        AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::Or, false);
+    }
+
+    Y_UNIT_TEST(AndKeepsAbsorbingAccumulator) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, true);
+    }
+
+    Y_UNIT_TEST(OrKeepsAbsorbingAccumulator) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, true);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnAbsorbingInput) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::And, false);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnAbsorbingInput) {
+        AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, false);
+    }
+};
 
 } // namespace NKikimr::NArrow::NSSA

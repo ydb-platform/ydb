@@ -26,35 +26,23 @@ TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
     return TExecutionResult::Done();
 }
 
-TConclusion<bool> TStreamLogicProcessor::AddMonoValue(
-    const bool monoValue, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const {
-    if (Operation == NKernels::EOperation::And) {
-        if (monoValue) {
-            if (!accResult) {
-                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            }
-            return false;
-        } else {
-            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
-                NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            return true;
-        }
-    } else if (Operation == NKernels::EOperation::Or) {
-        if (!monoValue) {
-            if (!accResult) {
-                context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            }
-            return false;
-        } else {
-            context.MutableResources().Upsert(GetOutputColumnIdOnce(),
-                NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
-            return true;
-        }
+// Return whether
+bool TStreamLogicProcessor::HandleMonoValue(const bool monoValue, const bool isAccumulatorInput,
+    const std::shared_ptr<IChunkedArray>& accumulatedResult, const TProcessorContext& context) const {
+    const bool isAbsorbingValue = Operation == NKernels::EOperation::And ? !monoValue : monoValue;
+    if ((!isAbsorbingValue && accumulatedResult) || (isAbsorbingValue && isAccumulatorInput)) {
+        return isAbsorbingValue;
     }
-    Y_FAIL();
-    return false;
+
+    const auto recordsCount = context.GetResources().GetRecordsCountRobustVerified();
+    auto accessor = monoValue ? NAccessor::TSparsedArray::BuildTrueArrayUI8(recordsCount)
+                              : NAccessor::TSparsedArray::BuildFalseArrayUI8(recordsCount);
+    if (accumulatedResult) {
+        context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessor, false);
+    } else {
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
+    }
+    return isAbsorbingValue;
 }
 
 TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const TProcessorContext& context) const {
@@ -65,25 +53,40 @@ TConclusion<bool> TStreamLogicProcessor::CombineInput(const ui32 inputId, const 
     const auto accessor = result.DetachResult().GetAccessorVerified();
     context.MutableResources().Remove(GetOutputColumnIdOnce());
     context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
+    // VisitValues can expand encoded inputs, so scan only the kernel result and not inputs.
     return IsFinishAccessor(accessor);
 }
 
 TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     const ui32 inputId, const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(!context.GetResources().HasMarker(FinishMarker));
-    const auto& accResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
+    const auto& accumulatedResult = context.GetResources().GetAccessorOptional(GetOutputColumnIdOnce());
+    std::optional<bool> monoResult;
+    if (accumulatedResult) {
+        auto isMonoResult = GetMonoInput(accumulatedResult);
+        if (isMonoResult.IsFail()) {
+            return isMonoResult;
+        }
+        monoResult = isMonoResult.DetachResult();
+    }
 
-    if (auto accInput = context.GetResources().GetAccessorOptional(inputId)) {
-        TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accInput);
+    if (monoResult && HandleMonoValue(*monoResult, true, accumulatedResult, context)) {
+        return true;
+    }
+
+    if (auto accessorInput = context.GetResources().GetAccessorOptional(inputId)) {
+        TConclusion<std::optional<bool>> isMonoInput = GetMonoInput(accessorInput);
         if (isMonoInput.IsFail()) {
             return isMonoInput;
         }
         if (isMonoInput.GetResult()) {
-            return AddMonoValue(*isMonoInput.GetResult(), accResult, context);
+            return HandleMonoValue(*isMonoInput.GetResult(), false, accumulatedResult, context);
         }
-        if (!accResult) {
-            AFL_VERIFY(accInput->GetDataType()->id() == arrow::uint8()->id())("type", accInput->GetDataType()->ToString());
-            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accInput, false);
+        if (!accumulatedResult) {
+            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
+            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessorInput, false);
+        } else if (monoResult) {
+            context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
         } else {
             return CombineInput(inputId, context);
         }
@@ -92,7 +95,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
         const auto& scalarInput = context.GetResources().GetConstantScalarVerified(inputId);
         if (!scalarInput->is_valid) {
             AFL_VERIFY(scalarInput->type->id() == arrow::uint8()->id())("type", scalarInput->type->ToString());
-            if (!accResult) {
+            if (!accumulatedResult) {
                 context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
                     std::make_shared<NAccessor::TTrivialArray>(TStatusValidator::GetValid(arrow::MakeArrayFromScalar(
                         *scalarInput, context.GetResources().GetRecordsCountRobustVerified()))), false);
@@ -106,7 +109,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             return isMonoInput;
         }
 
-        return AddMonoValue(isMonoInput.GetResult(), accResult, context);
+        return HandleMonoValue(isMonoInput.GetResult(), false, accumulatedResult, context);
     }
 }
 

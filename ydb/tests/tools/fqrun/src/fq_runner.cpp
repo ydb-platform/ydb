@@ -130,6 +130,29 @@ public:
         return true;
     }
 
+    void CreateConnectionsFromDdl(const std::vector<TConnectionDdl>& statements, const TFqOptions& options) {
+        for (const auto& statement : statements) {
+            Y_ENSURE(!IsInterrupted(), "Initialization interrupted");
+            const auto& name = statement.Content.name();
+            TString connectionId;
+            if (statement.IfNotExists) {
+                const auto status = FqSetup.FindConnection(name, options, connectionId);
+                Y_ENSURE(status.IsSuccess(), "Failed to look up connection: " << status.ToString());
+            }
+            if (connectionId.empty()) {
+                const auto status = FqSetup.CreateConnection(statement.Content, options, connectionId);
+                if (!status.IsSuccess() && statement.IfNotExists) {
+                    // A concurrent creator may have won; resolve the existing object via FQ ACLs.
+                    const auto lookup = FqSetup.FindConnection(name, options, connectionId);
+                    Y_ENSURE(lookup.IsSuccess(), "Failed to look up connection: " << lookup.ToString());
+                }
+                Y_ENSURE(status.IsSuccess() || (statement.IfNotExists && !connectionId.empty()),
+                    "Failed to create connection '" << name << "': " << status.ToString());
+            }
+            ConnectionNameToId[std::make_pair(options.Scope, name)] = connectionId;
+        }
+    }
+
     bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const {
         for (auto binding : bindings) {
             if (VerbosityLevel >= EVerbosity::QueriesText) {
@@ -343,6 +366,10 @@ void TFqRunner::PrintQueryResults() const {
 
 bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) const {
     return Impl->CreateConnections(connections, options);
+}
+
+void TFqRunner::CreateConnectionsFromDdl(const std::vector<TConnectionDdl>& statements, const TFqOptions& options) const {
+    Impl->CreateConnectionsFromDdl(statements, options);
 }
 
 bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const {

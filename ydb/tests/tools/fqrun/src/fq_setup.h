@@ -33,6 +33,8 @@ public:
 
     TRequestResult CreateConnection(const FederatedQuery::ConnectionContent& connection, const TFqOptions& options, TString& connectionId) const;
 
+    TRequestResult FindConnection(const TString& name, const TFqOptions& options, TString& connectionId) const;
+
     TRequestResult CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const;
 
     void QueryRequestAsync(const TRequestOptions& query, TDuration pingPeriod) const;

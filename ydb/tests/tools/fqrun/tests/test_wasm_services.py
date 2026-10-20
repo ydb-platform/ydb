@@ -8,7 +8,7 @@ import pytest
 import yatest.common
 
 from ydb.tests.library.harness.tls_tools import generate_selfsigned_cert
-from ydb.tests.tools.fqrun.examples.service.config import profile_query, write_setup
+from ydb.tests.tools.fqrun.examples.service.config import connection_ddl, profile_query, write_setup
 from ydb.tests.tools.fqrun.examples.service.mock import MockServices
 
 
@@ -249,6 +249,97 @@ def test_verbose_connection_does_not_print_secrets(service, tmp_path):
     assert 'Creating connection' in output
     assert 'fqrun-example-token' not in output
     assert 'fqrun-secret-header' not in output
+
+
+@pytest.mark.parametrize('service', [False, True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_ddl_services(service, tmp_path, protocol):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql=profile_query('profiles_' + protocol), extra=(
+        '--init-query=' + str(tmp_path / 'connections.sql'),
+        '--secrets-file=' + str(tmp_path / 'secrets.json'), '--verbosity=3', '--scope-id=ddl-scope',
+    ))
+    assert runner.wait(process) == 0, runner.output()
+    assert [int(row['id']) for row in runner.rows()] == [42, 43]
+    assert all(auth == 'Bearer fqrun-example-token' for _, _, auth in service.requests)
+    assert 'fqrun-example-token' not in runner.output()
+
+
+def ddl_options(tmp_path, sql):
+    path = tmp_path / 'init.sql'
+    path.write_text(sql)
+    return ('--init-query=' + str(path),)
+
+
+def local_ddl(service, auth='NONE'):
+    return connection_ddl('profiles_http', 'http://127.0.0.1:%d' % service.http.server_port, auth=auth)
+
+
+@pytest.mark.parametrize('auth,expected', [('NONE', None), ('CURRENT_IAM', 'Bearer fqrun-test-yql-token')])
+def test_ddl_auth(service, tmp_path, auth, expected):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql=profile_query('profiles_http'),
+                           extra=ddl_options(tmp_path, local_ddl(service, auth)))
+    assert runner.wait(process) == 0, runner.output()
+    assert service.requests and all(token == expected for _, _, token in service.requests)
+
+
+@pytest.mark.parametrize('protobuf_first', [False, True])
+def test_ddl_if_not_exists(service, tmp_path, protobuf_first):
+    runner = Runner(tmp_path, service)
+    ddl = local_ddl(service)
+    repeated = ddl.replace('SOURCE `', 'SOURCE IF NOT EXISTS `').replace("127.0.0.1", "127.0.0.2")
+    sql = repeated if protobuf_first else '-- SQL comment with ;\n' + ddl + repeated
+    process = runner.start(alias='profiles_http' if protobuf_first else None, sql=profile_query('profiles_http'),
+                           extra=ddl_options(tmp_path, sql) + ('--loop-count=2',))
+    assert runner.wait(process) == 0, runner.output()
+    assert len(service.requests) == 4  # Initialization runs once, outside the loop.
+
+
+@pytest.mark.parametrize('mutation,error', [
+    (lambda ddl: ddl + ddl, 'Failed to create connection'),
+    (lambda ddl: ddl + 'SELECT 1;', 'supports only CREATE'),
+    (lambda ddl: ddl.replace('CREATE EXTERNAL', 'CREATE OR REPLACE EXTERNAL'), 'OR REPLACE'),
+    (lambda ddl: ddl.replace('`profiles_http`', 'other.`profiles_http`'), 'cluster-qualified'),
+    (lambda ddl: ddl.replace('PROTOCOL = "HTTP"', 'PROTOCOL = "FTP"'), 'PROTOCOL must'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = FALSE, METHOD = "PATCH"'), 'Unsupported ExternalService property'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = TRUE'), 'scheme must match'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = "maybe"'), 'USE_TLS must'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = FALSE, UNKNOWN = "x"'), 'Unsupported ExternalService property'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = FALSE, protocol = "HTTP"'), 'duplicate keys'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = FALSE, TOKEN_SECRET_NAME = "unexpected"'), 'not supported'),
+    (lambda ddl: ddl.replace('AUTH_METHOD = "NONE"', 'AUTH_METHOD = "TOKEN", TOKEN_SECRET_NAME = "missing"'),
+     'not present in --secrets-file'),
+    (lambda ddl: ddl.replace('SOURCE_TYPE = "ExternalService"', 'SOURCE_TYPE = "ObjectStorage"'), 'SOURCE_TYPE must'),
+    (lambda ddl: ddl.replace('USE_TLS = FALSE', 'USE_TLS = FALSE, CA_CERTIFICATE = "pem"'), 'requires TLS'),
+    (lambda ddl: '', 'must contain CREATE'),
+    (lambda ddl: ddl.replace('WITH (', 'WITH (' + "'broken'"), 'Invalid initialization SQL'),
+])
+def test_ddl_errors(service, tmp_path, mutation, error):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql=profile_query('profiles_http'),
+                           extra=ddl_options(tmp_path, mutation(local_ddl(service))))
+    assert runner.wait(process) != 0, runner.output()
+    assert error in runner.output()
+    assert not service.requests
+
+
+def test_ddl_protobuf_name_conflict(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    assert runner.wait(runner.start(extra=ddl_options(tmp_path, local_ddl(service)))) != 0
+    assert 'Failed to create connection' in runner.output()
+    assert not service.requests
+
+
+def test_ddl_init_only(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    command = [yatest.common.binary_path('ydb/tests/tools/fqrun/fqrun'), '--compute=in-place',
+               '--cfg=' + str(runner.config), '--scope-id=init-only']
+    command += list(ddl_options(tmp_path, local_ddl(service)))
+    result = subprocess.run(command, capture_output=True, timeout=120,
+                            env=dict(os.environ, YQL_TOKEN='fqrun-test-yql-token'))
+    assert result.returncode == 0, result.stderr.decode(errors='replace')
+    assert not service.requests
 
 
 @pytest.mark.parametrize('signal_number', [signal.SIGTERM, signal.SIGINT])

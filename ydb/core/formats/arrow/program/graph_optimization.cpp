@@ -16,6 +16,7 @@
 
 #include <library/cpp/string_utils/quote/quote.h>
 #include <memory>
+#include <util/generic/ylimits.h>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -56,6 +57,13 @@ bool TGraph::HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 re
 void TGraph::AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId) {
     from->AddEdgeTo(to, resourceId);
     to->AddEdgeFrom(from, resourceId);
+}
+
+TConclusion<ui32> TGraph::BuildNextResourceId() {
+    if (NextResourceId == Max<ui32>()) {
+        return TConclusionStatus::Fail("resource id limit exceeded");
+    }
+    return ++NextResourceId;
 }
 
 void TGraph::RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId) {
@@ -606,35 +614,44 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     }
     RemoveEdge(condNode, dest, destResourceId);
 
-    const ui32 resourceIdxFetch = BuildNextResourceId();
+    auto resourceIdxFetch = BuildNextResourceId();
+    if (resourceIdxFetch.IsFail()) {
+        return resourceIdxFetch.GetError();
+    }
     IDataSource::TFetchIndexContext indexContext(
         dataAddr->GetColumnId(), IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), *indexChecker));
-    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
+    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(*resourceIdxFetch, indexContext);
     auto indexFetchNode = AddNode(indexFetchProc);
-    RegisterProducer(resourceIdxFetch, indexFetchNode.get());
+    RegisterProducer(*resourceIdxFetch, indexFetchNode.get());
 
-    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    auto resourceIdIndexToAnd = BuildNextResourceId();
+    if (resourceIdIndexToAnd.IsFail()) {
+        return resourceIdIndexToAnd.GetError();
+    }
     auto resolvedColumnName = Resolver.GetColumnName(dataAddr->GetColumnId(), false);
     IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker,
         resolvedColumnName.empty() ? "COLUMN_NAME_NOT_RESOLVED" : resolvedColumnName);
     auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
-        resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
+        *resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, *resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);
-    RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+    RegisterProducer(*resourceIdIndexToAnd, indexProcNode.get());
+    AddEdge(indexFetchNode.get(), indexProcNode.get(), *resourceIdxFetch);
     AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
 
-    const ui32 resourceIdEqToAnd = BuildNextResourceId();
-    RegisterProducer(resourceIdEqToAnd, condNode);
-    calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+    auto resourceIdEqToAnd = BuildNextResourceId();
+    if (resourceIdEqToAnd.IsFail()) {
+        return resourceIdEqToAnd.GetError();
+    }
+    RegisterProducer(*resourceIdEqToAnd, condNode);
+    calc->SetOutputResourceIdOnce(*resourceIdEqToAnd);
 
     auto andProcessor = std::make_shared<TStreamLogicProcessor>(
-        TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+        TColumnChainInfo::BuildVector({ *resourceIdEqToAnd, *resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
     auto andNode = AddNode(andProcessor);
     AddEdge(andNode.get(), dest, destResourceId);
 
-    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    AddEdge(indexProcNode.get(), andNode.get(), *resourceIdIndexToAnd);
+    AddEdge(condNode, andNode.get(), *resourceIdEqToAnd);
     ResetProducer(destResourceId, andNode.get());
     return true;
 }
@@ -669,30 +686,39 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     }
     RemoveEdge(condNode, dest, destResourceId);
 
-    const ui32 resourceIdxFetch = BuildNextResourceId();
+    auto resourceIdxFetch = BuildNextResourceId();
+    if (resourceIdxFetch.IsFail()) {
+        return resourceIdxFetch.GetError();
+    }
     IDataSource::TFetchHeaderContext headerContext(dataAddr->GetColumnId(), { dataAddr->GetSubColumnName() });
-    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, headerContext);
+    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(*resourceIdxFetch, headerContext);
     auto indexFetchNode = AddNode(indexFetchProc);
-    RegisterProducer(resourceIdxFetch, indexFetchNode.get());
+    RegisterProducer(*resourceIdxFetch, indexFetchNode.get());
 
-    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    auto resourceIdIndexToAnd = BuildNextResourceId();
+    if (resourceIdIndexToAnd.IsFail()) {
+        return resourceIdIndexToAnd.GetError();
+    }
     IDataSource::TCheckHeaderContext checkHeaderContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName());
-    auto indexCheckProc = std::make_shared<THeaderCheckerProcessor>(resourceIdxFetch, checkHeaderContext, resourceIdIndexToAnd);
+    auto indexCheckProc = std::make_shared<THeaderCheckerProcessor>(*resourceIdxFetch, checkHeaderContext, *resourceIdIndexToAnd);
     auto indexProcNode = AddNode(indexCheckProc);
-    RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+    RegisterProducer(*resourceIdIndexToAnd, indexProcNode.get());
+    AddEdge(indexFetchNode.get(), indexProcNode.get(), *resourceIdxFetch);
 
-    const ui32 resourceIdEqToAnd = BuildNextResourceId();
-    RegisterProducer(resourceIdEqToAnd, condNode);
-    calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+    auto resourceIdEqToAnd = BuildNextResourceId();
+    if (resourceIdEqToAnd.IsFail()) {
+        return resourceIdEqToAnd.GetError();
+    }
+    RegisterProducer(*resourceIdEqToAnd, condNode);
+    calc->SetOutputResourceIdOnce(*resourceIdEqToAnd);
 
     auto andProcessor = std::make_shared<TStreamLogicProcessor>(
-        TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+        TColumnChainInfo::BuildVector({ *resourceIdEqToAnd, *resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
     auto andNode = AddNode(andProcessor);
     AddEdge(andNode.get(), dest, destResourceId);
 
-    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    AddEdge(indexProcNode.get(), andNode.get(), *resourceIdIndexToAnd);
+    AddEdge(condNode, andNode.get(), *resourceIdEqToAnd);
     ResetProducer(destResourceId, andNode.get());
     return true;
 }
@@ -774,8 +800,11 @@ TConclusionStatus TGraph::Collapse() {
         }
     }
     if (filters.size() > 1) {
-        const ui32 finalResourceId = BuildNextResourceId();
-        auto filterNode = AddNode(std::make_shared<TFilterProcessor>(finalResourceId));
+        auto finalResourceId = BuildNextResourceId();
+        if (finalResourceId.IsFail()) {
+            return finalResourceId.GetError();
+        }
+        auto filterNode = AddNode(std::make_shared<TFilterProcessor>(*finalResourceId));
         std::vector<ui32> inputs;
         std::vector<TGraphNode*> inputNodes;
         for (auto&& i : filters) {
@@ -784,14 +813,14 @@ TConclusionStatus TGraph::Collapse() {
             RemoveNode(i->GetIdentifier());
         }
         auto mergeNode = AddNode(std::make_shared<TStreamLogicProcessor>(
-            TColumnChainInfo::BuildVector(inputs), TColumnChainInfo(finalResourceId), NKernels::EOperation::And));
+            TColumnChainInfo::BuildVector(inputs), TColumnChainInfo(*finalResourceId), NKernels::EOperation::And));
         ui32 idx = 0;
         for (auto&& i : inputNodes) {
             AddEdge(i, mergeNode.get(), inputs[idx]);
             ++idx;
         }
-        AddEdge(mergeNode.get(), filterNode.get(), finalResourceId);
-        RegisterProducer(finalResourceId, mergeNode.get());
+        AddEdge(mergeNode.get(), filterNode.get(), *finalResourceId);
+        RegisterProducer(*finalResourceId, mergeNode.get());
     }
 
     while (hasChanges) {

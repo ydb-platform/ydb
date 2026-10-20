@@ -221,9 +221,9 @@ private:
         it->second = node;
     }
 
-    ui32 BuildNextResourceId() {
-        return ++NextResourceId;
-    }
+    // Ids are handed out above every column id already present in the program. A system column near
+    // Max<ui32>() leaves almost no room, and wrapping would reuse a real column id.
+    TConclusion<ui32> BuildNextResourceId();
 
     TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory);
 
@@ -258,7 +258,9 @@ public:
             AFL_VERIFY(!Finished);
             Finished = true;
             TGraph graph(std::move(Processors), Resolver, ReserveIndexMemory);
-            graph.Collapse();
+            if (auto collapsed = graph.Collapse(); collapsed.IsFail()) {
+                return collapsed;
+            }
             return graph.Compile();
         }
     };

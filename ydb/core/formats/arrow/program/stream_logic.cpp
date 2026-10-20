@@ -26,7 +26,7 @@ TConclusion<TExecutionResult> TStreamLogicProcessor::DoExecute(
     return TExecutionResult::Done();
 }
 
-// Return whether
+// Returns whether no further inputs can change the result.
 bool TStreamLogicProcessor::HandleMonoValue(const bool monoValue, const bool isAccumulatorInput,
     const std::shared_ptr<IChunkedArray>& accumulatedResult, const TProcessorContext& context) const {
     const bool isAbsorbingValue = Operation == NKernels::EOperation::And ? !monoValue : monoValue;
@@ -86,6 +86,7 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
             context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessorInput, false);
         } else if (monoResult) {
+            AFL_VERIFY(accessorInput->GetDataType()->id() == arrow::uint8()->id())("type", accessorInput->GetDataType()->ToString());
             context.MutableResources().Upsert(GetOutputColumnIdOnce(), accessorInput, false);
         } else {
             return CombineInput(inputId, context);

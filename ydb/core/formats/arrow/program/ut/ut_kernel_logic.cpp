@@ -555,6 +555,20 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
         test.AssertResult({ absorbingValue, absorbingValue, absorbingValue });
     }
 
+    void AssertAbsorbingScalarAfterNeutralAccumulator(const NKernels::EOperation operation) {
+        const bool absorbingValue = operation == NKernels::EOperation::Or;
+        const std::vector<std::optional<ui8>> expected(2, absorbingValue);
+        auto neutral = absorbingValue ? NAccessor::TSparsedArray::BuildFalseArrayUI8(expected.size())
+                                      : NAccessor::TSparsedArray::BuildTrueArrayUI8(expected.size());
+
+        TStreamLogicTest test(expected.size(), {1, 2}, 3, operation);
+        test.AddAccessor(1, neutral);
+        test.AddScalar(2, std::make_shared<arrow::UInt8Scalar>(absorbingValue));
+        UNIT_ASSERT(!test.ProcessInput(1));
+        UNIT_ASSERT(test.ProcessInput(2));
+        test.AssertResult(expected);
+    }
+
     Y_UNIT_TEST(AndForwardsSparseInputAfterNeutralAccumulator) {
         AssertNeutralOperandForwardsSparseInput(NKernels::EOperation::And, true);
     }
@@ -585,6 +599,14 @@ Y_UNIT_TEST_SUITE(StreamLogic) {
 
     Y_UNIT_TEST(OrFinishesOnAbsorbingInput) {
         AssertAbsorbingOperandFinishesStream(NKernels::EOperation::Or, false);
+    }
+
+    Y_UNIT_TEST(AndFinishesOnAbsorbingScalarAfterNeutralAccumulator) {
+        AssertAbsorbingScalarAfterNeutralAccumulator(NKernels::EOperation::And);
+    }
+
+    Y_UNIT_TEST(OrFinishesOnAbsorbingScalarAfterNeutralAccumulator) {
+        AssertAbsorbingScalarAfterNeutralAccumulator(NKernels::EOperation::Or);
     }
 
     Y_UNIT_TEST(StopsReadyInputBatchAfterKernelAbsorbingResult) {

@@ -17,7 +17,7 @@ private:
     virtual NJson::TJsonValue DoDebugJson() const override;
     virtual TConclusion<TExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
     bool HandleMonoValue(
-        const bool monoValue, const bool isAccumulator, const std::shared_ptr<IChunkedArray>& accResult, const TProcessorContext& context) const;
+        const bool monoValue, const bool isAccumulatorInput, const std::shared_ptr<IChunkedArray>& accumulatedResult, const TProcessorContext& context) const;
     TConclusion<bool> CombineInput(const ui32 inputId, const TProcessorContext& context) const;
 
     virtual bool IsAggregation() const override {

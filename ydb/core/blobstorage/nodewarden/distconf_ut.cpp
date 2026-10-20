@@ -1431,7 +1431,7 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
             UNIT_ASSERT_VALUES_EQUAL(pb->RingGroupsSize(), 1);
             const auto& item = pb->GetRingGroups(0);
             UNIT_ASSERT(item.HasBridgePileId());
-            UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&item, &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId),
+            UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&item, &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId),
                 TBridgePileId::FromPileIndex(0));
         }
 

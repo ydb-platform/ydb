@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
                     &config.GetSchemeBoardConfig()}) {
                 for (const auto& ringGroup : ss->GetRingGroups()) {
                     UNIT_ASSERT_LT(TBridgePileId::FromProto(&ringGroup,
-                        &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId).GetPileIndex(), 2);
+                        &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::GetBridgePileId).GetPileIndex(), 2);
                 }
             }
             const auto baseConfig = env.FetchBaseConfig();

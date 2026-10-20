@@ -238,7 +238,7 @@ namespace NKikimr::NStorage {
     std::optional<TString> TDistributedConfigKeeper::ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config) {
         // copy bridge info into state storage configs for easier access in replica processors/proxies
         if (config->HasClusterState()) {
-            return ForEachStateStorageConfig(config, [&](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+            return ForEachStateStorageConfig(config, [&](NKikimrConfig::TDomainsConfig::TStateStorage *pb) -> std::optional<TString> {
                 auto& clusterState = config->GetClusterState();
 
                 // copy cluster state generation
@@ -342,14 +342,14 @@ namespace NKikimr::NStorage {
 
         // bridged cluster requires every ring group to be bound to some pile; legacy Ring is turned into the ring group
         // with the same replica actor ids
-        return ForEachStateStorageConfig(config, [](NKikimrConfig::TStateStorageConfig *pb) -> std::optional<TString> {
+        return ForEachStateStorageConfig(config, [](NKikimrConfig::TDomainsConfig::TStateStorage *pb) -> std::optional<TString> {
             if (pb->HasRing()) {
                 pb->AddRingGroups()->Swap(pb->MutableRing());
                 pb->ClearRing();
             }
             for (auto& ringGroup : *pb->MutableRingGroups()) {
                 TBridgePileId::FromPileIndex(0).CopyToProto(&ringGroup,
-                    &NKikimrConfig::TStateStorageConfig::TRing::SetBridgePileId);
+                    &NKikimrConfig::TDomainsConfig::TStateStorage::TRing::SetBridgePileId);
             }
             return std::nullopt;
         });

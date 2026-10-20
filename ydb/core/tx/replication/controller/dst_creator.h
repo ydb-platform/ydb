@@ -32,7 +32,7 @@ IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActo
     const TString& database, const TPathId& pathId,
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
     EReplicationMode mode = EReplicationMode::ReadOnly,
-    EConsistencyLevel consistency = EConsistencyLevel::Row, bool skipInitialScan = false,
+    EConsistencyLevel consistency = EConsistencyLevel::Row, bool initialScan = true,
     const TPathId& pendingDstPathId = {});
 
 }

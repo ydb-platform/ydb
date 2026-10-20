@@ -2091,6 +2091,190 @@ namespace {
             return content;
         }
 
+        enum class EMultiTableSqlFailure {
+            None,
+            Sql,
+            Checksum,
+            Mixed,
+        };
+
+        void CheckMultiTableSqlExport(EMultiTableSqlFailure failure, bool encrypted, bool reboot) {
+            Env();
+            auto& flags = Runtime().GetAppData().FeatureFlags;
+            flags.SetEnableTableBackupAsSql(true);
+            flags.SetEnableChecksumsExport(true);
+            flags.SetEnableEncryptedExport(true);
+            flags.SetEnableExportAutoDropping(false);
+            ui64 txId = 100;
+
+            struct TItem {
+                TString Name;
+                TString Prefix;
+                ui64 Shard;
+                EMultiTableSqlFailure Failure;
+                TString Sql;
+                TString OldScheme;
+                TString OldData;
+            };
+            TVector<TItem> items;
+            // Similar and nested prefixes catch cleanup of a sibling's artifacts.
+            const TVector<TString> destinations = {
+                "table", "table10", "nested/table", "table1", "other/table", "table100",
+            };
+            NKikimrExport::TCreateExportRequest request;
+            auto& settings = *request.MutableExportToS3Settings();
+            settings.set_endpoint(Sprintf("localhost:%d", S3Port()));
+            settings.set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
+            settings.set_number_of_retries(0);
+            if (encrypted) {
+                settings.set_destination_prefix("multi");
+                auto& encryption = *settings.mutable_encryption_settings();
+                encryption.set_encryption_algorithm("AES-128-GCM");
+                encryption.mutable_symmetric_key()->set_key("0123456789012345");
+            }
+            for (ui32 i = 0; i < destinations.size(); ++i) {
+                const TString name = "Table" + ToString(i);
+                TestCreateTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "%s"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                    UniformPartitionsCount: 1
+                )", name.c_str()));
+                Env().TestWaitNotification(Runtime(), txId);
+                const ui64 shard = DescribePath(Runtime(), "/MyRoot/" + name, true)
+                    .GetPathDescription().GetTablePartitions(0).GetDatashardId();
+                UpdateRow(Runtime(), name, i + 1, "old-" + name, shard);
+                auto& item = *settings.add_items();
+                item.set_source_path("/MyRoot/" + name);
+                item.set_destination_prefix((encrypted ? "" : "multi/") + destinations[i]);
+                const auto itemFailure = failure != EMultiTableSqlFailure::Mixed ? failure
+                    : i % 3 == 0 ? EMultiTableSqlFailure::None
+                    : i % 3 == 1 ? EMultiTableSqlFailure::Sql : EMultiTableSqlFailure::Checksum;
+                items.push_back({name, "/multi/" + destinations[i], shard, itemFailure,
+                    DescribeTableAsSql("/MyRoot/" + name), {}, {}});
+            }
+            TString requestText;
+            UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(request, &requestText));
+            const TString suffix = encrypted ? ".enc" : "";
+            const auto readArtifact = [&](const TString& key) -> TString {
+                const auto content = GetS3FileContent(key + suffix);
+                if (!encrypted) {
+                    return content;
+                }
+                const auto [plain, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    NBackup::TEncryptionKey("0123456789012345"), TBuffer(content.data(), content.size()));
+                return TString(plain.Data(), plain.Size());
+            };
+            const auto forgetExport = [&](ui64 id) {
+                TestForgetExport(Runtime(), ++txId, "/MyRoot", id);
+                Env().TestWaitNotification(Runtime(), id);
+                UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
+            };
+
+            // Reuse a real backup, then change every table's schema and data.
+            const auto oldExportId = ++txId;
+            TestExport(Runtime(), oldExportId, "/MyRoot", requestText);
+            WaitTableSqlExport(oldExportId);
+            for (ui32 i = 0; i < items.size(); ++i) {
+                auto& item = items[i];
+                CheckSqlBackup(item.Prefix, item.Sql, encrypted);
+                item.OldScheme = GetS3FileContent(item.Prefix + "/scheme.pb" + suffix);
+                item.OldData = GetS3FileContent(item.Prefix + "/data_00.csv" + suffix);
+                UNIT_ASSERT_VALUES_EQUAL(readArtifact(item.Prefix + "/data_00.csv"),
+                    ToString(i + 1) + ",\"old-" + item.Name + "\"\n");
+                TestAlterTable(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                    Name: "%s"
+                    Columns { Name: "extra%u" Type: "Utf8" }
+                )", item.Name.c_str(), i));
+                Env().TestWaitNotification(Runtime(), txId);
+                UpdateRow(Runtime(), item.Name, i + 1, "new-" + item.Name, item.Shard);
+                const auto newSql = DescribeTableAsSql("/MyRoot/" + item.Name);
+                UNIT_ASSERT_VALUES_UNEQUAL(item.Sql, newSql);
+                item.Sql = newSql;
+                if (item.Failure != EMultiTableSqlFailure::None) {
+                    // Cleanup must also remove a leftover SQL file in the other format.
+                    S3Mock().GetData()[item.Prefix + "/create_table.sql" + (encrypted ? "" : ".enc")] = "stale SQL";
+                }
+            }
+            forgetExport(oldExportId);
+
+            auto uploads = Runtime().template AddObserver<NWrappers::NExternalStorage::TEvPutObjectRequest>([&](auto& ev) {
+                const TString key(ev->Get()->Request.GetKey().c_str());
+                for (const auto& item : items) {
+                    if (item.Failure == EMultiTableSqlFailure::None) {
+                        continue;
+                    }
+                    const TString failedKey = item.Prefix.substr(1) + "/create_table.sql"
+                        + (item.Failure == EMultiTableSqlFailure::Checksum ? ".sha256" : suffix);
+                    if (key == failedKey) {
+                        FailS3Upload(ev);
+                        ev.Reset();
+                        return;
+                    }
+                }
+            });
+            const auto exportId = ++txId;
+            TBlockEvents<NSchemeShard::TEvPrivate::TEvExportSchemeUploadResult> results(Runtime(), [exportId](const auto& ev) {
+                return ev->Get()->ExportId == exportId;
+            });
+            const auto checkBeforeDataBackup = [&] {
+                Runtime().WaitFor("all table SQL uploads or cleanups finish", [&] { return results.size() >= items.size(); });
+                UNIT_ASSERT_VALUES_EQUAL(results.size(), items.size());
+                THashSet<ui32> completedItems;
+                for (const auto& result : results) {
+                    UNIT_ASSERT_C(result->Get()->Success, result->Get()->Error);
+                    UNIT_ASSERT(result->Get()->ItemIdx < items.size());
+                    UNIT_ASSERT(completedItems.insert(result->Get()->ItemIdx).second);
+                }
+                for (ui32 i = 0; i < items.size(); ++i) {
+                    const auto& item = items[i];
+                    if (item.Failure == EMultiTableSqlFailure::None) {
+                        CheckSqlBackup(item.Prefix, item.Sql, encrypted);
+                    } else {
+                        CheckSqlArtifactsAbsent(item.Prefix);
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(item.Prefix + "/scheme.pb" + suffix), item.OldScheme);
+                    UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(item.Prefix + "/data_00.csv" + suffix), item.OldData);
+                    UNIT_ASSERT_VALUES_EQUAL(GetPersistedExportItemState(exportId, i),
+                        static_cast<ui8>(NSchemeShard::TExportInfo::EState::UploadTableSchemeSql));
+                }
+            };
+            TestExport(Runtime(), exportId, "/MyRoot", requestText);
+            checkBeforeDataBackup();
+            if (reboot) {
+                // Lose all six completion events, including successful cleanups.
+                results.clear();
+                RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+                checkBeforeDataBackup();
+            }
+            results.Stop().Unblock();
+            WaitTableSqlExport(exportId);
+            for (ui32 i = 0; i < items.size(); ++i) {
+                const auto& item = items[i];
+                if (item.Failure == EMultiTableSqlFailure::None) {
+                    const auto sql = CheckSqlBackup(item.Prefix, item.Sql, encrypted);
+                    UNIT_ASSERT_STRING_CONTAINS(sql, "CREATE TABLE `" + item.Name + "`");
+                    UNIT_ASSERT_STRING_CONTAINS(sql, "`extra" + ToString(i) + "`");
+                } else {
+                    CheckSqlArtifactsAbsent(item.Prefix);
+                }
+                const auto schema = readArtifact(item.Prefix + "/scheme.pb");
+                Ydb::Table::CreateTableRequest description;
+                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(schema, &description));
+                UNIT_ASSERT_VALUES_EQUAL(description.columns_size(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(description.columns(2).name(), "extra" + ToString(i));
+                UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent(item.Prefix + "/scheme.pb.sha256"),
+                    NBackup::ComputeChecksum(schema) + " scheme.pb");
+                const auto data = readArtifact(item.Prefix + "/data_00.csv");
+                UNIT_ASSERT_C(data.StartsWith(ToString(i + 1) + ",\"new-" + item.Name + "\","), data);
+                UNIT_ASSERT_VALUES_EQUAL(StringSplitter(data).Split('\n').SkipEmpty().Count(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(StringSplitter(data).Split(',').Count(), 3u);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), items.size());
+            forgetExport(exportId);
+        }
+
         enum class ESqlExportDatabase {
             Root,
             LocalSubdomain,
@@ -4118,6 +4302,22 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTables, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::None, Encrypted, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesSqlUploadFallback, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Sql, Encrypted, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesChecksumUploadFallback, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Checksum, Encrypted, Reboot);
+    }
+
+    Y_UNIT_TEST_QUAD(TableBackupAsSqlManyTablesMixedFallback, Encrypted, Reboot) {
+        CheckMultiTableSqlExport(EMultiTableSqlFailure::Mixed, Encrypted, Reboot);
     }
 
     Y_UNIT_TEST(TableBackupAsSqlMultiItemKeepsAndForgetsSchemeSnapshots) {

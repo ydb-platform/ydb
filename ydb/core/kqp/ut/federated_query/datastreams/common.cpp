@@ -353,7 +353,7 @@ std::shared_ptr<NYdb::NTopic::TTopicClient> TStreamingTestFixture::GetTopicClien
         LocalTopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(*GetInternalDriver(), TopicClientSettings);
     }
 
-    if (!TopicClient) {
+    if (!local && !TopicClient) {
         TopicClient = std::make_shared<NYdb::NTopic::TTopicClient>(
             *GetExternalDriver(), NYdb::NTopic::TTopicClientSettings().DiscoveryEndpoint(YDB_ENDPOINT).Database(YDB_DATABASE));
     }

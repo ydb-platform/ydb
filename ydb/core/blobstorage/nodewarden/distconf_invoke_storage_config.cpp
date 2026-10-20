@@ -765,7 +765,9 @@ namespace NKikimr::NStorage {
             {"clientId", msg.ClientId},
             {"serverId", msg.ServerId});
 
-        if (msg.Status != NKikimrProto::OK) {
+        if (msg.ClientId != ControllerPipeId) {
+            return; // the pipe has already been closed
+        } else if (msg.Status != NKikimrProto::OK) {
             ControllerPipeId = {};
             throw TExError() << "Failed to connect to BSC with " << msg.Status;
         }
@@ -782,6 +784,9 @@ namespace NKikimr::NStorage {
             {"clientId", msg.ClientId},
             {"serverId", msg.ServerId});
 
+        if (msg.ClientId != ControllerPipeId) {
+            return; // the pipe has been closed by this actor
+        }
         ControllerPipeId = {};
         throw TExError() << "Pipe to BSC disconnected";
     }
@@ -798,6 +803,18 @@ namespace NKikimr::NStorage {
 
         auto request = std::make_unique<TEvBlobStorage::TEvControllerDistconfRequest>();
         auto& record = request->Record;
+
+        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
+            if (response.GetStatus(0).GetInterfaceVersion() < BSC_INTERFACE_BRIDGE_PILE_OPS) {
+                throw TExError() << "BS_CONTROLLER is way too old to add piles";
+            }
+            record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateAddBridgePile);
+            AddedBridgePileId.CopyToProto(&record, &NKikimrBlobStorage::TEvControllerDistconfRequest::SetBridgePileId);
+            record.MutableStorageConfig()->PackFrom(ProposedStorageConfig); // with static VDisks in the pile
+            NTabletPipe::SendData(SelfId(), ControllerPipeId, request.release());
+            return;
+        }
+
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
         const auto& replaceStorageConfig = op->Command.GetReplaceStorageConfig();
@@ -842,6 +859,7 @@ namespace NKikimr::NStorage {
                 record.MutableStorageConfig()->PackFrom(ProposedStorageConfig);
                 break;
 
+            case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }
@@ -877,6 +895,15 @@ namespace NKikimr::NStorage {
             {"selfId", SelfId()},
             {"record", getRecord()});
 
+        if (ControllerOp == EControllerOp::ADD_BRIDGE_PILE) {
+            if (record.GetStatus() != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
+                throw TExError() << "Can't add pile to the cluster: BSC can't add parts of its groups to the pile: "
+                    << record.GetErrorReason();
+            }
+            NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId); // BSC is not needed anymore
+            return StartProposition(&ProposedStorageConfig);
+        }
+
         if (const auto& status = record.GetStatus(); status != NKikimrBlobStorage::TEvControllerDistconfResponse::OK) {
             throw TExError() << "Failed to interact with BSC to update configuration"
                 << " Status# " << NKikimrBlobStorage::TEvControllerDistconfResponse::EStatus_Name(status)
@@ -907,6 +934,7 @@ namespace NKikimr::NStorage {
                 break;
             }
 
+            case EControllerOp::ADD_BRIDGE_PILE:
             case EControllerOp::UNSET:
                 Y_DEBUG_ABORT();
         }

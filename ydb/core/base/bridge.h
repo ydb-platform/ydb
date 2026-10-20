@@ -166,6 +166,18 @@ namespace NKikimr {
                 groupId));
         }
 
+        // Pile of the operation changing the set of piles which is pending, or invalid pile id if there is none.
+        inline TBridgePileId GetPendingPileOperationPileId(const NKikimrBridge::TClusterStateDetails& details) {
+            return details.HasPendingPileOperation()
+                ? TBridgePileId::FromProto(&details.GetPendingPileOperation(),
+                    &NKikimrBridge::TClusterStateDetails::TPendingPileOperation::GetBridgePileId)
+                : TBridgePileId();
+        }
+
+        // Make an entry for the part of the bridged group in the designated pile, which the group has no part in yet
+        // (filling the gap with absent entries); returns the entry to fill in.
+        NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId);
+
         // Pile implied for nodes without pile name and groups without pile id by the pile registry implied by bridge
         // config: single-pile cluster (this is the case of the cluster converted from non-bridged one) has them in its
         // only pile, multi-pile one has no implicit pile.
@@ -194,7 +206,8 @@ namespace NKikimr {
 
         // Pile registry for the new bridge config: piles remaining in the config keep their ids, slots of the dropped
         // ones get free, new piles take free slots in ascending order before the registry grows, free slots at the end
-        // are trimmed. Implicit pile setting is kept only while its pile remains in the config.
+        // are trimmed. Implicit pile setting is kept only while its pile remains in the config, PileListChanged is kept
+        // as is.
         NKikimrBridge::TPileRegistry AssignPileIds(const NKikimrBridge::TPileRegistry& registry,
             const NKikimrConfig::TBridgeConfig& bridgeConfig);
 

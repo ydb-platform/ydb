@@ -645,6 +645,12 @@ namespace NKikimr::NStorage {
 
         static void GenerateBridgeInitialState(const TNodeWardenConfig& cfg, NKikimrBlobStorage::TStorageConfig *config);
 
+        // Add INACTIVE pile to the cluster in the config: allocate parts of bridged static groups and state storage ring
+        // groups in the pile, make it DISCONNECTED and unsynced, and leave the pending operation for BSC to add parts of
+        // its groups; baseConfig provides PDisks already known to BSC.
+        std::optional<TString> AddBridgePileToConfig(NKikimrBlobStorage::TStorageConfig *config, TBridgePileId pileId,
+            const NKikimrBlobStorage::TBaseConfig *baseConfig);
+
         TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config);
         static TBridgeInfo::TPtr GenerateBridgeInfo(const NKikimrBlobStorage::TStorageConfig& config,
             const TNodeWardenConfig& cfg, ui32 selfNodeId);
@@ -745,7 +751,8 @@ namespace NKikimr::NStorage {
         void ApplyConfigUpdateToDynamicNodes(bool drop);
         void OnDynamicNodeDisconnected(ui32 nodeId, TActorId sessionId);
         void Handle(TEvNodeWardenDynamicConfigSubscribe::TPtr ev);
-        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache);
+        // pileListChangeCapable tells whether the node takes pile ids from pile registry, see PileListChanged
+        void PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache, bool pileListChangeCapable);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Event delivery
@@ -885,6 +892,12 @@ namespace NKikimr::NStorage {
     // when there is none persisted; nullopt when the node is not bridge-capable (has no BridgeConfig).
     std::optional<NKikimrBridge::TPileRegistry> GetPileRegistry(const NKikimrBlobStorage::TStorageConfig& config,
         const NKikimrConfig::TBridgeConfig *bridgeConfig);
+
+    // Nodes of older versions take pile ids from positions of piles in their BridgeConfig, so they can't work with the
+    // config (and must not get it) once the list of piles has been changed.
+    inline bool IsPileListChanged(const NKikimrBlobStorage::TStorageConfig& config) {
+        return config.GetClusterStateDetails().GetPileRegistry().GetPileListChanged();
+    }
 
     // Resolve pile of the node against pile registry (as GetPileRegistry provides it, or nullopt for the config that is
     // not a bridged one): default pile (invalid pile id) when there is no registry, nullopt when the pile can't be

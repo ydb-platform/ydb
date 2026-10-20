@@ -160,6 +160,7 @@ namespace NKikimr::NStorage {
             ENABLE_DISTCONF,
             DISABLE_DISTCONF,
             OTHER,
+            ADD_BRIDGE_PILE, // BSC validates addition of the pile, then ProposedStorageConfig gets proposed
         } ControllerOp = EControllerOp::UNSET;
 
         void FetchStorageConfig(const TQuery::TFetchStorageConfig& request);
@@ -204,6 +205,12 @@ namespace NKikimr::NStorage {
         void RequireBridgeCapability(bool pileListChange, THashSet<ui32> requiredNodeIds,
             THashSet<ui32> ignoredNodeIds, std::function<void()> callback);
         void NotifyBscConversionFinished(const TQuery::TNotifyBscConversionFinished& cmd);
+
+        TBridgePileId AddedBridgePileId; // set while adding pile, BaseConfig is requested for it
+
+        void AddBridgePile(const TQuery::TAddBridgePile& cmd);
+        void AddBridgePileWithBaseConfig();
+        void NotifyBridgePileOperation(const TQuery::TNotifyBridgePileOperation& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Retro trace collection

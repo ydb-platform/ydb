@@ -106,4 +106,16 @@ private:
     bool AllowEmptyDatabase = false;
 };
 
+class TCommandBridgeAddPile : public TYdbCommand {
+public:
+    TCommandBridgeAddPile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
 }

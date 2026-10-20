@@ -355,6 +355,19 @@ message TEvNodeConfigInvokeOnRoot {
     message TNotifyBscConversionFinished {
     }
 
+    // Add INACTIVE pile to the cluster: allocate its parts of static groups and state storage, make it DISCONNECTED,
+    // then BSC adds its parts to the groups it manages; the pile may be rejoined when the operation is finished.
+    message TAddBridgePile {
+        string PileName = 1;
+    }
+
+    // Sent by BSC when it has performed its part of pending pile operation, or has failed to do so (then it retries).
+    message TNotifyBridgePileOperation {
+        uint32 BridgePileId = 1;
+        optional string ErrorReason = 2; // set on failure
+        NKikimrBridge.TClusterStateDetails.TPendingPileOperation.EKind Kind = 3;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -380,6 +393,8 @@ message TEvNodeConfigInvokeOnRoot {
         TConvertToBridge ConvertToBridge = 25;
         TNotifyBscConversionFinished NotifyBscConversionFinished = 26;
         TValidateTargetedProposition ValidateTargetedProposition = 27;
+        TAddBridgePile AddBridgePile = 28;
+        TNotifyBridgePileOperation NotifyBridgePileOperation = 29;
     }
 }
 
@@ -449,4 +464,5 @@ message TConnectivityPayload {
     optional uint32 BridgePileId = 2; // bridge pile id of a sender
     TStorageConfig CommittedStorageConfig = 3; // committed version of storage config
     optional string BridgePileName = 4; // bridge pile name of a sender (if its location has one)
+    bool PileListChangeCapable = 5; // sender takes pile ids from pile registry, not from positions in BridgeConfig
 }

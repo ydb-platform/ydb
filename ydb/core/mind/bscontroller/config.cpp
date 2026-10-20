@@ -540,7 +540,7 @@ namespace NKikimr::NBsController {
 
         std::optional<TString> TBlobStorageController::ValidateAndCommitConfigUpdate(std::optional<TConfigState>& state,
                 TConfigTxFlags flags, TTransactionContext& txc,
-                NKikimrBlobStorage::TConfigResponse *response) {
+                NKikimrBlobStorage::TConfigResponse *response, bool dryRun) {
             if (!state || !state->Changed()) {
                 return std::nullopt;
             }
@@ -555,6 +555,9 @@ namespace NKikimr::NBsController {
             if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
+            } else if (dryRun) {
+                RollbackConfigUpdate(state);
+                return std::nullopt;
             }
 
             CommitConfigUpdates(*state, txc);

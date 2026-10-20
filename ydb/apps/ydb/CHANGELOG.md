@@ -1,3 +1,5 @@
+* Added `ydb admin bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin bridge list`.
+
 * Added `ydb bridge convert` to migrate an ordinary cluster to single-pile bridge mode.
 
 * Added support for repeating `--pile` in `ydb admin cluster bridge failover` to disconnect multiple failed piles in one operation.

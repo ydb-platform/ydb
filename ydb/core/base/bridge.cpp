@@ -109,6 +109,8 @@ namespace NKikimr {
                 }
             }
 
+            res.SetPileListChanged(registry.GetPileListChanged());
+
             return res;
         }
 
@@ -199,6 +201,16 @@ namespace NKikimr {
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPrimaryPile);
             TBridgePileId::FromPileIndex(0).CopyToProto(&state, &NKikimrBridge::TClusterState::SetPromotedPile);
             return state;
+        }
+
+        NKikimrBridge::TGroupState::TPile *AddGroupPile(NKikimrBridge::TGroupState *state, TBridgePileId bridgePileId) {
+            Y_ABORT_UNLESS(bridgePileId && !GetGroupPile(*state, bridgePileId));
+            while (state->PileSize() <= bridgePileId.GetPileIndex()) {
+                state->AddPile()->SetAbsent(true);
+            }
+            auto *pile = state->MutablePile(bridgePileId.GetPileIndex());
+            pile->Clear();
+            return pile;
         }
 
     } // NBridge

@@ -22,11 +22,15 @@ public:
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
 
         Y_ABORT_UNLESS(Config.HasClusterStateDetails());
+        const TBridgePileId pendingOperationPileId = Self->GetPendingOperationPileId();
         for (const auto& pss : Config.GetClusterStateDetails().GetPileSyncState()) {
             if (!pss.GetUnsyncedBSC()) {
                 continue;
             }
             const auto unsyncedBridgePileId = TBridgePileId::FromProto(&pss, &std::decay_t<decltype(pss)>::GetBridgePileId);
+            if (unsyncedBridgePileId == pendingOperationPileId) {
+                continue; // groups don't have all their parts in this pile yet
+            }
             bool somethingUnsynced = false;
 
             // find all bridged groups and check their sync states
@@ -324,40 +328,207 @@ public:
     }
 };
 
-void TBlobStorageController::CheckBridgeConversion() {
-    if (!Loaded || !StorageConfig || !StorageConfig->GetClusterStateDetails().GetBscConversionPending()) {
-        return;
-    } else if (ConvertingToBridge) {
-        RecheckBridgeConversion = true;
+bool TBlobStorageController::StartRetriableStep(TRetriableStep& step) {
+    if (step.Running) {
+        step.Recheck = true;
+        return false;
+    }
+    step.Running = true;
+    step.Recheck = false;
+    return true;
+}
+
+bool TBlobStorageController::FinishRetriableStep(TRetriableStep& step, bool failed) {
+    Y_ABORT_UNLESS(step.Running);
+    step.Running = false;
+    if (step.Recheck) {
+        return true;
+    } else if (failed) {
+        // nothing else may trigger the check on a quiet cluster, so repeat the whole step (not just the notification, as
+        // the conditions might have changed meanwhile) after a while
+        if (!step.RetryScheduled) {
+            step.RetryScheduled = true;
+            TActivationContext::Schedule(step.RetryBackoff.Next(), new IEventHandle(step.RetryEventType, 0, SelfId(),
+                {}, nullptr, 0));
+        }
     } else {
-        ConvertingToBridge = true;
-        RecheckBridgeConversion = false;
+        step.RetryBackoff.Reset();
+    }
+    return false;
+}
+
+void TBlobStorageController::OnRetriableStepRetry(TRetriableStep& step) {
+    Y_ABORT_UNLESS(step.RetryScheduled);
+    step.RetryScheduled = false;
+}
+
+void TBlobStorageController::CheckBridgeConversion() {
+    if (Loaded && StorageConfig && StorageConfig->GetClusterStateDetails().GetBscConversionPending() &&
+            StartRetriableStep(BridgeConversionStep)) {
         Execute(std::make_unique<TTxConvertToBridge>(this));
     }
 }
 
 void TBlobStorageController::OnBridgeConversionStepDone(bool failed) {
-    Y_ABORT_UNLESS(ConvertingToBridge);
-    ConvertingToBridge = false;
-    if (RecheckBridgeConversion) {
+    if (FinishRetriableStep(BridgeConversionStep, failed)) {
         CheckBridgeConversion();
-    } else if (failed) {
-        // nothing else may trigger the check on a quiet cluster, so repeat the whole step (not just the notification, as
-        // the conditions might have changed meanwhile) after a while
-        if (!BridgeConversionRetryScheduled) {
-            BridgeConversionRetryScheduled = true;
-            TActivationContext::Schedule(BridgeConversionRetryBackoff.Next(), new IEventHandle(
-                TEvPrivate::EvRetryBridgeConversion, 0, SelfId(), {}, nullptr, 0));
-        }
-    } else {
-        BridgeConversionRetryBackoff.Reset();
     }
 }
 
 void TBlobStorageController::HandleRetryBridgeConversion() {
-    Y_ABORT_UNLESS(BridgeConversionRetryScheduled);
-    BridgeConversionRetryScheduled = false;
+    OnRetriableStepRetry(BridgeConversionStep);
     CheckBridgeConversion();
+}
+
+class TBlobStorageController::TTxAddBridgePile : public TTransactionBase<TBlobStorageController> {
+    const TBridgePileId PileId;
+    const ui64 BecameUnsyncedGeneration;
+    // set when validating addition of the pile against the proposed storage config without committing anything
+    const std::optional<NKikimrBlobStorage::TStorageConfig> ProposedStorageConfig;
+    std::unique_ptr<IEventHandle> Response;
+    std::optional<TConfigState> State;
+    std::vector<std::tuple<TGroupId, TGroupId>> Added;
+    std::optional<TString> Error;
+
+public:
+    TTxAddBridgePile(TBlobStorageController *controller, TBridgePileId pileId, ui64 becameUnsyncedGeneration)
+        : TTransactionBase(controller)
+        , PileId(pileId)
+        , BecameUnsyncedGeneration(becameUnsyncedGeneration)
+    {}
+
+    TTxAddBridgePile(TBlobStorageController *controller, TBridgePileId pileId,
+            NKikimrBlobStorage::TStorageConfig&& proposedStorageConfig, std::unique_ptr<IEventHandle> response)
+        : TTransactionBase(controller)
+        , PileId(pileId)
+        , BecameUnsyncedGeneration(0)
+        , ProposedStorageConfig(std::move(proposedStorageConfig))
+        , Response(std::move(response))
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_ADD_BRIDGE_PILE; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic(),
+            ProposedStorageConfig ? &*ProposedStorageConfig : nullptr);
+
+        try {
+            Self->AddBridgePileGroups(*State, PileId, BecameUnsyncedGeneration, &Added);
+        } catch (const TExError& ex) {
+            Error = ex.what();
+            Self->RollbackConfigUpdate(State);
+            return true;
+        }
+
+        Error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc, nullptr,
+            /*dryRun=*/ static_cast<bool>(ProposedStorageConfig));
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (State) {
+            State->ApplyConfigUpdates();
+        }
+
+        YDB_LOG(Error ? PRI_ERROR : PRI_INFO, "Bridge pile addition step complete",
+            {"marker", "BSCBR17"},
+            {"dryRun", static_cast<bool>(Response)},
+            {"pileId", PileId},
+            {"numAdded", Added.size()},
+            {"error", Error.value_or("")});
+
+        if (Response) {
+            auto& record = Response->Get<TEvBlobStorage::TEvControllerDistconfResponse>()->Record;
+            if (Error) {
+                record.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                record.SetErrorReason(*Error);
+            }
+            TActivationContext::Send(Response.release());
+            return;
+        }
+
+        if (!Error) {
+            // new parts are unsynced from the very beginning, they get synced when the pile rejoins
+            for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
+                const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,
+                    targetGroupId);
+                if (inserted) {
+                    Self->SyncersRequiringAction.PushBack(&it->second);
+                }
+            }
+            Self->ProcessSyncers();
+        }
+
+        Self->OnBridgePileOperationStepDone(PileId, NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD,
+            std::move(Error));
+    }
+};
+
+ITransaction* TBlobStorageController::CreateTxValidateAddBridgePile(TBridgePileId pileId,
+        NKikimrBlobStorage::TStorageConfig&& storageConfig, std::unique_ptr<IEventHandle> response) {
+    return new TTxAddBridgePile(this, pileId, std::move(storageConfig), std::move(response));
+}
+
+TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
+    return StorageConfig ? NBridge::GetPendingPileOperationPileId(StorageConfig->GetClusterStateDetails()) : TBridgePileId();
+}
+
+void TBlobStorageController::CheckBridgePileOperation() {
+    const TBridgePileId pileId = GetPendingOperationPileId();
+    if (!Loaded || !pileId || !StartRetriableStep(BridgePileOperationStep)) {
+        return;
+    }
+
+    const auto& details = StorageConfig->GetClusterStateDetails();
+    using TOperation = NKikimrBridge::TClusterStateDetails::TPendingPileOperation;
+    switch (details.GetPendingPileOperation().GetKind()) {
+        case TOperation::ADD: {
+            ui64 becameUnsyncedGeneration = 0;
+            for (const auto& pss : details.GetPileSyncState()) {
+                if (TBridgePileId::FromProto(&pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                        pileId) {
+                    becameUnsyncedGeneration = pss.GetBecameUnsyncedGeneration();
+                }
+            }
+            Y_DEBUG_ABORT_UNLESS(becameUnsyncedGeneration); // the pile being added is unsynced
+            Execute(std::make_unique<TTxAddBridgePile>(this, pileId, becameUnsyncedGeneration));
+            break;
+        }
+
+        case NKikimrBridge::TClusterStateDetails_TPendingPileOperation_EKind_TClusterStateDetails_TPendingPileOperation_EKind_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKikimrBridge::TClusterStateDetails_TPendingPileOperation_EKind_TClusterStateDetails_TPendingPileOperation_EKind_INT_MAX_SENTINEL_DO_NOT_USE_:
+            Y_ABORT();
+    }
+}
+
+void TBlobStorageController::OnBridgePileOperationStepDone(TBridgePileId pileId,
+        NKikimrBridge::TClusterStateDetails::TPendingPileOperation::EKind kind, std::optional<TString> error) {
+    // report the result to distconf: success finishes the operation, failure gets recorded (unless it is the same one)
+    // and the operation is retried
+    NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
+    auto *cmd = request.MutableNotifyBridgePileOperation();
+    pileId.CopyToProto(cmd, &NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgePileOperation::SetBridgePileId);
+    cmd->SetKind(kind);
+    if (error) {
+        cmd->SetErrorReason(*error);
+    }
+    InvokeOnRoot(std::move(request), [this, failed = error.has_value()](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+        const bool notified = result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+        if (!notified) {
+            YDB_LOG_WARN("Failed to notify distconf about bridge pile operation",
+                {"marker", "BSCBR18"},
+                {"result", result});
+        }
+        if (FinishRetriableStep(BridgePileOperationStep, failed || !notified)) {
+            CheckBridgePileOperation();
+        }
+    });
+}
+
+void TBlobStorageController::HandleRetryBridgePileOperation() {
+    OnRetriableStepRetry(BridgePileOperationStep);
+    CheckBridgePileOperation();
 }
 
 void TBlobStorageController::CheckUnsyncedBridgePiles() {

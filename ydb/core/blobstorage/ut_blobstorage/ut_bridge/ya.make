@@ -6,6 +6,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SRCS(
         bridge_assimilation.cpp
+        bridge_failover.cpp
         bridge_cluster_state.cpp
         bridge_conversion.cpp
         bridge_decommit.cpp

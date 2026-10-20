@@ -1,5 +1,7 @@
 * Added `ydb bridge convert` to migrate an ordinary cluster to single-pile bridge mode.
 
+* Added support for repeating `--pile` in `ydb admin cluster bridge failover` to disconnect multiple failed piles in one operation.
+
 
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 

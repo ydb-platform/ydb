@@ -260,15 +260,15 @@ int TCommandBridgeSwitchover::Run(TConfig& config) {
 }
 
 TCommandBridgeFailover::TCommandBridgeFailover(bool allowEmptyDatabase)
-    : TYdbCommand("failover", {}, "Perform an emergency failover when a pile becomes unresponsive")
+    : TYdbCommand("failover", {}, "Perform an emergency failover when one or more piles become unresponsive")
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
 void TCommandBridgeFailover::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("pile", "Name of the pile that is down.")
-        .Required().RequiredArgument("PILE_NAME").StoreResult(&DownPile);
+    config.Opts->AddLongOption("pile", "Name of a pile that is down. Can be used multiple times.")
+        .Required().RequiredArgument("PILE_NAME").AppendTo(&DownPiles);
     config.Opts->AddLongOption("new-primary", "Name of the pile to become the new primary (optional, only if the target pile was the primary).")
         .Optional().RequiredArgument("PILE_NAME").StoreResult(&NewPrimaryPile);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -284,7 +284,9 @@ int TCommandBridgeFailover::Run(TConfig& config) {
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
     std::vector<NYdb::NBridge::TPileStateUpdate> updates;
-    updates.push_back({DownPile, NYdb::NBridge::EPileState::DISCONNECTED});
+    for (const auto& pile : DownPiles) {
+        updates.push_back({pile, NYdb::NBridge::EPileState::DISCONNECTED});
+    }
     if (!NewPrimaryPile.empty()) {
         updates.push_back({NewPrimaryPile, NYdb::NBridge::EPileState::PRIMARY});
     }

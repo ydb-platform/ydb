@@ -36,7 +36,7 @@ std::optional<NArrow::NSSA::TBloomNgramSizes> TIndexInfo::GetBloomNgramSize(cons
             continue;
         }
         if (!sizes) {
-            sizes = NArrow::NSSA::TBloomNgramSizes{*ngramSize, *ngramSize};
+            sizes = NArrow::NSSA::TBloomNgramSizes{ *ngramSize, *ngramSize };
         } else {
             sizes->Min = std::min(sizes->Min, *ngramSize);
             sizes->Max = std::max(sizes->Max, *ngramSize);

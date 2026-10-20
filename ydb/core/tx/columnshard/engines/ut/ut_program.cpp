@@ -861,7 +861,7 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             if (!NgramSize) {
                 return std::nullopt;
             }
-            return NArrow::NSSA::TBloomNgramSizes{*NgramSize, MaxNgramSize.value_or(*NgramSize)};
+            return NArrow::NSSA::TBloomNgramSizes{ *NgramSize, MaxNgramSize.value_or(*NgramSize) };
         }
     };
 
@@ -872,7 +872,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         TFixedNgramResolver columnResolver(indexInfo);
         columnResolver.NgramSize = 3;
 
-        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex, const bool asFilter = true) {
+        auto makeProgram = [&](const TString& pattern, const bool caseSensitive, const std::optional<ui32> argumentIndex,
+                               const bool asFilter = true) {
             NKikimrSSA::TProgram programProto;
             {
                 auto* command = programProto.AddCommand();

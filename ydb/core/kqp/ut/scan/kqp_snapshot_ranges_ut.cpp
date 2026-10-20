@@ -296,14 +296,20 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRanges) {
         AssertFullTable(plan.Build());
     }
 
-    Y_UNIT_TEST(EmptyRangeIsSkippedNextToOtherRanges) {
-        TSnapshotPlan plan;
-        SetRange(plan.AddRead(), 200, 100);
-        SetRange(plan.AddRead(), 100, 200);
-        const auto tables = plan.Build();
-        const auto& range = GetRange(tables);
-        UNIT_ASSERT_VALUES_EQUAL(range.GetFrom().GetValue().GetTuple(0).GetOptional().GetUint64(), 100);
-        UNIT_ASSERT_VALUES_EQUAL(range.GetTo().GetValue().GetTuple(0).GetOptional().GetUint64(), 200);
+    Y_UNIT_TEST(EmptyRangeNextToOtherRangesUsesFullTable) {
+        // The legacy scan sends an empty range to a shard as well, so the
+        // snapshot cannot skip it.
+        for (bool emptyFirst : {false, true}) {
+            TSnapshotPlan plan;
+            if (emptyFirst) {
+                SetRange(plan.AddRead(), 200, 100);
+            }
+            SetRange(plan.AddRead(), 100, 200);
+            if (!emptyFirst) {
+                SetRange(plan.AddRead(), 200, 100);
+            }
+            AssertFullTable(plan.Build());
+        }
     }
 
     Y_UNIT_TEST(PointReadUsesBothInclusiveBounds) {

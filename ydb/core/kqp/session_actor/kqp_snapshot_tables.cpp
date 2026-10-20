@@ -91,17 +91,13 @@ bool ParseBound(const NKikimrMiniKQL::TParams& bound, const TVector<NScheme::TTy
     return true;
 }
 
-enum class EKeyRange {
-    Ok,
-    Empty,
-    Unsupported,
-};
-
-EKeyRange FillKeyRange(const NKqpProto::TKqpPhyKeyRange& range, const TTableConstInfo& table,
+// Returns false if the range cannot be safely represented as a TxProxy key
+// range: the bounds are not convertible, or the range is empty.
+bool FillKeyRange(const NKqpProto::TKqpPhyKeyRange& range, const TTableConstInfo& table,
     TQueryData& queryData, NKikimrTxUserProxy::TKeyRange& result)
 {
     if (!FillBound(range.GetFrom(), queryData, *result.MutableFrom())) {
-        return EKeyRange::Unsupported;
+        return false;
     }
     // The compiler also sets RangeIsPoint for identical inclusive key prefixes.
     // Like ExtractRanges in kqp_partition_helper.cpp, only treat a complete key
@@ -112,30 +108,26 @@ EKeyRange FillKeyRange(const NKqpProto::TKqpPhyKeyRange& range, const TTableCons
         result.SetToInclusive(true);
         // A complete key is never an empty range, parsing only checks the types.
         TSerializedCellVec key;
-        return ParseBound(result.GetFrom(), table.KeyColumnTypes, false, key)
-            ? EKeyRange::Ok
-            : EKeyRange::Unsupported;
+        return ParseBound(result.GetFrom(), table.KeyColumnTypes, false, key);
     }
     if (!FillBound(range.GetTo(), queryData, *result.MutableTo())) {
-        return EKeyRange::Unsupported;
+        return false;
     }
     result.SetFromInclusive(range.GetFrom().GetIsInclusive());
     result.SetToInclusive(range.GetTo().GetIsInclusive());
-    // TxProxy rejects empty ranges, so they have to be detected here. Bounds
-    // are expanded the same way TxProxy does it in resolvereq.cpp.
+    // Bounds are expanded the same way TxProxy does it in resolvereq.cpp.
     TSerializedCellVec from;
     TSerializedCellVec to;
     if (!ParseBound(result.GetFrom(), table.KeyColumnTypes, result.GetFromInclusive(), from) ||
         !ParseBound(result.GetTo(), table.KeyColumnTypes, !result.GetToInclusive(), to))
     {
-        return EKeyRange::Unsupported;
+        return false;
     }
-    if (TTableRange(from.GetCells(), result.GetFromInclusive(), to.GetCells(), result.GetToInclusive())
-        .IsEmptyRange(table.KeyColumnTypes))
-    {
-        return EKeyRange::Empty;
-    }
-    return EKeyRange::Ok;
+    // TxProxy rejects empty ranges. They cannot be skipped either: the legacy
+    // scan still sends an empty (inverted) range to the shard that holds its
+    // From bound, and that shard needs the snapshot.
+    return !TTableRange(from.GetCells(), result.GetFromInclusive(), to.GetCells(), result.GetToInclusive())
+        .IsEmptyRange(table.KeyColumnTypes);
 }
 
 } // namespace
@@ -158,25 +150,15 @@ TVector<TSnapshotTable> BuildSnapshotTables(const TPreparedQueryHolder& prepared
             for (const auto* range : table.KeyRanges) {
                 TSnapshotTable entry;
                 entry.SetTablePath(table.Path);
-                switch (FillKeyRange(*range, *info, queryData, *entry.MutableKeyRange())) {
-                    case EKeyRange::Ok:
-                        ranges.push_back(std::move(entry));
-                        break;
-                    case EKeyRange::Empty:
-                        break;
-                    case EKeyRange::Unsupported:
-                        wholeTable = true;
-                        break;
-                }
-                if (wholeTable) {
+                if (!FillKeyRange(*range, *info, queryData, *entry.MutableKeyRange())) {
+                    wholeTable = true;
                     break;
                 }
+                ranges.push_back(std::move(entry));
             }
         }
 
-        // A table that is only read by empty ranges is still snapshotted as a
-        // whole, the same way it was before ranges were passed to TxProxy.
-        if (wholeTable || ranges.empty()) {
+        if (wholeTable) {
             result.emplace_back().SetTablePath(table.Path);
         } else {
             std::move(ranges.begin(), ranges.end(), std::back_inserter(result));

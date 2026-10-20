@@ -1041,6 +1041,10 @@ public:
         return OutputOffsets;
     }
 
+    std::optional<ui64> GetLastMessageOffset() const override {
+        return Buffer.Offsets.empty() ? std::nullopt : std::optional<ui64>(Buffer.Offsets.back());
+    }
+
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         if (auto status = Columns[columnId].GetStatus(); !Config.SkipErrors && status.IsFail()) {
             return status;

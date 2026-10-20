@@ -111,7 +111,7 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     if (memoryLimit && !IsSourceInMemory()) {
         const auto accessor = ExtractPortionAccessor();
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
+        StageResult->BuildResultPages(*accessor, *memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds());
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         if (StageResult->IsEmpty()) {

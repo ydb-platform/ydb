@@ -223,6 +223,34 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRanges) {
         UNIT_ASSERT_VALUES_EQUAL(GetRange(tables).GetTo().GetValue().GetTuple(0).GetOptional().GetUint64(), 200);
     }
 
+    Y_UNIT_TEST(TupleParameterUnrelatedNullElementIsIgnored) {
+        TSnapshotPlan plan;
+        NKikimrMiniKQL::TType type;
+        type.SetKind(NKikimrMiniKQL::Tuple);
+        auto* first = type.MutableTuple()->AddElement();
+        first->SetKind(NKikimrMiniKQL::Data);
+        first->MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
+        type.MutableTuple()->AddElement()->SetKind(NKikimrMiniKQL::Void);
+        NKikimrMiniKQL::TValue value;
+        value.AddTuple()->SetUint64(100);
+        value.AddTuple();
+        UNIT_ASSERT(plan.Params.AddMkqlParam("bounds", type, value));
+        auto* binding = plan.Tx->AddParamBindings();
+        binding->SetName("bounds");
+        binding->MutableExternalBinding();
+        auto* range = plan.AddRead();
+        range->MutableFrom()->SetIsInclusive(true);
+        auto* from = range->MutableFrom()->AddValues()->MutableParamElementValue();
+        from->SetParamName("bounds");
+        from->SetElementIndex(0);
+        AddLiteral(range->MutableTo(), 200);
+        range->MutableTo()->SetIsInclusive(true);
+        const auto tables = plan.Build();
+        UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetRange(tables).GetFrom().GetValue().GetTuple(0).GetOptional().GetUint64(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(GetRange(tables).GetTo().GetValue().GetTuple(0).GetOptional().GetUint64(), 200);
+    }
+
     Y_UNIT_TEST(UnknownReadDominatesKnownRange) {
         for (bool unknownFirst : {false, true}) {
             TSnapshotPlan plan;

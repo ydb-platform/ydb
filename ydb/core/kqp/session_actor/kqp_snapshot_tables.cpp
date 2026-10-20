@@ -18,8 +18,6 @@ bool FillBound(const NKqpProto::TKqpPhyKeyBound& bound, TQueryData& queryData, N
     for (const auto& value : bound.GetValues()) {
         NKikimrMiniKQL::TType ownedType;
         NKikimrMiniKQL::TValue ownedValue;
-        const NKikimrMiniKQL::TType* type = &ownedType;
-        const NKikimrMiniKQL::TValue* item = &ownedValue;
         auto convert = [&](const Ydb::TypedValue& typedValue) {
             ConvertYdbTypeToMiniKQLType(typedValue.type(), ownedType);
             ConvertYdbValueToMiniKQLValue(typedValue.type(), typedValue.value(), ownedValue);
@@ -36,16 +34,22 @@ bool FillBound(const NKqpProto::TKqpPhyKeyBound& bound, TQueryData& queryData, N
             if (!parameter) {
                 return false;
             }
-            convert(*parameter);
             if (value.HasParamElementValue()) {
+                // Convert only the referenced element: other fields of the tuple
+                // may have types that cannot be converted, e.g. Null.
                 const auto index = value.GetParamElementValue().GetElementIndex();
-                if (type->GetKind() != NKikimrMiniKQL::Tuple ||
-                    index >= type->GetTuple().ElementSize() || index >= item->TupleSize())
+                if (parameter->type().type_case() != Ydb::Type::kTupleType ||
+                    index >= static_cast<ui32>(parameter->type().tuple_type().elements_size()) ||
+                    index >= static_cast<ui32>(parameter->value().items_size()))
                 {
                     return false;
                 }
-                type = &type->GetTuple().GetElement(index);
-                item = &item->GetTuple(index);
+                Ydb::TypedValue tupleElement;
+                *tupleElement.mutable_type() = parameter->type().tuple_type().elements(index);
+                *tupleElement.mutable_value() = parameter->value().items(index);
+                convert(tupleElement);
+            } else {
+                convert(*parameter);
             }
         }
 
@@ -53,15 +57,15 @@ bool FillBound(const NKqpProto::TKqpPhyKeyBound& bound, TQueryData& queryData, N
         // NOT NULL keys. KQP's physical bounds may contain non-optional values.
         auto* elementType = result.MutableType()->MutableTuple()->AddElement();
         auto* element = result.MutableValue()->AddTuple();
-        if (type->GetKind() == NKikimrMiniKQL::Data) {
+        if (ownedType.GetKind() == NKikimrMiniKQL::Data) {
             elementType->SetKind(NKikimrMiniKQL::Optional);
-            elementType->MutableOptional()->MutableItem()->CopyFrom(*type);
-            element->MutableOptional()->CopyFrom(*item);
-        } else if (type->GetKind() == NKikimrMiniKQL::Optional &&
-            type->GetOptional().GetItem().GetKind() == NKikimrMiniKQL::Data)
+            elementType->MutableOptional()->MutableItem()->CopyFrom(ownedType);
+            element->MutableOptional()->CopyFrom(ownedValue);
+        } else if (ownedType.GetKind() == NKikimrMiniKQL::Optional &&
+            ownedType.GetOptional().GetItem().GetKind() == NKikimrMiniKQL::Data)
         {
-            elementType->CopyFrom(*type);
-            element->CopyFrom(*item);
+            elementType->CopyFrom(ownedType);
+            element->CopyFrom(ownedValue);
         } else {
             return false;
         }

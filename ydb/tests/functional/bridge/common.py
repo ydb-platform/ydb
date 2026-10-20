@@ -7,11 +7,37 @@ from ydb.tests.library.harness.util import LogLevels
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.public.api.protos.ydb_bridge_common_pb2 import PileState
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as bridge
+from ydb.public.api.protos.ydb_keyvalue_pb2 import ReadResult
 
 from hamcrest import assert_that, is_, has_entries
 
 import logging
 import time
+
+
+def value_for(key, tablet_id):
+    return "Value: <key = {key}, tablet_id = {tablet_id}>".format(key=key, tablet_id=tablet_id)
+
+
+def kv_readable(kv_client, table_path, tablet_ids, key, logger=logging.getLogger(__name__)):
+    for partition_id, tablet_id in enumerate(tablet_ids):
+        read_resp = kv_client.kv_read(table_path, partition_id, key)
+        if read_resp.operation.status != StatusIds.SUCCESS:
+            logger.debug("kv_read failed: %s", read_resp)
+            return False
+        result = ReadResult()
+        assert_that(read_resp.operation.result.Unpack(result))
+        assert_that(result.value.decode("utf-8") == value_for(key, tablet_id))
+    return True
+
+
+def kv_works(kv_client, table_path, tablet_ids, key, logger=logging.getLogger(__name__)):
+    for partition_id, tablet_id in enumerate(tablet_ids):
+        write_resp = kv_client.kv_write(table_path, partition_id, key, value_for(key, tablet_id))
+        if write_resp.operation.status != StatusIds.SUCCESS:
+            logger.debug("kv_write failed: %s", write_resp)
+            return False
+    return kv_readable(kv_client, table_path, tablet_ids, key, logger)
 
 
 class BridgeKiKiMRTest(object):
@@ -100,6 +126,8 @@ class BridgeKiKiMRTest(object):
             transient = response.operation.status == StatusIds.INTERNAL_ERROR and any(
                 issue in str(response.operation.issues) for issue in (
                     "No quorum to start propose/commit configuration", "Hop node disconnected",
+                    # nodes are still rebinding after another pile has been disconnected
+                    "No quorum for bridge configuration collection",
                 )
             )
             if expected_status != StatusIds.SUCCESS or not transient or time.monotonic() >= deadline:

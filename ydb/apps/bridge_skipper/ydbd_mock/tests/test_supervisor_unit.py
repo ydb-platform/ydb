@@ -116,8 +116,10 @@ class SupervisorRegressionTest(unittest.TestCase):
             args = argparse.Namespace(topology=incoming_path, piles="", nodes_per_pile=3,
                                       cluster_name=None, control_base_port=None, grpc_base_port=None,
                                       set=[], fresh=False, log_level="INFO")
+
             def unexpected_spawn(pile, truncate_logs=False):
                 raise supervisor.SupervisorError("unexpected child launch")
+
             cluster.spawn = unexpected_spawn
             with self.assertRaises(supervisor.SupervisorError):
                 supervisor.cmd_up(cluster, args)
@@ -128,8 +130,10 @@ class SupervisorRegressionTest(unittest.TestCase):
 
     def test_revived_keeper_split_reapplies_fault_to_every_node(self):
         class FakeCluster:
-            _macros = lambda self: [{"kind": "keeper_split", "pile": "pile1", "already": ["mock-pile1-2"]}]
             topology = Topology(["pile1", "pile2"], 3)
+
+            def _macros(self):
+                return [{"kind": "keeper_split", "pile": "pile1", "already": ["mock-pile1-2"]}]
 
             def request(self, pile, method, path, body):
                 calls.append((pile, body))

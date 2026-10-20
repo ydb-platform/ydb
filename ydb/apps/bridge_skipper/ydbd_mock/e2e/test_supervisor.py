@@ -3,7 +3,6 @@ import json
 import os
 import socket
 import subprocess
-import sys
 import tempfile
 import time
 import unittest
@@ -111,7 +110,6 @@ class SupervisorTest(E2ECase):
         self.assertEqual([(e["name"], e["field_target"] if "field_target" in e else e["target"]) for e in mine],
                          [("kill", "pile2"), ("revive", "pile2")])
         self.assertEqual(mine[0]["pile"], "pile1", "a dead pile cannot log: a live one does")
-
 
     def test_stop_and_cont_freeze_a_process(self):
         self.assertEqual(self.cluster.ctl("stop", "pile2").code, 0)

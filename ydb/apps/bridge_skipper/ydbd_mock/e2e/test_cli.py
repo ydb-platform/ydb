@@ -3,7 +3,6 @@
 Needs the ydb CLI at ~/ydb/bin/ydb (or YDBD_MOCK_REAL_YDB). The CLI only ever talks to the
 mock: the shim refuses every other endpoint.
 """
-import json
 import subprocess
 import sys
 import unittest

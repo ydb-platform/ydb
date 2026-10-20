@@ -4,8 +4,6 @@ Every method goes through the node's fault hook. Application errors are ready Op
 with a status, never gRPC errors. Methods the mock does not override, and services it does not
 register, answer gRPC UNIMPLEMENTED and record an `rpc.unimplemented` event.
 """
-import typing
-
 import grpc
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import config_yaml, health, model, operations
@@ -17,7 +15,6 @@ from ydb.public.api.grpc import ydb_monitoring_v1_pb2
 from ydb.public.api.grpc import ydb_monitoring_v1_pb2_grpc
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc
-from ydb.public.api.protos import ydb_bridge_common_pb2
 from ydb.public.api.protos import ydb_config_pb2
 from ydb.public.api.protos import ydb_discovery_pb2
 from ydb.public.api.protos import ydb_monitoring_pb2

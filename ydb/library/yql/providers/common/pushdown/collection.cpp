@@ -842,7 +842,7 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
     }
     settings.Pattern = regexp->ChildPtr(1);
     settings.Haystack = apply.Ref().ChildPtr(1);
-    if (regexp->ChildrenSize() >= 2) {
+    if (regexp->ChildrenSize() > 2) {
         settings.Escape = regexp->ChildPtr(2);
     }
     auto just = runConfigValue.ChildPtr(1);

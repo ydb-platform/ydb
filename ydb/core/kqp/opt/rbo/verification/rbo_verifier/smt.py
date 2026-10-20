@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Iterator, Sequence, TypeAlias
 
@@ -26,6 +27,10 @@ _MAX_STRUCTURAL_CSE_SCOPE_NODES = 16_384
 _MAX_FLATTENED_JUNCTION_CHILDREN = 32
 # Retain at most one rendered obligation for repeated check/model queries.
 _MAX_RENDERED_BODY_BYTES = 128 * 1024 * 1024
+# Quantifier bodies are closed rendering scopes, reusable across obligations.
+_MAX_RENDERED_SCOPE_BYTES = 128 * 1024 * 1024
+_MAX_RENDERED_SCOPE_ENTRIES = 4096
+_MIN_SCOPE_CACHE_DAG_NODES = 65_536
 
 
 class SmtError(ValueError):
@@ -112,14 +117,55 @@ class Term:
         return _render_scope(self, context)
 
 
+class _ScopeRenderCache:
+    """Bounded identity cache of independently hygienic quantifier bodies."""
+
+    def __init__(self) -> None:
+        self.entries: OrderedDict[int, tuple[Term, str, frozenset[str], int]] = OrderedDict()
+        self.bytes = 0
+
+    def source_names(self, root: Term) -> frozenset[str] | None:
+        cached = self.entries.get(id(root))
+        return cached[2] if cached is not None and cached[0] is root else None
+
+    def render(self, root: Term) -> str:
+        identity = id(root)
+        cached = self.entries.get(identity)
+        if cached is not None and cached[0] is root:
+            self.entries.move_to_end(identity)
+            return cached[1]
+        # No containing-scope aliases are visible to the body renderer. Reserve
+        # every source symbol/function used below this root before allocating
+        # local lets, including names shadowed by nested quantifier binders.
+        context = _RenderContext((), self)
+        context.reserve((root,))
+        source_names = frozenset(context.reserved)
+        rendered = _render_scope(root, context)
+        size = (sys.getsizeof(rendered) + sys.getsizeof(source_names)
+                + sum(sys.getsizeof(name) for name in source_names))
+        if size <= _MAX_RENDERED_SCOPE_BYTES and _MAX_RENDERED_SCOPE_ENTRIES > 0:
+            while self.entries and (
+                self.bytes + size > _MAX_RENDERED_SCOPE_BYTES
+                or len(self.entries) >= _MAX_RENDERED_SCOPE_ENTRIES
+            ):
+                _, removed = self.entries.popitem(last=False)
+                self.bytes -= removed[3]
+            # Keep the immutable root alive: identity reuse must never produce
+            # a cache hit for a different term.
+            self.entries[identity] = (root, rendered, source_names, size)
+            self.bytes += size
+        return rendered
+
+
 class _RenderContext:
     """Allocate hygienic aliases across all scopes in one rendered script."""
 
-    def __init__(self, reserved: Iterable[str]) -> None:
+    def __init__(self, reserved: Iterable[str], scope_cache: _ScopeRenderCache | None = None) -> None:
+        self.scope_cache = scope_cache
         self.reserved = set(reserved)
         self.next_alias = 0
 
-    def reserve(self, roots: Iterable[Term]) -> None:
+    def reserve(self, roots: Iterable[Term]) -> int:
         """Reserve names once across the complete shared assertion DAG."""
         pending = list(roots)
         seen: set[int] = set()
@@ -129,11 +175,20 @@ class _RenderContext:
             if identity in seen:
                 continue
             seen.add(identity)
+            cached_names = (self.scope_cache.source_names(term)
+                            if self.scope_cache is not None else None)
+            if cached_names is not None:
+                # Outer lets must also avoid every free name in
+                # a cached body. Reuse its complete source-name
+                # set instead of walking the immutable DAG again.
+                self.reserved.update(cached_names)
+                continue
             self.reserved.add(term.operation)
             if term.operation == "symbol":
                 assert isinstance(term.atom, str)
                 self.reserved.add(term.atom)
             pending.extend(term.arguments)
+        return len(seen)
 
     def fresh_alias(self) -> str:
         while True:
@@ -454,10 +509,9 @@ def _render_term(
                 f"({variable.render()} {variable.sort})"
                 for variable in variables
             )
-            pieces.append(
-                f"({item.operation} ({bindings}) "
-                f"{_render_scope(body, context)})"
-            )
+            rendered_body = (context.scope_cache.render(body) if context.scope_cache is not None
+                             else _render_scope(body, context))
+            pieces.append(f"({item.operation} ({bindings}) {rendered_body})")
             continue
         if not item.arguments:
             pieces.append(item.operation)
@@ -1007,6 +1061,7 @@ class Script:
         self._next_symbol = 0
         self._declarations: list[DeclarationRecord] = []
         self._rendered_body: tuple[tuple[int, int, int], Term | None, str] | None = None
+        self._scope_render_cache = _ScopeRenderCache()
         self._assertions: list[Term] = []
         self._ordinary_assertions: list[Term] = []
         self._global_assertions: list[Term] = []
@@ -1495,13 +1550,21 @@ class Script:
             return cached[2]
         self._rendered_body = None
         del cached  # release the previous large body before rendering another
-        context = _RenderContext(declaration.name for declaration in self._declarations)
+        scope_cache = self._scope_render_cache if self._scope_render_cache.entries else None
+        context = _RenderContext(
+            (declaration.name for declaration in self._declarations), scope_cache,
+        )
         ordinary_assertions = list(self._ordinary_assertions)
         if branch is not None:
             assert self._obligation_index is not None
             ordinary_assertions[self._obligation_index] = branch
         ordered_assertions = (*self._global_assertions, *ordinary_assertions)
-        context.reserve(ordered_assertions)
+        node_count = context.reserve(ordered_assertions)
+        if node_count >= _MIN_SCOPE_CACHE_DAG_NODES:
+            # Small scripts keep the original alias layout and
+            # avoid cache overhead. Counting piggybacks on the
+            # required name-hygiene traversal.
+            context.scope_cache = self._scope_render_cache
         lines = [declaration.render() for declaration in self._declarations]
         lines.extend(f"(assert {_render_scope(assertion, context)})"
                      for assertion in ordered_assertions)

@@ -172,25 +172,6 @@ const NJson::TJsonValue& PlanNode(
     return *match;
 }
 
-const NJson::TJsonValue& WitnessRows(
-    const NJson::TJsonValue& verdict,
-    TStringBuf tablePath)
-{
-    const TString identityPart = TStringBuilder()
-        << "path:" << tablePath.size() << ":" << tablePath << ";";
-    const NJson::TJsonValue* match = nullptr;
-    for (const auto& [table, rows] :
-        verdict["witness"].GetMapSafe())
-    {
-        if (table.Contains(identityPart)) {
-            UNIT_ASSERT_C(!match, tablePath);
-            match = &rows;
-        }
-    }
-    UNIT_ASSERT_C(match, tablePath);
-    return *match;
-}
-
 void CollectConjuncts(
     const NJson::TJsonValue& expression,
     TVector<const NJson::TJsonValue*>& conjuncts)
@@ -439,9 +420,15 @@ NJson::TJsonValue BuildVerificationProblem(
     const TRBOSemanticSnapshotBoundaryResultV1& initial,
     const TRBOSemanticSnapshotBoundaryResultV1& final,
     ui64 timeoutMs = 10'000,
-    bool diagnosticTransformationPrefix = false)
+    bool diagnosticTransformationPrefix = false,
+    const TString& query = {})
 {
-    TTempDir tempDir;
+    auto tempDir = TTempDir::NewTempDir(GetOutputPath().GetPath());
+    tempDir.DoNotRemove();
+    Cerr << "Verification artifacts: " << tempDir.Path().GetPath() << Endl;
+    if (!query.empty()) {
+        TFileOutput((tempDir.Path() / "query.sql").GetPath()).Write(query);
+    }
     const auto initialPath = tempDir.Path() / "initial.json";
     const auto finalPath = tempDir.Path() / "final.json";
     const auto formulaPath = tempDir.Path() / "problem.smt2";
@@ -461,6 +448,8 @@ NJson::TJsonValue BuildVerificationProblem(
     }
     command << "--solver" << HermeticSolver();
     command.Run();
+    TFileOutput((tempDir.Path() / "verdict.json").GetPath()).Write(command.GetOutput());
+    TFileOutput((tempDir.Path() / "verifier.stderr").GetPath()).Write(command.GetError());
     UNIT_ASSERT_C(
         command.GetExitCode().Defined(),
         command.GetError() << command.GetOutput());
@@ -508,7 +497,9 @@ TSnapshotPair CaptureRealHostSnapshotPair(
         sink);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-    const auto prepared = host->SyncPrepareDataQuery(query, settings);
+    const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+        return host->SyncPrepareDataQuery(query, settings);
+    });
     UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
     const auto results = sink->Extract();
@@ -521,7 +512,7 @@ TSnapshotPair CaptureRealHostSnapshotPair(
     UNIT_ASSERT(initial["stage_graph"].IsNull());
     UNIT_ASSERT(final["stage_graph"].IsMap());
 
-    auto verdict = BuildVerificationProblem(results[0], results[1]);
+    auto verdict = BuildVerificationProblem(results[0], results[1], 10'000, false, query);
     return {
         .Initial = std::move(initial),
         .Final = std::move(final),
@@ -631,7 +622,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT(!prepared.Success());
 
         const auto results = sink->Extract();
@@ -684,7 +677,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -787,7 +782,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             SELECT Key FROM `/Root/KeyValue`;
             SELECT Key AS OtherKey FROM `/Root/KeyValue`;
         )";
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
         const auto results = sink->Extract();
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 4);
@@ -863,7 +860,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
                 FROM `/Root/RboNativeWindow` GROUP BY Bucket, Id
             );
         )";
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
         const auto results = sink->Extract();
         UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
@@ -1299,13 +1298,14 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
         UNIT_ASSERT(PlanNodes(pair.Final, "outer_bind").empty());
         const auto joins = PlanNodes(pair.Final, "join");
-        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        // One join restores the scalar domain; the other implements the scalar subplan.
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(
             (*joins[0])["kind"].GetStringSafe(),
             "left");
     }
 
-    Y_UNIT_TEST(RealHostFindsCorrelatedScalarCountEmptyInputBug) {
+    Y_UNIT_TEST(RealHostVerifiesCorrelatedScalarCountOnEmptyInput) {
         TKikimrRunner kikimr;
         CreateExistsColumnTables(kikimr);
 
@@ -1341,14 +1341,14 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
 
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
         const auto joins = PlanNodes(pair.Final, "join");
-        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(
             (*joins[0])["kind"].GetStringSafe(),
             "left");
 
         UNIT_ASSERT_VALUES_EQUAL_C(
             pair.Verdict["status"].GetStringSafe(),
-            "COUNTEREXAMPLE",
+            "VERIFIED_BOUNDED",
             NJson::WriteJson(pair.Verdict, false));
         UNIT_ASSERT_VALUES_EQUAL(
             pair.Verdict["row_bound"].GetIntegerSafe(),
@@ -1357,25 +1357,78 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             pair.Verdict["task_bound"].GetIntegerSafe(),
             2);
 
-        const auto& outerRows =
-            WitnessRows(pair.Verdict, "/Root/RboExistsOuter").GetArraySafe();
-        const auto& innerRows =
-            WitnessRows(pair.Verdict, "/Root/RboExistsInner").GetArraySafe();
-        UNIT_ASSERT(!outerRows.empty());
-        bool hasUnmatchedOuter = false;
-        for (const auto& outer : outerRows) {
-            const i64 key = outer["MatchKey"].GetIntegerSafe();
-            bool matched = false;
-            for (const auto& inner : innerRows) {
-                const auto& innerKey = inner["MatchKey"];
-                matched = matched ||
-                    (!innerKey.IsNull() &&
-                     innerKey.GetIntegerSafe() == key);
+    }
+
+    Y_UNIT_TEST(RealHostPreservesCorrelatedEmptyScalarAggregateRows) {
+        for (const bool newRbo : {true, false}) {
+            auto kikimr = MakeTpcdsRunner(newRbo);
+            CreateExistsColumnTables(kikimr);
+            NYdb::TValueBuilder outer;
+            outer.BeginList();
+            for (i64 id = 1; id <= 3; ++id) {
+                outer.AddListItem().BeginStruct().AddMember("Id").Int64(id)
+                    .AddMember("MatchKey").Int64(id).AddMember("Payload").OptionalInt64(std::nullopt).EndStruct();
             }
-            hasUnmatchedOuter = hasUnmatchedOuter || !matched;
+            const auto inserted = kikimr.GetTableClient().BulkUpsert("/Root/RboExistsOuter", outer.EndList().Build()).GetValueSync();
+            UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            for (const bool populated : {false, true}) {
+                if (populated) {
+                    auto inner = NYdb::TValueBuilder().BeginList()
+                        .AddListItem().BeginStruct().AddMember("Id").Int64(1)
+                            .AddMember("MatchKey").OptionalInt64(1).AddMember("Payload").OptionalInt64(5)
+                            .AddMember("Amount").BeginOptional().Decimal(NYdb::TDecimalValue("0", 7, 2)).EndOptional().EndStruct()
+                        .AddListItem().BeginStruct().AddMember("Id").Int64(2)
+                            .AddMember("MatchKey").OptionalInt64(2).AddMember("Payload").OptionalInt64(std::nullopt)
+                            .AddMember("Amount").BeginOptional().Decimal(NYdb::TDecimalValue("0", 7, 2)).EndOptional().EndStruct()
+                        .EndList().Build();
+                    const auto result = kikimr.GetTableClient().BulkUpsert("/Root/RboExistsInner", std::move(inner)).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                }
+                for (const TString& function : {TString("SUM"), TString("MIN"), TString("MAX")}) {
+                    const TString query = TStringBuilder()
+                        << "PRAGMA YqlSelect = 'force'; SELECT o.Id, (SELECT COALESCE(" << function
+                        << "(i.Payload), CAST(0 AS Int64)) FROM `/Root/RboExistsInner` AS i "
+                           "WHERE i.MatchKey = o.MatchKey) AS Value FROM `/Root/RboExistsOuter` AS o ORDER BY o.Id;";
+                    const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    const auto evidence = GetOutputPath() / (TStringBuilder() << "empty_scalar_"
+                        << (newRbo ? "new_" : "old_") << function << (populated ? "_populated" : "_empty"));
+                    evidence.MkDirs();
+                    TFileOutput((evidence / "query.yql").GetPath()).Write(query);
+                    TFileOutput((evidence / "result.yson").GetPath()).Write(FormatResultSetYson(result.GetResultSet(0)));
+                    NYdb::TResultSetParser parser(result.GetResultSet(0));
+                    i64 expectedId = 1;
+                    while (parser.TryNextRow()) {
+                        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Id").GetInt64(), expectedId);
+                        const auto value = parser.ColumnParser("Value").GetOptionalInt64();
+                        UNIT_ASSERT_C(value.has_value(), "Lost scalar aggregate row on empty input; newRbo="
+                            << newRbo << " populated=" << populated << " function=" << function << " outer=" << expectedId);
+                        UNIT_ASSERT_VALUES_EQUAL(*value, populated && expectedId == 1 ? 5 : 0);
+                        ++expectedId;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(expectedId, 4);
+                }
+            }
         }
-        UNIT_ASSERT_C(
-            hasUnmatchedOuter,
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesCorrelatedScalarSumWithCoalesce) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateExistsColumnTables(kikimr);
+        const TString query = R"(
+            SELECT o.Id, (SELECT COALESCE(SUM(i.Payload), CAST(0 AS Int64))
+                FROM `/Root/RboExistsInner` AS i WHERE i.MatchKey = o.MatchKey) AS Value
+            FROM `/Root/RboExistsOuter` AS o;
+        )";
+        const auto pair = CaptureRealHostSnapshotPair(kikimr, query);
+        const auto evidence = GetOutputPath() / "correlated_scalar_sum_coalesce";
+        evidence.MkDirs();
+        TFileOutput((evidence / "query.yql").GetPath()).Write(query);
+        TFileOutput((evidence / "initial.json").GetPath()).Write(NJson::WriteJson(pair.Initial, false));
+        TFileOutput((evidence / "final.json").GetPath()).Write(NJson::WriteJson(pair.Final, false));
+        TFileOutput((evidence / "verdict.json").GetPath()).Write(NJson::WriteJson(pair.Verdict, false));
+        UNIT_ASSERT_VALUES_EQUAL_C(pair.Verdict["status"].GetStringSafe(), "VERIFIED_BOUNDED",
             NJson::WriteJson(pair.Verdict, false));
     }
 
@@ -1496,51 +1549,27 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT(pair.Final["plan"]["subplans"].GetArraySafe().empty());
         UNIT_ASSERT(PlanNodes(pair.Final, "outer_bind").empty());
         const auto joins = PlanNodes(pair.Final, "join");
-        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(joins.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(
             (*joins[0])["kind"].GetStringSafe(),
             "left");
 
-        TVector<const NJson::TJsonValue*> ifExpressions;
-        CollectExpressions(pair.Final["plan"], "if", ifExpressions);
+        TVector<const NJson::TJsonValue*> repairBranches;
+        CollectExpressions(pair.Final["plan"], "if_present", repairBranches);
         const NJson::TJsonValue* repair = nullptr;
-        for (const auto* expression : ifExpressions) {
-            if (expression->Has("type") &&
-                (*expression)["type"].GetStringSafe() == "Uint64" &&
-                expression->Has("nullable") &&
-                (*expression)["nullable"].GetBooleanSafe() &&
-                expression->Has("then") &&
-                (*expression)["then"]["kind"].GetStringSafe() == "if_present")
+        for (const auto* branch : repairBranches) {
+            if ((*branch)["type"].GetStringSafe() == "Uint64" &&
+                (*branch)["missing"]["kind"].GetStringSafe() == "literal" &&
+                (*branch)["missing"]["value"].GetUIntegerSafe() == 0)
             {
-                UNIT_ASSERT_C(!repair, NJson::WriteJson(pair.Final, false));
-                repair = expression;
+                UNIT_ASSERT(!repair);
+                repair = branch;
             }
         }
         UNIT_ASSERT_C(repair, NJson::WriteJson(pair.Final, false));
-        UNIT_ASSERT_VALUES_EQUAL(
-            (*repair)["condition"]["kind"].GetStringSafe(),
-            "literal");
-        UNIT_ASSERT((*repair)["condition"]["value"].GetBooleanSafe());
-        UNIT_ASSERT_VALUES_EQUAL(
-            (*repair)["else"]["kind"].GetStringSafe(),
-            "null");
-        const auto& restored = (*repair)["then"];
-        UNIT_ASSERT_VALUES_EQUAL(
-            restored["optional"]["kind"].GetStringSafe(),
-            "column");
-        UNIT_ASSERT_VALUES_EQUAL(
-            restored["present"]["kind"].GetStringSafe(),
-            "bound");
-        UNIT_ASSERT_VALUES_EQUAL(
-            restored["present"]["depth"].GetUIntegerSafe(),
-            0);
-        UNIT_ASSERT_VALUES_EQUAL(
-            restored["missing"]["type"].GetStringSafe(),
-            "Uint64");
-        UNIT_ASSERT_VALUES_EQUAL(
-            restored["missing"]["value"].GetUIntegerSafe(),
-            0);
-        UNIT_ASSERT(!restored["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL((*repair)["present"]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL((*repair)["present"]["depth"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT(!(*repair)["nullable"].GetBooleanSafe());
     }
 
     Y_UNIT_TEST(RealHostVerifiesScalarAndEqualityCorrelatedNotExists) {
@@ -1753,7 +1782,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
 
             auto sink = std::make_shared<TRecordingSemanticSnapshotSink>(10'000);
             auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
-            const auto prepared = host->SyncPrepareDataQuery(query, settings);
+            const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+                return host->SyncPrepareDataQuery(query, settings);
+            });
             UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
             complete = sink->Extract();
         }
@@ -1813,7 +1844,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             auto sink = std::make_shared<TRecordingSemanticSnapshotSink>(
                 *hashPropagationOrdinal);
             auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
-            const auto prepared = host->SyncPrepareDataQuery(query, settings);
+            const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+                return host->SyncPrepareDataQuery(query, settings);
+            });
             UNIT_ASSERT(!prepared.Success());
             stopped = sink->Extract();
         }
@@ -1853,7 +1886,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -1936,7 +1971,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2017,7 +2054,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2083,7 +2122,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2145,7 +2186,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2205,7 +2248,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2495,7 +2540,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2559,7 +2606,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2640,7 +2689,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2733,7 +2784,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2882,7 +2935,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -2966,7 +3021,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -3015,6 +3072,264 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostPreservesUnusedGroupingSetMultiplicity) {
+        auto kikimr = MakeTpcdsRunner();
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = tableSession.ExecuteSchemeQuery(
+            "CREATE TABLE `/Root/RboEmptyGrouping` (Id Int64 NOT NULL, PRIMARY KEY (Id));").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const bool populated : {false, true}) {
+            if (populated) {
+                auto rows = NYdb::TValueBuilder().BeginList().AddListItem().BeginStruct()
+                    .AddMember("Id").Int64(1).EndStruct().AddListItem().BeginStruct()
+                    .AddMember("Id").Int64(2).EndStruct().EndList().Build();
+                const auto inserted = kikimr.GetTableClient()
+                    .BulkUpsert("/Root/RboEmptyGrouping", std::move(rows)).GetValueSync();
+                UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+            }
+            const auto result = session.ExecuteQuery(R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT COUNT(*) AS Groups FROM (
+                    SELECT COUNT(*) AS Unused FROM `/Root/RboEmptyGrouping`
+                    GROUP BY GROUPING SETS ((), ())
+                ) AS g;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), "[[2u]]");
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesFullJoinGroupingWithShuffleElimination) {
+        auto kikimr = MakeTpcdsRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/RboFullLeft` (
+                Id Uint64 NOT NULL, K Int64 NOT NULL, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+            CREATE TABLE `/Root/RboFullRight` (
+                Id Uint64 NOT NULL, K Int64 NOT NULL, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        for (const bool eliminate : {false, true}) {
+            const TString query = TStringBuilder()
+                << "PRAGMA ydb.CostBasedOptimizationLevel = '4';\n"
+                << "PRAGMA ydb.OptShuffleElimination = '" << (eliminate ? "true" : "false") << "';\n"
+                << "PRAGMA ydb.OptimizerHints = 'JoinType(l r Shuffle) JoinOrder(l r)';\n"
+                << "SELECT l.K AS k, COUNT(r.K) AS n FROM `/Root/RboFullLeft` AS l "
+                   "FULL OUTER JOIN `/Root/RboFullRight` AS r ON l.K = r.K GROUP BY l.K;";
+            const auto pair = CaptureRealHostSnapshotPair(kikimr, query);
+            const auto artifacts = GetOutputPath() /
+                (eliminate ? "full_join_shuffle_enabled" : "full_join_shuffle_disabled");
+            artifacts.MkDirs();
+            TFileOutput((artifacts / "initial.json").GetPath()).Write(NJson::WriteJson(pair.Initial, false));
+            TFileOutput((artifacts / "final.json").GetPath()).Write(NJson::WriteJson(pair.Final, false));
+            TFileOutput((artifacts / "verdict.json").GetPath()).Write(NJson::WriteJson(pair.Verdict, false));
+            TFileOutput((artifacts / "query.yql").GetPath()).Write(query);
+            const auto& join = OnlyPlanNode(pair.Final, "join");
+            UNIT_ASSERT_VALUES_EQUAL(join["kind"].GetStringSafe(), "full");
+            UNIT_ASSERT_VALUES_EQUAL_C(pair.Verdict["status"].GetStringSafe(), "VERIFIED_BOUNDED",
+                NJson::WriteJson(pair.Verdict, false));
+        }
+    }
+
+    Y_UNIT_TEST(RealHostPreservesFullJoinGroupingWithShuffleEliminationRuntime) {
+        auto kikimr = MakeTpcdsRunner();
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/RboFullRuntimeLeft` (
+                Id Uint64 NOT NULL, K Int64 NOT NULL, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+            CREATE TABLE `/Root/RboFullRuntimeRight` (
+                Id Uint64 NOT NULL, K Int64 NOT NULL, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 16);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 id = 0; id < 32; ++id) {
+            rows.AddListItem().BeginStruct().AddMember("Id").Uint64(id)
+                .AddMember("K").Int64(static_cast<i64>(id) - 16).EndStruct();
+        }
+        const auto inserted = kikimr.GetTableClient()
+            .BulkUpsert("/Root/RboFullRuntimeRight", rows.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+        for (const bool eliminate : {false, true}) {
+            const TString query = TStringBuilder()
+                << "PRAGMA YqlSelect = 'force';\n"
+                << "PRAGMA ydb.CostBasedOptimizationLevel = '4';\n"
+                << "PRAGMA ydb.OptShuffleElimination = '" << (eliminate ? "true" : "false") << "';\n"
+                << "PRAGMA ydb.OptimizerHints = 'JoinType(l r Shuffle) JoinOrder(l r)';\n"
+                << "SELECT l.K AS k, COUNT(r.K) AS n FROM `/Root/RboFullRuntimeLeft` AS l "
+                   "FULL OUTER JOIN `/Root/RboFullRuntimeRight` AS r ON l.K = r.K GROUP BY l.K;";
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto evidence = GetOutputPath() /
+                (eliminate ? "full_join_runtime_enabled" : "full_join_runtime_disabled");
+            evidence.MkDirs();
+            TFileOutput((evidence / "query.yql").GetPath()).Write(query);
+            TFileOutput((evidence / "result.yson").GetPath()).Write(FormatResultSetYson(result.GetResultSet(0)));
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT(!parser.ColumnParser("k").GetOptionalInt64());
+            UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser("n").GetUint64(), 32,
+                "full join split one NULL group; shuffle elimination=" << eliminate);
+            UNIT_ASSERT_C(!parser.TryNextRow(), "full join emitted duplicate NULL groups; shuffle elimination=" << eliminate);
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesCountOverPayloadFreeScan) {
+        TKikimrRunner kikimr;
+        CreateOrderedColumnTable(kikimr);
+        auto pair = VerifyRealHostSnapshotPair(kikimr,
+            "SELECT COUNT(*) FROM `/Root/RboOrdered`;");
+        UNIT_ASSERT(OnlyPlanNode(pair.Final, "scan")["columns"].GetArraySafe().empty());
+        for (auto& node : pair.Final["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "scan") {
+                auto limit = NJson::TJsonValue(NJson::JSON_MAP);
+                limit["kind"] = "literal";
+                limit["type"] = "Uint64";
+                limit["value"] = ui64(0);
+                node["pushed_limit"] = std::move(limit);
+            }
+        }
+        TRBOSemanticSnapshotBoundaryResultV1 initial, changed;
+        initial.Json = NJson::WriteJson(pair.Initial, false);
+        changed.Json = NJson::WriteJson(pair.Final, false);
+        const auto verdict = BuildVerificationProblem(initial, changed);
+        UNIT_ASSERT_VALUES_EQUAL(verdict["status"].GetStringSafe(), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesDynamicDateCasts) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+        for (const TString& column : {TString("Bytes"), TString("Text")}) {
+            VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                << "SELECT Id, CAST(" << column << " AS Date) FROM `/Root/RboTextOrdered`;");
+            VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                << "SELECT Id, COALESCE(CAST(" << column << " AS Date), CAST(0 AS Date)) "
+                   "FROM `/Root/RboTextOrdered`;");
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesPushedDateCastPredicates) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+        for (const TString& column : {TString("Bytes"), TString("Text")}) {
+            for (const TString& comparison : {TString("="), TString(">=")}) {
+                const auto pair = VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                    << "SELECT Id, " << column << " FROM `/Root/RboTextOrdered` WHERE CAST("
+                    << column << " AS Date) " << comparison << " Date('2001-01-12');");
+                bool pushed = false;
+                for (const auto& node : pair.Final["plan"]["nodes"].GetArraySafe()) {
+                    if (node["op"].GetStringSafe() == "scan" && node["predicate"].IsMap()) {
+                        pushed = true;
+                    }
+                }
+                UNIT_ASSERT_C(pushed, NJson::WriteJson(pair.Final, false));
+            }
+        }
+    }
+
+
+    Y_UNIT_TEST(RealHostVerifiesTextExtrema) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+        VerifyRealHostSnapshotPair(kikimr,
+            "SELECT MIN(Bytes), MAX(Bytes), MIN(Text), MAX(Text) FROM `/Root/RboTextOrdered`;");
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesPushedLikeJunctions) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateTextOrderedColumnTable(kikimr);
+        for (const TString& column : {TString("Bytes"), TString("Text")}) {
+            for (const TString& junction : {TString("AND"), TString("OR")}) {
+                VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                    << "SELECT Id, " << column << " FROM `/Root/RboTextOrdered` WHERE "
+                    << column << " LIKE '%a%b%' " << junction << " "
+                    << column << " LIKE '%x%y%';");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesReadPredicateBindings) {
+        auto kikimr = MakeTpcdsRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/RboPrivatePredicate` (
+                Id Int32 NOT NULL, FilterValue Int32, Payload Int32, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        for (const TString& column : {TString("Id"), TString("FilterValue")}) {
+            const auto pair = VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                << "SELECT Payload FROM `/Root/RboPrivatePredicate` WHERE "
+                << column << " = CAST(42 AS Int32);");
+            const auto& scan = OnlyPlanNode(pair.Final, "scan");
+            UNIT_ASSERT(scan["predicate"].IsMap());
+            // Required-column propagation can keep the predicate's column in
+            // the Read output. Both public and private bindings must refer to
+            // the same captured source without leaking private bindings.
+            size_t predicateBindings = 0;
+            THashSet<TString> privateOutputs;
+            for (const auto& mapping : scan["predicate_columns"].GetArraySafe()) {
+                predicateBindings += mapping["source"].GetStringSafe() == column;
+                UNIT_ASSERT(privateOutputs.insert(mapping["output"].GetStringSafe()).second);
+            }
+            for (const auto& mapping : scan["columns"].GetArraySafe()) {
+                predicateBindings += mapping["source"].GetStringSafe() == column;
+                UNIT_ASSERT(!privateOutputs.contains(mapping["output"].GetStringSafe()));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(predicateBindings, 1);
+            const auto& result = OnlyPlanNode(pair.Final, "project");
+            UNIT_ASSERT_VALUES_EQUAL(result["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(!privateOutputs.contains(
+                result["columns"].GetArraySafe().front()["expression"]["column"].GetStringSafe()));
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesRequiredTextPredicates) {
+        auto kikimr = MakeTpcdsRunner();
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/RboRequiredText` (
+                Id Uint64 NOT NULL, Bytes String NOT NULL, Text Utf8 NOT NULL, PRIMARY KEY (Id)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        for (const TString& column : {TString("Bytes"), TString("Text")}) {
+            for (const TString& predicate : {
+                    column + " LIKE '%special%requests%'", column + " NOT LIKE '%special%requests%'",
+                    column + " LIKE '%BRASS'", column + " LIKE '%green%'",
+                    column + " IN ('red', 'blue', 'green')"})
+            {
+                VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                    << "SELECT Id, " << column << " FROM `/Root/RboRequiredText` WHERE " << predicate << ";");
+            }
+            VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                << "SELECT Id, " << column << " LIKE '%special%requests%' AS Matches FROM `/Root/RboRequiredText`;");
+        }
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesPushedTextPredicates) {
+        TKikimrRunner kikimr;
+        CreateTextOrderedColumnTable(kikimr);
+        for (const TString& column : {TString("Bytes"), TString("Text")}) {
+            for (const TString& predicate : {
+                    column + " LIKE '%special%requests%'",
+                    column + " NOT LIKE '%special%requests%'",
+                    column + " LIKE '%BRASS'",
+                    column + " LIKE '%green%'",
+                    column + " IN ('red', 'blue', 'green')"})
+            {
+                VerifyRealHostSnapshotPair(kikimr, TStringBuilder()
+                    << "SELECT Id, " << column << " FROM `/Root/RboTextOrdered` WHERE " << predicate << ";");
+            }
+        }
+    }
+
     Y_UNIT_TEST(RealHostVerifiesPushedOlapFilter) {
         TKikimrRunner kikimr;
         CreateOrderedColumnTable(kikimr);
@@ -3032,7 +3347,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -3597,7 +3914,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             )";
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(query, settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, query, settings] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();
@@ -4301,7 +4620,9 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(TpcdsQuery(96), settings);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([host, settings] {
+            return host->SyncPrepareDataQuery(TpcdsQuery(96), settings);
+        });
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();

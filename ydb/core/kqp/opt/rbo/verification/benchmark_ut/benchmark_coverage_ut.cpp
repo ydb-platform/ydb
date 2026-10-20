@@ -66,12 +66,16 @@ const TSuite Clickbench{
 const TSuite Job{
     "JOB_YQL", "job", "schema.yql", "q", 113,
     "ydb/core/kqp/opt/rbo/verification/benchmark_ut/corpora/job"};
+const TSuite Ssb{
+    "SSB_YQL", "ssb", "schema.yql", "q", 13,
+    "ydb/core/kqp/opt/rbo/verification/benchmark_ut/corpora/ssb"};
 
 struct TCoverageRunConfig {
     ECoverageMode Mode = ECoverageMode::FormulaDashboard;
     std::set<ui32> Selected;
     TMaybe<TString> Solver;
     ui64 TimeoutMs = DefaultTimeoutMs;
+    TString QueryMode = "data";
 };
 
 bool RetainRunEvidence(ECoverageMode mode) {
@@ -388,6 +392,10 @@ TCoverageRunConfig ResolveCoverageRun(
         return result;
     }
 
+    result.QueryMode = GetEnv("RBO_COVERAGE_QUERY_MODE", "data");
+    if (result.QueryMode != "data" && result.QueryMode != "generic" && result.QueryMode != "generic-spilling") {
+        ythrow yexception() << "RBO_COVERAGE_QUERY_MODE must be data, generic, or generic-spilling";
+    }
     result.Selected = SelectedQueries(suite);
     result.Solver = CoverageSolver();
     result.TimeoutMs = TimeoutMs();
@@ -509,6 +517,19 @@ void PreserveTextArtifact(
     artifacts[TString(key)] = name;
     artifacts[TStringBuilder() << key << "_sha256"] =
         to_lower(HexEncode(digest, sizeof(digest)));
+}
+
+void PreserveMissingQueryArtifact(TOutcome& outcome, TStringBuf slug, ui32 queryId, TStringBuf query) {
+    if (outcome.Json.Has("artifacts") && outcome.Json["artifacts"].Has("query_sha256")) {
+        return;
+    }
+    try {
+        PreserveTextArtifact(outcome.Json["artifacts"], "query",
+            TStringBuilder() << slug << "_q" << queryId << ".query.yql", query);
+    } catch (const std::exception& error) {
+        outcome.Json["artifact_error"] = error.what();
+        outcome.Fatal = true;
+    }
 }
 
 NJson::TJsonValue PreserveCaptureArtifacts(
@@ -1018,10 +1039,15 @@ TOutcome ClassifyQuery(
     ui32 queryId,
     ui64 timeoutMs,
     const TMaybe<TString>& solver,
-    bool preserveArtifacts)
+    bool preserveArtifacts,
+    TStringBuf queryMode)
 {
     auto sink = std::make_shared<TRecordingSink>();
-    auto host = MakeHost(kikimr.GetTestServer(), moduleResolver, sink);
+    auto configuration = MakeConfiguration();
+    if (queryMode == "generic-spilling") {
+        configuration->_KqpEnableSpilling = true;
+    }
+    auto host = MakeHost(kikimr.GetTestServer(), moduleResolver, sink, std::move(configuration));
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
     const TString query = Query(suite, queryId);
@@ -1031,9 +1057,17 @@ TOutcome ClassifyQuery(
     const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
         host,
         query,
-        settings
+        settings,
+        generic = queryMode != "data"
     ] {
-        return host->SyncPrepareDataQuery(query, settings);
+        if (!generic) {
+            return host->SyncPrepareDataQuery(query, settings);
+        }
+        auto preparing = host->PrepareGenericQuery(query, settings);
+        while (!preparing->HasResult()) {
+            preparing->Continue().GetValueSync();
+        }
+        return preparing->GetResult();
     });
     const ui64 prepareMs = (TInstant::Now() - started).MilliSeconds();
     const auto captures = sink->Take();
@@ -1144,6 +1178,11 @@ TOutcome ClassifyQuery(
             outcome.Json["artifact_error"] = error.what();
         }
     }
+    // Translation can fail before the first snapshot callback. Retain the
+    // exact submitted SQL even when there is no partial capture to preserve.
+    if (preserveArtifacts || !prepareSucceeded || outcome.Fatal) {
+        PreserveMissingQueryArtifact(outcome, suite.Slug, queryId, query);
+    }
     SetPreparationOutcome(outcome, prepareSucceeded, prepareReason);
     outcome.SnapshotPairCaptured = snapshotPairCaptured;
     return outcome;
@@ -1162,6 +1201,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     std::set<ui32> verifierEntryQueries;
     TVector<TString> policyLoadViolations;
     ui64 timeoutMs = DefaultTimeoutMs;
+    TString queryMode = "data";
     bool timeoutResolved = false;
     NJson::TJsonValue rows(NJson::JSON_ARRAY);
     TMap<TString, ui32> summary;
@@ -1195,6 +1235,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         }
         fatal = fatal || outcome.Fatal;
         outcome.Json["suite"] = suite.Name;
+        outcome.Json["query_mode"] = queryMode;
         outcome.Json["source"] = std::move(source);
         outcome.Json["timeout_ms"] = timeoutResolved
             ? NJson::TJsonValue(timeoutMs)
@@ -1211,6 +1252,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         }
         const auto config = ResolveCoverageRun(*policy, suite, run);
         mode = config.Mode;
+        queryMode = config.QueryMode;
         timeoutMs = config.TimeoutMs;
         timeoutResolved = true;
         selected = config.Selected;
@@ -1239,7 +1281,8 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                     queryId,
                     timeoutMs,
                     solver,
-                    RetainRunEvidence(mode));
+                    RetainRunEvidence(mode),
+                    queryMode);
             } catch (const std::exception& error) {
                 outcome = HarnessError(
                     queryId,
@@ -1372,6 +1415,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     NJson::TJsonValue report = CoverageReportHeader(suite);
     report["exploratory"] = run == ECoverageRun::Exploratory;
     report["solver_present"] = solver.Defined();
+    report["query_mode"] = queryMode;
     report["construction_timeout_ms"] = ConstructionTimeoutMs;
     report["timeout_ms"] = timeoutResolved
         ? NJson::TJsonValue(timeoutMs)
@@ -1833,12 +1877,21 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     }
 
     Y_UNIT_TEST(OptimizerFailureRetainsCaptureMetadata) {
-        const auto zeroCapture = OptimizerFailure(
+        auto zeroCapture = OptimizerFailure(
             51, 17, 0, "window metadata references a missing member");
         UNIT_ASSERT(!zeroCapture.SnapshotPairCaptured);
         UNIT_ASSERT_VALUES_EQUAL(
             zeroCapture.Json["capture_count"].GetUIntegerSafe(), 0);
         UNIT_ASSERT_VALUES_EQUAL(zeroCapture.Status, "OPTIMIZER_FAILURE");
+        const TString query = "SELECT unresolved_alias;\r\n";
+        PreserveMissingQueryArtifact(zeroCapture, "zero_capture", 51, query);
+        UNIT_ASSERT(!zeroCapture.Fatal);
+        const auto& artifacts = zeroCapture.Json["artifacts"];
+        UNIT_ASSERT_VALUES_EQUAL(artifacts["query_sha256"].GetStringSafe().size(), 64);
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput((GetOutputPath() /
+            artifacts["query"].GetStringSafe()).GetPath()).ReadAll(), query);
+        UNIT_ASSERT(!artifacts.Has("initial_snapshot"));
+        UNIT_ASSERT(!artifacts.Has("final_snapshot"));
     }
 
     Y_UNIT_TEST(PolicySolverUsesHermeticBinaryAfterExplicitOptIn) {
@@ -1877,6 +1930,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {"RBO_COVERAGE_QUERIES", "999"},
             {"RBO_COVERAGE_TIMEOUT_MS", "0"},
             {"RBO_Z3", "/ambient/z3"},
+            {"RBO_COVERAGE_QUERY_MODE", "invalid"},
         }};
         const auto config = ResolveCoverageRun(
             policy,
@@ -1892,6 +1946,27 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "contrib/tools/z3/z3");
         UNIT_ASSERT_VALUES_UNEQUAL(*config.Solver, "/ambient/z3");
         UNIT_ASSERT_VALUES_EQUAL(config.TimeoutMs, ProofFloorTimeoutMs);
+        UNIT_ASSERT_VALUES_EQUAL(config.QueryMode, "data");
+    }
+
+    Y_UNIT_TEST(CoverageQueryModeIsExplicitAndValidated) {
+        const auto policy = LoadCoveragePolicy();
+        for (const TString& mode : {TString("data"), TString("generic"), TString("generic-spilling"), TString("invalid")}) {
+            NTesting::TScopedEnvironment environment{{
+                {"RBO_COVERAGE_QUERY_MODE", mode},
+                {"RBO_COVERAGE_USE_SOLVER", "0"},
+                {"RBO_COVERAGE_QUERIES", "24"},
+                {"RBO_COVERAGE_TIMEOUT_MS", "10000"},
+            }};
+            if (mode == "invalid") {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(ResolveCoverageRun(policy, Tpcds, ECoverageRun::Environment),
+                    yexception, "RBO_COVERAGE_QUERY_MODE must be");
+            } else {
+                const auto config = ResolveCoverageRun(policy, Tpcds, ECoverageRun::Environment);
+                UNIT_ASSERT_VALUES_EQUAL(config.QueryMode, mode);
+                UNIT_ASSERT(config.Selected == std::set<ui32>{24});
+            }
+        }
     }
 
     Y_UNIT_TEST(SharedTpcdsPreparationModes) {
@@ -1959,6 +2034,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
 
     Y_UNIT_TEST(JoinOrderBenchmarkExploratory) {
         RunCoverage(Job, ECoverageRun::Exploratory);
+    }
+
+    Y_UNIT_TEST(StarSchemaBenchmarkExploratory) {
+        RunCoverage(Ssb, ECoverageRun::Exploratory);
     }
 
     Y_UNIT_TEST(ProofFloorTpchCorpus) {

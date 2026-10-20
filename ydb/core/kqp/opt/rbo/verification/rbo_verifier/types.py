@@ -10,6 +10,10 @@ VOID = "Void"
 # Mirrors NYql::NUdf::MAX_DATE.  Date is an unsigned day-since-epoch value and
 # this upper bound is non-inclusive.
 MAX_DATE = 49_673
+# Unsigned epoch counts in days, seconds and microseconds, respectively.
+# Mirrors udf_data_type.h; cross-unit conversions remain unsupported.
+DATE_TIME_BOUNDS = {DATE: MAX_DATE, "Datetime": MAX_DATE * 86_400,
+                    "Timestamp": MAX_DATE * 86_400_000_000}
 
 INTEGER_TYPES = frozenset(
     {
@@ -25,7 +29,11 @@ INTEGER_TYPES = frozenset(
 )
 
 STRING_TYPES = frozenset({"String", "Utf8"})
-FIXED_SCALAR_TYPES = frozenset({BOOL, DATE, DOUBLE}) | INTEGER_TYPES | STRING_TYPES
+
+# StablePickle's reviewed injective, total scalar encodings. Floating point,
+# Decimal and nested optionals need separate runtime audits.
+STABLE_PICKLE_TYPES = INTEGER_TYPES | frozenset(DATE_TIME_BOUNDS) | STRING_TYPES | {BOOL}
+FIXED_SCALAR_TYPES = frozenset({BOOL, DOUBLE, *DATE_TIME_BOUNDS}) | INTEGER_TYPES | STRING_TYPES
 
 
 def is_decimal_type(scalar_type: str) -> bool:
@@ -125,7 +133,7 @@ def ordering_comparison_compatible(left: str, right: str) -> bool:
     return (
         ordinary_integer_comparison_compatible(left, right)
         or string_comparison_compatible(left, right)
-        or (left == DATE and right == DATE)
+        or (left == right and left in DATE_TIME_BOUNDS)
         or decimal_comparison_compatible(left, right)
     )
 
@@ -139,7 +147,7 @@ def family(scalar_type: str) -> str:
         return "int"
     if scalar_type in STRING_TYPES:
         return "string"
-    if scalar_type == DATE:
+    if scalar_type in DATE_TIME_BOUNDS:
         return "date"
     if scalar_type == DOUBLE:
         return "carrier"
@@ -152,6 +160,6 @@ def is_ordered_type(scalar_type: str) -> bool:
     return (
         scalar_type in INTEGER_TYPES
         or scalar_type in STRING_TYPES
-        or scalar_type == DATE
+        or scalar_type in DATE_TIME_BOUNDS
         or is_decimal_type(scalar_type)
     )

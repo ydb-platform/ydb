@@ -1,5 +1,6 @@
 import os
 import unittest
+from copy import deepcopy
 from collections import Counter
 from unittest import mock
 
@@ -248,7 +249,100 @@ def _ground(term, values):
     raise AssertionError(f"unsupported ground operation {term.operation!r}")
 
 
+def _with_window_aliases(snapshot, count=1, rename=True):
+    snapshot = deepcopy(snapshot)
+    project = next(node for node in snapshot["plan"]["nodes"] if node["id"] == "project")
+    names = [column["output"] for column in project["columns"][:-1]]
+    mapping = {name: name for name in names}
+    aliases = []
+    previous = project["input"]
+    for index in range(count):
+        bindings = {name: f"alias{index}.{name}" if rename else name for name in mapping}
+        alias = {
+            "id": f"aliases{index}", "op": "project", "input": previous, "ordered": False,
+            "columns": [
+                {"output": bindings[name], "expression": _column(source)}
+                for name, source in mapping.items()
+            ],
+        }
+        aliases.append(alias)
+        previous = alias["id"]
+        mapping = bindings
+    offset = snapshot["plan"]["nodes"].index(project)
+    snapshot["plan"]["nodes"][offset:offset] = aliases
+    project["input"] = previous
+
+    def rewrite(expression):
+        if not isinstance(expression, dict):
+            return
+        if expression.get("kind") == "column":
+            expression["column"] = mapping[expression["column"]]
+        elif expression.get("kind") in {"window_sum", "window_avg"}:
+            expression["input"] = mapping[expression["input"]]
+            keys = expression["partition_by"]
+            expression["partition_by"] = mapping[keys] if isinstance(keys, str) else [mapping[key] for key in keys]
+        for value in expression.values():
+            if isinstance(value, dict):
+                rewrite(value)
+
+    for column in project["columns"]:
+        rewrite(column["expression"])
+    if snapshot["stage_graph"]:
+        stage = next(stage for stage in snapshot["stage_graph"]["stages"] if "project" in stage["nodes"])
+        index = stage["nodes"].index("project")
+        stage["nodes"][index:index] = [alias["id"] for alias in aliases]
+    return snapshot
+
+
 class WindowSumTest(unittest.TestCase):
+
+    def test_utf8_partitions_preserve_routing_and_detect_split_partitions(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+
+        def utf8(snapshot):
+            for table in snapshot["schema"]["tables"]:
+                for column in table["columns"]:
+                    if column["type"] == "String":
+                        column["type"] = "Utf8"
+            return parse_snapshot(snapshot)
+        before = utf8(_snapshot())
+        after = utf8(_staged_snapshot(['class']))
+        mutation = utf8(_staged_snapshot(['class', 'item']))
+        self.assertEqual(solve(build_problem(before, after, 2, 2), SOLVER, 2, 30_000).status, "VERIFIED_BOUNDED")
+        self.assertEqual(solve(build_problem(before, mutation, 2, 2), SOLVER, 2, 30_000).status, "COUNTEREXAMPLE")
+
+    def test_window_column_alias_corridors_preserve_staged_results(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+        before = parse_snapshot(_snapshot())
+        for count in (1, 8):
+            for rename in (False, True):
+                with self.subTest(count=count, rename=rename):
+                    after = parse_snapshot(_with_window_aliases(_staged_snapshot(["class"]), count, rename))
+                    problem = build_problem(before, after, 2, 2)
+                    self.assertEqual(solve(problem, SOLVER, 2, 30_000).status, "VERIFIED_BOUNDED")
+
+    def test_aliased_window_sum_changed_to_average_has_a_counterexample(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+        before = _with_window_aliases(_snapshot(), 8)
+        changed = deepcopy(before)
+        expression = changed["plan"]["nodes"][-1]["columns"][-1]["expression"]["left"]
+        expression["kind"] = "window_avg"
+        expression["partition_by"] = [expression["partition_by"]]
+        problem = build_logical_kernel_problem_for_tests(parse_snapshot(before), parse_snapshot(changed), 2)
+        self.assertEqual(solve(problem, SOLVER, 2, 30_000).status, "COUNTEREXAMPLE")
+
+    def test_window_alias_corridor_bound_and_error_markers_are_rejected(self):
+        with self.assertRaisesRegex(SnapshotError, "exceeds eight"):
+            parse_snapshot(_with_window_aliases(_snapshot(), 9))
+        guarded = _with_window_aliases(_snapshot())
+        alias = next(node for node in guarded["plan"]["nodes"] if node["id"] == "aliases0")
+        alias["columns"][-1]["error_on_null"] = True
+        with self.assertRaises(SnapshotError):
+            parse_snapshot(guarded)
+
     def test_nested_window_sum_preserves_groups_bags_nulls_and_null_partition(self):
         snapshot = parse_snapshot(_snapshot())
         script = smt.Script()
@@ -340,7 +434,10 @@ class WindowSumTest(unittest.TestCase):
             },
         )
         stale["plan"]["nodes"][3]["input"] = "carrier"
-        with self.assertRaisesRegex(SnapshotError, "directly consume"):
+        stale["plan"]["nodes"][2]["columns"][-1]["expression"] = {
+            "kind": "null", "type": "Decimal(35,2)",
+        }
+        with self.assertRaisesRegex(SnapshotError, "total direct column"):
             parse_snapshot(stale)
 
         fanout = _snapshot()

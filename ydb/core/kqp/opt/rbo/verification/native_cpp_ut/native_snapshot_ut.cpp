@@ -1,6 +1,10 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
+#include <ydb/core/kqp/ut/rbo/kqp_rbo_test_helpers.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/opt/rbo/verification/semantic_snapshot.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -14,15 +18,20 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <yql/essentials/core/yql_graph_transformer.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
 #include <util/system/shellcommand.h>
+
+#include <limits>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -30,7 +39,8 @@ namespace {
 using namespace NYql;
 
 struct TFixture {
-    explicit TFixture(TString groupType = "String", bool groupNotNull = false)
+    explicit TFixture(TString groupType = "String", bool groupNotNull = false, TString otherType = "Int32",
+        ui8 pricePrecision = 15)
         : Functions(NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry()))
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , Query(MakeIntrusive<TKikimrQueryContext>(
@@ -48,16 +58,17 @@ struct TFixture {
         table.Metadata->Kind = EKikimrTableKind::Datashard;
         table.Metadata->KeyColumnNames = {"k"};
         table.Metadata->Columns.emplace("k", TKikimrColumnMetadata("k", 1, "Int32", true));
-        table.Metadata->Columns.emplace("x", TKikimrColumnMetadata("x", 2, "Int32", true));
+        table.Metadata->Columns.emplace("x", TKikimrColumnMetadata("x", 2, otherType, true));
         table.Metadata->Columns.emplace("g", TKikimrColumnMetadata("g", 3, groupType, groupNotNull));
         TKikimrColumnMetadata price("price", 4, "Decimal", false);
-        price.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(15, 2));
+        price.TypeInfo = NScheme::TTypeInfo(NScheme::TDecimalType(pricePrecision, 2));
         table.Metadata->Columns.emplace("price", std::move(price));
         table.Metadata->ColumnOrder = {"k", "x", "g", "price"};
         UNIT_ASSERT(table.Load(Expr));
         Table = &table;
         Key = Registry.Add(TInfoUnit("same", "k"));
         Other = Registry.Add(TInfoUnit("same", "x"));
+        OtherType = Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(otherType));
         Group = Registry.Add(TInfoUnit("same", "g"));
         Price = Registry.Add(TInfoUnit("same", "price"));
     }
@@ -69,7 +80,7 @@ struct TFixture {
             nullptr, nullptr, std::nullopt, std::nullopt, ESortDir::None,
             TPhysicalOpProps{}, TPositionHandle());
         const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
-        SetType(*read, {{Key, int32}, {Other, int32}});
+        SetType(*read, {{Key, int32}, {Other, OtherType}});
         return read;
     }
 
@@ -86,7 +97,7 @@ struct TFixture {
         return ExportSemanticSnapshotV1(root, Rbo);
     }
 
-    TIntrusivePtr<TOpWindow> Window(const TString& function, bool wholePartition) {
+    TIntrusivePtr<TOpWindow> Window(const TString& function, bool wholePartition, const TString& partitionType = "String") {
         const auto* decimal = Expr.MakeType<TOptionalExprType>(
             Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "35", "2"));
         // Leave accumulator headroom at the two-row proof bound. Full-width
@@ -94,7 +105,7 @@ struct TFixture {
         const auto* priceType = Expr.MakeType<TOptionalExprType>(
             Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "15", "2"));
         const auto* groupType = Expr.MakeType<TOptionalExprType>(
-            Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+            Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(partitionType)));
         auto read = MakeIntrusive<TOpRead>(
             "same", TUnorderedIUs{Key, Group, Price}, NYql::EStorageType::RowStorage,
             NOpt::BuildTableMeta(*Table, TPositionHandle(), Expr).Ptr(),
@@ -119,14 +130,24 @@ struct TFixture {
         return window;
     }
 
-    TIntrusivePtr<TOpMap> StringConcat(bool copyColumn, TInfoUnitId& result) {
+    TIntrusivePtr<TOpMap> StringConcat(bool copyColumn, TInfoUnitId& result,
+        TString textType = "String", bool twoMembers = false, bool mixedLiteral = false, bool olap = false) {
         const auto pos = TPositionHandle();
         const auto* int32 = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
-        const auto* string = Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String);
+        const auto* string = Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(textType));
+        const auto* resultType = mixedLiteral ? Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String) : string;
         const auto* optionalString = Expr.MakeType<TOptionalExprType>(string);
         auto read = Read();
         read->GetColumns() = TUnorderedIUs{Key, Group};
+        if (olap) {
+            Table->Metadata->Kind = EKikimrTableKind::Olap;
+            read->StorageType = NYql::EStorageType::ColumnStorage;
+        }
+        if (twoMembers) {
+            read->GetColumns().Add(Other);
+        }
         TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> types{{Key, int32}, {Group, optionalString}};
+        if (twoMembers) { types.emplace_back(Other, string); }
         SetType(*read, types);
         TIntrusivePtr<IOperator> input = read;
         auto source = Group;
@@ -144,19 +165,30 @@ struct TFixture {
         auto member = Expr.NewCallable(pos, "Member", {row, Expr.NewAtom(pos, ToString(source))});
         member->SetTypeAnn(optionalString);
         const auto literal = [&](TStringBuf value) {
-            auto node = Expr.NewCallable(pos, "String", {Expr.NewAtom(pos, value)});
+            auto node = Expr.NewCallable(pos, textType, {Expr.NewAtom(pos, value)});
             node->SetTypeAnn(string);
             return node;
         };
         auto coalesce = Expr.NewCallable(pos, "Coalesce", {member, literal("")});
         coalesce->SetTypeAnn(string);
-        auto concat = Expr.NewCallable(pos, "Concat", {coalesce, literal(":")});
-        concat->SetTypeAnn(string);
+        auto separator = literal(", ");
+        if (mixedLiteral) {
+            separator = Expr.NewCallable(pos, "String", {Expr.NewAtom(pos, ", ")});
+            separator->SetTypeAnn(resultType);
+        }
+        auto concat = Expr.NewCallable(pos, "Concat", {coalesce, separator});
+        concat->SetTypeAnn(resultType);
+        if (twoMembers) {
+            auto other = Expr.NewCallable(pos, "Member", {row, Expr.NewAtom(pos, ToString(Other))});
+            other->SetTypeAnn(string);
+            concat = Expr.NewCallable(pos, "Concat", {concat, other});
+            concat->SetTypeAnn(resultType);
+        }
         auto lambda = Expr.NewLambda(pos, Expr.NewArguments(pos, {row}), std::move(concat));
         result = Registry.Add(TInfoUnit("", "answer"));
         auto map = MakeIntrusive<TOpMap>(input, pos, TMapIUs{{result,
             TMapElement(TExpression(lambda, &Expr, &ExpressionProps))}});
-        types.emplace_back(result, string);
+        types.emplace_back(result, resultType);
         SetType(*map, types);
         return map;
     }
@@ -171,7 +203,7 @@ struct TFixture {
         }
         UNIT_ASSERT(!compute.empty());
         auto& graph = root.PlanProps.StageGraph;
-        const auto source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+        const auto source = graph.AddSourceStage(static_cast<TOpRead*>(input)->StorageType);
         const auto sink = graph.AddStage();
         input->Props.StageId = source;
         for (auto* op : compute) {
@@ -297,6 +329,51 @@ struct TFixture {
         UNIT_ASSERT(localMember->GetTypeAnn() == int32);
         UNIT_ASSERT_VALUES_EQUAL(capture->GetDependencies().At(local).Outer, captured);
         return exported;
+    }
+
+    TSemanticSnapshotExportResult NullableKeyJoin(const TString& scalarType, const TString& kind,
+                                                  bool equalNulls, bool staged) {
+        const auto pos = TPositionHandle();
+        const auto* type = Expr.MakeType<TOptionalExprType>(
+            Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(scalarType)));
+        const auto rightGroup = Registry.Add(TInfoUnit("right", "g"));
+        const auto makeRead = [&](TString alias, TInfoUnitId id) {
+            auto read = MakeIntrusive<TOpRead>(std::move(alias), TUnorderedIUs{id}, NYql::EStorageType::RowStorage,
+                NOpt::BuildTableMeta(*Table, pos, Expr).Ptr(), nullptr, nullptr,
+                std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+            SetType(*read, {{id, type}});
+            return read;
+        };
+        auto left = makeRead("same", Group);
+        auto right = makeRead("right", rightGroup);
+        TJoinIUs keys;
+        keys.Add({Group, rightGroup, equalNulls});
+        auto join = MakeIntrusive<TOpJoin>(left, right, pos, kind, keys);
+        TOrderedIUs<TString> output;
+        TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> types;
+        if (kind != "RightSemi" && kind != "RightOnly") {
+            output.Append(Group, "left");
+            types.emplace_back(Group, type);
+        }
+        if (kind != "LeftSemi" && kind != "LeftOnly") {
+            output.Append(rightGroup, "right");
+            types.emplace_back(rightGroup, type);
+        }
+        SetType(*join, types);
+        TOpRoot root(join, pos, std::move(output));
+        if (staged) {
+            auto& graph = root.PlanProps.StageGraph;
+            const auto leftStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const auto rightStage = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const auto joinStage = graph.AddStage();
+            left->Props.StageId = leftStage;
+            right->Props.StageId = rightStage;
+            join->Props.StageId = joinStage;
+            root.ComputeParents();
+            graph.Connect(leftStage, joinStage, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(leftStage)));
+            graph.Connect(rightStage, joinStage, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(rightStage)));
+        }
+        return Export(root);
     }
 
     TSemanticSnapshotExportResult SharedReadJoin(
@@ -455,6 +532,7 @@ struct TFixture {
     const TKikimrTableDescription* Table = nullptr;
     TInfoUnitId Key;
     TInfoUnitId Other;
+    const TTypeAnnotationNode* OtherType = nullptr;
     TInfoUnitId Group;
     TInfoUnitId Price;
     TInfoUnitId Sum = TUnorderedIUs::InvalidBit;
@@ -469,7 +547,9 @@ NJson::TJsonValue Parse(const TSemanticSnapshotExportResult& exported) {
 }
 
 TString Verify(const TString& before, const TString& after, bool diagnosticPrefix = false) {
-    TTempDir directory;
+    auto directory = TTempDir::NewTempDir(GetOutputPath().GetPath());
+    directory.DoNotRemove();
+    Cerr << "Verification artifacts: " << directory.Path().GetPath() << Endl;
     const auto beforePath = directory.Path() / "before.json";
     const auto afterPath = directory.Path() / "after.json";
     TFileOutput(beforePath.GetPath()).Write(before);
@@ -477,13 +557,16 @@ TString Verify(const TString& before, const TString& after, bool diagnosticPrefi
     TShellCommand command(BinaryPath("ydb/core/kqp/opt/rbo/verification/bin/kqp_rbo_verify"));
     command << beforePath.GetPath() << afterPath.GetPath()
         << "--rows" << "2" << "--timeout-ms" << "10000"
+        << "--emit-smt" << (directory.Path() / "problem.smt2").GetPath()
         << "--solver" << BinaryPath("contrib/tools/z3/z3");
     if (diagnosticPrefix) {
         command << "--diagnostic-transformation-prefix";
     }
     command.Run();
+    TFileOutput((directory.Path() / "verdict.json").GetPath()).Write(command.GetOutput());
+    TFileOutput((directory.Path() / "verifier.stderr").GetPath()).Write(command.GetError());
     NJson::TJsonValue verdict;
-    UNIT_ASSERT_C(NJson::ReadJsonTree(command.GetOutput(), &verdict, true),
+    UNIT_ASSERT_C(NJson::ReadJsonTree(command.GetOutput(), &verdict, false),
         command.GetError() << command.GetOutput());
     if (diagnosticPrefix) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["comparison_scope"].GetStringSafe(), "OPTIMIZER_TRANSFORMATION_PREFIX");
@@ -564,7 +647,8 @@ void CheckNativeInitialScalarTypes(bool predicate) {
 }
 
 TString CheckNativeTextMembership(const TString& sourceType, const TString& itemType,
-    bool nullable, bool negate, bool changeLastItem = false)
+    bool nullable, bool negate, bool changeLastItem = false, bool dictionary = false, bool strictCast = false,
+    bool safeCast = false)
 {
     TFixture beforeFixture(sourceType, !nullable);
     TFixture afterFixture(sourceType, !nullable);
@@ -586,7 +670,31 @@ TString CheckNativeTextMembership(const TString& sourceType, const TString& item
             items.push_back(fixture.Expr.NewCallable(pos, itemType, {fixture.Expr.NewAtom(pos, value)}));
         }
         TExprNode::TPtr body;
-        if (rewrite) {
+        if (rewrite && dictionary) {
+            UNIT_ASSERT(!nullable);
+            UNIT_ASSERT(sourceType == itemType || (sourceType == "Utf8" && itemType == "String"));
+            auto key = fixture.Expr.NewArgument(pos, "key");
+            auto payload = fixture.Expr.NewArgument(pos, "payload");
+            const auto* itemAnnotation = fixture.Expr.MakeType<TDataExprType>(
+                itemType == "String" ? NUdf::EDataSlot::String : NUdf::EDataSlot::Utf8);
+            const auto* listType = fixture.Expr.MakeType<TListExprType>(itemAnnotation);
+            auto descriptor = ExpandType(pos, *listType, fixture.Expr);
+            items.insert(items.begin(), std::move(descriptor));
+            auto dict = fixture.Expr.NewCallable(pos, "ToDict", {
+                fixture.Expr.NewCallable(pos, "List", std::move(items)),
+                fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {key}), TExprNode::TPtr(key)),
+                fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {payload}),
+                    fixture.Expr.NewCallable(pos, "Void", {})),
+                fixture.Expr.NewList(pos, {fixture.Expr.NewAtom(pos, "One"), fixture.Expr.NewAtom(pos, "Auto")})});
+            auto lookup = member;
+            if (sourceType != itemType) {
+                lookup = strictCast || safeCast
+                    ? fixture.Expr.NewCallable(pos, safeCast ? "SafeCast" : "StrictCast",
+                        {member, ExpandType(pos, *itemAnnotation, fixture.Expr)})
+                    : fixture.Expr.NewCallable(pos, "ToString", {member});
+            }
+            body = fixture.Expr.NewCallable(pos, "Contains", {dict, lookup});
+        } else if (rewrite) {
             TExprNode::TListType comparisons;
             for (const auto& item : items) {
                 comparisons.push_back(fixture.Expr.NewCallable(pos, "==", {member, item}));
@@ -702,6 +810,1022 @@ void CheckNativeSortNullPlacement(bool merge) {
     }
 }
 
+TSemanticSnapshotExportResult NativeDateCast(
+    const TString& type, bool nullable, bool lowered, bool missingZero, bool staged,
+    bool malformedDescriptor = false, bool coalesceZero = false, bool foldedZero = false,
+    std::optional<i64> shiftMicros = std::nullopt, bool materializeCast = false, bool subtract = false)
+{
+    TFixture fixture(type, !nullable);
+    const auto pos = TPositionHandle();
+    const auto* bytes = fixture.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const TTypeAnnotationNode* sourceType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(bytes)) : bytes;
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* date = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Date);
+    const auto* optionalDate = fixture.Expr.MakeType<TOptionalExprType>(date);
+    auto read = fixture.Read();
+    read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, sourceType}});
+    auto row = fixture.Expr.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, ToString(fixture.Group))});
+    member->SetTypeAnn(sourceType);
+    auto itemDescriptor = fixture.Expr.NewCallable(pos, "DataType", {
+        fixture.Expr.NewAtom(pos, malformedDescriptor ? "Utf8" : "Date")});
+    itemDescriptor->SetTypeAnn(fixture.Expr.MakeType<TTypeExprType>(date));
+    auto descriptor = fixture.Expr.NewCallable(pos, "OptionalType", {itemDescriptor});
+    descriptor->SetTypeAnn(fixture.Expr.MakeType<TTypeExprType>(optionalDate));
+    const auto cast = [&](TExprNode::TPtr input) {
+        auto result = fixture.Expr.NewCallable(pos, "SafeCast", {input, descriptor});
+        result->SetTypeAnn(optionalDate);
+        return result;
+    };
+    auto body = cast(member);
+    if (lowered) {
+        UNIT_ASSERT(nullable);
+        auto argument = fixture.Expr.NewArgument(pos, "bytes");
+        argument->SetTypeAnn(bytes);
+        auto missing = fixture.Expr.NewCallable(pos, "Nothing", {descriptor});
+        if (missingZero) {
+            auto zero = fixture.Expr.NewCallable(pos, "Date", {fixture.Expr.NewAtom(pos, "0")});
+            zero->SetTypeAnn(date);
+            missing = fixture.Expr.NewCallable(pos, "Just", {zero});
+        }
+        missing->SetTypeAnn(optionalDate);
+        body = fixture.Expr.NewCallable(pos, "IfPresent", {member,
+            fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {argument}), cast(argument)), missing});
+        body->SetTypeAnn(optionalDate);
+    }
+    if (coalesceZero) {
+        auto zero = fixture.Expr.NewCallable(pos, foldedZero ? "Date" : "Int32", {fixture.Expr.NewAtom(pos, "0")});
+        zero->SetTypeAnn(foldedZero ? date : int32);
+        auto fallback = foldedZero ? fixture.Expr.NewCallable(pos, "Just", {zero}) : cast(zero);
+        fallback->SetTypeAnn(optionalDate);
+        body = fixture.Expr.NewCallable(pos, "Coalesce", {body, fallback});
+        body->SetTypeAnn(optionalDate);
+    }
+    TIntrusivePtr<IOperator> input = read;
+    std::optional<TInfoUnitId> castColumn;
+    if (shiftMicros) {
+        if (materializeCast) {
+            const auto castResult = fixture.Registry.Add(TInfoUnit("", "parsed"));
+            auto castExpression = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+            auto castMap = MakeIntrusive<TOpMap>(input, pos,
+                TMapIUs{{castResult, TMapElement(TExpression(castExpression, &fixture.Expr, &fixture.ExpressionProps))}});
+            fixture.SetType(*castMap, {{fixture.Key, int32}, {fixture.Group, sourceType}, {castResult, optionalDate}});
+            input = castMap;
+            castColumn = castResult;
+            row = fixture.Expr.NewArgument(pos, "parsed_row");
+            row->SetTypeAnn(castMap->Type->Cast<TListExprType>()->GetItemType());
+            body = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, ToString(castResult))});
+            body->SetTypeAnn(optionalDate);
+        }
+        const auto* intervalType = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Interval);
+        auto interval = fixture.Expr.NewCallable(pos, "Interval", {fixture.Expr.NewAtom(pos, ToString(*shiftMicros))});
+        interval->SetTypeAnn(intervalType);
+        auto optionalInterval = fixture.Expr.NewCallable(pos, "Just", {interval});
+        optionalInterval->SetTypeAnn(fixture.Expr.MakeType<TOptionalExprType>(intervalType));
+        body = fixture.Expr.NewCallable(pos, subtract ? "-" : "+", {body, optionalInterval});
+        body->SetTypeAnn(optionalDate);
+    }
+    auto expression = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+    const auto result = fixture.Registry.Add(TInfoUnit("", "date"));
+    auto map = MakeIntrusive<TOpMap>(input, pos,
+        TMapIUs{{result, TMapElement(TExpression(expression, &fixture.Expr, &fixture.ExpressionProps))}});
+    TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> columns{
+        {fixture.Key, int32}, {fixture.Group, sourceType}, {result, optionalDate}};
+    if (castColumn) {
+        columns.emplace_back(*castColumn, optionalDate);
+    }
+    fixture.SetType(*map, columns);
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {result, "date"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeOlapDatePredicate(
+    const TString& textType, bool nullable, const TString& comparison,
+    bool justConstant, bool pushed, ui16 days = 11334, TStringBuf mutation = "")
+{
+    TFixture fixture(textType, !nullable);
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* text = ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(textType));
+    const TTypeAnnotationNode* sourceType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(text)) : text;
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* date = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Date);
+    const auto* optionalDate = ctx.MakeType<TOptionalExprType>(date);
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* optionalBool = ctx.MakeType<TOptionalExprType>(boolean);
+    auto read = fixture.Read();
+    fixture.Table->Metadata->Kind = EKikimrTableKind::Olap;
+    read->StorageType = NYql::EStorageType::ColumnStorage;
+    read->GetColumns() = {fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, sourceType}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Group))});
+    member->SetTypeAnn(sourceType);
+    auto target = ExpandType(pos, *optionalDate, ctx);
+    if (mutation == "wrong_target") {
+        target = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(text), ctx);
+    }
+    // ExpandType builds syntax; these fixtures bypass the type annotator.
+    // Preserve the exact annotations the real pushdown leaves on descriptors.
+    const auto* targetItem = mutation == "wrong_target" ? text : date;
+    target->Child(0)->SetTypeAnn(ctx.MakeType<TTypeExprType>(targetItem));
+    target->SetTypeAnn(ctx.MakeType<TTypeExprType>(ctx.MakeType<TOptionalExprType>(targetItem)));
+    auto cast = ctx.NewCallable(pos, "SafeCast", {member, target});
+    cast->SetTypeAnn(optionalDate);
+    auto constant = ctx.NewCallable(pos, "Date", {ctx.NewAtom(pos, ToString(days))});
+    constant->SetTypeAnn(mutation == "wrong_literal_type" ? int32 : date);
+    if (justConstant) {
+        constant = ctx.NewCallable(pos, "Just", {constant});
+        constant->SetTypeAnn(mutation == "wrong_just_type" ? optionalBool : optionalDate);
+    }
+    auto predicate = ctx.NewCallable(pos, comparison, {cast, constant});
+    predicate->SetTypeAnn(optionalBool);
+    auto fallback = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, mutation == "true_fallback" ? "true" : "false")});
+    fallback->SetTypeAnn(boolean);
+    auto body = ctx.NewCallable(pos, "Coalesce", {predicate, fallback});
+    body->SetTypeAnn(boolean);
+    TIntrusivePtr<IOperator> input = read;
+    if (pushed) {
+        auto argument = ctx.NewArgument(pos, "members_g");
+        auto bound = mutation == "wrong_binding" ? ctx.NewArgument(pos, "unbound") : argument;
+        TNodeOnNodeOwnedMap replacements{{member.Get(), bound}};
+        auto pushedBody = ctx.ReplaceNodes(std::move(body), replacements);
+        if (mutation == "typed_cast") {
+            pushedBody->Child(0)->Child(0)->SetTypeAnn(optionalDate);
+        }
+        auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(pushedBody));
+        if (mutation == "extra_lambda_arg") {
+            lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument, ctx.NewArgument(pos, "extra")}),
+                lambda->ChildPtr(1));
+        }
+        auto column = ctx.NewCallable(pos, "KqpOlapApplyColumnArg", {
+            ExpandType(pos, *row->GetTypeAnn(), ctx), ctx.NewAtom(pos, ToString(fixture.Group))});
+        auto apply = ctx.NewCallable(pos, "KqpOlapApply", {
+            lambda, ctx.NewList(pos, {column}), ctx.NewAtom(pos, "")});
+        auto flow = ctx.NewArgument(pos, "flow");
+        auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {flow, apply});
+        read->OlapFilterLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {flow}), std::move(filter));
+    } else {
+        auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+        auto filter = MakeIntrusive<TOpFilter>(read, pos, TExpression(lambda, &ctx, &fixture.ExpressionProps));
+        filter->Type = read->Type;
+        input = filter;
+    }
+    TOpRoot root(input, pos, {{fixture.Key, "key"}, {fixture.Group, "value"}});
+    if (pushed) {
+        read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(read->StorageType);
+    }
+    return fixture.Export(root);
+}
+
+
+TSemanticSnapshotExportResult NativeNarrowDecimalZero(bool folded, bool staged, ui8 precision,
+    bool changeJust = false, bool malformedDescriptor = false)
+{
+    TFixture fixture("String", false, "Int32", precision);
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* decimal = ctx.MakeType<TDataExprParamsType>(
+        NUdf::EDataSlot::Decimal, ToString(precision), "2");
+    const auto* optional = ctx.MakeType<TOptionalExprType>(decimal);
+    auto read = fixture.Read();
+    read->GetColumns() = {fixture.Key, fixture.Price};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Price, optional}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Price))});
+    member->SetTypeAnn(optional);
+    auto sourceZero = ctx.NewCallable(pos, "Int32", {ctx.NewAtom(pos, "0")});
+    sourceZero->SetTypeAnn(int32);
+    auto descriptor = ExpandType(pos, *(malformedDescriptor
+        ? ctx.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, ToString(precision + 1), "2")
+        : decimal), ctx);
+    descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(decimal));
+    auto zero = ctx.NewCallable(pos, "SafeCast", {sourceZero, descriptor});
+    if (folded) {
+        zero = ctx.NewCallable(pos, "Decimal", {
+            ctx.NewAtom(pos, "0"), ctx.NewAtom(pos, ToString(precision)), ctx.NewAtom(pos, "2")});
+    }
+    zero->SetTypeAnn(decimal);
+    auto justValue = zero;
+    if (changeJust) {
+        justValue = ctx.NewCallable(pos, "Decimal", {
+            ctx.NewAtom(pos, "1"), ctx.NewAtom(pos, ToString(precision)), ctx.NewAtom(pos, "2")});
+        justValue->SetTypeAnn(decimal);
+    }
+    auto just = ctx.NewCallable(pos, "Just", {justValue});
+    just->SetTypeAnn(optional);
+    auto coalesce = ctx.NewCallable(pos, "Coalesce", {member, zero});
+    coalesce->SetTypeAnn(decimal);
+    const auto zeroOutput = fixture.Registry.Add(TInfoUnit("", "zero"));
+    const auto filledOutput = fixture.Registry.Add(TInfoUnit("", "filled"));
+    auto justLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(just));
+    auto coalesceLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(coalesce));
+    auto map = MakeIntrusive<TOpMap>(read, pos, TMapIUs{
+        {zeroOutput, TMapElement(TExpression(justLambda, &ctx, &fixture.ExpressionProps))},
+        {filledOutput, TMapElement(TExpression(coalesceLambda, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Price, optional},
+        {zeroOutput, optional}, {filledOutput, decimal}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {zeroOutput, "zero"}, {filledOutput, "filled"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+
+template <typename T>
+void CheckStableScalarPacking(NUdf::EDataSlot slot, TVector<T> values) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TTypeEnvironment environment(alloc);
+    NMiniKQL::TMemoryUsageInfo memory("StablePickle contract");
+    NMiniKQL::THolderFactory holders(alloc.Ref(), memory);
+    auto* type = NMiniKQL::TDataType::Create(NUdf::GetDataTypeInfo(slot).TypeId, environment);
+    auto* optionalType = NMiniKQL::TOptionalType::Create(type, environment);
+    NMiniKQL::TValuePacker required(true, type), optional(true, optionalType);
+    const TString nullBytes(optional.Pack(NUdf::TUnboxedValuePod()));
+    UNIT_ASSERT(!optional.Unpack(nullBytes, holders));
+    TVector<TString> encodings;
+    for (size_t index = 0; index < values.size(); ++index) {
+        const T value = values[index];
+        const TString bytes(required.Pack(NUdf::TUnboxedValuePod(value)));
+        const TString present(optional.Pack(NUdf::TUnboxedValuePod(value)));
+        UNIT_ASSERT_VALUES_EQUAL(bytes, present);
+        UNIT_ASSERT(bytes != nullBytes);
+        UNIT_ASSERT_VALUES_EQUAL(required.Unpack(bytes, holders).template Get<T>(), value);
+        UNIT_ASSERT_VALUES_EQUAL(optional.Unpack(present, holders).template Get<T>(), value);
+        for (size_t previous = 0; previous < index; ++previous) {
+            UNIT_ASSERT_VALUES_EQUAL(bytes == encodings[previous], value == values[previous]);
+        }
+        encodings.push_back(bytes);
+    }
+}
+
+void CheckStableTextPacking(NUdf::EDataSlot slot) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TTypeEnvironment environment(alloc);
+    NMiniKQL::TMemoryUsageInfo memory("StablePickle text contract");
+    NMiniKQL::THolderFactory holders(alloc.Ref(), memory);
+    auto* type = NMiniKQL::TDataType::Create(NUdf::GetDataTypeInfo(slot).TypeId, environment);
+    auto* optionalType = NMiniKQL::TOptionalType::Create(type, environment);
+    NMiniKQL::TValuePacker required(true, type), optional(true, optionalType);
+    const TString nullBytes(optional.Pack(NUdf::TUnboxedValuePod()));
+    UNIT_ASSERT(!optional.Unpack(nullBytes, holders));
+    TVector<TString> values{"", "a", "b", TString("a\0b", 3), TString("\0", 1),
+                           TString("\xc3\xa9"), TString("\xe6\xbc\xa2"), TString("\xf0\x9f\x98\x80")};
+    for (size_t length : {7, 8, 15, 16, 127, 128, 255, 256, 16383, 16384}) {
+        values.push_back(TString(length, 'x'));
+    }
+    if (slot == NUdf::EDataSlot::String) {
+        values.push_back(TString("\xff\x80\0\xfe", 4));
+    }
+    TVector<TString> encodings;
+    for (size_t index = 0; index < values.size(); ++index) {
+        const NUdf::TUnboxedValue value(NMiniKQL::MakeString(values[index]));
+        const TString bytes(required.Pack(value)), present(optional.Pack(value));
+        UNIT_ASSERT_VALUES_EQUAL(bytes, present);
+        UNIT_ASSERT(bytes != nullBytes);
+        const auto restoredRequired = required.Unpack(bytes, holders);
+        const auto restoredOptional = optional.Unpack(present, holders);
+        UNIT_ASSERT(restoredOptional);
+        UNIT_ASSERT_VALUES_EQUAL(TString(restoredRequired.AsStringRef()), values[index]);
+        UNIT_ASSERT_VALUES_EQUAL(TString(restoredOptional.AsStringRef()), values[index]);
+        for (size_t previous = 0; previous < index; ++previous) {
+            UNIT_ASSERT_VALUES_EQUAL(bytes == encodings[previous], values[index] == values[previous]);
+        }
+        encodings.push_back(bytes);
+    }
+}
+
+TSemanticSnapshotExportResult NativeStablePickle(
+    const TString& type, bool nullable, bool staged, bool constant = false,
+    bool malformedResult = false)
+{
+    TFixture fixture(type, !nullable);
+    const auto pos = TPositionHandle();
+    const auto* item = fixture.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const TTypeAnnotationNode* sourceType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(item)) : item;
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* string = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String);
+    auto read = fixture.Read();
+    read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, sourceType}});
+    auto row = fixture.Expr.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto argument = fixture.Expr.NewCallable(pos, "Member", {row, fixture.Expr.NewAtom(pos, ToString(fixture.Group))});
+    argument->SetTypeAnn(sourceType);
+    if (constant) {
+        argument = fixture.Expr.NewCallable(pos, type, {fixture.Expr.NewAtom(pos, type == "Bool" ? "false" : "0")});
+        argument->SetTypeAnn(item);
+    }
+    auto body = fixture.Expr.NewCallable(pos, "StablePickle", {argument});
+    body->SetTypeAnn(malformedResult ? sourceType : string);
+    auto expression = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}), std::move(body));
+    const auto result = fixture.Registry.Add(TInfoUnit("", "pickle"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{result, TMapElement(TExpression(expression, &fixture.Expr, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, sourceType}, {result, string}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {result, "pickle"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeAliasedDecimalWindow(
+    const TString& function, size_t aliasCount, bool staged)
+{
+    TFixture f;
+    const auto pos = TPositionHandle();
+    auto original = f.Window(function, true);
+    TIntrusivePtr<IOperator> input = original->GetInput();
+    auto argument = f.Sum;
+    auto partition = f.Group;
+    for (size_t index = 0; index < aliasCount; ++index) {
+        const auto sumCopy = f.Registry.Add(TInfoUnit("", "sum_alias"));
+        const auto keyCopy = f.Registry.Add(TInfoUnit("", "key_alias"));
+        input = MakeIntrusive<TOpMap>(input, pos, TMapIUs{
+            {sumCopy, TMapElement(MakeColumnAccess(argument, pos, &f.Expr, &f.ExpressionProps))},
+            {keyCopy, TMapElement(MakeColumnAccess(partition, pos, &f.Expr, &f.ExpressionProps))},
+        });
+        argument = sumCopy;
+        partition = keyCopy;
+    }
+    auto window = MakeIntrusive<TOpWindow>(input, pos,
+        TWindowIUs{{f.WindowResult, {function, EWindowFuncKind::Aggregate, TOrderedIUs<>{argument}}}},
+        TOrderedIUs<>{partition}, TSortIUs{}, original->GetFrame());
+    TOpRoot plan(window, pos, {{f.WindowResult, "answer"}});
+    plan.PlanProps.InfoUnitRegistry = f.Registry;
+    for (const auto& entry : plan) { entry.Current->BindExpressionPlanProps(&plan.PlanProps); }
+    auto annotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(f.Types), f.Types);
+    TRBOContext rbo(f.Optimize, f.Expr, f.Types, *annotation, *f.Functions);
+    UNIT_ASSERT(plan.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    if (staged) { f.StageSerial(plan); }
+    return ExportSemanticSnapshotV1(plan, rbo);
+}
+
+TSemanticSnapshotExportResult NativeRank(
+    const TString& type, bool nullable, bool partitioned, bool staged,
+    bool ascending = true, bool secondKey = false, bool ordered = true,
+    const TString& function = "rank", bool wholeFrame = false)
+{
+    TFixture f(type, !nullable);
+    const auto pos = TPositionHandle();
+    auto read = f.Read();
+    read->GetColumns() = TUnorderedIUs{f.Key, f.Other, f.Group};
+    const auto* scalar = f.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const TTypeAnnotationNode* groupType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(f.Expr.MakeType<TOptionalExprType>(scalar)) : scalar;
+    const auto* int32 = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    f.SetType(*read, {{f.Key, int32}, {f.Other, int32}, {f.Group, groupType}});
+    const auto rank = f.Registry.Add(TInfoUnit("", "rank"));
+    TSortIUs order;
+    if (ordered) { order.Append(f.Group, TSortOrder{ascending, ascending}); }
+    if (secondKey) { order.Append(f.Key, TSortOrder{true, true}); }
+    TOpWindowFrame frame;
+    if (wholeFrame) { frame.EndKind = EWindowFrameBound::UnboundedFollowing; }
+    auto window = MakeIntrusive<TOpWindow>(read, pos,
+        TWindowIUs{{rank, {function, EWindowFuncKind::Native, {}}}},
+        partitioned ? TOrderedIUs<>{f.Other} : TOrderedIUs<>{}, std::move(order), frame);
+    TOpRoot root(window, pos, {{f.Key, "key"}, {rank, "rank"}});
+    root.PlanProps.InfoUnitRegistry = f.Registry;
+    for (const auto& entry : root) { entry.Current->BindExpressionPlanProps(&root.PlanProps); }
+    UNIT_ASSERT(root.ComputeTypes(f.Rbo) == IGraphTransformer::TStatus::Ok);
+    if (staged) { f.StageSerial(root); }
+    return f.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeIntegralAverage(
+    const TString& scalarType, bool nullable, bool grouped, bool split, bool staged)
+{
+    TFixture f(scalarType, !nullable);
+    const auto pos = TPositionHandle();
+    auto read = f.Read();
+    read->GetColumns() = TUnorderedIUs{f.Key, f.Group};
+    const auto* itemType = f.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(scalarType));
+    const TTypeAnnotationNode* valueType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(f.Expr.MakeType<TOptionalExprType>(itemType)) : itemType;
+    f.SetType(*read, {{f.Key, f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)}, {f.Group, valueType}});
+    const auto result = f.Registry.Add(TInfoUnit("", "average"));
+    const TOrderedIUs<> keys = grouped ? TOrderedIUs<>{f.Key} : TOrderedIUs<>{};
+    TIntrusivePtr<IOperator> plan;
+    if (split) {
+        const auto state = f.Registry.Add(TInfoUnit("", "average_state"));
+        auto partial = MakeIntrusive<TOpAggregate>(read,
+            TAggregationIUs{{state, {f.Group, "avg", false, false}}}, keys, EOpPhase::Intermediate, false, pos);
+        plan = MakeIntrusive<TOpAggregate>(partial,
+            TAggregationIUs{{result, {state, "avg", false, false}}}, keys, EOpPhase::Final, false, pos);
+    } else {
+        plan = MakeIntrusive<TOpAggregate>(read,
+            TAggregationIUs{{result, {f.Group, "avg", false, false}}}, keys, EOpPhase::Undefined, false, pos);
+    }
+    TOrderedIUs<TString> columns;
+    if (grouped) { columns.Append(f.Key, "key"); }
+    columns.Append(result, "average");
+    TOpRoot root(plan, pos, std::move(columns));
+    root.PlanProps.InfoUnitRegistry = f.Registry;
+    for (const auto& entry : root) {
+        entry.Current->BindExpressionPlanProps(&root.PlanProps);
+    }
+    UNIT_ASSERT(root.ComputeTypes(f.Rbo) == IGraphTransformer::TStatus::Ok);
+    if (staged) {
+        f.StageSerial(root);
+    }
+    return f.Export(root);
+}
+
+std::pair<TSemanticSnapshotExportResult, TSemanticSnapshotExportResult> NativeGroupingSets(
+    const TString& function, bool nullable, bool duplicateSets, bool singleSet = false,
+    bool wrongOutputNullability = false, bool stagedTemplate = false, bool stagedExpanded = false,
+    bool nullableGroupingKey = false, TString groupingType = "Int32", bool countAll = false)
+{
+    TFixture fixture("Int32", !nullable, groupingType);
+    const auto pos = TPositionHandle();
+    auto read = fixture.Read();
+    read->GetColumns().Add(fixture.Group);
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* valueType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(int32)) : int32;
+    TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> columns{
+        {fixture.Key, int32}, {fixture.Other, fixture.OtherType}, {fixture.Group, valueType}};
+    if (function == "avg") {
+        read->GetColumns().Add(fixture.Price);
+        columns.emplace_back(fixture.Price, fixture.Expr.MakeType<TOptionalExprType>(
+            fixture.Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "15", "2")));
+    }
+    fixture.SetType(*read, columns);
+    auto measure = function == "avg" ? fixture.Price : fixture.Group;
+    TIntrusivePtr<IOperator> aggregateInput = read;
+    if (countAll) {
+        UNIT_ASSERT_VALUES_EQUAL(function, "count");
+        measure = fixture.Registry.Add(TInfoUnit("", "unit"));
+        auto row = fixture.Expr.NewArgument(pos, "row");
+        auto lambda = fixture.Expr.NewLambda(pos, fixture.Expr.NewArguments(pos, {row}),
+            fixture.Expr.NewCallable(pos, "Void", {}));
+        aggregateInput = MakeIntrusive<TOpMap>(read, pos, TMapIUs{{measure,
+            TMapElement(TExpression(lambda, &fixture.Expr, &fixture.ExpressionProps))}});
+    }
+    const auto value = fixture.Registry.Add(TInfoUnit("", "value"));
+    const auto outputKey = fixture.Registry.Add(TInfoUnit("", "group"));
+    const auto outputValue = fixture.Registry.Add(TInfoUnit("", "value"));
+    const auto indicator = fixture.Registry.Add(TInfoUnit("", "indicator"));
+    const auto groupingKey = nullableGroupingKey ? fixture.Group : fixture.Other;
+    auto aggregate = MakeIntrusive<TOpAggregate>(aggregateInput,
+        TAggregationIUs{{value, {measure, function, false, false}}},
+        TOrderedIUs<>{groupingKey}, EOpPhase::Undefined, false, pos);
+    TVector<TUnorderedIUs> sets{{groupingKey}};
+    if (!singleSet) {
+        sets.push_back({});
+    }
+    if (duplicateSets) {
+        sets.push_back({});
+        sets.push_back({groupingKey});
+    }
+    auto grouping = MakeIntrusive<TOpGroupingSets>(aggregate, std::move(sets),
+        TMappedIUs<TInfoUnitId>{{outputKey, groupingKey}, {outputValue, value}}, pos,
+        TMappedIUs<TInfoUnitId>{{indicator, groupingKey}});
+    TOpRoot root(grouping, pos, {{outputKey, "group"}, {outputValue, "value"}, {indicator, "indicator"}});
+    root.PlanProps.InfoUnitRegistry = fixture.Registry;
+    auto annotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(fixture.Types), fixture.Types);
+    TRBOContext rbo(fixture.Optimize, fixture.Expr, fixture.Types, *annotation, *fixture.Functions);
+    for (const auto& entry : root) {
+        entry.Current->BindExpressionPlanProps(&root.PlanProps);
+    }
+    root.RecomputeOutputIUsSubtree();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    if (wrongOutputNullability) {
+        fixture.SetType(*grouping, {{outputKey, int32},
+            {outputValue, grouping->GetIUType(outputValue, fixture.Expr)},
+            {indicator, fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)}});
+    }
+    if (stagedTemplate) {
+        fixture.StageSerial(root);
+    }
+    auto initial = ExportSemanticSnapshotV1(root, rbo);
+    if (wrongOutputNullability || stagedTemplate) {
+        return {std::move(initial), {}};
+    }
+    UNIT_ASSERT_C(initial.IsSupported(), "GroupingSets template: " << initial.UnsupportedReason);
+    Parse(initial);
+    TExpandGroupingSetsRule rule;
+    root.SetInput(rule.SimpleMatchAndApply(grouping, rbo, root.PlanProps));
+    root.RecomputeOutputIUsSubtree();
+    root.ComputeParents();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    if (stagedExpanded) {
+        if (singleSet) {
+            fixture.StageSerial(root);
+        } else {
+            auto& graph = root.PlanProps.StageGraph;
+            const auto source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            read->Props.StageId = source;
+            const auto producer = countAll ? graph.AddStage() : source;
+            if (countAll) {
+                aggregateInput->Props.StageId = producer;
+                graph.Connect(source, producer, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(source)));
+            }
+            auto& unionAll = static_cast<TOpUnionAll&>(*root.GetInput());
+            const auto sink = graph.AddStage();
+            unionAll.Props.StageId = sink;
+            for (auto* branch : unionAll.GetChildren()) {
+                const auto stage = graph.AddStage();
+                auto* current = branch;
+                while (current->GetKind() != EOperator::Replicate) {
+                    UNIT_ASSERT_VALUES_EQUAL(current->GetChildCount(), 1);
+                    current->Props.StageId = stage;
+                    current = current->GetChild(0).Get();
+                }
+                auto& port = static_cast<TOpReplicate&>(*current);
+                port.Props.StageId = producer;
+                graph.Connect(producer, stage, MakeIntrusive<TUnionAllConnection>(*GetReplicateOutputIndex(port)));
+                graph.Connect(stage, sink, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(stage)));
+            }
+        }
+    }
+    auto expanded = ExportSemanticSnapshotV1(root, rbo);
+    UNIT_ASSERT_C(expanded.IsSupported(), "Expanded GroupingSets: " << expanded.UnsupportedReason);
+    Parse(expanded);
+    return {std::move(initial), std::move(expanded)};
+}
+
+TSemanticSnapshotExportResult NativeCompiledLike(
+    bool utf8, bool nullable, bool staged, bool changedPattern = false, bool wrongMemberType = false,
+    TStringBuf junction = {}, bool pushed = false, TStringBuf mutation = {}, bool logicalPushed = false)
+{
+    TFixture fixture(utf8 ? "Utf8" : "String", !nullable);
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* optionalBool = ctx.MakeType<TOptionalExprType>(boolean);
+    const auto* string = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::String);
+    const auto* optionalString = ctx.MakeType<TOptionalExprType>(string);
+    const auto* uint64 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+    const auto* optionalUint64 = ctx.MakeType<TOptionalExprType>(uint64);
+    const auto* voidType = ctx.MakeType<TVoidExprType>();
+    const auto typed = [&](TStringBuf name, TExprNode::TListType children, const TTypeAnnotationNode* type) {
+        auto node = ctx.NewCallable(pos, name, std::move(children));
+        node->SetTypeAnn(type);
+        return node;
+    };
+    const auto literal = [&](TStringBuf type, TStringBuf value, const TTypeAnnotationNode* annotation) {
+        return typed(type, {ctx.NewAtom(pos, value)}, annotation);
+    };
+    const auto callable = [&](const TTypeAnnotationNode* result,
+                              TVector<TCallableExprType::TArgumentInfo> arguments, size_t optional = 0) {
+        return ctx.MakeType<TCallableExprType>(result, std::move(arguments), optional, TStringBuf());
+    };
+    const auto argument = [](const TTypeAnnotationNode* type, TStringBuf name = TStringBuf()) {
+        TCallableExprType::TArgumentInfo result;
+        result.Type = type;
+        result.Name = name;
+        result.Flags = 0;
+        return result;
+    };
+    const auto descriptor = [&](const TTypeAnnotationNode* type) {
+        auto node = ExpandType(pos, *type, ctx);
+        auto annotation = CreateTypeAnnotationTransformer(
+            CreateExtCallableTypeAnnotationTransformer(fixture.Types), fixture.Types);
+        UNIT_ASSERT(SyncTransform(*annotation, node, ctx) == IGraphTransformer::TStatus::Ok);
+        return node;
+    };
+    const auto udf = [&](TStringBuf name, const TCallableExprType* type,
+                         TExprNode::TPtr config, const TTypeAnnotationNode* configType, bool strict = false) {
+        TExprNode::TListType settings;
+        if (strict) {
+            settings.push_back(ctx.NewList(pos, {ctx.NewAtom(pos, "strict")}));
+        }
+        return typed("Udf", {ctx.NewAtom(pos, name), config, descriptor(voidType),
+            ctx.NewAtom(pos, ""), descriptor(type), descriptor(configType),
+            ctx.NewAtom(pos, ""), ctx.NewList(pos, std::move(settings))}, type);
+    };
+    TVector<const TItemExprType*> optionItems;
+    for (const TStringBuf name : {"CaseSensitive", "DotNl", "Literal", "LogErrors", "LongestMatch", "MaxMem",
+                                 "NeverCapture", "NeverNl", "OneLine", "PerlClasses", "PosixSyntax", "Utf8", "WordBoundary"}) {
+        optionItems.push_back(ctx.MakeType<TItemExprType>(name, name == "MaxMem" ? uint64 : boolean));
+    }
+    const auto* optionsType = ctx.MakeType<TStructExprType>(optionItems);
+    const auto* optionalOptions = ctx.MakeType<TOptionalExprType>(optionsType);
+    TVector<TCallableExprType::TArgumentInfo> optionArguments;
+    for (const TStringBuf name : {"Utf8", "PosixSyntax", "LongestMatch", "LogErrors", "MaxMem", "Literal",
+                                 "NeverNl", "DotNl", "NeverCapture", "CaseSensitive", "PerlClasses", "WordBoundary", "OneLine"}) {
+        optionArguments.push_back(argument(name == "MaxMem" ? optionalUint64 : optionalBool, name));
+    }
+    const auto* optionsCallable = callable(optionsType, optionArguments, optionArguments.size());
+    auto optionsUdf = udf("Re2.Options", optionsCallable, typed("Void", {}, voidType), voidType, true);
+    auto positional = ctx.NewList(pos, {});
+    positional->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{}));
+    auto field = ctx.NewList(pos, {ctx.NewAtom(pos, "CaseSensitive"),
+        typed("Just", {literal("Bool", "true", boolean)}, optionalBool)});
+    const auto* namedType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+        ctx.MakeType<TItemExprType>("CaseSensitive", optionalBool)});
+    auto options = typed("NamedApply", {optionsUdf, positional, typed("AsStruct", {field}, namedType)}, optionsType);
+    const auto* patternCallable = callable(string, {argument(string), argument(optionalString)}, 1);
+    const auto makeMatch = [&](TStringBuf patternText) {
+        auto pattern = typed("Apply", {udf("Re2.PatternFromLike", patternCallable, typed("Void", {}, voidType), voidType),
+            literal("String", patternText, string)}, string);
+        const auto* configType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{string, optionalOptions});
+        auto config = ctx.NewList(pos, {pattern, typed("Just", {options}, optionalOptions)});
+        config->SetTypeAnn(configType);
+        const auto* matchCallable = callable(boolean, {argument(optionalString)});
+        return typed("AssumeStrict", {udf("Re2.Match", matchCallable, config, configType)}, matchCallable);
+    };
+    auto match = makeMatch(changedPattern ? "%a%c%" : "%a%b%");
+
+    auto read = fixture.Read();
+    read->GetColumns() = {fixture.Key, fixture.Group};
+    const auto* text = ctx.MakeType<TDataExprType>(utf8 ? NUdf::EDataSlot::Utf8 : NUdf::EDataSlot::String);
+    const auto* optionalText = ctx.MakeType<TOptionalExprType>(text);
+    const TTypeAnnotationNode* sourceType = nullable ? static_cast<const TTypeAnnotationNode*>(optionalText) : text;
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, sourceType}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = typed("Member", {row, ctx.NewAtom(pos, ToString(fixture.Group))}, sourceType);
+    auto bytes = utf8 ? typed("ToString", {member}, nullable
+        ? static_cast<const TTypeAnnotationNode*>(optionalString) : string) : member;
+    auto input = nullable ? bytes : typed("Just", {bytes}, optionalString);
+    if (wrongMemberType) {
+        member->SetTypeAnn(nullable ? static_cast<const TTypeAnnotationNode*>(text) : optionalText);
+    }
+    if (!junction.empty()) {
+        fixture.Table->Metadata->Kind = EKikimrTableKind::Olap;
+        read->StorageType = NYql::EStorageType::ColumnStorage;
+        auto first = typed("Apply", {match, input}, boolean);
+        auto second = typed("Apply", {makeMatch("%x%y%"), input}, boolean);
+        const TStringBuf operation = junction == "NotOr" ? "Or" : junction;
+        auto body = typed(operation, {first, second}, boolean);
+        if (junction == "NotOr") {
+            body = typed("Not", {body}, boolean);
+        }
+        TIntrusivePtr<IOperator> plan = read;
+        if (pushed) {
+            auto argument = ctx.NewArgument(pos, "members_g");
+            auto bound = mutation == "wrong_binding" ? ctx.NewArgument(pos, "unbound") : argument;
+            TNodeOnNodeOwnedMap replacements{{member.Get(), bound}};
+            body = ctx.ReplaceNodes(std::move(body), replacements);
+            if (mutation == "typed_body") {
+                body->SetTypeAnn(boolean);
+            } else if (mutation == "empty_junction") {
+                body = ctx.NewCallable(pos, operation, {});
+            } else if (mutation == "arbitrary_body") {
+                body = ctx.NewCallable(pos, "SomeOtherPredicate", {bound});
+            }
+            auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {argument}), std::move(body));
+            auto column = ctx.NewCallable(pos, "KqpOlapApplyColumnArg", {
+                ExpandType(pos, *row->GetTypeAnn(), ctx), ctx.NewAtom(pos, ToString(fixture.Group))});
+            auto apply = ctx.NewCallable(pos, "KqpOlapApply", {
+                lambda, ctx.NewList(pos, {column}), ctx.NewAtom(pos, "")});
+            auto flow = ctx.NewArgument(pos, "flow");
+            auto filter = ctx.NewCallable(pos, "KqpOlapFilter", {flow, apply});
+            read->OlapFilterLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {flow}), std::move(filter));
+        } else {
+            auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+            auto filter = MakeIntrusive<TOpFilter>(read, pos, TExpression(lambda, &ctx, &fixture.ExpressionProps));
+            filter->Type = read->Type;
+            plan = filter;
+        }
+        TOpRoot root(plan, pos, {{fixture.Key, "key"}, {fixture.Group, "value"}});
+        if (pushed && !logicalPushed) {
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(read->StorageType);
+        }
+        return fixture.Export(root);
+    }
+    auto expression = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), typed("Apply", {match, input}, boolean));
+    const auto output = fixture.Registry.Add(TInfoUnit("", "matches"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{output, TMapElement(TExpression(expression, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, sourceType}, {output, boolean}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {output, "matches"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeIntegralCoalesce(
+    const TString& type, bool coalesce, bool staged, bool changedFallback = false, bool wrongFallbackType = false, const TString& fallbackSource = {})
+{
+    TFixture fixture(type);
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* scalar = ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(type));
+    const auto* optional = ctx.MakeType<TOptionalExprType>(scalar);
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    auto read = fixture.Read();
+    read->GetColumns() = {fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, optional}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Group))});
+    member->SetTypeAnn(optional);
+    auto fallback = ctx.NewCallable(pos, type, {ctx.NewAtom(pos, changedFallback ? "1" : "0")});
+    fallback->SetTypeAnn(wrongFallbackType ? ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool) : scalar);
+    if (!fallbackSource.empty()) {
+        auto literal = ctx.NewCallable(pos, fallbackSource, {ctx.NewAtom(pos, changedFallback ? "1" : "0")});
+        literal->SetTypeAnn(ctx.MakeType<TDataExprType>(*NUdf::FindDataSlot(fallbackSource)));
+        auto descriptor = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, type)});
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(scalar));
+        fallback = ctx.NewCallable(pos, "SafeCast", {literal, descriptor});
+        fallback->SetTypeAnn(scalar);
+    }
+    TExprNode::TPtr body;
+    if (coalesce) {
+        body = ctx.NewCallable(pos, "Coalesce", {member, fallback});
+    } else {
+        auto value = ctx.NewArgument(pos, "present");
+        value->SetTypeAnn(scalar);
+        auto handler = ctx.NewLambda(pos, ctx.NewArguments(pos, {value}), TExprNode::TPtr(value));
+        handler->SetTypeAnn(scalar);
+        body = ctx.NewCallable(pos, "IfPresent", {member, handler, fallback});
+    }
+    body->SetTypeAnn(scalar);
+    auto expression = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+    const auto output = fixture.Registry.Add(TInfoUnit("", "coalesced"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{output, TMapElement(TExpression(expression, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, optional}, {output, scalar}});
+    TOpRoot root(map, pos, {{fixture.Key, "key"}, {output, "value"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeBooleanCoalesce(bool coalesce, bool staged, bool fallbackTrue = false, bool wrongType = false) {
+    TFixture fixture("Bool");
+    auto& ctx = fixture.Expr;
+    const auto pos = TPositionHandle();
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    const auto* optional = ctx.MakeType<TOptionalExprType>(boolean);
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    auto read = fixture.Read();
+    read->GetColumns() = {fixture.Key, fixture.Group};
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Group, optional}});
+    auto row = ctx.NewArgument(pos, "row");
+    row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+    auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Group))});
+    member->SetTypeAnn(optional);
+    auto fallback = ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, fallbackTrue ? "true" : "false")});
+    fallback->SetTypeAnn(wrongType ? int32 : boolean);
+    TExprNode::TPtr body;
+    if (coalesce) {
+        body = ctx.NewCallable(pos, "Coalesce", {member, fallback});
+    } else {
+        auto value = ctx.NewArgument(pos, "present");
+        value->SetTypeAnn(boolean);
+        auto handler = ctx.NewLambda(pos, ctx.NewArguments(pos, {value}), TExprNode::TPtr(value));
+        handler->SetTypeAnn(boolean);
+        body = ctx.NewCallable(pos, "IfPresent", {member, handler, fallback});
+    }
+    body->SetTypeAnn(boolean);
+    auto expression = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(body));
+    const auto output = fixture.Registry.Add(TInfoUnit("", "coalesced"));
+    auto map = MakeIntrusive<TOpMap>(read, pos,
+        TMapIUs{{output, TMapElement(TExpression(expression, &ctx, &fixture.ExpressionProps))}});
+    fixture.SetType(*map, {{fixture.Key, int32}, {fixture.Group, optional}, {output, boolean}});
+    TOpRoot plan(map, pos, {{fixture.Key, "key"}, {output, "value"}});
+    if (staged) {
+        fixture.StageSerial(plan);
+    }
+    return fixture.Export(plan);
+}
+
+TSemanticSnapshotExportResult NativeInt32ReadPoint(bool pushed, bool staged, i32 pointValue,
+    bool wrongDescriptor = false, bool pruneKey = false)
+{
+    TFixture fixture;
+    const auto pos = TPositionHandle();
+    auto& ctx = fixture.Expr;
+    const auto* int32 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* uint64 = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64);
+    const auto* boolean = ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+    auto read = fixture.Read();
+    read->StorageType = NYql::EStorageType::ColumnStorage;
+    auto value = ctx.NewCallable(pos, "Int32", {ctx.NewAtom(pos, ToString(pointValue))});
+    value->SetTypeAnn(int32);
+    TIntrusivePtr<IOperator> input = read;
+    if (pushed) {
+        auto descriptor = ctx.NewCallable(pos, "DataType", {ctx.NewAtom(pos, wrongDescriptor ? "Int64" : "Int32")});
+        descriptor->SetTypeAnn(ctx.MakeType<TTypeExprType>(wrongDescriptor
+            ? ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Int64) : int32));
+        auto point = ctx.NewCallable(pos, "RangeFor", {ctx.NewAtom(pos, "==="), value, descriptor});
+        auto ranges = ctx.NewCallable(pos, "RangeUnion", {point});
+        auto cap = ctx.NewCallable(pos, "Uint64", {ctx.NewAtom(pos, "10000")});
+        cap->SetTypeAnn(uint64);
+        auto multiply = ctx.NewCallable(pos, "RangeMultiply", {cap, ranges});
+        read->RangeInfo = TOpRead::TRangeInfo{
+            .ComputeNode = ctx.NewCallable(pos, "RangeFinalize", {multiply}),
+            .KeyColumns = {"k"},
+            .UsedPrefixLen = 1,
+            .ExpectedMaxRanges = 1,
+        };
+    } else {
+        auto row = ctx.NewArgument(pos, "row");
+        row->SetTypeAnn(read->Type->Cast<TListExprType>()->GetItemType());
+        auto member = ctx.NewCallable(pos, "Member", {row, ctx.NewAtom(pos, ToString(fixture.Key))});
+        member->SetTypeAnn(int32);
+        auto comparison = ctx.NewCallable(pos, "==", {member, value});
+        comparison->SetTypeAnn(boolean);
+        auto lambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}), std::move(comparison));
+        auto filter = MakeIntrusive<TOpFilter>(read, pos,
+            TExpression(lambda, &ctx, &fixture.ExpressionProps));
+        filter->Type = read->Type;
+        input = filter;
+    }
+    if (pushed && pruneKey) {
+        read->GetColumns() = {fixture.Other};
+        fixture.SetType(*read, {{fixture.Other, int32}});
+    }
+    TVector<std::pair<TInfoUnitId, TString>> resultColumns{{fixture.Other, "value"}};
+    if (!pruneKey) {
+        resultColumns.insert(resultColumns.begin(), {fixture.Key, "key"});
+    }
+    TOpRoot root(input, pos, TOrderedIUs<TString>(resultColumns.begin(), resultColumns.end()));
+    if (staged) {
+        if (pushed) {
+            read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(read->StorageType);
+        } else {
+            fixture.StageSerial(root);
+        }
+    }
+    return fixture.Export(root);
+}
+
+TSemanticSnapshotExportResult NativeDistinctAliases(bool nullable, bool aliases,
+    bool reverseTraits = false, bool reverseKeys = false, bool staged = false,
+    bool swapValues = false, bool duplicateInput = false)
+{
+    TFixture fixture("Int32", !nullable);
+    const auto pos = TPositionHandle();
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* groupType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(int32)) : int32;
+    auto read = fixture.Read();
+    read->GetColumns().Add(fixture.Group);
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Other, int32}, {fixture.Group, groupType}});
+    const auto early = fixture.Registry.Add(TInfoUnit("", reverseTraits ? "second" : "first"));
+    const auto late = fixture.Registry.Add(TInfoUnit("", reverseTraits ? "first" : "second"));
+    const auto first = reverseTraits ? late : early;
+    const auto second = reverseTraits ? early : late;
+    TAggregationIUs traits;
+    if (aliases) {
+        const auto firstSource = duplicateInput ? fixture.Group : fixture.Other;
+        if (reverseTraits) {
+            traits.Add(second, TOpAggregationTraits{fixture.Group, "distinct", false, false});
+            traits.Add(first, TOpAggregationTraits{firstSource, "distinct", false, false});
+        } else {
+            traits.Add(first, TOpAggregationTraits{firstSource, "distinct", false, false});
+            traits.Add(second, TOpAggregationTraits{fixture.Group, "distinct", false, false});
+        }
+    }
+    const auto keys = reverseKeys ? TOrderedIUs<>{fixture.Group, fixture.Other}
+                                 : TOrderedIUs<>{fixture.Other, fixture.Group};
+    auto aggregate = MakeIntrusive<TOpAggregate>(read, std::move(traits), keys,
+        EOpPhase::Undefined, aliases, pos);
+    const auto firstOutput = aliases ? first : fixture.Other;
+    const auto secondOutput = aliases ? second : fixture.Group;
+    fixture.SetType(*aggregate, {{firstOutput, int32}, {secondOutput, groupType}});
+    TOpRoot root(aggregate, pos, {{swapValues ? secondOutput : firstOutput, "first"},
+                                {swapValues ? firstOutput : secondOutput, "second"}});
+    if (staged) {
+        fixture.StageSerial(root);
+    }
+    return fixture.Export(root);
+}
+
+std::pair<TSemanticSnapshotExportResult, TSemanticSnapshotExportResult> NativeNullableCountDistinct(
+    bool grouped, bool nullable = true, bool removeDistinct = false)
+{
+    TFixture fixture("Int32", !nullable);
+    const auto pos = TPositionHandle();
+    auto read = fixture.Read();
+    read->GetColumns().Add(fixture.Group);
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const TTypeAnnotationNode* valueType = nullable
+        ? static_cast<const TTypeAnnotationNode*>(fixture.Expr.MakeType<TOptionalExprType>(int32)) : int32;
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Other, int32}, {fixture.Group, valueType}});
+    const auto count = fixture.Registry.Add(TInfoUnit("", "count"));
+    auto aggregate = MakeIntrusive<TOpAggregate>(read,
+        TAggregationIUs{{count, {fixture.Group, "count", true, false}}},
+        grouped ? TOrderedIUs<>{fixture.Other} : TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+    TOpRoot root(aggregate, pos, {{count, "count"}});
+    root.PlanProps.InfoUnitRegistry = fixture.Registry;
+    auto annotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(fixture.Types), fixture.Types);
+    TRBOContext rbo(fixture.Optimize, fixture.Expr, fixture.Types, *annotation, *fixture.Functions);
+    root.RecomputeOutputIUsSubtree();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    auto initial = ExportSemanticSnapshotV1(root, rbo);
+    Parse(initial);
+    if (removeDistinct) {
+        aggregate->SetAggregationTraits(TAggregationIUs{{count, {fixture.Group, "count", false, false}}});
+    } else {
+        TExpandDistinctAggregationRule rule;
+        root.SetInput(rule.SimpleMatchAndApply(aggregate, rbo, root.PlanProps));
+    }
+    root.RecomputeOutputIUsSubtree();
+    root.ComputeParents();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    fixture.StageSerial(root);
+    auto expanded = ExportSemanticSnapshotV1(root, rbo);
+    Parse(expanded);
+    return {std::move(initial), std::move(expanded)};
+}
+
+std::pair<TSemanticSnapshotExportResult, TSemanticSnapshotExportResult> NativeDecimalAverageDistinct(
+    bool extraDistinct, bool corruptCount = false, bool staged = true, ui32 malformedFinal = 0)
+{
+    TFixture fixture;
+    const auto pos = TPositionHandle();
+    auto read = fixture.Read();
+    read->GetColumns().Add(fixture.Price);
+    const auto* int32 = fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+    const auto* priceType = fixture.Expr.MakeType<TOptionalExprType>(
+        fixture.Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "15", "2"));
+    fixture.SetType(*read, {{fixture.Key, int32}, {fixture.Other, int32}, {fixture.Price, priceType}});
+    const auto average = fixture.Registry.Add(TInfoUnit("", "average"));
+    const auto count = fixture.Registry.Add(TInfoUnit("", "count"));
+    const auto distinct = fixture.Registry.Add(TInfoUnit("", "distinct_count"));
+    const auto extra = fixture.Registry.Add(TInfoUnit("", "extra_distinct_count"));
+    TAggregationIUs traits{{average, {fixture.Price, "avg", false, false}},
+        {count, {fixture.Price, "count", false, false}}, {distinct, {fixture.Other, "count", true, false}}};
+    if (extraDistinct) {
+        traits.Add(extra, TOpAggregationTraits{fixture.Key, "count", true, false});
+    }
+    auto aggregate = MakeIntrusive<TOpAggregate>(read, std::move(traits), TOrderedIUs<>{},
+        EOpPhase::Undefined, false, pos);
+    TOrderedIUs<TString> outputs{{average, "average"}, {count, "count"}, {distinct, "distinct_count"}};
+    if (extraDistinct) {
+        outputs.Append(extra, "extra_distinct_count");
+    }
+    TOpRoot root(aggregate, pos, std::move(outputs));
+    root.PlanProps.InfoUnitRegistry = fixture.Registry;
+    auto annotation = CreateTypeAnnotationTransformer(
+        CreateExtCallableTypeAnnotationTransformer(fixture.Types), fixture.Types);
+    TRBOContext rbo(fixture.Optimize, fixture.Expr, fixture.Types, *annotation, *fixture.Functions);
+    root.RecomputeOutputIUsSubtree();
+    root.ComputeParents();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    auto initial = ExportSemanticSnapshotV1(root, rbo);
+    Parse(initial);
+    TExpandDistinctAggregationRule expand;
+    root.SetInput(expand.SimpleMatchAndApply(aggregate, rbo, root.PlanProps));
+    auto finalAggregate = CastOperator<TOpAggregate>(root.GetInput());
+    UNIT_ASSERT_VALUES_EQUAL(finalAggregate->GetInput()->GetChildCount(), extraDistinct ? 3 : 2);
+    if (corruptCount) {
+        auto finalTraits = finalAggregate->GetAggregationTraits();
+        auto corrupted = finalTraits.At(distinct);
+        corrupted.Input = finalTraits.At(count).Input;
+        finalTraits.Replace(distinct, std::move(corrupted));
+        finalAggregate->SetAggregationTraits(std::move(finalTraits));
+    }
+    TVector<std::unique_ptr<IRule>> rules;
+    rules.emplace_back(std::make_unique<TExpandReplicateRule>());
+    TRuleBasedStage("Expand shared average inputs", std::move(rules)).RunStage(root, rbo);
+    TGlobalInliningStage("Inline average input aliases").RunStage(root, rbo);
+    root.RecomputeOutputIUsSubtree();
+    root.ComputeParents();
+    UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+    if (staged) {
+        TAssignStagesStage().RunStage(root, rbo);
+        TPropagateHashFuncStage().RunStage(root, rbo);
+    }
+    if (malformedFinal) {
+        const TTypeAnnotationNode* bad = nullptr;
+        if (malformedFinal == 1) {
+            bad = fixture.Expr.MakeType<TDataExprParamsType>(NUdf::EDataSlot::Decimal, "35", "2");
+        } else {
+            const auto* sumType = fixture.Expr.MakeType<TDataExprParamsType>(
+                NUdf::EDataSlot::Decimal, malformedFinal == 2 ? "34" : "35", "2");
+            const auto* countType = fixture.Expr.MakeType<TDataExprType>(
+                malformedFinal == 3 ? NUdf::EDataSlot::Int64 : NUdf::EDataSlot::Uint64);
+            bad = fixture.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{sumType, countType});
+        }
+        bad = fixture.Expr.MakeType<TOptionalExprType>(bad);
+        TVector<const TItemExprType*> fields;
+        for (const auto* item : finalAggregate->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()) {
+            fields.push_back(item->GetName() == ToString(average)
+                ? fixture.Expr.MakeType<TItemExprType>(item->GetName(), bad) : item);
+        }
+        finalAggregate->Type = fixture.Expr.MakeType<TListExprType>(fixture.Expr.MakeType<TStructExprType>(fields));
+    }
+    auto final = ExportSemanticSnapshotV1(root, rbo);
+    if (!malformedFinal) { Parse(final); }
+    return {std::move(initial), std::move(final)};
+}
+
 TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
     TFixture fixture;
     auto read = fixture.Read();
@@ -718,6 +1842,809 @@ TSemanticSnapshotExportResult StagedRead(ui32 firstStage) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
+    Y_UNIT_TEST(NativeFilterFusionIsVisibleToTransformationProofs) {
+        TFixture f;
+        const auto pos = TPositionHandle();
+        auto read = f.Read();
+        auto column = MakeColumnAccess(f.Key, pos, &f.Expr, &f.ExpressionProps);
+        auto lower = MakeIntrusive<TOpFilter>(read, pos,
+            MakeBinaryPredicate(">", column, MakeConstant("Int32", "0", pos, &f.Expr)));
+        auto upper = MakeIntrusive<TOpFilter>(lower, pos,
+            MakeBinaryPredicate("<", column, MakeConstant("Int32", "5", pos, &f.Expr)));
+        TOpRoot root(upper, pos, {{f.Key, "key"}});
+        root.PlanProps.InfoUnitRegistry = f.Registry;
+        auto annotation = CreateTypeAnnotationTransformer(
+            CreateExtCallableTypeAnnotationTransformer(f.Types), f.Types);
+        TRBOContext rbo(f.Optimize, f.Expr, f.Types, *annotation, *f.Functions);
+        TNativeCaptureSink sink;
+        TSemanticSnapshotPairCaptureV1 capture(&sink);
+        capture.CaptureInitial(root, rbo);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 1);
+        UNIT_ASSERT_C(sink.Results.front().IsSupported(), sink.Results.front().UnsupportedReason);
+        rbo.TransformationDebug.Reset(100);
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TFuseFiltersRule>());
+        TRuleBasedStage("Native filter fusion", std::move(rules)).RunStage(root, rbo);
+        auto fused = CastOperator<TOpFilter>(root.GetInput());
+        UNIT_ASSERT(fused->GetInput() == read);
+        f.StageSerial(root);
+        capture.CaptureFinal(root, rbo);
+        UNIT_ASSERT_VALUES_EQUAL(sink.Results.size(), 2);
+        UNIT_ASSERT_C(sink.Results.back().IsSupported(), sink.Results.back().UnsupportedReason);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(sink.Results.front().Json, sink.Results.back().Json), "VERIFIED_BOUNDED");
+        UNIT_ASSERT_VALUES_EQUAL_C(rbo.TransformationDebug.Events.size(), 1,
+            "Filter fusion changed the native plan but was omitted from the transformation log");
+        UNIT_ASSERT_VALUES_EQUAL(rbo.TransformationDebug.Events.front().Name, "Fuse filters");
+    }
+
+    Y_UNIT_TEST(NativeIntegralCoalescePreservesEmptyAndPresentValues) {
+        for (const TString& type : {TString("Int8"), TString("Uint8"), TString("Int16"), TString("Uint16"),
+                                   TString("Int32"), TString("Uint32"), TString("Int64"), TString("Uint64")}) {
+            const auto before = NativeIntegralCoalesce(type, false, false);
+            const auto after = NativeIntegralCoalesce(type, true, true);
+            Parse(before);
+            Parse(after);
+            UNIT_ASSERT_STRING_CONTAINS(after.Json, "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            const auto changed = NativeIntegralCoalesce(type, true, true, true);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+            UNIT_ASSERT(!NativeIntegralCoalesce(type, true, false, false, true).IsSupported());
+        }
+    }
+
+    Y_UNIT_TEST(NativeOlapLikeJunctionsPreserveBooleanSemantics) {
+        for (bool utf8 : {false, true}) {
+            for (bool nullable : {false, true}) {
+                for (const TStringBuf junction : {"And", "Or", "NotOr"}) {
+                    const auto before = NativeCompiledLike(utf8, nullable, false, false, false, junction);
+                    const auto after = NativeCompiledLike(utf8, nullable, false, false, false, junction, true);
+                    const auto changed = NativeCompiledLike(utf8, nullable, false, true, false, junction, true);
+                    Parse(before);
+                    Parse(after);
+                    Parse(changed);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+                }
+            }
+        }
+        for (const TStringBuf mutation : {"wrong_binding", "typed_body", "empty_junction", "arbitrary_body"}) {
+            UNIT_ASSERT(!NativeCompiledLike(false, true, false, false, false, "Or", true, mutation).IsSupported());
+        }
+    }
+
+    Y_UNIT_TEST(NativeLogicalPushedLikePreservesRowPredicatesBeforeStages) {
+        for (bool utf8 : {false, true}) {
+            const auto before = NativeCompiledLike(utf8, true, false, false, false, "Or");
+            const auto after = NativeCompiledLike(utf8, true, false, false, false, "Or", true, {}, true);
+            const auto changed = NativeCompiledLike(utf8, true, false, true, false, "Or", true, {}, true);
+            Parse(before);
+            Parse(after);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, true), "VERIFIED_BOUNDED");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json, true), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeCompiledLikePreservesRequiredAndNullableText) {
+        for (const bool utf8 : {false, true}) {
+            for (const bool nullable : {false, true}) {
+                const auto initial = NativeCompiledLike(utf8, nullable, false);
+                const auto final = NativeCompiledLike(utf8, nullable, true);
+                Parse(initial);
+                Parse(final);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+                const auto changed = NativeCompiledLike(utf8, nullable, true, true);
+                Parse(changed);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+                UNIT_ASSERT(!NativeCompiledLike(utf8, nullable, false, false, true).IsSupported());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeZeroWidthUnionPreservesCountAndBranchMultiplicity) {
+        const auto capture = [](ui32 branches, bool zeroWidth, bool staged) {
+            TFixture f("Int32");
+            const auto pos = TPositionHandle();
+            const auto payload = f.Registry.Add(TInfoUnit("", "payload"));
+            const auto unit = f.Registry.Add(TInfoUnit("", "unit"));
+            const auto count = f.Registry.Add(TInfoUnit("", "count"));
+            TVector<TIntrusivePtr<IOperator>> inputs;
+            TUnionInputRow sources;
+            for (ui32 i = 0; i < branches; ++i) {
+                inputs.push_back(f.Read());
+                sources.Inputs.push_back(f.Key);
+            }
+            TUnionAllIUs columns(TUnionInputPolicy{branches});
+            if (!zeroWidth) {
+                columns.Add(payload, std::move(sources));
+            }
+            auto merge = MakeIntrusive<TOpUnionAll>(std::move(inputs), pos, std::move(columns));
+            TIntrusivePtr<IOperator> input = merge;
+            if (zeroWidth) {
+                auto row = f.Expr.NewArgument(pos, "row");
+                auto lambda = f.Expr.NewLambda(pos, f.Expr.NewArguments(pos, {row}),
+                    f.Expr.NewCallable(pos, "Void", {}));
+                input = MakeIntrusive<TOpMap>(merge, pos, TMapIUs{{unit,
+                    TMapElement(TExpression(lambda, &f.Expr, &f.ExpressionProps))}});
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(input,
+                TAggregationIUs{{count, {zeroWidth ? unit : payload, "count", false, false}}},
+                TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+            TOpRoot root(aggregate, pos, {{count, "count"}});
+            root.PlanProps.InfoUnitRegistry = f.Registry;
+            auto annotation = CreateTypeAnnotationTransformer(
+                CreateExtCallableTypeAnnotationTransformer(f.Types), f.Types);
+            TRBOContext rbo(f.Optimize, f.Expr, f.Types, *annotation, *f.Functions);
+            for (const auto& entry : root) {
+                entry.Current->BindExpressionPlanProps(&root.PlanProps);
+            }
+            root.RecomputeOutputIUsSubtree();
+            UNIT_ASSERT(root.ComputeTypes(rbo) == IGraphTransformer::TStatus::Ok);
+            root.ComputeParents();
+            if (staged) {
+                auto& graph = root.PlanProps.StageGraph;
+                TVector<ui32> sources;
+                for (auto* read : merge->GetChildren()) {
+                    const auto source = graph.AddSourceStage(NYql::EStorageType::RowStorage);
+                    read->Props.StageId = source;
+                    sources.push_back(source);
+                }
+                const auto sink = graph.AddStage();
+                merge->Props.StageId = sink;
+                input->Props.StageId = sink;
+                aggregate->Props.StageId = sink;
+                for (const auto source : sources) {
+                    graph.Connect(source, sink, MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(source)));
+                }
+            }
+            auto exported = ExportSemanticSnapshotV1(root, rbo);
+            Parse(exported);
+            return exported;
+        };
+        for (const bool staged : {false, true}) {
+            for (const ui32 branches : {2, 3, 4}) {
+                const auto before = capture(branches, false, false);
+                const auto after = capture(branches, true, staged);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, !staged), "VERIFIED_BOUNDED");
+            }
+            const auto before = capture(3, false, false);
+            const auto changed = capture(2, true, staged);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsMatchesIndependentBagUnion) {
+        for (const TString& function : {TString("count"), TString("sum"), TString("min"), TString("max")}) {
+            for (const bool nullable : {false, true}) {
+                for (const bool duplicateSets : {false, true}) {
+                    const auto [initial, expanded] = NativeGroupingSets(function, nullable, duplicateSets);
+                    UNIT_ASSERT_VALUES_EQUAL_C(Verify(initial.Json, expanded.Json, true), "VERIFIED_BOUNDED",
+                        function << " nullable=" << nullable << " duplicateSets=" << duplicateSets);
+                }
+                const auto [initial, expanded] = NativeGroupingSets(function, nullable, false, true);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json, true), "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsCountAllPreservesUnitCarrierAndMultiplicity) {
+        for (const bool nullableKey : {false, true}) {
+            for (const bool duplicateSets : {false, true}) {
+                for (const bool staged : {false, true}) {
+                    const auto [initial, expanded] = NativeGroupingSets("count", true, duplicateSets,
+                        false, false, false, staged, nullableKey, "Int32", true);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json, !staged), "VERIFIED_BOUNDED");
+                }
+            }
+        }
+        const auto [initial, expanded] = NativeGroupingSets("count", true, true,
+            false, false, false, false, true, "Int32", true);
+        auto changed = Parse(expanded);
+        auto removed = NJson::TJsonValue(NJson::JSON_MAP);
+        bool mutated = false;
+        for (auto& node : changed["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() != "union_all") {
+                continue;
+            }
+            auto& last = node["inputs"].GetArraySafe().back();
+            removed["id"] = "mutant_empty_count_branch";
+            removed["op"] = "filter";
+            removed["input"] = last["node"];
+            removed["predicate"]["kind"] = "literal";
+            removed["predicate"]["type"] = "Bool";
+            removed["predicate"]["value"] = false;
+            last["node"] = "mutant_empty_count_branch";
+            mutated = true;
+            break;
+        }
+        UNIT_ASSERT(mutated);
+        changed["plan"]["nodes"].AppendValue(std::move(removed));
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, NJson::WriteJson(changed, false), true), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsMatchesExpandedStages) {
+        for (const TString& function : {TString("count"), TString("sum"), TString("min"), TString("max"), TString("avg")}) {
+            const auto [initial, expanded] = NativeGroupingSets(function, true, true, false, false, false, true);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json), "VERIFIED_BOUNDED");
+        }
+        const auto [initial, expanded] = NativeGroupingSets("sum", false, false, true, false, false, true);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsPreservesRequiredKeyValues) {
+        for (const TString& type : {TString("Int8"), TString("Int16"), TString("Int32"), TString("Int64"),
+                                   TString("Uint8"), TString("Uint16"), TString("Uint32"), TString("Uint64"),
+                                   TString("Bool"), TString("String"), TString("Utf8"), TString("Date"),
+                                   TString("Datetime"), TString("Timestamp")}) {
+            const auto [initial, expanded] = NativeGroupingSets(
+                "count", true, true, false, false, false, true, false, type);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(initial.Json, expanded.Json), "VERIFIED_BOUNDED", type);
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsDistinguishesNullGroupsFromOmittedKeys) {
+        for (const TString& function : {TString("count"), TString("sum")}) {
+            const auto [initial, expanded] = NativeGroupingSets(function, true, true, false, false, false, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json), "VERIFIED_BOUNDED");
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsPreservesAuditedDecimalAverage) {
+        for (const bool duplicateSets : {false, true}) {
+            const auto [initial, expanded] = NativeGroupingSets("avg", true, duplicateSets);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, expanded.Json, true), "VERIFIED_BOUNDED");
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsRejectsInvalidNullabilityAndResidualPhysicalTemplates) {
+        UNIT_ASSERT(!NativeGroupingSets("count", false, false, false, true).first.IsSupported());
+        UNIT_ASSERT(!NativeGroupingSets("count", false, false, false, false, true).first.IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsDetectsLostBranchesAndWrongNullsOrIndicators) {
+        const auto [initial, expanded] = NativeGroupingSets("sum", true, true);
+        for (const TString& mutation : {TString("branch"), TString("null"), TString("indicator")}) {
+            auto changed = Parse(expanded);
+            bool mutated = false;
+            auto removedBranch = NJson::TJsonValue(NJson::JSON_MAP);
+            for (auto& node : changed["plan"]["nodes"].GetArraySafe()) {
+                if (mutation == "branch" && node["op"].GetStringSafe() == "union_all") {
+                    UNIT_ASSERT(node["inputs"].GetArraySafe().size() > 2);
+                    auto& last = node["inputs"].GetArraySafe().back();
+                    removedBranch["id"] = "mutant_empty_branch";
+                    removedBranch["op"] = "filter";
+                    removedBranch["input"] = last["node"];
+                    removedBranch["predicate"]["kind"] = "literal";
+                    removedBranch["predicate"]["type"] = "Bool";
+                    removedBranch["predicate"]["value"] = false;
+                    last["node"] = "mutant_empty_branch";
+                    mutated = true;
+                } else if (node["op"].GetStringSafe() == "project") {
+                    for (auto& column : node["columns"].GetArraySafe()) {
+                        auto& expression = column["expression"];
+                        if (mutation == "null" && expression["kind"].GetStringSafe() == "null") {
+                            const auto type = expression["type"].GetStringSafe();
+                            expression = NJson::TJsonValue(NJson::JSON_MAP);
+                            expression["kind"] = "if";
+                            expression["condition"]["kind"] = "literal";
+                            expression["condition"]["type"] = "Bool";
+                            expression["condition"]["value"] = true;
+                            expression["then"]["kind"] = "literal";
+                            expression["then"]["type"] = type;
+                            expression["then"]["value"] = i64(0);
+                            expression["else"]["kind"] = "null";
+                            expression["else"]["type"] = type;
+                            expression["type"] = type;
+                            expression["nullable"] = true;
+                            mutated = true;
+                            break;
+                        }
+                        if (mutation == "indicator" && expression["kind"].GetStringSafe() == "literal" &&
+                            expression["type"].GetStringSafe() == "Uint64")
+                        {
+                            expression["value"] = ui64(expression["value"].GetUIntegerSafe() == 0 ? 1 : 0);
+                            mutated = true;
+                            break;
+                        }
+                    }
+                }
+                if (mutated) { break; }
+            }
+            UNIT_ASSERT(mutated);
+            if (mutation == "branch") {
+                changed["plan"]["nodes"].AppendValue(std::move(removedBranch));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, NJson::WriteJson(changed, false), true), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupingSetsDetectsChangedReducer) {
+        const auto [initial, expanded] = NativeGroupingSets("min", true, true);
+        auto changed = Parse(expanded);
+        for (auto& node : changed["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                node["aggregates"][0]["function"] = "max";
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, NJson::WriteJson(changed, false), true), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeDistinctAliasesUseBindingsInsteadOfTraitOrder) {
+        for (const bool nullable : {false, true}) {
+            const auto initial = NativeDistinctAliases(nullable, false);
+            Parse(initial);
+            for (const bool reverseTraits : {false, true}) {
+                for (const bool reverseKeys : {false, true}) {
+                    const auto final = NativeDistinctAliases(nullable, true, reverseTraits, reverseKeys, true);
+                    Parse(final);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeDistinctAliasesStillObserveOutputBindings) {
+        const auto initial = NativeDistinctAliases(false, false);
+        const auto changed = NativeDistinctAliases(false, true, true, true, true, true);
+        Parse(initial);
+        Parse(changed);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeDistinctAliasesRejectMissingOrRepeatedSourceKeys) {
+        UNIT_ASSERT(!NativeDistinctAliases(false, true, true, false, false, false, true).IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeDecimalAverageFollowsActualDistinctExpansionBindings) {
+        for (const bool extraDistinct : {false, true}) {
+            for (const bool corruptCount : {false, true}) {
+                const auto [initial, final] = NativeDecimalAverageDistinct(extraDistinct, corruptCount);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json),
+                    corruptCount ? "COUNTEREXAMPLE" : "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeDecimalAverageDistinctPrefixesAreVerifiableBeforeStages) {
+        for (const bool extraDistinct : {false, true}) {
+            for (const bool corruptCount : {false, true}) {
+                const auto [initial, prefix] = NativeDecimalAverageDistinct(extraDistinct, corruptCount, false);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, prefix.Json, true),
+                    corruptCount ? "COUNTEREXAMPLE" : "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeDecimalAverageCarrierRejectsInconsistentFinalAnnotations) {
+        for (const bool staged : {false, true}) {
+            for (ui32 malformed = 1; malformed <= 3; ++malformed) {
+                const auto [initial, final] = NativeDecimalAverageDistinct(false, false, staged, malformed);
+                UNIT_ASSERT(initial.IsSupported());
+                UNIT_ASSERT(!final.IsSupported());
+                UNIT_ASSERT_STRING_CONTAINS(final.UnsupportedReason,
+                    "Decimal avg final annotation disagrees with the audited source and state");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeNullableCountDistinctMatchesProductionExpansion) {
+        for (const bool grouped : {false, true}) {
+            for (const bool nullable : {false, true}) {
+                const auto [initial, final] = NativeNullableCountDistinct(grouped, nullable);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeNullableCountDistinctDetectsLostDeduplication) {
+        for (const bool grouped : {false, true}) {
+            const auto [initial, changed] = NativeNullableCountDistinct(grouped, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeOuterJoinUniquenessDoesNotUseOnlyNullExtendedKeys) {
+        for (const TString& kind : {TString("Inner"), TString("Left"), TString("Right"),
+                                   TString("Full"), TString("Exclusion")}) {
+            for (const bool joinsRightKey : {false, true}) {
+                NTests::TIdTestContext f;
+                const auto a = f.Id("a"), b = f.Id("b"), payload = f.Id("payload");
+                auto left = f.Read({a}), right = f.Read({b, payload});
+                left->Props.Metadata.emplace();
+                right->Props.Metadata.emplace();
+                left->Props.Metadata->ColumnsCount = 1;
+                right->Props.Metadata->ColumnsCount = 2;
+                left->Props.Metadata->KeyColumns = {a};
+                right->Props.Metadata->KeyColumns = {b};
+                auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, kind,
+                    TJoinIUs{{a, joinsRightKey ? b : payload}});
+                join->ComputeMetadata(f.RboCtx, f.Props);
+                const TOrderedIUs<> expected = kind == "Full" || kind == "Exclusion" ? TOrderedIUs<>{}
+                    : kind == "Right" ? TOrderedIUs<>{b}
+                    : joinsRightKey ? TOrderedIUs<>{a}
+                    : kind == "Left" ? TOrderedIUs<>{a, b} : TOrderedIUs<>{b};
+                UNIT_ASSERT_C(join->Props.Metadata->KeyColumns == expected,
+                    kind << " uses null-extended columns as its only unique key");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeFullJoinNullKeysDoNotPermitMultiplicityChangingElimination) {
+        for (const bool equalNulls : {false, true}) {
+            TFixture f("Int32");
+            const auto pos = TPositionHandle();
+            const auto* int32 = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32);
+            const auto* optional = f.Expr.MakeType<TOptionalExprType>(int32);
+            const auto rightKey = f.Registry.Add(TInfoUnit("right", "k"));
+            const auto makeRead = [&](TString alias, TInfoUnitId id, const TTypeAnnotationNode* type) {
+                auto read = MakeIntrusive<TOpRead>(std::move(alias), TUnorderedIUs{id}, NYql::EStorageType::RowStorage,
+                    NOpt::BuildTableMeta(*f.Table, pos, f.Expr).Ptr(), nullptr, nullptr,
+                    std::nullopt, std::nullopt, ESortDir::None, TPhysicalOpProps{}, pos);
+                f.SetType(*read, {{id, type}});
+                return read;
+            };
+            auto a = makeRead("same", f.Key, int32);
+            auto b = makeRead("right", rightKey, int32);
+            auto c = makeRead("same", f.Group, optional);
+            auto predicate = MakeConstant("Bool", "false", pos, &f.Expr);
+            predicate.GetExpressionBody()->SetTypeAnn(f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool));
+            auto empty = MakeIntrusive<TOpFilter>(a, pos, predicate);
+            f.SetType(*empty, {{f.Key, int32}});
+            auto full = MakeIntrusive<TOpJoin>(empty, b, pos, "Full", TJoinIUs{{f.Key, rightKey}});
+            f.SetType(*full, {{f.Key, optional}, {rightKey, optional}});
+            TJoinIUs keys;
+            keys.Add({f.Group, f.Key, equalNulls});
+            auto outer = MakeIntrusive<TOpJoin>(c, full, pos, "Left", keys);
+            f.SetType(*outer, {{f.Group, optional}, {f.Key, optional}, {rightKey, optional}});
+            TOpRoot root(outer, pos, {{f.Group, "group"}});
+            root.PlanProps.InfoUnitRegistry = f.Registry;
+            for (const auto& item : root) {
+                item.Current->BindExpressionPlanProps(&root.PlanProps);
+            }
+            root.RecomputeOutputIUsSubtree();
+            root.ComputeParents();
+            a->ComputeMetadata(f.Rbo, root.PlanProps);
+            b->ComputeMetadata(f.Rbo, root.PlanProps);
+            c->ComputeMetadata(f.Rbo, root.PlanProps);
+            empty->ComputeMetadata(f.Rbo, root.PlanProps);
+            full->ComputeMetadata(f.Rbo, root.PlanProps);
+            outer->ComputeMetadata(f.Rbo, root.PlanProps);
+            ComputePlanLiveness(root);
+            const auto before = f.Export(root);
+            Parse(before);
+            const bool eliminated = TEliminateLeftJoinRule().MatchAndApply(root.MutableChild(0), f.Rbo, root.PlanProps);
+            root.ComputeParents();
+            const auto after = f.Export(root);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, after.Json, true), "VERIFIED_BOUNDED",
+                "equalNulls=" << equalNulls << " eliminated=" << eliminated);
+        }
+    }
+
+    Y_UNIT_TEST(NativeTableLookupRequiresTheCompletePrimaryKeyForUniqueness) {
+        for (ui32 mask = 0; mask < 4; ++mask) {
+            for (const bool joinMode : {false, true}) {
+                NTests::TIdTestContext f;
+                auto& table = f.Tables->GetOrAddTable("ut", "/Root", "/Root/table");
+                table.Metadata = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/table");
+                table.Metadata->DoesExist = true;
+                table.Metadata->PathId = TKikimrPathId(1, 1);
+                table.Metadata->SchemaVersion = 1;
+                table.Metadata->Kind = EKikimrTableKind::Datashard;
+                table.Metadata->KeyColumnNames = {"a", "b"};
+                ui32 columnId = 0;
+                for (const TString& name : {TString("a"), TString("b"), TString("payload")}) {
+                    table.Metadata->Columns.emplace(name, TKikimrColumnMetadata(name, ++columnId, "Int32", true));
+                    table.Metadata->ColumnOrder.push_back(name);
+                }
+                UNIT_ASSERT(table.Load(f.ExprCtx));
+                const auto sourceA = f.Id("a"), sourceB = f.Id("b");
+                const auto outputA = f.Id("a"), outputB = f.Id("b"), payload = f.Id("payload");
+                auto source = f.Read({sourceA, sourceB});
+                source->ComputeMetadata(f.RboCtx, f.Props);
+                TUnorderedIUs columns{payload};
+                if (mask & 1) { columns.Add(outputA); }
+                if (mask & 2) { columns.Add(outputB); }
+                TOpTableLookup::TLookupKeys keys;
+                keys.Append(sourceA, "a");
+                keys.Append(sourceB, "b");
+                auto lookup = joinMode
+                    ? MakeIntrusive<TOpTableLookup>(source, f.Pos, source->GetTable(), columns, keys, "Inner", std::nullopt)
+                    : MakeIntrusive<TOpTableLookup>(source, f.Pos, source->GetTable(), columns, keys);
+                lookup->ComputeMetadata(f.RboCtx, f.Props);
+                const auto expected = !joinMode && mask == 3 ? TOrderedIUs<>{outputA, outputB} : TOrderedIUs<>{};
+                UNIT_ASSERT_C(lookup->Props.Metadata->KeyColumns == expected,
+                    "Lookup advertised a partial composite key as unique: mask=" << mask << " join=" << joinMode);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeGroupedAggregateRetainsKnownGroupingUniqueness) {
+        for (const bool knownInputKey : {true, false}) {
+            NTests::TIdTestContext f;
+            const auto key = f.Id("key"), value = f.Id("value"), total = f.Id("total");
+            auto read = f.Read({key, value});
+            read->Props.Metadata.emplace();
+            read->Props.Metadata->ColumnsCount = 2;
+            if (knownInputKey) {
+                read->Props.Metadata->KeyColumns = {key};
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(read,
+                TAggregationIUs{{total, {value, "sum", false, false}}},
+                TOrderedIUs<>{key, value}, EOpPhase::Undefined, false, f.Pos);
+            aggregate->ComputeMetadata(f.RboCtx, f.Props);
+            const auto expected = knownInputKey ? TOrderedIUs<>{key} : TOrderedIUs<>{key, value};
+            UNIT_ASSERT_C(aggregate->Props.Metadata->KeyColumns == expected,
+                "Grouped aggregate lost uniqueness when its input key was unknown");
+        }
+    }
+
+    Y_UNIT_TEST(NativeFullJoinDoesNotAdvertiseOneSidedShuffling) {
+        for (const auto algo : {EJoinAlgoType::GraceJoin, EJoinAlgoType::MapJoin}) {
+            for (const TString& kind : {TString("Inner"), TString("Left"), TString("Right"),
+                                       TString("Full"), TString("Exclusion")}) {
+                NTests::TIdTestContext f;
+                f.Config->OptShuffleElimination = true;
+                const auto leftKey = f.Id("left"), rightKey = f.Id("right"), count = f.Id("count");
+                auto left = f.Read({leftKey}), right = f.Read({rightKey});
+                left->Props.Metadata.emplace();
+                right->Props.Metadata.emplace();
+                left->Props.Metadata->ColumnsCount = right->Props.Metadata->ColumnsCount = 1;
+                left->Props.Metadata->ShuffledByColumns = {leftKey};
+                right->Props.Metadata->ShuffledByColumns = {rightKey};
+                auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, kind, TJoinIUs{{leftKey, rightKey}});
+                join->Props.JoinAlgo = algo;
+                join->ComputeMetadata(f.RboCtx, f.Props);
+                const bool bothSidesNullable = kind == "Full" || kind == "Exclusion";
+                const auto expected = bothSidesNullable || (kind == "Right" && algo == EJoinAlgoType::MapJoin)
+                    ? TOrderedIUs<>{} : TOrderedIUs<>{kind == "Right" ? rightKey : leftKey};
+                UNIT_ASSERT_C(join->Props.Metadata->ShuffledByColumns == expected,
+                    kind << " advertises a distribution that unmatched rows need not preserve");
+                if (bothSidesNullable) {
+                    auto aggregate = MakeIntrusive<TOpAggregate>(join,
+                        TAggregationIUs{{count, {rightKey, "count", false, false}}},
+                        TOrderedIUs<>{leftKey}, EOpPhase::Undefined, false, f.Pos);
+                    UNIT_ASSERT(!CanEliminateAggregateShuffle(*aggregate, f.RboCtx));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeStablePickleMatchesRuntimeScalarPacking) {
+        CheckStableScalarPacking<bool>(NUdf::EDataSlot::Bool, {false, true});
+        CheckStableScalarPacking<i8>(NUdf::EDataSlot::Int8, {-128, -1, 0, 1, 127});
+        CheckStableScalarPacking<ui8>(NUdf::EDataSlot::Uint8, {0, 1, 127, 128, 255});
+        CheckStableScalarPacking<i16>(NUdf::EDataSlot::Int16, {-32768, -1, 0, 1, 127, 128, 32767});
+        CheckStableScalarPacking<ui16>(NUdf::EDataSlot::Uint16, {0, 1, 127, 128, 65535});
+        CheckStableScalarPacking<i32>(NUdf::EDataSlot::Int32,
+            {std::numeric_limits<i32>::min(), -1, 0, 1, 127, 128, 16383, 16384, std::numeric_limits<i32>::max()});
+        CheckStableScalarPacking<ui32>(NUdf::EDataSlot::Uint32,
+            {0, 1, 127, 128, 16383, 16384, std::numeric_limits<ui32>::max()});
+        CheckStableScalarPacking<i64>(NUdf::EDataSlot::Int64,
+            {std::numeric_limits<i64>::min(), -1, 0, 1, 127, 128, 16383, 16384, std::numeric_limits<i64>::max()});
+        CheckStableScalarPacking<ui64>(NUdf::EDataSlot::Uint64,
+            {0, 1, 127, 128, 16383, 16384, std::numeric_limits<ui64>::max()});
+        CheckStableScalarPacking<ui16>(NUdf::EDataSlot::Date, {0, 1, 127, 128, 49672});
+        CheckStableScalarPacking<ui32>(NUdf::EDataSlot::Datetime, {0, 1, 127, 128, 4291747199U});
+        CheckStableScalarPacking<ui64>(NUdf::EDataSlot::Timestamp, {0, 1, 127, 128, 4291747199999999ULL});
+    }
+
+    Y_UNIT_TEST(NativeStablePickleMatchesRuntimeTextPacking) {
+        CheckStableTextPacking(NUdf::EDataSlot::String);
+        CheckStableTextPacking(NUdf::EDataSlot::Utf8);
+    }
+
+    Y_UNIT_TEST(NativeStablePicklePreservesNullableKeysAndDetectsChangedInputs) {
+        for (const TString& type : {TString("Bool"), TString("Int32"), TString("Int64"), TString("Date"),
+                                   TString("Datetime"), TString("Timestamp"), TString("String"), TString("Utf8")}) {
+            for (const bool nullable : {false, true}) {
+                const auto initial = NativeStablePickle(type, nullable, false);
+                const auto final = NativeStablePickle(type, nullable, true);
+                Parse(initial);
+                Parse(final);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+                const auto changed = NativeStablePickle(type, nullable, true, true);
+                Parse(changed);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+                if (type != "String" || nullable) {
+                    UNIT_ASSERT(!NativeStablePickle(type, nullable, false, false, true).IsSupported());
+                }
+            }
+        }
+        for (const TString& type : {TString("Double")}) {
+            UNIT_ASSERT(!NativeStablePickle(type, true, false).IsSupported());
+        }
+    }
+
+    Y_UNIT_TEST(NativePruningKeepsGroupingSetsAggregateTemplate) {
+        for (const bool keepCount : {true, false}) {
+            TFixture fixture;
+            const auto pos = TPositionHandle();
+            const auto count = fixture.Registry.Add(TInfoUnit("", "count"));
+            const auto output = fixture.Registry.Add(TInfoUnit("", "count_output"));
+            auto aggregate = MakeIntrusive<TOpAggregate>(fixture.Read(),
+                TAggregationIUs{{count, {fixture.Key, "count", false, false}}},
+                TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+            auto grouping = MakeIntrusive<TOpGroupingSets>(aggregate,
+                TVector<TUnorderedIUs>{{}, {}}, TMappedIUs<TInfoUnitId>{{output, count}}, pos);
+            TOpRoot root(grouping, pos, keepCount
+                ? TOrderedIUs<TString>{{output, "count"}} : TOrderedIUs<TString>{});
+            root.PlanProps.InfoUnitRegistry = fixture.Registry;
+            TGlobalPruningStage("early pruning").RunStage(root, fixture.Rbo);
+            UNIT_ASSERT_C(grouping->GetInput()->Kind == EOperator::Aggregate,
+                "GroupingSets lost its Aggregate definition during pruning");
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->GetAggregationTraits().Keys().Empty(), !keepCount);
+            UNIT_ASSERT_VALUES_EQUAL(grouping->GetGroupingSets().size(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(NativePruningFoldsOrdinaryResultlessScalarAggregate) {
+        TFixture fixture;
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(fixture.Read(),
+            TAggregationIUs{}, TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
+        TOpRoot root(aggregate, pos, TOrderedIUs<TString>{});
+        root.PlanProps.InfoUnitRegistry = fixture.Registry;
+        FinishLogicalRewrite(root, fixture.Expr);
+        UNIT_ASSERT(root.GetInput()->Kind == EOperator::EmptySource);
+    }
+
+    Y_UNIT_TEST(NativeDateCoalesceZeroSurvivesConstantFolding) {
+        for (const TString& type : {TString("String"), TString("Utf8")}) {
+            for (const bool nullable : {false, true}) {
+                const auto before = NativeDateCast(type, nullable, false, false, false, false, true, false);
+                const auto after = NativeDateCast(type, nullable, false, false, true, false, true, true);
+                Parse(before);
+                Parse(after);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+                const auto dropped = NativeDateCast(type, nullable, false, false, true);
+                Parse(dropped);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, dropped.Json), "COUNTEREXAMPLE");
+                UNIT_ASSERT(!NativeDateCast(type, nullable, false, false, false, true, true).IsSupported());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeCompleteIntegerLiteralCastsSurviveConstantFolding) {
+        for (const TString& source : {TString("Int8"), TString("Uint8"), TString("Int16"),
+                                     TString("Uint16"), TString("Int32"), TString("Uint32")}) {
+            const auto before = NativeIntegralCoalesce("Int64", false, false);
+            const auto after = NativeIntegralCoalesce("Int64", true, true, false, false, source);
+            const auto changed = NativeIntegralCoalesce("Int64", true, true, true, false, source);
+            Parse(before);
+            Parse(after);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeDynamicDateCastPreservesNullAndRejectsContradictoryTypes) {
+        for (const TString& type : {TString("String"), TString("Utf8")}) {
+            for (bool nullable : {false, true}) {
+                const auto initial = NativeDateCast(type, nullable, false, false, false);
+                const auto final = NativeDateCast(type, nullable, nullable, false, true);
+                Parse(initial);
+                Parse(final);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+                UNIT_ASSERT(!NativeDateCast(type, nullable, false, false, false, true).IsSupported());
+                if (nullable) {
+                    const auto changed = NativeDateCast(type, true, true, true, true);
+                    Parse(changed);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, changed.Json), "COUNTEREXAMPLE");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativePushedDateCastComparisonsPreserveNullsAndConstants) {
+        for (const TString& textType : {TString("String"), TString("Utf8")}) {
+            for (bool nullable : {false, true}) {
+                for (const TString& comparison : {TString("=="), TString("!="), TString("<"),
+                                                   TString("<="), TString(">"), TString(">=")}) {
+                    for (bool justConstant : {false, true}) {
+                        const auto before = NativeOlapDatePredicate(textType, nullable, comparison, justConstant, false);
+                        const auto after = NativeOlapDatePredicate(textType, nullable, comparison, justConstant, true);
+                        Parse(before);
+                        Parse(after);
+                        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+                    }
+                    const auto before = NativeOlapDatePredicate(textType, nullable, comparison, true, false);
+                    const auto changed = NativeOlapDatePredicate(textType, nullable, comparison, true, true, 11335);
+                    Parse(changed);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativePushedDateCastComparisonsRejectMalformedApply) {
+        for (const TStringBuf mutation : {"wrong_target", "wrong_literal_type", "wrong_just_type",
+                                          "true_fallback", "wrong_binding", "typed_cast", "extra_lambda_arg"}) {
+            const auto result = NativeOlapDatePredicate("Utf8", true, ">=", true, true, 11334, mutation);
+            UNIT_ASSERT_C(!result.IsSupported(), mutation);
+        }
+    }
+
+
+    Y_UNIT_TEST(NativeReadPointKeepsPrunedKeyPrivateToPredicate) {
+        const auto before = NativeInt32ReadPoint(false, false, 42, false, true);
+        Parse(before);
+        for (bool staged : {false, true}) {
+            const auto after = NativeInt32ReadPoint(true, staged, 42, false, true);
+            const auto changed = NativeInt32ReadPoint(true, staged, 43, false, true);
+            Parse(after);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, !staged), "VERIFIED_BOUNDED");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+        }
+    }
+
+    Y_UNIT_TEST(NativeNarrowDecimalZeroWrappersSurviveConstantFolding) {
+        for (const ui8 precision : {ui8(7), ui8(15), ui8(35)}) {
+            const auto before = NativeNarrowDecimalZero(false, false, precision);
+            Parse(before);
+            for (bool staged : {false, true}) {
+                const auto after = NativeNarrowDecimalZero(true, staged, precision);
+                const auto changed = NativeNarrowDecimalZero(true, staged, precision, true);
+                Parse(after);
+                Parse(changed);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json, !staged), "VERIFIED_BOUNDED");
+                UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+            }
+        }
+        UNIT_ASSERT(!NativeNarrowDecimalZero(false, false, 7, false, true).IsSupported());
+    }
+
+
+    Y_UNIT_TEST(NativeDateIntervalsAcceptReviewedStringCasts) {
+        constexpr i64 day = 86'400'000'000LL;
+        for (const TString& type : {TString("String"), TString("Utf8")}) {
+            for (bool nullable : {false, true}) {
+                for (bool subtract : {false, true}) {
+                    const auto before = NativeDateCast(type, nullable, false, false, false,
+                        false, false, false, 5 * day, false, subtract);
+                    const auto after = NativeDateCast(type, nullable, false, false, true,
+                        false, false, false, 5 * day, true, subtract);
+                    const auto changed = NativeDateCast(type, nullable, false, false, true,
+                        false, false, false, 6 * day, true, subtract);
+                    Parse(before);
+                    Parse(after);
+                    Parse(changed);
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+                    UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+                }
+                UNIT_ASSERT(!NativeDateCast(type, nullable, false, false, false,
+                    true, false, false, day).IsSupported());
+                UNIT_ASSERT(!NativeDateCast(type, nullable, false, false, false,
+                    false, false, false, day + 1).IsSupported());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeTemporalColumnsPreserveUnitsAcrossStages) {
+        for (const TString& type : {TString("Date"), TString("Datetime"), TString("Timestamp")}) {
+            TFixture fixture(type);
+            auto read = fixture.Read();
+            read->GetColumns() = TUnorderedIUs{fixture.Key, fixture.Group};
+            fixture.SetType(*read, {
+                {fixture.Key, fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Int32)},
+                {fixture.Group, fixture.Expr.MakeType<TOptionalExprType>(
+                    fixture.Expr.MakeType<TDataExprType>(*NUdf::FindDataSlot(type)))}});
+            auto sorted = MakeIntrusive<TOpSort>(read, TPositionHandle(),
+                TSortIUs{{fixture.Group, {true, true}}});
+            sorted->Type = read->Type;
+            TOpRoot root(sorted, TPositionHandle(), {{fixture.Key, "key"}, {fixture.Group, "time"}});
+            const auto before = fixture.Export(root);
+            Parse(before);
+            fixture.StageSerial(root);
+            const auto after = fixture.Export(root);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        }
+    }
+
     Y_UNIT_TEST(NativeSortUsesPhysicalNullPlacement) {
         CheckNativeSortNullPlacement(false);
     }
@@ -777,6 +2704,57 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
             UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership("Utf8", "String", true, negate, true),
                 "COUNTEREXAMPLE");
         }
+    }
+
+    Y_UNIT_TEST(NativeRequiredTextMembershipMatchesDictionaryLowering) {
+        for (const TString& type : {TString("String"), TString("Utf8")}) {
+            for (bool negate : {false, true}) {
+                UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership(type, type, false, negate, false, true),
+                    "VERIFIED_BOUNDED");
+                UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership(type, type, false, negate, true, true),
+                    "COUNTEREXAMPLE");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeBooleanCoalesceFalsePreservesTruthAndNullness) {
+        const auto before = NativeBooleanCoalesce(true, false);
+        Parse(before);
+        UNIT_ASSERT_STRING_CONTAINS(before.Json, "if_present");
+        for (bool staged : {false, true}) {
+            const auto equivalent = NativeBooleanCoalesce(false, staged);
+            const auto changed = NativeBooleanCoalesce(false, staged, true);
+            Parse(equivalent);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, equivalent.Json, !staged), "VERIFIED_BOUNDED");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json, !staged), "COUNTEREXAMPLE");
+        }
+        UNIT_ASSERT(!NativeBooleanCoalesce(true, false, false, true).IsSupported());
+    }
+
+    Y_UNIT_TEST(NativeTextMembershipPreservesUtf8BytesThroughDictionaryCasts) {
+        for (ui32 castKind : {0u, 1u, 2u}) {
+            for (bool negate : {false, true}) {
+                UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership("Utf8", "String", false, negate, false, true, castKind == 1, castKind == 2),
+                    "VERIFIED_BOUNDED");
+                UNIT_ASSERT_VALUES_EQUAL(CheckNativeTextMembership("Utf8", "String", false, negate, true, true, castKind == 1, castKind == 2),
+                    "COUNTEREXAMPLE");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeReadPointRangesRespectInt32Keys) {
+        for (i32 point : {std::numeric_limits<i32>::min(), 42, std::numeric_limits<i32>::max()}) {
+            const auto before = NativeInt32ReadPoint(false, false, point);
+            const auto after = NativeInt32ReadPoint(true, true, point);
+            const auto changed = NativeInt32ReadPoint(true, true, point == 42 ? 43 : 42);
+            Parse(before);
+            Parse(after);
+            Parse(changed);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, changed.Json), "COUNTEREXAMPLE");
+        }
+        UNIT_ASSERT(!NativeInt32ReadPoint(true, false, 42, true).IsSupported());
     }
 
     Y_UNIT_TEST(NullSinkSkipsNativeTypeMaterialization) {
@@ -876,6 +2854,40 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         }
     }
 
+    Y_UNIT_TEST(NativeWholePartitionWindowsAcceptUtf8PartitionKeys) {
+        for (const TString& function : {TString("sum"), TString("avg")}) {
+            TFixture fixture("Utf8");
+            auto window = fixture.Window(function, true, "Utf8");
+            TOpRoot root(window, TPositionHandle(), {{fixture.WindowResult, "answer"}});
+            const auto before = fixture.Export(root);
+            Parse(before);
+            fixture.StageSerial(root);
+            const auto after = fixture.Export(root);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        }
+    }
+
+    Y_UNIT_TEST(NativeWholePartitionWindowsFollowDirectColumnAliases) {
+        for (const TString& function : {TString("sum"), TString("avg")}) {
+            const auto direct = NativeAliasedDecimalWindow(function, 0, false);
+            Parse(direct);
+            for (const size_t aliases : {1, 8}) {
+                const auto copied = NativeAliasedDecimalWindow(function, aliases, true);
+                Parse(copied);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(direct.Json, copied.Json), "VERIFIED_BOUNDED");
+            }
+        }
+        const auto sum = NativeAliasedDecimalWindow("sum", 8, false);
+        const auto average = NativeAliasedDecimalWindow("avg", 8, true);
+        Parse(sum);
+        Parse(average);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(sum.Json, average.Json), "COUNTEREXAMPLE");
+        const auto tooDeep = NativeAliasedDecimalWindow("sum", 9, false);
+        UNIT_ASSERT(!tooDeep.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(tooDeep.UnsupportedReason, "exceeds eight");
+    }
+
     Y_UNIT_TEST(NativeWindowProofDetectsSumChangedToAverage) {
         TFixture sumFixture;
         auto sum = sumFixture.Window("sum", true);
@@ -906,6 +2918,123 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
         const auto final = copyFixture.Export(after);
         Parse(final);
         UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+    }
+
+    Y_UNIT_TEST(NativeStoredUtf8ConcatPreservesValuesAndCheckedFailure) {
+        for (const bool olap : {false, true}) {
+            for (const bool mixedLiteral : {false, true}) {
+                TFixture beforeFixture("Utf8", false, "Utf8");
+                TInfoUnitId beforeResult;
+                auto beforeMap = beforeFixture.StringConcat(false, beforeResult, "Utf8", true, mixedLiteral, olap);
+                TOpRoot before(beforeMap, TPositionHandle(), {{beforeResult, "answer"}});
+                const auto initial = beforeFixture.Export(before);
+                const auto initialJson = Parse(initial);
+                bool found = false;
+                for (const auto& node : initialJson["plan"]["nodes"].GetArraySafe()) {
+                    if (node["op"].GetStringSafe() != "project") { continue; }
+                    for (const auto& column : node["columns"].GetArraySafe()) {
+                        if (column["output"].GetStringSafe() != ToString(beforeResult)) { continue; }
+                        const auto& expression = column["expression"];
+                        UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), olap ? "checked_concat" : "opaque");
+                        UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), mixedLiteral ? "String" : "Utf8");
+                        found = true;
+                    }
+                }
+                UNIT_ASSERT(found);
+                TFixture afterFixture("Utf8", false, "Utf8");
+                TInfoUnitId afterResult;
+                auto afterMap = afterFixture.StringConcat(true, afterResult, "Utf8", true, mixedLiteral, olap);
+                TOpRoot after(afterMap, TPositionHandle(), {{afterResult, "answer"}});
+                afterFixture.StageSerial(after);
+                const auto final = afterFixture.Export(after);
+                Parse(final);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(initial.Json, final.Json), "VERIFIED_BOUNDED");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeCheckedConcatCopiesRetainDemandAndRejectChangedUses) {
+        const auto make = [](size_t depth, bool staged, TStringBuf mutation = "") {
+            TFixture f("Utf8", false, "Utf8");
+            const auto pos = TPositionHandle();
+            TInfoUnitId original;
+            TIntrusivePtr<IOperator> input = f.StringConcat(false, original, "Utf8", true, false, true);
+            const auto* text = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Utf8);
+            const auto* boolean = f.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::Bool);
+            auto output = original;
+            for (size_t index = 0; index < depth; ++index) {
+                // Reuse the retained original at depth two: every old alias
+                // must remain audited after a copy is appended.
+                const auto source = original;
+                TMapIUs copies;
+                TVector<std::pair<TInfoUnitId, const TTypeAnnotationNode*>> types;
+                for (auto id : input->GetOutputIUs()) {
+                    types.emplace_back(id, input->GetIUType(id, f.Expr));
+                }
+                auto access = MakeColumnAccess(source, pos, &f.Expr, &f.ExpressionProps);
+                access.GetExpressionBody()->SetTypeAnn(mutation == "wrong_type" ? boolean : text);
+                output = f.Registry.Add(TInfoUnit("", "copy"));
+                copies.Add(output, TMapElement(access));
+                types.emplace_back(output, text);
+                if (mutation == "fanout") {
+                    const auto extra = f.Registry.Add(TInfoUnit("", "extra"));
+                    copies.Add(extra, TMapElement(access));
+                    types.emplace_back(extra, text);
+                }
+                if (mutation == "transform_old" && index == 1) {
+                    auto value = f.Expr.NewCallable(pos, "Exists", {access.GetExpressionBody()});
+                    value->SetTypeAnn(boolean);
+                    const auto extra = f.Registry.Add(TInfoUnit("", "changed"));
+                    auto lambda = f.Expr.NewLambda(pos, access.GetLambda()->ChildPtr(0), std::move(value));
+                    copies.Add(extra, TMapElement(TExpression(lambda, &f.Expr, &f.ExpressionProps)));
+                    types.emplace_back(extra, boolean);
+                }
+                auto copy = MakeIntrusive<TOpMap>(input, pos, std::move(copies));
+                f.SetType(*copy, types);
+                input = copy;
+            }
+            TOpRoot root(input, pos, {{mutation == "drop" ? f.Key : output, "answer"}});
+            if (staged) {
+                f.StageSerial(root);
+                if (mutation == "stage_edge") {
+                    auto& graph = root.PlanProps.StageGraph;
+                    const auto previous = *input->Props.StageId;
+                    const auto final = graph.AddStage();
+                    input->Props.StageId = final;
+                    graph.Connect(previous, final,
+                        MakeIntrusive<TUnionAllConnection>(graph.GetOutputIndex(previous)));
+                }
+            }
+            return f.Export(root);
+        };
+        const auto direct = make(0, false);
+        Parse(direct);
+        for (const size_t depth : {1, 2}) {
+            for (const bool staged : {false, true}) {
+                const auto copied = make(depth, staged);
+                Parse(copied);
+                UNIT_ASSERT_VALUES_EQUAL(Verify(direct.Json, copied.Json, !staged), "VERIFIED_BOUNDED");
+            }
+        }
+        for (const TStringBuf mutation : {"fanout", "transform_old", "drop", "wrong_type", "stage_edge"}) {
+            const auto rejected = make(2, true, mutation);
+            UNIT_ASSERT_C(!rejected.IsSupported(), mutation);
+        }
+    }
+
+    Y_UNIT_TEST(NativeTextConcatRejectsWrongResultAndStoredTypes) {
+        for (const bool wrongResult : {false, true}) {
+            TFixture fixture("Utf8");
+            TInfoUnitId result;
+            auto map = fixture.StringConcat(false, result, wrongResult ? "Utf8" : "String");
+            if (wrongResult) {
+                map->GetMapElements().At(result).GetExpression().GetExpressionBody()->SetTypeAnn(
+                    fixture.Expr.MakeType<TDataExprType>(NUdf::EDataSlot::String));
+            }
+            TOpRoot root(map, TPositionHandle(), {{result, "answer"}});
+            const auto exported = fixture.Export(root);
+            UNIT_ASSERT_C(!exported.IsSupported(), exported.Json);
+        }
     }
 
     Y_UNIT_TEST(NativeCorrelatedExistsUsesTheCallerBinding) {
@@ -979,6 +3108,85 @@ Y_UNIT_TEST_SUITE(TNativeSemanticSnapshot) {
             const auto badUse = useFixture.CorrelatedScalarCount(useFixture.Key, throughMap, false, true);
             UNIT_ASSERT(!badUse.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(badUse.UnsupportedReason, "outer dependency");
+        }
+    }
+
+    Y_UNIT_TEST(NativeRankPreservesPartitionsNullsAndFramesDuringStaging) {
+        for (const TString& type : {TString("Int32"), TString("Uint64"), TString("String"), TString("Date")}) {
+            for (const bool nullable : {false, true}) {
+                for (const bool partitioned : {false, true}) {
+                    for (const bool ascending : {false, true}) {
+                        const auto before = NativeRank(type, nullable, partitioned, false, ascending);
+                        const auto after = NativeRank(type, nullable, partitioned, true, ascending,
+                            false, true, "rank", true);
+                        Parse(before);
+                        Parse(after);
+                        UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, after.Json), "VERIFIED_BOUNDED",
+                            type << " nullable=" << nullable << " partitioned=" << partitioned << " asc=" << ascending);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeRankDetectsChangedOrderAndPeerKeys) {
+        const auto before = NativeRank("Int32", true, false, false);
+        const auto reversed = NativeRank("Int32", true, false, true, false);
+        const auto tieBroken = NativeRank("Int32", true, false, true, true, true);
+        Parse(before);
+        Parse(reversed);
+        Parse(tieBroken);
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, reversed.Json), "COUNTEREXAMPLE");
+        UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, tieBroken.Json), "COUNTEREXAMPLE");
+    }
+
+    Y_UNIT_TEST(NativeUnorderedRankIsOneAndOtherNativeFunctionsRemainUnsupported) {
+        for (const bool partitioned : {false, true}) {
+            const auto before = NativeRank("Int32", true, partitioned, false, true, false, false);
+            const auto after = NativeRank("Int32", true, partitioned, true, true, false, false);
+            Parse(before);
+            Parse(after);
+            UNIT_ASSERT_VALUES_EQUAL(Verify(before.Json, after.Json), "VERIFIED_BOUNDED");
+        }
+        for (const TString& function : {TString("denserank"), TString("rownumber")}) {
+            const auto result = NativeRank("Int32", true, false, false, true, false, true, function);
+            UNIT_ASSERT(!result.IsSupported());
+        }
+    }
+
+    Y_UNIT_TEST(NativeIntegerAveragePreservesRequiredAndOptionalStateTypes) {
+        for (const TString& type : {TString("Int8"), TString("Int16"), TString("Int32"), TString("Int64"),
+                                   TString("Uint8"), TString("Uint16"), TString("Uint32"), TString("Uint64")}) {
+            for (const bool nullable : {false, true}) {
+                for (const bool grouped : {false, true}) {
+                    const auto before = NativeIntegralAverage(type, nullable, grouped, false, false);
+                    const auto after = NativeIntegralAverage(type, nullable, grouped, true, true);
+                    Parse(before);
+                    Parse(after);
+                    UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, after.Json), "VERIFIED_BOUNDED",
+                        type << " nullable=" << nullable << " grouped=" << grouped);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NativeNullEqualJoinKeysSurviveStagingAndDetectLostNullMatches) {
+        for (const TString& type : {TString("Int32"), TString("Int64"), TString("String"), TString("Date")}) {
+            TFixture initialFixture(type), finalFixture(type), changedFixture(type);
+            const auto before = initialFixture.NullableKeyJoin(type, "Inner", true, false);
+            const auto after = finalFixture.NullableKeyJoin(type, "Inner", true, true);
+            const auto changed = changedFixture.NullableKeyJoin(type, "Inner", false, true);
+            UNIT_ASSERT_STRING_CONTAINS(before.Json, "equal_nulls");
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, after.Json), "VERIFIED_BOUNDED", type);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, changed.Json), "COUNTEREXAMPLE", type);
+        }
+        for (const TString& kind : {TString("Left"), TString("Full"), TString("LeftSemi"), TString("LeftOnly")}) {
+            TFixture initialFixture("Int32"), finalFixture("Int32"), changedFixture("Int32");
+            const auto before = initialFixture.NullableKeyJoin("Int32", kind, true, false);
+            const auto after = finalFixture.NullableKeyJoin("Int32", kind, true, true);
+            const auto changed = changedFixture.NullableKeyJoin("Int32", kind, false, true);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, after.Json), "VERIFIED_BOUNDED", kind);
+            UNIT_ASSERT_VALUES_EQUAL_C(Verify(before.Json, changed.Json), "COUNTEREXAMPLE", kind);
         }
     }
 

@@ -80,8 +80,13 @@ def capture(
     process = run(arguments, config.capture_timeout_seconds)
     _save_process(directory / "capture", process)
     if process.returncode != 0:
+        # The capture executable reports preparation/export failures on stderr.
+        # Keep the complete stream in the artifact and a bounded tail in the
+        # verdict, so distinct failures do not all look like an exit-code error.
+        diagnostic = process.stderr.strip()[-4096:]
+        suffix = f"; stderr tail: {diagnostic}" if diagnostic else ""
         raise LocalizationError(
-            f"capture command failed for ordinal {ordinal} with exit code {process.returncode}"
+            f"capture command failed for ordinal {ordinal} with exit code {process.returncode}{suffix}"
         )
     manifest = directory / CAPTURE_MANIFEST
     try:
@@ -206,10 +211,10 @@ def validate_config(config: Config) -> None:
         raise LocalizationError("capture timeout must be positive")
     if config.max_events <= 0:
         raise LocalizationError("maximum event count must be positive")
-    if config.strategy not in {"sequential", "divide-and-conquer"}:
+    if config.strategy not in {"sequential", "divide-and-conquer", "adjacent"}:
         raise LocalizationError("unknown localization strategy")
-    if config.all_steps and config.strategy != "divide-and-conquer":
-        raise LocalizationError("--all-steps requires divide-and-conquer")
+    if config.all_steps and config.strategy == "sequential":
+        raise LocalizationError("--all-steps requires divide-and-conquer or adjacent")
     if config.artifacts.exists():
         raise LocalizationError(f"artifact directory already exists: {config.artifacts}")
 

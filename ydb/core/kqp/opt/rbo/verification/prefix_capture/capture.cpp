@@ -100,7 +100,8 @@ TCaptureOutput ClassifyCapture(
     if (boundaries.size() != 2) {
         ythrow yexception()
             << "expected exactly two semantic snapshot boundaries, got "
-            << boundaries.size();
+            << boundaries.size() << "; preparation succeeded=" << preparationSucceeded
+            << "; preparation issues: " << preparationIssues;
     }
 
     auto& initial = boundaries[0];

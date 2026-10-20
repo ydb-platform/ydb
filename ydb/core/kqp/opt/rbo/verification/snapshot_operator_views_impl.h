@@ -237,13 +237,16 @@ const TVector<TString>& SnapshotReadColumns(const TOpRead& op, const TInfoUnitRe
     return result;
 }
 
-TVector<std::pair<TInfoUnit, TInfoUnit>> SnapshotJoinKeys(const TOpJoin& op) {
-    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
+struct TSnapshotJoinKey {
+    TInfoUnit Left;
+    TInfoUnit Right;
+    bool EqualNulls;
+};
+
+TVector<TSnapshotJoinKey> SnapshotJoinKeys(const TOpJoin& op) {
+    TVector<TSnapshotJoinKey> result;
     for (const auto& key : op.JoinKeys.Items()) {
-        if (key.EqualNulls) {
-            ythrow yexception() << "Null-equal join keys require an explicit snapshot encoding";
-        }
-        result.emplace_back(SnapshotIU(key.first), SnapshotIU(key.second));
+        result.push_back({SnapshotIU(key.first), SnapshotIU(key.second), key.EqualNulls});
     }
     return result;
 }
@@ -258,13 +261,6 @@ const TVector<TString>& SnapshotRootColumnOrder(const TOpRoot& root) {
         }
     }
     return it->second;
-}
-
-IOperator* SnapshotUnionInput(const TOpUnionAll& op, size_t index) {
-    if (op.GetChildCount() != 2) {
-        ythrow yexception() << "The audited Decimal average carrier requires a binary UnionAll";
-    }
-    return op.GetChild(index).Get();
 }
 
 TVector<TSnapshotSortElement> SnapshotMergeOrder(const TMergeConnection& connection) {

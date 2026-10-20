@@ -852,7 +852,7 @@ def q28_decimal_avg_carrier_stage_graph():
     return stages, edges
 
 
-def q28_decimal_avg_union_carrier_snapshot(*, count_from_distinct=False):
+def q28_decimal_avg_union_carrier_snapshot(*, count_from_distinct=False, native_layout=False, staged=True):
     decimal_type = "Decimal(7,2)"
     lanes = ("_avg_state", "_count_state", "_distinct_state")
     average_state = {
@@ -1036,28 +1036,45 @@ def q28_decimal_avg_union_carrier_snapshot(*, count_from_distinct=False):
         nullable=True,
     )
     stages, edges = q28_decimal_avg_carrier_stage_graph()
-    return parse_snapshot(
-        _snapshot_with_stage_graph(
-            schema_value,
-            [
-                scan,
-                average_partial,
-                average_project,
-                count_partial,
-                count_project,
-                distinct_values,
-                distinct_partial,
-                distinct_project,
-                first_union,
-                second_union,
-                final,
-            ],
-            "final",
-            ["average", "count", "distinct_count"],
-            stages,
-            edges,
-        )
+    nodes = [scan, average_partial, average_project, count_partial, count_project,
+             distinct_values, distinct_partial, distinct_project, first_union, second_union, final]
+    if native_layout:
+        # Native Maps preserve order; union bindings differ from every input.
+        average_partial["aggregates"].append(count_trait("a.x", "_unused_count"))
+        branches = ((average_partial, average_project), (count_partial, count_project),
+                    (distinct_partial, distinct_project))
+        inputs = []
+        for partial, project in branches:
+            names = {lane: project["id"] + lane for lane in lanes}
+            for trait in partial["aggregates"]:
+                trait["output"] = names.get(trait["output"], trait["output"])
+            for item in project["columns"]:
+                item["output"] = names[item["output"]]
+                if item["expression"]["kind"] == "column":
+                    item["expression"]["column"] = names[item["expression"]["column"]]
+            project["ordered"] = True
+            inputs.append({"node": project["id"], "columns": list(names.values())})
+        second_union["inputs"] = inputs
+        second_union["output"] = ["union" + lane for lane in lanes]
+        for trait in final["aggregates"]:
+            trait["input"] = "union" + trait["input"]
+        nodes.remove(first_union)
+        stages = [stage for stage in stages if stage["id"] != "first_union_stage"]
+        next(stage for stage in stages if stage["id"] == "second_union_stage")["inputs"] = [
+            project["id"] for _, project in branches
+        ]
+        edges = [edge for edge in edges if edge["id"] != "first_union_lane"]
+        for edge in edges:
+            if edge["id"] in {"average_lane", "count_lane"}:
+                edge["consumer"] = "second_union_stage"
+            elif edge["id"] == "distinct_lane":
+                edge["consumer_input"] = 2
+    value = _snapshot_with_stage_graph(
+        schema_value, nodes, "final", ["average", "count", "distinct_count"], stages, edges,
     )
+    if not staged:
+        value["stage_graph"] = None
+    return parse_snapshot(value)
 
 
 def q28_decimal_logical_snapshot():
@@ -1582,10 +1599,11 @@ def count_distinct_snapshot(
 def grouped_count_distinct_snapshot(
     via_distinct_all=False,
     input_type="Int32",
+    nullable_input=False,
 ):
     schema_value = _stage_schema("A")
     schema_value["tables"][0]["columns"][0]["nullable"] = True
-    schema_value["tables"][0]["columns"][1]["type"] = input_type
+    schema_value["tables"][0]["columns"][1].update(type=input_type, nullable=nullable_input)
 
     if not via_distinct_all:
         aggregate = {
@@ -1631,7 +1649,7 @@ def grouped_count_distinct_snapshot(
                     "function": "distinct",
                     "output": "d.x",
                     "type": input_type,
-                    "nullable": False,
+                    "nullable": nullable_input,
                     "distinct": False,
                     "unwrap": False,
                 },
@@ -3703,6 +3721,139 @@ class SolverProtocolTest(unittest.TestCase):
         self.assertIn(f"(assert {predicates[1].render()})", formulas[2])
         self.assertNotIn("(get-value", formulas[1])
         self.assertIn("(get-value (v_0))", formulas[2])
+
+    @staticmethod
+    def _many_outcome_problem(count=17, *, left_count=1, changed_last=False,
+                              last_enabled=True, left_enabled=True):
+        script = smt.Script()
+        requested = script.fresh_constant('requested', smt.BOOL)
+        script.assert_term(requested)
+        columns = (Column('x', 'Int64', False),)
+
+        def outcome(value, enabled):
+            return relation_model.Outcome(
+                smt.TRUE if enabled else smt.FALSE,
+                relation_model.Relation(columns, (relation_model.Row(
+                    smt.TRUE, {'x': Value('Int64', smt.FALSE, smt.int_value(value))},
+                ),)),
+                smt.FALSE,
+            )
+
+        left = relation_model.RelationFamily(tuple(outcome(0, left_enabled) for _ in range(left_count)))
+        right = relation_model.RelationFamily(tuple(
+            outcome(int(changed_last and index == count - 1), last_enabled if index == count - 1 else True)
+            for index in range(count)
+        ))
+        mismatch = relation_model.family_mismatch(left, right, ScalarEncoder(script))
+        script.assert_obligation(mismatch.counterexample)
+        return Problem(script, {}, mismatch_branches=mismatch.branches,
+                       semantic_mismatch=relation_model.MismatchBranch('semantic_mismatch', mismatch.counterexample),
+                       preferred_branches=mismatch.preferred_branches), requested
+
+    @unittest.skipUnless(SOLVER, 'requires the pinned solver')
+    def test_grouped_outcomes_preserve_equivalence_and_the_last_counterexample(self):
+        for count in (16, 17, 24):
+            for changed in (False, True):
+                problem, requested = self._many_outcome_problem(count, changed_last=changed)
+                with self.subTest(count=count, changed=changed):
+                    self.assertIsNotNone(problem.preferred_branches)
+                    result = verifier.query_solver(problem, SOLVER, (requested,), timeout_ms=10_000)
+                    self.assertEqual(result.status, 'sat' if changed else 'unsat')
+                    if changed:
+                        self.assertEqual(result.values, {requested.atom: True})
+
+    @unittest.skipUnless(SOLVER, 'requires the pinned solver')
+    def test_grouped_outcomes_ignore_only_disabled_alternatives(self):
+        problem, _ = self._many_outcome_problem(changed_last=True, last_enabled=False)
+        self.assertEqual(verifier.query_solver(problem, SOLVER, timeout_ms=10_000).status, 'unsat')
+        problem, _ = self._many_outcome_problem(left_enabled=False)
+        self.assertEqual(verifier.query_solver(problem, SOLVER, timeout_ms=10_000).status, 'sat')
+
+    def test_multiple_logical_outcomes_keep_the_canonical_probe(self):
+        problem, _ = self._many_outcome_problem(left_count=2)
+        self.assertIsNone(problem.preferred_branches)
+        with mock.patch.object(verifier, '_run_solver', return_value=subprocess.CompletedProcess(
+            ['solver'], 0, 'unsat\n', '',
+        )) as run:
+            self.assertEqual(verifier.query_solver(problem, 'solver').status, 'unsat')
+        run.assert_called_once()
+
+    def test_grouped_outcomes_cannot_skip_the_model_domain(self):
+        problem, _ = self._many_outcome_problem()
+        exclusion = relation_model.MismatchBranch('out_of_model', smt.TRUE)
+        problem = replace(problem, soundness_exclusion=exclusion, soundness_exclusions=(exclusion,))
+        with mock.patch.object(verifier, '_run_solver', return_value=subprocess.CompletedProcess(
+            ['solver'], 0, 'sat\n', '',
+        )) as run:
+            result = verifier.query_solver(problem, 'solver')
+        self.assertEqual(result.status, 'unknown')
+        self.assertEqual(result.phase, 'soundness')
+        run.assert_called_once()
+
+    def test_render_time_reduces_the_solver_process_deadline(self):
+        now = [100.0]
+        problem = mock.Mock()
+
+        def render(**kwargs):
+            now[0] = 100.75
+            return '(check-sat)'
+
+        def run(solver, formula, timeout):
+            self.assertGreater(timeout, 0)
+            self.assertLessEqual(timeout, 0.25)
+            return subprocess.CompletedProcess([solver], 0, 'unsat\n', '')
+
+        problem.formula.side_effect = render
+        with (mock.patch.object(verifier.time, 'monotonic', side_effect=lambda: now[0]),
+              mock.patch.object(verifier, '_run_solver', side_effect=run)):
+            budget = verifier._SolverBudget.start(1000)
+            result = verifier._query_obligation(problem, 'z3', (), budget, None)
+        self.assertEqual(result.status, 'unsat')
+
+    def test_model_render_time_reduces_the_solver_process_deadline(self):
+        now = [100.0]
+        problem = mock.Mock()
+        requested = (smt.symbol('v_0', smt.BOOL),)
+
+        def render(*args, **kwargs):
+            now[0] = 100.8 if args else 100.1
+            return '(check-sat)'
+
+        calls = []
+
+        def run(solver, formula, timeout):
+            calls.append(timeout)
+            if len(calls) == 1:
+                now[0] = 100.2
+                return subprocess.CompletedProcess([solver], 0, 'sat\n', '')
+            self.assertGreater(timeout, 0)
+            self.assertLessEqual(timeout, 0.200001)
+            return subprocess.CompletedProcess([solver], 0, 'sat\n((v_0 true))\n', '')
+
+        problem.formula.side_effect = render
+        with (mock.patch.object(verifier.time, 'monotonic', side_effect=lambda: now[0]),
+              mock.patch.object(verifier, '_run_solver', side_effect=run)):
+            budget = verifier._SolverBudget.start(1000)
+            result = verifier._query_obligation(problem, 'z3', requested, budget, None)
+        self.assertEqual(result.status, 'sat')
+        self.assertEqual(result.values, {'v_0': True})
+        self.assertEqual(len(calls), 2)
+
+    def test_late_unsat_cannot_escape_the_solver_deadline(self):
+        now = [100.0]
+        problem = mock.Mock()
+        problem.formula.return_value = '(check-sat)'
+
+        def run(solver, formula, timeout):
+            now[0] = 101.01
+            return subprocess.CompletedProcess([solver], 0, 'unsat\n', '')
+
+        with (mock.patch.object(verifier.time, 'monotonic', side_effect=lambda: now[0]),
+              mock.patch.object(verifier, '_run_solver', side_effect=run)):
+            budget = verifier._SolverBudget.start(1000)
+            result = verifier._query_obligation(problem, 'z3', (), budget, None)
+        self.assertEqual(result.status, 'unknown')
+        self.assertIn('after the global solver deadline', result.reason)
 
     def test_preferred_portfolio_shares_one_decreasing_solver_deadline(self):
         problem, _, _ = self._preferred_branch_problem()
@@ -6821,6 +6972,38 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected,
                 )
 
+    def test_nullable_integer_count_distinct_matches_tiny_set_reference(self):
+        snapshot = count_distinct_snapshot(nullable_input=True)
+        script = smt.Script()
+        database = Database(snapshot, 3, script)
+        relation = RelationEvaluator(snapshot, database, ScalarEncoder(script)).root().certain()
+        states = (None, (0, None), (0, -1), (0, 0), (0, 1))
+        for rows in product(states, repeat=3):
+            expected = Counter({(len({row[1] for row in rows
+                                     if row is not None and row[1] is not None}),): 1})
+            with self.subTest(rows=rows):
+                self.assertEqual(self._symbolic_bag(relation, self._constants(database, rows)), expected)
+
+    def test_nullable_grouped_count_distinct_matches_deduplication_and_reference(self):
+        direct = grouped_count_distinct_snapshot(nullable_input=True)
+        decomposed = grouped_count_distinct_snapshot(via_distinct_all=True, nullable_input=True)
+        script_a, script_b = smt.Script(), smt.Script()
+        db_a, db_b = Database(direct, 3, script_a), Database(decomposed, 3, script_b)
+        relation_a = RelationEvaluator(direct, db_a, ScalarEncoder(script_a)).root().certain()
+        relation_b = RelationEvaluator(decomposed, db_b, ScalarEncoder(script_b)).root().certain()
+        states = (None,) + tuple(product((None, 0), (None, 0, 1)))
+        for rows in product(states, repeat=3):
+            groups = {}
+            for row in rows:
+                if row is not None:
+                    values = groups.setdefault(row[0], set())
+                    if row[1] is not None:
+                        values.add(row[1])
+            expected = Counter((key, len(values)) for key, values in groups.items())
+            with self.subTest(rows=rows):
+                self.assertEqual(self._symbolic_bag(relation_a, self._constants(db_a, rows)), expected)
+                self.assertEqual(self._symbolic_bag(relation_b, self._constants(db_b, rows)), expected)
+
     def test_nullable_decimal_count_distinct_uses_raw_aggregate_equality(self):
         snapshot = count_distinct_snapshot(
             "Decimal(7,2)",
@@ -7872,75 +8055,76 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     self.assertEqual(actual, expected)
 
     def test_q28_decimal_avg_union_carrier_matches_concrete_reference(self):
-        snapshot = q28_decimal_avg_union_carrier_snapshot()
-        script = smt.Script()
-        database = Database(snapshot, 3, script)
-        router = Router(script)
-        relation = StageEvaluator(
-            snapshot,
-            database,
-            ScalarEncoder(script),
-            router,
-        ).root().certain()
+        for native_layout in (False, True):
+            snapshot = q28_decimal_avg_union_carrier_snapshot(native_layout=native_layout)
+            script = smt.Script()
+            database = Database(snapshot, 3, script)
+            router = Router(script)
+            relation = StageEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root().certain()
 
-        cases = (
-            (None, None, None),
-            ((0, None), (0, None), None),
-            ((0, 100), (0, 300), None),
-            ((0, 100), (0, 100), (0, 300)),
-            (
-                (0, REFERENCE_DECIMAL_NAN),
-                (0, REFERENCE_DECIMAL_NAN),
-                None,
-            ),
-            (
-                (0, REFERENCE_DECIMAL_INF),
-                (0, -REFERENCE_DECIMAL_INF),
-                None,
-            ),
-            (
-                (0, REFERENCE_DECIMAL_INF),
-                (0, 100),
-                None,
-            ),
-            (
-                (0, None),
-                (0, REFERENCE_DECIMAL_NAN),
-                (0, 100),
-            ),
-        )
-        for rows in cases:
-            non_null = [
-                row[1]
-                for row in rows
-                if row is not None and row[1] is not None
-            ]
-            expected_average = (
-                None
-                if not non_null
-                else self._reference_decimal_average(non_null)
-            )
-            expected = Counter({
+            cases = (
+                (None, None, None),
+                ((0, None), (0, None), None),
+                ((0, 100), (0, 300), None),
+                ((0, 100), (0, 100), (0, 300)),
                 (
-                    expected_average,
-                    len(non_null),
-                    len(set(non_null)),
-                ): 1,
-            })
-            with self.subTest(rows=rows):
-                constants = self._constants(database, rows)
-                for slot in range(len(rows)):
-                    constants[
-                        router.source_task("A", slot).atom
-                    ] = bool(slot % 2)
-                self.assertEqual(
-                    self._symbolic_bag(
-                        relation,
-                        constants,
-                        self._hash_choice,
-                    ),
-                    expected,
+                    (0, REFERENCE_DECIMAL_NAN),
+                    (0, REFERENCE_DECIMAL_NAN),
+                    None,
+                ),
+                (
+                    (0, REFERENCE_DECIMAL_INF),
+                    (0, -REFERENCE_DECIMAL_INF),
+                    None,
+                ),
+                (
+                    (0, REFERENCE_DECIMAL_INF),
+                    (0, 100),
+                    None,
+                ),
+                (
+                    (0, None),
+                    (0, REFERENCE_DECIMAL_NAN),
+                    (0, 100),
+                ),
+            )
+            for rows in cases:
+                non_null = [
+                    row[1]
+                    for row in rows
+                    if row is not None and row[1] is not None
+                ]
+                expected_average = (
+                    None
+                    if not non_null
+                    else self._reference_decimal_average(non_null)
                 )
+                expected = Counter({
+                    (
+                        expected_average,
+                        len(non_null),
+                        len(set(non_null)),
+                    ): 1,
+                })
+                with self.subTest(rows=rows, native_layout=native_layout):
+                    constants = self._constants(database, rows)
+                    for slot in range(len(rows)):
+                        constants[
+                            router.source_task("A", slot).atom
+                        ] = bool(slot % 2)
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            constants,
+                            self._hash_choice,
+                        ),
+                        expected,
+                    )
 
     def test_decimal_extrema_preserve_finite_bound_through_split_state(self):
         for function, staged in product(("max", "min"), (False, True)):
@@ -9261,6 +9445,46 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_pruned_scan_predicate_preserves_nulls_and_payload_free_multiplicity(self):
+        for nullable, payload, staged in product((False, True), repeat=3):
+            def snapshot(pushed, threshold=0):
+                schema_value = _stage_schema("A")
+                schema_value["tables"][0]["columns"][0]["nullable"] = nullable
+                scan = copy.deepcopy(SCAN_A)
+                predicate = {"kind": "gte", "left": {"kind": "column", "column": "a.k"},
+                             "right": {"kind": "literal", "type": "Int64", "value": threshold}}
+                if pushed:
+                    scan["columns"] = [{"source": "x", "output": "a.x"}] if payload else []
+                    scan["predicate_columns"] = [{"source": "k", "output": "private.k"}]
+                    scan["predicate"] = copy.deepcopy(predicate)
+                    scan["predicate"]["left"]["column"] = "private.k"
+                    nodes, root = [scan], "a"
+                    stages = [_stage("source", ["a"], [], ["a"], "column")] if staged else None
+                else:
+                    nodes = [scan, {"id": "filter", "op": "filter", "input": "a", "predicate": predicate}]
+                    root, stages = "filter", None
+                output, edges = ["a.x"], []
+                if not payload:
+                    nodes.append({
+                        "id": "emit", "op": "project", "input": root, "ordered": False,
+                        "columns": [{"output": "one", "expression": {
+                            "kind": "literal", "type": "Int64", "value": 1}}],
+                    })
+                    root, output = "emit", ["one"]
+                    if pushed and staged:
+                        stages.append(_stage("compute", ["emit"], ["a"], ["emit"]))
+                        edges = [_edge("gather", "source", "compute", 0, 0, "union_all", parallel=False)]
+                return parse_snapshot(_snapshot_with_stage_graph(
+                    schema_value, nodes, root, output, stages, edges))
+
+            before = snapshot(False)
+            build = build_problem if staged else build_transformation_prefix_problem
+            with self.subTest(nullable=nullable, payload=payload, staged=staged):
+                result = solve(build(before, snapshot(True), 2, 10_000), SOLVER, 2, 10_000)
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+                changed = solve(build(before, snapshot(True, 1), 2, 10_000), SOLVER, 2, 10_000)
+                self.assertEqual(changed.status, "COUNTEREXAMPLE")
+
     def test_row_source_result_projection_preserves_each_tuple_position(self):
         initial = row_source_result_snapshot(staged=False)
         final = row_source_result_snapshot(staged=True)
@@ -9292,6 +9516,35 @@ class VerificationTest(unittest.TestCase):
             30_000,
         )
         self.assertEqual(inequivalent.status, "COUNTEREXAMPLE")
+
+    def test_q28_variadic_rebound_avg_carrier_matches_logical_and_detects_mutation(self):
+        logical = q28_decimal_logical_snapshot()
+        for corrupted in (False, True):
+            staged = q28_decimal_avg_union_carrier_snapshot(
+                count_from_distinct=corrupted, native_layout=True,
+            )
+            result = solve(build_problem(logical, staged, 2, 30_000), SOLVER, 2, 30_000)
+            with self.subTest(corrupted=corrupted):
+                self.assertEqual(result.status, "COUNTEREXAMPLE" if corrupted else "VERIFIED_BOUNDED")
+
+    def test_q28_avg_carrier_can_be_verified_before_stage_assignment(self):
+        logical = q28_decimal_logical_snapshot()
+        for native_layout in (False, True):
+            for corrupted in (False, True):
+                prefix = q28_decimal_avg_union_carrier_snapshot(
+                    count_from_distinct=corrupted, native_layout=native_layout, staged=False,
+                )
+                result = solve(build_transformation_prefix_problem(logical, prefix, 2, 30_000),
+                               SOLVER, 2, 30_000)
+                with self.subTest(native_layout=native_layout, corrupted=corrupted):
+                    self.assertEqual(result.status, "COUNTEREXAMPLE" if corrupted else "VERIFIED_BOUNDED")
+        prefix = q28_decimal_avg_union_carrier_snapshot(native_layout=True, staged=False)
+        physical = q28_decimal_avg_union_carrier_snapshot(native_layout=True)
+        result = solve(
+            build_transformation_pair_problem(prefix, physical, 2, 30_000, observation_snapshot=logical),
+            SOLVER, 2, 30_000,
+        )
+        self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_integral_division_is_an_exact_bounded_observable(self):
         original = integral_division_snapshot()
@@ -9620,8 +9873,19 @@ class VerificationTest(unittest.TestCase):
         )
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
+    def test_text_and_temporal_extrema_preserve_partition_reductions(self):
+        for input_type in ("String", "Utf8", "Date", "Datetime", "Timestamp"):
+            for function, grouped, nullable in product(("min", "max"), (False, True), (False, True)):
+                with self.subTest(type=input_type, function=function, grouped=grouped, nullable=nullable):
+                    initial = aggregate_stage_snapshot(
+                        function, grouped, False, nullable_input=nullable, input_type=input_type)
+                    final = aggregate_stage_snapshot(
+                        function, grouped, True, nullable_input=nullable, input_type=input_type)
+                    result = solve(build_problem(initial, final, 2, 10_000), SOLVER, 2, 10_000)
+                    self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
     def test_corrupt_min_final_function_has_a_solver_counterexample(self):
-        for input_type in ("Decimal(2,0)", "Int64"):
+        for input_type in ("Decimal(2,0)", "Int64", "String", "Utf8", "Date", "Datetime", "Timestamp"):
             with self.subTest(input_type=input_type):
                 logical = aggregate_stage_snapshot(
                     "min",

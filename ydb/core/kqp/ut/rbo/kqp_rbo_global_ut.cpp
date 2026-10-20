@@ -70,6 +70,35 @@ void CheckMapPullup(const TString& kind, bool fromLeft, EMapUse use, bool expect
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpRboGlobalIUs) {
+    Y_UNIT_TEST(PruningKeepsGroupingSetsAggregateTemplate) {
+        for (const bool keepCount : {false, true}) {
+            NTests::TIdTestContext f;
+            const auto value = f.Id("value"), count = f.Id("count"), output = f.Id("count_output");
+            auto aggregate = MakeIntrusive<TOpAggregate>(f.Read({value}),
+                TAggregationIUs{{count, {value, "count", false, false}}},
+                TOrderedIUs<>{}, EOpPhase::Undefined, false, f.Pos);
+            auto grouping = MakeIntrusive<TOpGroupingSets>(aggregate,
+                TVector<TUnorderedIUs>{{}, {}}, TMappedIUs<TInfoUnitId>{{output, count}}, f.Pos);
+            auto root = f.Root(grouping, keepCount ? TOrderedIUs<TString>{{output, "count"}} : TOrderedIUs<TString>{});
+            TGlobalPruningStage("early pruning").RunStage(*root, f.RboCtx);
+            UNIT_ASSERT_C(grouping->GetInput()->Kind == EOperator::Aggregate,
+                "GroupingSets lost its Aggregate template during pruning");
+            UNIT_ASSERT_VALUES_EQUAL(aggregate->GetAggregationTraits().Keys().Empty(), !keepCount);
+            UNIT_ASSERT_VALUES_EQUAL(grouping->GetGroupingSets().size(), 2);
+        }
+    }
+
+
+    Y_UNIT_TEST(CleanupFoldsOrdinaryResultlessScalarAggregate) {
+        NTests::TIdTestContext f;
+        const auto value = f.Id("value");
+        auto aggregate = MakeIntrusive<TOpAggregate>(f.Read({value}), TAggregationIUs{},
+            TOrderedIUs<>{}, EOpPhase::Undefined, false, f.Pos);
+        auto root = f.Root(aggregate, {});
+        FinishLogicalRewrite(*root, f.ExprCtx);
+        UNIT_ASSERT(root->GetInput()->Kind == EOperator::EmptySource);
+    }
+
     Y_UNIT_TEST(ExpandReplicateReplacesAllPorts) {
         TIdTestContext f;
         f.Config->_KqpEnableSpilling = false;
@@ -981,6 +1010,56 @@ Y_UNIT_TEST_SUITE(KqpRboRebindConsumers) {
         UNIT_ASSERT(subplans.At(nestedCall).DependentIUs == TUnorderedIUs{local});
         UNIT_ASSERT(body->GetFilterExpression().Node == originalBody);
         UNIT_ASSERT(filter->GetFilterExpression().GetRawInputIUs() == TUnorderedIUs{call});
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpRboFilterFusion) {
+    Y_UNIT_TEST(ReportsTheRewriteAndRetainsBothPredicates) {
+        TIdTestContext f;
+        const auto key = f.Id("key");
+        auto read = f.Read({key});
+        auto lower = MakeIntrusive<TOpFilter>(read, f.Pos,
+            MakeBinaryPredicate(">", f.Column(key), MakeConstant("Int32", "0", f.Pos, &f.ExprCtx)));
+        auto upper = MakeIntrusive<TOpFilter>(lower, f.Pos,
+            MakeBinaryPredicate("<", f.Column(key), MakeConstant("Int32", "5", f.Pos, &f.ExprCtx)));
+        auto root = f.Root(upper, {{key, "key"}});
+        TFuseFiltersRule rule;
+        auto& input = root->MutableChild(0);
+        const bool changed = rule.MatchAndApply(input, f.RboCtx, root->PlanProps);
+        UNIT_ASSERT_C(changed, "Filter fusion changed the plan without reporting the rewrite");
+        auto fused = CastOperator<TOpFilter>(input);
+        UNIT_ASSERT(fused->GetInput() == read);
+        UNIT_ASSERT_VALUES_EQUAL(fused->GetFilterExpression().SplitConjunct().size(), 2);
+        UNIT_ASSERT(!rule.MatchAndApply(input, f.RboCtx, root->PlanProps));
+    }
+
+    Y_UNIT_TEST(RecomputesParentsBeforeTheFollowingRule) {
+        class TCheckParents final : public IRule {
+        public:
+            TCheckParents() : IRule("Check fused filter parents", ERuleProperties::RequireParents) {}
+            bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override {
+                return input->Kind == EOperator::Filter && input->GetChild(0)->Kind == EOperator::Source;
+            }
+            bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext&, TPlanProps&) override {
+                const auto& parents = input->GetChild(0)->Parents;
+                UNIT_ASSERT_VALUES_EQUAL(parents.size(), 1);
+                UNIT_ASSERT_C(parents.front().first == input.Get(), "Filter fusion left stale parent metadata");
+                return false;
+            }
+        };
+        TIdTestContext f;
+        const auto key = f.Id("key");
+        auto read = f.Read({key});
+        auto lower = MakeIntrusive<TOpFilter>(read, f.Pos,
+            MakeBinaryPredicate(">", f.Column(key), MakeConstant("Int32", "0", f.Pos, &f.ExprCtx)));
+        auto upper = MakeIntrusive<TOpFilter>(lower, f.Pos,
+            MakeBinaryPredicate("<", f.Column(key), MakeConstant("Int32", "5", f.Pos, &f.ExprCtx)));
+        auto root = f.Root(upper, {{key, "key"}});
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TFuseFiltersRule>());
+        rules.emplace_back(std::make_unique<TCheckParents>());
+        TRuleBasedStage("Filter fusion", std::move(rules)).RunStage(*root, f.RboCtx);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperators(*root, EOperator::Filter), 1);
     }
 }
 

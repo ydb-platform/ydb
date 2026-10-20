@@ -46,20 +46,23 @@ TOrderedIUs<> ComputeKeysAfterJoin(TOpJoin* join) {
         return {};
     }
 
-    // If right join keys covers all the keys of the right hand side,
-    // we don't need the key of the right side at all
-    if (rightKeys.Unordered().IsSubsetOf(join->JoinKeys.Right())) {
-        return leftKeys;
-    }
-    // Same for the left side
-    else if (leftKeys.Unordered().IsSubsetOf(join->JoinKeys.Left())) {
-        return rightKeys;
+    // Null extension can introduce repeated NULL keys on either side. Full
+    // and exclusion joins cannot retain either input's uniqueness guarantee.
+    if (join->JoinKind == "Full" || join->JoinKind == "Exclusion") {
+        return {};
     }
 
-    else {
-        leftKeys.AppendMissing(rightKeys.Items());
+    // A one-sided key can survive only when its side is not null-extended.
+    // Otherwise preserve the pair of input keys, which distinguishes matches
+    // and the at-most-one unmatched row for each preserved-side input row.
+    if (join->JoinKind != "Right" && rightKeys.Unordered().IsSubsetOf(join->JoinKeys.Right())) {
         return leftKeys;
     }
+    if (join->JoinKind != "Left" && leftKeys.Unordered().IsSubsetOf(join->JoinKeys.Left())) {
+        return rightKeys;
+    }
+    leftKeys.AppendMissing(rightKeys.Items());
+    return leftKeys;
 }
 
 using TStorageBindings = THashMap<TString, TInfoUnitId>;
@@ -222,13 +225,8 @@ void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         return;
     }
 
-    TOrderedIUs<> keyColumns;
-    for (const auto& key : tableData.Metadata->KeyColumnNames) {
-        if (const auto it = bindings.find(key); it != bindings.end()) {
-            keyColumns.Append(it->second);
-        }
-    }
-    Props.Metadata->KeyColumns = std::move(keyColumns);
+    // A proper subset of a composite primary key need not be unique.
+    Props.Metadata->KeyColumns = ResolveStorageColumns(tableData.Metadata->KeyColumnNames, bindings);
 }
 
 /***
@@ -500,7 +498,8 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         // Like DistinctAll: the whole grouping tuple is unique, even when the
         // input has no known key.
         Props.Metadata->KeyColumns = KeyColumns;
-    } else if (inputMetadata.KeyColumns.Unordered().IsSubsetOf(KeyColumns.Unordered()))
+    } else if (!inputMetadata.KeyColumns.Items().empty() &&
+        inputMetadata.KeyColumns.Unordered().IsSubsetOf(KeyColumns.Unordered()))
     {
         Props.Metadata->KeyColumns = inputMetadata.KeyColumns;
     } else {
@@ -646,6 +645,13 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         }
     }
     Props.Metadata->SourceStatsColumns.IntersectWith(outputs);
+
+    // Unmatched rows from either side have NULLs in the other side's keys.
+    // Their join partition need not equal the partition of those NULL keys,
+    // so neither one-sided key list describes Full/Exclusion output shuffling.
+    if (JoinKind == "Full" || JoinKind == "Exclusion") {
+        return;
+    }
 
     NKqp::EJoinAlgoType algo = Props.JoinAlgo.has_value() ? *Props.JoinAlgo : NKqp::EJoinAlgoType::Undefined;
     if (algo == NKqp::EJoinAlgoType::MapJoin) {

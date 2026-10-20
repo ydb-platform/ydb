@@ -202,6 +202,12 @@ Y_UNIT_TEST_SUITE(TRBOPrefixCapture) {
             "preparation succeeded");
     }
 
+    Y_UNIT_TEST(IncompleteCaptureRetainsOptimizerDiagnostics) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            ClassifyCapture(10, false, {Supported(ERBOSemanticSnapshotBoundaryV1::Initial, "initial")},
+                "specific optimizer failure"), yexception, "specific optimizer failure");
+    }
+
     Y_UNIT_TEST(BenchmarkInputPreparationMatchesCoverageHarness) {
         const TString schema = R"(CREATE TABLE `/Root/T` (
     k Uint64,

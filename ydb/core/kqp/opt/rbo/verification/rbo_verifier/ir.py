@@ -17,7 +17,8 @@ from .types import (
     DATE,
     DOUBLE,
     INTEGER_TYPES,
-    MAX_DATE,
+    STABLE_PICKLE_TYPES,
+    DATE_TIME_BOUNDS,
     VOID,
     equality_comparison_compatible,
     family,
@@ -157,6 +158,8 @@ class Scan:
     columns: tuple[ScanColumn, ...]
     predicate: Expr | None
     pushed_limit: Expr | None
+    # Physical inputs available only while evaluating the pushed predicate.
+    predicate_columns: tuple[ScanColumn, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +292,7 @@ class Aggregate:
 class JoinKey:
     left: str
     right: str
+    equal_nulls: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -606,7 +610,7 @@ def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | deci
         or (
             scalar_family == "date"
             and type(value) is int
-            and 0 <= value < MAX_DATE
+            and 0 <= value < DATE_TIME_BOUNDS[scalar_type]
         )
         or (scalar_family == "string" and isinstance(value, str))
     )
@@ -950,6 +954,18 @@ def _parse_expr(
             nullable=nullable,
         )
 
+    if kind == "stable_pickle":
+        _keys(obj, {"kind", "arg", "source_type", "type", "nullable"}, path)
+        source_type = _scalar_type(obj["source_type"], f"{path}.source_type")
+        if source_type not in STABLE_PICKLE_TYPES:
+            _fail(path, "StablePickle requires a reviewed scalar")
+        if obj["type"] != "String" or _bool(obj["nullable"], f"{path}.nullable"):
+            _fail(path, "StablePickle result must be non-null String")
+        return Expr(
+            kind=kind, args=(parse_child(obj["arg"], f"{path}.arg"),),
+            source_type=source_type, result_type="String", nullable=False,
+        )
+
     if kind in {"cast_decimal", "cast_double"}:
         _keys(obj, {"kind", "arg", "source_type", "type", "nullable"}, path)
         return Expr(
@@ -1038,12 +1054,12 @@ def _parse_expr(
                     "and a non-empty identity suffix",
                 )
         elif kind == "checked_concat":
-            if result_type != "String" or nullable:
-                _fail(path, "checked_concat result must be non-null String")
+            if result_type not in {"String", "Utf8"} or nullable:
+                _fail(path, "checked_concat result must be non-null String or Utf8")
             if not 1 <= len(raw_args) <= 2:
                 _fail(
                     f"{path}.args",
-                    "checked_concat requires one or two stored-String arguments",
+                    "checked_concat requires one or two stored-text arguments",
                 )
             if not (
                 fingerprint.startswith(RESTRICTED_CONCAT_FINGERPRINT_PREFIX)
@@ -1175,7 +1191,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             obj,
             {"id", "op", "table", "columns"},
             path,
-            {"predicate", "pushed_limit"},
+            {"predicate", "pushed_limit", "predicate_columns"},
         )
         columns: list[ScanColumn] = []
         for index, raw_column in enumerate(_array(obj["columns"], f"{path}.columns")):
@@ -1188,12 +1204,21 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                     output=_string(column["output"], f"{column_path}.output"),
                 )
             )
-        if not columns:
-            _fail(f"{path}.columns", "must not be empty")
+        predicate_columns: list[ScanColumn] = []
+        for index, raw_column in enumerate(_array(obj.get("predicate_columns", []), f"{path}.predicate_columns")):
+            column_path = f"{path}.predicate_columns[{index}]"
+            column = _object(raw_column, column_path)
+            _keys(column, {"source", "output"}, column_path)
+            predicate_columns.append(ScanColumn(
+                source=_string(column["source"], f"{column_path}.source"),
+                output=_string(column["output"], f"{column_path}.output"),
+            ))
+        # A payload-free scan preserves table multiplicity for COUNT(*).
         return Scan(
             id=node_id,
             table=_string(obj["table"], f"{path}.table"),
             columns=tuple(columns),
+            predicate_columns=tuple(predicate_columns),
             predicate=(
                 None
                 if obj.get("predicate") is None
@@ -1389,7 +1414,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         ):
             key_path = f"{path}.keys[{index}]"
             key = _object(raw_key, key_path)
-            _keys(key, {"left", "right"}, key_path)
+            _keys(key, {"left", "right"}, key_path, {"equal_nulls"})
             # Preserve the old complete-predicate audit bound: one equality
             # and its two column leaves became this side-explicit descriptor.
             for _ in range(3):
@@ -1398,6 +1423,7 @@ def _parse_node(value: Any, path: str) -> PlanNode:
                 JoinKey(
                     _string(key["left"], f"{key_path}.left"),
                     _string(key["right"], f"{key_path}.right"),
+                    _bool(key.get("equal_nulls", False), f"{key_path}.equal_nulls"),
                 )
             )
         predicate_depth = 1
@@ -1445,8 +1471,6 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             _string(column, f"{path}.output[{index}]")
             for index, column in enumerate(_array(obj["output"], f"{path}.output"))
         )
-        if not output:
-            _fail(f"{path}.output", "must not be empty")
         return UnionAll(
             node_id,
             tuple(inputs),
@@ -1653,12 +1677,12 @@ def _parse_subplan(value: Any, path: str) -> Subplan:
             )
         if (
             integer_bounds(lookup.type) is None
-            and lookup.type not in {DATE, "String"}
+            and lookup.type not in {DATE, "String", "Utf8"}
         ):
             _fail(
                 path,
                 "this IN slice supports only fixed-width integral, "
-                "Date, or String columns",
+                "Date, or String/Utf8 columns",
             )
         return InSubplan(
             binding=binding,
@@ -1834,6 +1858,16 @@ def _infer_expr(
     if expr.kind == "void":
         _fail(path, "void may only flow transparently to a canonical count aggregate")
 
+    if expr.kind == "stable_pickle":
+        if (expr.source_type not in STABLE_PICKLE_TYPES
+                or expr.result_type != "String" or expr.nullable is not False
+                or len(expr.args) != 1):
+            _fail(path, "StablePickle requires an audited scalar and non-null String result")
+        argument = infer(expr.args[0], columns, f"{path}.arg", bindings)
+        if argument.name != expr.source_type:
+            _fail(path, "StablePickle source_type disagrees with its argument")
+        return ValueType("String", False)
+
     if expr.kind in {"literal", "null", "opaque"}:
         assert expr.result_type is not None and expr.nullable is not None
         if expr.kind == "opaque":
@@ -1861,9 +1895,9 @@ def _infer_expr(
                 f"{expr.kind} input must be Optional<Decimal(35,2)>",
             )
         expected_partition_types = (
-            {ValueType("String", True)}
+            {ValueType("String", True), ValueType("Utf8", True)}
             if expr.kind == "window_sum"
-            else {ValueType("Int64", True), ValueType("String", True)}
+            else {ValueType("Int64", True), ValueType("String", True), ValueType("Utf8", True)}
         )
         for partition_name in expr.partition_by:
             partition = columns.get(partition_name)
@@ -1874,9 +1908,9 @@ def _infer_expr(
                 )
             if partition.value_type not in expected_partition_types:
                 expected = (
-                    "Optional<String>"
+                    "Optional<String> or Optional<Utf8>"
                     if expr.kind == "window_sum"
-                    else "Optional<Int64> or Optional<String>"
+                    else "Optional<Int64>, Optional<String> or Optional<Utf8>"
                 )
                 _fail(path, f"{expr.kind} partition key must be {expected}")
         return ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
@@ -1957,8 +1991,8 @@ def _infer_expr(
         return ValueType(WINDOW_RANK_RESULT_TYPE, False)
 
     if expr.kind == "checked_concat":
-        if expr.result_type != "String" or expr.nullable:
-            _fail(path, "checked_concat result must be non-null String")
+        if expr.result_type not in {"String", "Utf8"} or expr.nullable:
+            _fail(path, "checked_concat result must be non-null String or Utf8")
         fingerprint = expr.fingerprint
         if not (
             isinstance(fingerprint, str)
@@ -1971,7 +2005,7 @@ def _infer_expr(
                 "and a non-empty identity suffix",
             )
         if not 1 <= len(expr.args) <= 2:
-            _fail(path, "checked_concat requires one or two stored-String arguments")
+            _fail(path, "checked_concat requires one or two stored-text arguments")
         if any(
             argument.kind != "column" or argument.column is None
             for argument in expr.args
@@ -1987,12 +2021,14 @@ def _infer_expr(
                 f"{path}.args[{index}]",
                 bindings,
             )
-            if argument.name != "String":
+            if argument.name not in {"String", "Utf8"}:
                 _fail(
                     f"{path}.args[{index}]",
-                    "checked_concat arguments must be stored String columns",
+                    "checked_concat arguments must be stored String or Utf8 columns",
                 )
-        return ValueType("String", False)
+            if expr.result_type == "Utf8" and argument.name != "Utf8":
+                _fail(path, "Utf8 checked_concat cannot consume a stored String column")
+        return ValueType(expr.result_type, False)
 
     if expr.kind == "opaque_double":
         if expr.result_type != DOUBLE or expr.nullable is not True:
@@ -2344,14 +2380,13 @@ def _is_exact_count_distinct(
 ) -> bool:
     """Recognize the reviewed direct COUNT(DISTINCT) input boundary.
 
-    The two admitted forms are exact non-null fixed-width integers and
+    The admitted forms are required or nullable fixed-width integers and
     nullable canonical Decimal values.  Decimal de-duplication uses MiniKQL's
     raw aggregate equality in the relational model.
     """
 
     exact_input = (
         input_column.type in INTEGER_TYPES
-        and not input_column.nullable
     ) or (
         decimal.is_type(input_column.type)
         and input_column.nullable
@@ -2383,23 +2418,24 @@ def _validate_integral_double_average(
     input_column: Column,
     path: str,
 ) -> None:
-    if trait.state != INTEGRAL_DOUBLE_AVERAGE_STATE:
-        _fail(
-            f"{path}.state",
-            "integral avg state must be exactly "
-            "{kind=integral_double_v1, source_type=Int64, "
-            "sum_type=Double, count_type=Uint64, nullable=true, "
-            "exact_when_count_at_most=2}",
-        )
-    expected_input_type = DOUBLE if node.phase == "final" else "Int64"
-    if input_column.type != expected_input_type or not input_column.nullable:
-        _fail(
-            path,
-            f"integral avg {node.phase} input must be "
-            f"Optional<{expected_input_type}>",
-        )
-    if trait.output_type != DOUBLE or not trait.output_nullable:
-        _fail(path, "integral avg output must be Optional<Double>")
+    state = trait.state
+    if (
+        not isinstance(state, AverageStateType)
+        or state.source_type not in INTEGER_TYPES
+        or type(state.nullable) is not bool
+        or state != replace(INTEGRAL_DOUBLE_AVERAGE_STATE,
+                            source_type=state.source_type, nullable=state.nullable)
+    ):
+        _fail(f"{path}.state", "integral avg requires an exact integer source, "
+              "Double sum, Uint64 count, Boolean nullability and count-at-most-two contract")
+    expected_input_type = DOUBLE if node.phase == "final" else state.source_type
+    if input_column.type != expected_input_type or input_column.nullable != state.nullable:
+        expected = f"Optional<{expected_input_type}>" if state.nullable else expected_input_type
+        _fail(path, f"integral avg {node.phase} input must be {expected}")
+    expected_nullable = state.nullable or (not node.keys and node.phase != "intermediate")
+    if trait.output_type != DOUBLE or trait.output_nullable != expected_nullable:
+        expected = "Optional<Double>" if expected_nullable else "Double"
+        _fail(path, f"integral avg output must be {expected}, following source/phase/key nullability")
 
 
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
@@ -2444,7 +2480,7 @@ def _validate_average_state_dataflow(
     Decimal AVG additionally admits the exact keyless expansion emitted for
     multi-aggregate branches: one direct Project of the intermediate state,
     logical-null Project pads for every other branch, and an unordered,
-    identity-mapped UnionAll tree.  Every node/column that still carries the
+    explicitly mapped UnionAll tree.  Every node/column that still carries the
     hidden tuple is returned for the StageGraph routing audit.
     """
 
@@ -2577,11 +2613,6 @@ def _validate_average_state_dataflow(
         final_trait: AggregateTrait,
     ) -> None:
         path = f"node {final.id!r}.aggregates"
-        if snapshot.stage_graph is None:
-            _fail(
-                path,
-                "an indirect Decimal avg carrier requires a StageGraph",
-            )
         if (
             final.keys
             or final.distinct_all
@@ -2608,32 +2639,33 @@ def _validate_average_state_dataflow(
                 "final avg trait",
             )
 
-        def visit(node_id: str, consumer_id: str) -> int:
+        def visit(node_id: str, column: str, consumer_id: str) -> int:
             node = nodes[node_id]
             node_path = f"node {node.id!r}"
             require_only_consumer(node.id, consumer_id, node_path)
             exact_carrier_column(
                 node.id,
-                final_trait.input,
+                column,
                 final_trait,
                 node_path,
             )
-            track(node.id, final_trait.input, node_path)
+            track(node.id, column, node_path)
 
             if isinstance(node, UnionAll):
                 if (
                     node.ordered
-                    or len(node.inputs) != 2
-                    or final_trait.input not in node.output
-                    or any(item.columns != node.output for item in node.inputs)
+                    or column not in node.output
                 ):
                     _fail(
                         node_path,
-                        "Decimal avg state requires a binary unordered "
-                        "identity UnionAll carrier",
+                        "Decimal avg state requires an unordered UnionAll carrier",
                     )
+                index = node.output.index(column)
+                for item in node.inputs:
+                    if item.columns.count(item.columns[index]) != 1:
+                        _fail(node_path, "a Decimal avg UnionAll input may not fan out its state")
                 return sum(
-                    visit(item.node, node.id)
+                    visit(item.node, item.columns[index], node.id)
                     for item in node.inputs
                 )
 
@@ -2642,15 +2674,10 @@ def _validate_average_state_dataflow(
                     node_path,
                     "every Decimal avg UnionAll leaf must be one exact Project",
                 )
-            if node.ordered:
-                _fail(
-                    node_path,
-                    "a Decimal avg carrier Project must be unordered",
-                )
             projection = tuple(
                 item
                 for item in node.columns
-                if item.output == final_trait.input
+                if item.output == column
             )
             if len(projection) != 1 or projection[0].error_on_null:
                 _fail(
@@ -2661,7 +2688,7 @@ def _validate_average_state_dataflow(
             state_projection = projection[0]
             other_uses = any(
                 item is not state_projection
-                and final_trait.input in expression_columns(item.expression)
+                and column in expression_columns(item.expression)
                 for item in node.columns
             )
             if other_uses:
@@ -2676,7 +2703,6 @@ def _validate_average_state_dataflow(
                 or source.phase != "intermediate"
                 or source.keys
                 or source.distinct_all
-                or len(source.aggregates) != 1
             ):
                 _fail(
                     node_path,
@@ -2687,10 +2713,13 @@ def _validate_average_state_dataflow(
 
             expression = state_projection.expression
             if expression.kind == "column":
-                source_trait = source.aggregates[0]
+                source_trait = next(
+                    (trait for trait in source.aggregates if trait.output == column),
+                    None,
+                )
                 if (
-                    expression.column != final_trait.input
-                    or source_trait.output != final_trait.input
+                    expression.column != column
+                    or source_trait is None
                 ):
                     _fail(
                         node_path,
@@ -2699,7 +2728,7 @@ def _validate_average_state_dataflow(
                     )
                 exact_carrier_column(
                     source.id,
-                    final_trait.input,
+                    column,
                     final_trait,
                     node_path,
                 )
@@ -2715,7 +2744,7 @@ def _validate_average_state_dataflow(
                 expression.kind != "null"
                 or expression.result_type != final_trait.output_type
                 or expression.nullable is not True
-                or final_trait.input in schemas[source.id]
+                or column in schemas[source.id]
             ):
                 _fail(
                     node_path,
@@ -2731,7 +2760,7 @@ def _validate_average_state_dataflow(
                 "final avg must directly consume an intermediate aggregate "
                 "with the same ordered keys",
             )
-        if visit(child.id, final.id) != 1:
+        if visit(child.id, final_trait.input, final.id) != 1:
             _fail(
                 path,
                 "a Decimal avg carrier must contain exactly one matching "
@@ -2937,18 +2966,16 @@ def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
             "checked_concat must belong only to the main result plan",
         )
 
+    final_stage_nodes = None
     if snapshot.stage_graph is not None:
-        if producer.id != snapshot.plan.root:
+        final_stage_nodes = frozenset(
+            snapshot.stage_graph.stage_map()[snapshot.stage_graph.root_stage].nodes
+        )
+        if producer.id not in final_stage_nodes:
             _fail(
                 f"node {producer.id!r}",
-                "a staged checked_concat Project must be the plan root",
+                "a staged checked_concat Project must belong to the final stage",
             )
-        if projection.output not in snapshot.plan.output:
-            _fail(
-                f"node {producer.id!r}.columns",
-                "the checked_concat output must be returned by the result root",
-            )
-        return CheckedConcatCorridor(producer, projection.output, ())
 
     consumers: dict[str, list[PlanNode]] = {
         node.id: [] for node in snapshot.plan.nodes
@@ -2958,7 +2985,7 @@ def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
             consumers[child].append(consumer)
 
     current = producer
-    current_output = projection.output
+    current_outputs = {projection.output}
     selectors: list[Limit | Sort] = []
     while current.id != snapshot.plan.root:
         parents = consumers[current.id]
@@ -2968,24 +2995,44 @@ def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
                 "checked_concat rootward dataflow must have exactly one consumer",
             )
         parent = parents[0]
+        if final_stage_nodes is not None and (
+            parent.id not in final_stage_nodes
+            or not isinstance(parent, Project)
+            or any(
+                column.expression.kind != "column"
+                or column.error_on_null
+                or column.require_total
+                or column.require_at_most_one is not None
+                for column in parent.columns
+            )
+        ):
+            _fail(
+                f"node {parent.id!r}",
+                "staged checked_concat may cross only pure column Projects in the final stage",
+            )
         if isinstance(parent, Project):
             transports = tuple(
                 column
                 for column in parent.columns
-                if current_output in expression_columns(column.expression)
+                if current_outputs.intersection(expression_columns(column.expression))
             )
             if (
-                len(transports) != 1
-                or transports[0].expression.kind != "column"
-                or transports[0].expression.column != current_output
+                not transports
+                or any(column.expression.kind != "column"
+                       or column.expression.column not in current_outputs
+                       for column in transports)
+                or sum(column.output != column.expression.column for column in transports) > 1
             ):
                 _fail(
                     f"node {parent.id!r}.columns",
-                    "checked_concat may cross a Project only as one direct column transport",
+                    "checked_concat may cross a Project only as one direct column transport "
+                    "plus retained identity columns",
                 )
-            current_output = transports[0].output
+            # Native Maps append a copy while retaining their input columns.
+            # Audit every alias on later consumers, including retained originals.
+            current_outputs = {column.output for column in transports}
         elif isinstance(parent, Sort):
-            if any(item.column == current_output for item in parent.order):
+            if any(item.column in current_outputs for item in parent.order):
                 _fail(
                     f"node {parent.id!r}.order",
                     "checked_concat may not be consumed as a Sort key",
@@ -3012,7 +3059,7 @@ def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
             )
         current = parent
 
-    if current_output not in snapshot.plan.output:
+    if not current_outputs.intersection(snapshot.plan.output):
         _fail(
             "snapshot.plan.output",
             "the checked_concat output must be returned by the result root",
@@ -3125,13 +3172,15 @@ def _validate_stage_graph(
     if graph is None:
         if any(
             isinstance(node, Scan)
-            and (node.predicate is not None or node.pushed_limit is not None)
+            and node.pushed_limit is not None
             for node in snapshot.plan.nodes
         ):
             _fail(
                 "snapshot.stage_graph",
-                "a pushed scan predicate or limit requires a column-storage source stage",
+                "a pushed scan limit requires a column-storage source stage",
             )
+        # A reviewed row-local predicate has the same bag semantics before
+        # stage assignment. Pushed limits still need task-local selection.
         return
     path = "snapshot.stage_graph"
     if not graph.stages:
@@ -3886,18 +3935,27 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             if table is None:
                 _fail(f"node {node.id!r}", f"unknown table {node.table!r}")
             table_columns = table.column_map()
-            _unique([column.source for column in node.columns], f"node {node.id!r} scan sources")
-            _unique([column.output for column in node.columns], f"node {node.id!r} output")
+            if node.predicate_columns and node.predicate is None:
+                _fail(f"node {node.id!r}", "private scan inputs require a pushed predicate")
+            mappings = node.columns + node.predicate_columns
+            _unique([column.source for column in mappings], f"node {node.id!r} scan sources")
+            _unique([column.output for column in mappings], f"node {node.id!r} scan bindings")
             result = {}
             for column in node.columns:
                 source = table_columns.get(column.source)
                 if source is None:
                     _fail(f"node {node.id!r}", f"unknown source column {column.source!r}")
                 result[column.output] = Column(column.output, source.type, source.nullable)
+            predicate_schema = dict(result)
+            for column in node.predicate_columns:
+                source = table_columns.get(column.source)
+                if source is None:
+                    _fail(f"node {node.id!r}", f"unknown predicate source column {column.source!r}")
+                predicate_schema[column.output] = Column(column.output, source.type, source.nullable)
             if node.predicate is not None:
                 predicate_type = _infer_expr(
                     node.predicate,
-                    result,
+                    predicate_schema,
                     f"node {node.id!r}.predicate",
                     binary64_mode=binary64_mode,
                 )
@@ -4073,10 +4131,10 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     f"node {node.id!r}",
                     "DistinctAll requires one distinct trait for each ordered key",
                 )
-            if sum(trait.distinct for trait in node.aggregates) > 1:
+            if sum(trait.distinct for trait in node.aggregates) > 2:
                 _fail(
                     f"node {node.id!r}.aggregates",
-                    "at most one direct distinct aggregate trait is modeled",
+                    "at most two direct distinct aggregate traits are modeled",
                 )
 
             output_names = (() if node.distinct_all else node.keys) + tuple(
@@ -4140,7 +4198,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     _fail(
                         trait_path,
                         "direct distinct is modeled only for a "
-                        "phase-undefined count of a non-null fixed-width "
+                        "phase-undefined count of a fixed-width "
                         "integer or nullable canonical Decimal with non-null "
                         "Uint64 output",
                     )
@@ -4195,14 +4253,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         )
                 elif trait.function in {"max", "min"}:
                     function = trait.function
-                    if (
-                        not decimal.is_type(input_column.type)
-                        and integer_bounds(input_column.type) is None
-                    ):
+                    if not is_ordered_type(input_column.type):
                         _fail(
                             trait_path,
                             f"{function} does not support {input_column.type!r}; "
-                            "only Decimal and fixed-width integers are modeled",
+                            "only modeled ordered scalar types are supported",
                         )
                     if trait.output_type != input_column.type:
                         _fail(
@@ -4324,6 +4379,15 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"{key_path}.right",
                         f"column {key.right!r} is not available from the right input",
                     )
+                if type(key.equal_nulls) is not bool:
+                    _fail(key_path, "equal_nulls must be Boolean")
+                if key.equal_nulls and (
+                    left_column.type != right_column.type
+                    or left_column.type not in (
+                        INTEGER_TYPES | frozenset(DATE_TIME_BOUNDS) | {BOOL, "String", "Utf8"}
+                    )
+                ):
+                    _fail(key_path, "null-equal join keys require identical reviewed scalar types")
                 if left_column.type == DOUBLE or right_column.type == DOUBLE:
                     _fail(key_path, "join keys may not consume Double")
                 if not equality_comparison_compatible(

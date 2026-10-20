@@ -13,6 +13,7 @@ from typing import Callable
 from . import decimal, floating, smt
 from .errors import RelationError
 from .ir import AggregateTrait
+from .types import integer_bounds
 from .scalar import (
     DecimalAverageState,
     DecimalSumState,
@@ -24,7 +25,7 @@ from .scalar import (
 
 GuardedValues = tuple[tuple[smt.Term, Value], ...]
 ValueEquality = Callable[[Value, Value], smt.Term]
-IntegralAverage = Callable[[smt.Term, smt.Term, smt.Term], smt.Term]
+IntegralAverage = Callable[[smt.Term, smt.Term, smt.Term, str], smt.Term]
 
 
 def variance_value(
@@ -45,8 +46,10 @@ def variance_value(
         left: floating.VarianceState,
         right: floating.VarianceState,
     ) -> floating.VarianceState:
-        return floating.VarianceState(*(floating.Binary64(smt.ite(guard, a, b))
-            for a, b in zip(floating.state_terms(left), floating.state_terms(right))))
+        return floating.VarianceState(*(
+            floating.Binary64(smt.ite(guard, a, b))
+            for a, b in zip(floating.state_terms(left), floating.state_terms(right))
+        ))
 
     state = floating.VarianceState(floating.ZERO, floating.ZERO, floating.ZERO)
     seen = smt.FALSE
@@ -430,6 +433,32 @@ def decimal_average_value(
     )
 
 
+def _divide_decimal_average(
+    total: smt.Term,
+    count: smt.Term,
+    sum_type: str,
+    count_type: str,
+    count_bound: int,
+) -> smt.Term:
+    """Use constant divisors inside the independently derived count bound.
+
+    Counts are sums of guarded ones or certified partial counts, so every
+    reachable count is an integer in [0, count_bound]. Enumerating a small
+    range avoids nonlinear symbolic division without changing Decimal's
+    rounding or special values. Larger groups retain the general encoder.
+    """
+    if not 0 <= count_bound <= 8:
+        return decimal.divide(total, count, sum_type, count_type)
+    result = decimal.divide(total, smt.ZERO, sum_type, count_type)
+    for divisor in range(1, count_bound + 1):
+        result = smt.ite(
+            smt.eq(count, smt.int_value(divisor)),
+            decimal.divide(total, smt.int_value(divisor), sum_type, count_type),
+            result,
+        )
+    return result
+
+
 def finish_decimal_average(
     guarded_sums: tuple[tuple[smt.Term, smt.Term], ...],
     count_terms: tuple[smt.Term, ...],
@@ -458,7 +487,7 @@ def finish_decimal_average(
     total = decimal.sum_with_headroom(guarded_sums, sum_type, finite_abs_bound)
     count = smt.add(*count_terms)
     average = decimal.narrow_same_scale(
-        decimal.divide(total, count, sum_type, count_type), sum_type, output_type,
+        _divide_decimal_average(total, count, sum_type, count_type, count_bound), sum_type, output_type,
     )
     return Value(
         output_type,
@@ -492,8 +521,11 @@ def integral_average_value(
     assert trait.state.exact_when_count_at_most == 2
     count_terms: list[smt.Term] = []
     count_bound = 0
-    minimum = smt.int_value((1 << 63) - 1)
-    maximum = smt.int_value(-(1 << 63))
+    assert trait.state.source_type is not None
+    bounds = integer_bounds(trait.state.source_type)
+    assert bounds is not None
+    minimum = smt.int_value(bounds[1] - 1)
+    maximum = smt.int_value(bounds[0])
     for guard, value in zip(guards, values):
         if guard == smt.FALSE:
             continue
@@ -532,8 +564,10 @@ def integral_average_value(
     count = smt.add(*count_terms)
     return Value(
         trait.output_type,
-        smt.not_(smt.or_(*guards)) if trait.output_nullable else smt.FALSE,
-        encode(count, minimum, maximum),
+        # A required intermediate carrier is present even for an empty input;
+        # final AVG nullness depends on its member count, not carrier presence.
+        smt.eq(count, smt.ZERO) if trait.output_nullable else smt.FALSE,
+        encode(count, minimum, maximum, trait.state.source_type),
         average_metadata=(
             IntegralAverageState(
                 count=count,

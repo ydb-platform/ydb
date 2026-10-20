@@ -107,7 +107,15 @@ not by a workload query number. A benchmark fixture motivates a slice but
 does not authorize neighboring shapes.
 
 - Fixed-width integers preserve signedness, width, overflow, NULLs, and the
-  exact admitted casts/division. Date operations accept only reviewed shapes.
+  exact admitted casts/division. Date, Datetime and Timestamp keep their exact
+  unsigned day/second/microsecond domains; comparisons and extrema preserve
+  units. Cross-unit conversions still require a separately reviewed shape.
+- Fixed-width integer, Boolean and temporal `StablePickle` uses a shared
+  same-type injective encoding, including one optional layer. Present optional
+  and required values share identity; NULL remains distinct from every present
+  value. Its bytes and ordering are abstract, so symbolic mismatches still need
+  runtime confirmation. Floating, Decimal and nested-optional inputs remain unsupported. String/Utf8
+  equality is admitted through the separately audited text packing contract.
 - Decimal arithmetic and aggregates preserve encoded finite/special values,
   scale, NULL behavior, and phase contracts. Finite aggregate headroom is
   mandatory; potentially non-associative overflow is not silently assumed away.

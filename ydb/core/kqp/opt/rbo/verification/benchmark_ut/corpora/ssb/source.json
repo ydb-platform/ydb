@@ -1,0 +1,142 @@
+{
+  "repository": "https://github.com/umbra-db/QueryBrew",
+  "revision": "45617e688b0787c2130f3e68d466fe073ad1cabf",
+  "files": {
+    "11.sql": "59ac3f21b62ce3ce2c1bbf782c1f4e960648e2e3887d11f9e32c4b85bed76a13",
+    "12.sql": "8827591fc9ffd7b522080e269a9f4cc45b8e5a20790ca84ea93d0337d654c3fb",
+    "13.sql": "6b70d85cc27faab8fe066ed52f476a67ebe643ee69e029916aca0e35afc17dca",
+    "21.sql": "f53731a268e2dbfcfab38757f1da6e051973f1237943bc648266578326603b52",
+    "22.sql": "8e903584c00b4e80001c4468db87e8c94d9e0d915c4e8e7fc590be8e71d736c7",
+    "23.sql": "25080e685316d8713d5fa708a7f098b71854c61c8db01aff90e2ef2ad4404784",
+    "31.sql": "5b3b50cc889b27bc6d52c46ec23a3abf862e2fa457ea7b95153722f7f8bb8e7f",
+    "32.sql": "be68943718aeb01e42040bf46ffeaebf9ba519df6921f702ef6787ffaaf9b843",
+    "33.sql": "6f95f07bf3c7cc3860084b1e949766140bad2a2f50d78959f471629a2afecca8",
+    "34.sql": "f278e5e47b112376415492e4ea91440eb963e220fd4442f51a253b432196625c",
+    "41.sql": "6178975e7046659f338508be4324c44544af37c9c6ca5e2cb203f441b9d26b3b",
+    "42.sql": "07fee1c40484c2ffdae443194944732a0796fc282e0d822e39e9904a14982db2",
+    "43.sql": "867e4dd0825bb55d611b43ffb6f8b190b0afca01d6ef84b960a75c74963697f3",
+    "ssb.dbschema.json": "dda95032b3522ee82858f5bd6c4ad5bab7f0c22d78930d55427801175f720808",
+    "LICENSE": "c00a4e6563b1984606f42a67c65408a10f95a82bede5538a614882122d351e3c"
+  },
+  "source_path": "benchmarks/ssb",
+  "schema_scale_choice": 1,
+  "paper": "https://www.cs.umb.edu/~poneil/StarSchemaB.PDF",
+  "scope": "YDB optimizer correctness on the adapted schema; not a benchmark performance claim",
+  "adaptations": [
+    "FROM tables use /Root paths; SELECT, WHERE, GROUP BY and ORDER BY are unchanged",
+    "AnsiImplicitCrossJoin enables comma joins before WHERE filtering",
+    "integer maps to Int32; numeric(18,2) maps to Decimal(18,2)",
+    "char/varchar map to String: length, blank-padding and ASCII restrictions are not modeled",
+    "All primary keys and NOT NULL declarations are preserved",
+    "Foreign keys and generator value ranges are not assumed by the proofs",
+    "Schema uses the pinned QueryBrew financial Decimal types and its scale<1000 order-key choice",
+    "No data generator or dataset is downloaded or executed"
+  ],
+  "queries": [
+    {
+      "query_id": 1,
+      "ssb_query": "1.1",
+      "source": "11.sql",
+      "source_sha256": "59ac3f21b62ce3ce2c1bbf782c1f4e960648e2e3887d11f9e32c4b85bed76a13",
+      "adapted": "q1.yql",
+      "adapted_sha256": "833779a3f899835201f5058d7d8a6024a2b2a0207b28d299eed0345993384f5c"
+    },
+    {
+      "query_id": 2,
+      "ssb_query": "1.2",
+      "source": "12.sql",
+      "source_sha256": "8827591fc9ffd7b522080e269a9f4cc45b8e5a20790ca84ea93d0337d654c3fb",
+      "adapted": "q2.yql",
+      "adapted_sha256": "1b408c4dfa79756f94baedd2e72b4a834bf904cbc23781a78d0d619bf371bbd0"
+    },
+    {
+      "query_id": 3,
+      "ssb_query": "1.3",
+      "source": "13.sql",
+      "source_sha256": "6b70d85cc27faab8fe066ed52f476a67ebe643ee69e029916aca0e35afc17dca",
+      "adapted": "q3.yql",
+      "adapted_sha256": "12a60ef55d9e3ea2e644a29c5c7cbee93839c753715978b2bd0bbab0afd6c59c"
+    },
+    {
+      "query_id": 4,
+      "ssb_query": "2.1",
+      "source": "21.sql",
+      "source_sha256": "f53731a268e2dbfcfab38757f1da6e051973f1237943bc648266578326603b52",
+      "adapted": "q4.yql",
+      "adapted_sha256": "01d3be2945440226fbb128f884eafc331a446508383eeb6dd5c4cfc41ffcb604"
+    },
+    {
+      "query_id": 5,
+      "ssb_query": "2.2",
+      "source": "22.sql",
+      "source_sha256": "8e903584c00b4e80001c4468db87e8c94d9e0d915c4e8e7fc590be8e71d736c7",
+      "adapted": "q5.yql",
+      "adapted_sha256": "74aab0aacfaf9a5da249cab432af4ab8c348ce4a390ef8e2ada369f4b05e4bf6"
+    },
+    {
+      "query_id": 6,
+      "ssb_query": "2.3",
+      "source": "23.sql",
+      "source_sha256": "25080e685316d8713d5fa708a7f098b71854c61c8db01aff90e2ef2ad4404784",
+      "adapted": "q6.yql",
+      "adapted_sha256": "01cd74f7200ae6f6c5b66738c70d9275bb131495daa8687a8aa1f0d69d81afc2"
+    },
+    {
+      "query_id": 7,
+      "ssb_query": "3.1",
+      "source": "31.sql",
+      "source_sha256": "5b3b50cc889b27bc6d52c46ec23a3abf862e2fa457ea7b95153722f7f8bb8e7f",
+      "adapted": "q7.yql",
+      "adapted_sha256": "74a14d3a880549e8eeb49658d967183f05a06a25fbf0f86d2d55385764c06e2f"
+    },
+    {
+      "query_id": 8,
+      "ssb_query": "3.2",
+      "source": "32.sql",
+      "source_sha256": "be68943718aeb01e42040bf46ffeaebf9ba519df6921f702ef6787ffaaf9b843",
+      "adapted": "q8.yql",
+      "adapted_sha256": "522ffc23b48d82cbffea042821044b3fee030e079b0d18928ad2a1520e685607"
+    },
+    {
+      "query_id": 9,
+      "ssb_query": "3.3",
+      "source": "33.sql",
+      "source_sha256": "6f95f07bf3c7cc3860084b1e949766140bad2a2f50d78959f471629a2afecca8",
+      "adapted": "q9.yql",
+      "adapted_sha256": "4631a3c7b9fb98277f3bdb851255ca0e102c141a10afa97b54cc0e251364c5b5"
+    },
+    {
+      "query_id": 10,
+      "ssb_query": "3.4",
+      "source": "34.sql",
+      "source_sha256": "f278e5e47b112376415492e4ea91440eb963e220fd4442f51a253b432196625c",
+      "adapted": "q10.yql",
+      "adapted_sha256": "60bba1a1a40695d38f06c31a64b0365be300bc765e527bc8051b5428f9e60a1c"
+    },
+    {
+      "query_id": 11,
+      "ssb_query": "4.1",
+      "source": "41.sql",
+      "source_sha256": "6178975e7046659f338508be4324c44544af37c9c6ca5e2cb203f441b9d26b3b",
+      "adapted": "q11.yql",
+      "adapted_sha256": "d43a4bf34407a950a450c9a9b6b43463335898fd509e3677c2c21f0794c16c4c"
+    },
+    {
+      "query_id": 12,
+      "ssb_query": "4.2",
+      "source": "42.sql",
+      "source_sha256": "07fee1c40484c2ffdae443194944732a0796fc282e0d822e39e9904a14982db2",
+      "adapted": "q12.yql",
+      "adapted_sha256": "b1cb4de0776bee3e0e8eeff402254a898ac1fa683ada6da78ea6ffc2ac923732"
+    },
+    {
+      "query_id": 13,
+      "ssb_query": "4.3",
+      "source": "43.sql",
+      "source_sha256": "867e4dd0825bb55d611b43ffb6f8b190b0afca01d6ef84b960a75c74963697f3",
+      "adapted": "q13.yql",
+      "adapted_sha256": "903d0c3808f61d0bf50857b21e4d2a8b60b029636eee1ea939699ce77ea40c3f"
+    }
+  ],
+  "adapted_schema_sha256": "d17b2a154ca96a4eecb20e336b909ea63b5670f0cd62e58568cff08958349370"
+}

@@ -475,6 +475,61 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     }
 
     // A scalar aggregate yields one row even when none of its results is used.
+    Y_UNIT_TEST(LegacyScalarAggregateRowsSurviveEmptyCorrelatedInput) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(false);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        config->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (a Int64 NOT NULL, PRIMARY KEY(a));
+            CREATE TABLE `/Root/t2` (a Int64 NOT NULL, b Int64, PRIMARY KEY(a));
+        )").GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+        NYdb::TValueBuilder outer;
+        outer.BeginList();
+        for (const i64 value : {1, 2, 3}) {
+            outer.AddListItem().BeginStruct().AddMember("a").Int64(value).EndStruct();
+        }
+        auto inserted = db.BulkUpsert("/Root/t1", outer.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        for (const bool populated : {false, true}) {
+            if (populated) {
+                auto inner = NYdb::TValueBuilder().BeginList()
+                    .AddListItem().BeginStruct().AddMember("a").Int64(1).AddMember("b").OptionalInt64(5).EndStruct()
+                    .AddListItem().BeginStruct().AddMember("a").Int64(2).AddMember("b").OptionalInt64(std::nullopt).EndStruct()
+                    .EndList().Build();
+                const auto result = db.BulkUpsert("/Root/t2", std::move(inner)).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            for (const TString& function : {TString("SUM"), TString("MIN"), TString("MAX")}) {
+                const TString query = TStringBuilder()
+                    << "PRAGMA YqlSelect = 'force'; SELECT t1.a, (SELECT COALESCE(" << function
+                    << "(t2.b), CAST(0 AS Int64)) FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) AS value "
+                       "FROM `/Root/t1` AS t1 ORDER BY t1.a;";
+                const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)),
+                    populated ? "[[1;[5]];[2;[0]];[3;[0]]]" : "[[1;[0]];[2;[0]];[3;[0]]]", query);
+            }
+            for (const TString& argument : {TString("*"), TString("t2.b")}) {
+                const TString query = TStringBuilder()
+                    << "PRAGMA YqlSelect = 'force'; SELECT t1.a, (SELECT COUNT(" << argument
+                    << ") FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) AS value "
+                       "FROM `/Root/t1` AS t1 ORDER BY t1.a;";
+                const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                const TString expected = !populated ? "[[1;[0u]];[2;[0u]];[3;[0u]]]"
+                    : argument == "*" ? "[[1;[1u]];[2;[1u]];[3;[0u]]]" : "[[1;[1u]];[2;[0u]];[3;[0u]]]";
+                UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+            }
+        }
+    }
+
     Y_UNIT_TEST(ScalarAggregatesWithoutUsedResults) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -512,6 +567,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const std::vector<std::pair<TString, TString>> cases = {
             {"SELECT COUNT(*) AS c FROM (SELECT MAX(a) AS m FROM `/Root/t1` UNION ALL SELECT MAX(b) AS m FROM `/Root/t2`);",
              "[[2u]]"},
+            {"SELECT t1.a, (SELECT COALESCE(SUM(t2.b), CAST(0 AS Int64)) FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) AS value FROM `/Root/t1` AS t1 ORDER BY t1.a;",
+             "[[1;[10]];[3;[0]]]"},
+            {"SELECT t1.a, (SELECT COALESCE(MIN(t2.b), CAST(0 AS Int64)) FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) AS value FROM `/Root/t1` AS t1 ORDER BY t1.a;",
+             "[[1;[10]];[3;[0]]]"},
+            {"SELECT t1.a, (SELECT COALESCE(MAX(t2.b), CAST(0 AS Int64)) FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) AS value FROM `/Root/t1` AS t1 ORDER BY t1.a;",
+             "[[1;[10]];[3;[0]]]"},
             {"SELECT t1.a FROM `/Root/t1` AS t1 WHERE EXISTS (SELECT MAX(t2.b) FROM `/Root/t2` AS t2) ORDER BY t1.a;",
              "[[1];[3]]"},
             {"SELECT t1.a FROM `/Root/t1` AS t1 WHERE EXISTS (SELECT MAX(t2.b) FROM `/Root/t2` AS t2 WHERE t2.a = t1.a) ORDER BY t1.a;",
@@ -1390,6 +1451,76 @@ FROM (
         UNIT_ASSERT_C(mergeSortBy.Contains("t1.a desc nulls first"), sortPlan);
         UNIT_ASSERT_C(mergeSortBy.Contains("t1.b asc nulls first"), sortPlan);
         UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
+    }
+
+    Y_UNIT_TEST_TWIN(RepeatedSortAliasesKeepTheFirstDirection, ColumnStore) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto* config = appConfig.MutableTableServiceConfig();
+        config->SetEnableNewRBO(true);
+        config->SetEnableFallbackToYqlOptimizer(false);
+        config->SetAllowOlapDataQuery(true);
+        config->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        config->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const TString schema = TStringBuilder() << R"(
+            CREATE TABLE `/Root/repeated_sort_keys` (
+                Id Int64 NOT NULL,
+                K Int64,
+                PRIMARY KEY (Id)
+            )
+        )" << (ColumnStore ? "WITH (STORE = COLUMN);" : ";");
+        const auto scheme = session.ExecuteSchemeQuery(schema).GetValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+        const std::array<std::optional<i64>, 6> keys = {2, std::nullopt, 1, 1, std::nullopt, 0};
+        TValueBuilder rows;
+        rows.BeginList();
+        for (size_t i = 0; i < keys.size(); ++i) {
+            rows.AddListItem().BeginStruct()
+                .AddMember("Id").Int64(i + 1)
+                .AddMember("K").OptionalInt64(keys[i])
+                .EndStruct();
+        }
+        const auto upsert = client.BulkUpsert("/Root/repeated_sort_keys", rows.EndList().Build()).GetValueSync();
+        UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+
+        for (bool ascending : {true, false}) {
+            const std::array<i64, 6> expected = ascending
+                ? std::array<i64, 6>{2, 5, 6, 3, 4, 1}
+                : std::array<i64, 6>{1, 3, 4, 6, 2, 5};
+            for (const TString& suffix : {TString(""), TString(" LIMIT 2"), TString(" LIMIT 3 OFFSET 1")}) {
+                TString control;
+                for (bool repeated : {false, true}) {
+                    const TString query = TStringBuilder()
+                        << "PRAGMA YqlSelect = 'force';\n"
+                        << "SELECT Id, K AS a, K AS b FROM `/Root/repeated_sort_keys` ORDER BY "
+                        << (repeated ? "a" : "K") << (ascending ? " ASC" : " DESC")
+                        << (repeated ? (ascending ? ", b DESC" : ", b ASC") : "")
+                        << ", Id" << suffix << ";";
+                    const auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), query << "\n" << result.GetIssues().ToString());
+                    const auto& resultSet = result.GetResultSet(0);
+                    const auto formatted = FormatResultSetYson(resultSet);
+                    if (repeated) {
+                        UNIT_ASSERT_VALUES_EQUAL_C(formatted, control, query);
+                    } else {
+                        control = formatted;
+                    }
+                    const size_t offset = suffix.Contains("OFFSET") ? 1 : 0;
+                    const size_t count = suffix.empty() ? 6 : (offset ? 3 : 2);
+                    UNIT_ASSERT_VALUES_EQUAL_C(resultSet.RowsCount(), count, query);
+                    TResultSetParser parser(resultSet);
+                    for (size_t i = 0; i < count; ++i) {
+                        UNIT_ASSERT_C(parser.TryNextRow(), query);
+                        UNIT_ASSERT_VALUES_EQUAL_C(parser.ColumnParser(0).GetInt64(), expected[offset + i], query);
+                        UNIT_ASSERT_C(parser.ColumnParser(1).GetOptionalInt64() == keys[expected[offset + i] - 1], query);
+                        UNIT_ASSERT_C(parser.ColumnParser(2).GetOptionalInt64() == keys[expected[offset + i] - 1], query);
+                    }
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(TopSortPushedToRowReadAndKept) {
@@ -7883,6 +8014,32 @@ FROM (
         UNIT_ASSERT(newMap->GetOutputIUs() == (TUnorderedIUs{source, fresh}));
     }
 
+    Y_UNIT_TEST(OuterJoinUniquenessDoesNotUseOnlyNullExtendedKeys) {
+        for (const TString& kind : {TString("Inner"), TString("Left"), TString("Right"),
+                                   TString("Full"), TString("Exclusion")}) {
+            for (const bool joinsRightKey : {false, true}) {
+                NTests::TIdTestContext f;
+                const auto a = f.Id("a"), b = f.Id("b"), payload = f.Id("payload");
+                auto left = f.Read({a}), right = f.Read({b, payload});
+                left->Props.Metadata.emplace();
+                right->Props.Metadata.emplace();
+                left->Props.Metadata->ColumnsCount = 1;
+                right->Props.Metadata->ColumnsCount = 2;
+                left->Props.Metadata->KeyColumns = {a};
+                right->Props.Metadata->KeyColumns = {b};
+                auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, kind,
+                    TJoinIUs{{a, joinsRightKey ? b : payload}});
+                join->ComputeMetadata(f.RboCtx, f.Props);
+                const TOrderedIUs<> expected = kind == "Full" || kind == "Exclusion" ? TOrderedIUs<>{}
+                    : kind == "Right" ? TOrderedIUs<>{b}
+                    : joinsRightKey ? TOrderedIUs<>{a}
+                    : kind == "Left" ? TOrderedIUs<>{a, b} : TOrderedIUs<>{b};
+                UNIT_ASSERT_C(join->Props.Metadata->KeyColumns == expected,
+                    kind << " uses null-extended columns as its only unique key");
+            }
+        }
+    }
+
     Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {
         NTests::TIdTestContext f;
         const auto a = f.Id(), payload = f.Id(), b = f.Id(), rightPayload = f.Id();
@@ -7966,6 +8123,96 @@ FROM (
             }
         }
     }
+
+    Y_UNIT_TEST(TableLookupRequiresTheCompletePrimaryKeyForUniqueness) {
+        for (ui32 mask = 0; mask < 4; ++mask) {
+            for (const bool joinMode : {false, true}) {
+                NTests::TIdTestContext f;
+                auto& table = f.Tables->GetOrAddTable("ut", "/Root", "/Root/table");
+                table.Metadata = MakeIntrusive<TKikimrTableMetadata>("ut", "/Root/table");
+                table.Metadata->DoesExist = true;
+                table.Metadata->PathId = TKikimrPathId(1, 1);
+                table.Metadata->SchemaVersion = 1;
+                table.Metadata->Kind = EKikimrTableKind::Datashard;
+                table.Metadata->KeyColumnNames = {"a", "b"};
+                ui32 columnId = 0;
+                for (const TString& name : {TString("a"), TString("b"), TString("payload")}) {
+                    table.Metadata->Columns.emplace(name, TKikimrColumnMetadata(name, ++columnId, "Int32", true));
+                    table.Metadata->ColumnOrder.push_back(name);
+                }
+                UNIT_ASSERT(table.Load(f.ExprCtx));
+                const auto sourceA = f.Id("a"), sourceB = f.Id("b");
+                const auto outputA = f.Id("a"), outputB = f.Id("b"), payload = f.Id("payload");
+                auto source = f.Read({sourceA, sourceB});
+                source->ComputeMetadata(f.RboCtx, f.Props);
+                TUnorderedIUs columns{payload};
+                if (mask & 1) { columns.Add(outputA); }
+                if (mask & 2) { columns.Add(outputB); }
+                TOpTableLookup::TLookupKeys keys;
+                keys.Append(sourceA, "a");
+                keys.Append(sourceB, "b");
+                auto lookup = joinMode
+                    ? MakeIntrusive<TOpTableLookup>(source, f.Pos, source->GetTable(), columns, keys, "Inner", std::nullopt)
+                    : MakeIntrusive<TOpTableLookup>(source, f.Pos, source->GetTable(), columns, keys);
+                lookup->ComputeMetadata(f.RboCtx, f.Props);
+                const auto expected = !joinMode && mask == 3 ? TOrderedIUs<>{outputA, outputB} : TOrderedIUs<>{};
+                UNIT_ASSERT_C(lookup->Props.Metadata->KeyColumns == expected,
+                    "Lookup advertised a partial composite key as unique: mask=" << mask << " join=" << joinMode);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FullJoinDoesNotAdvertiseOneSidedShuffling) {
+        for (const auto algo : {EJoinAlgoType::GraceJoin, EJoinAlgoType::MapJoin}) {
+            for (const TString& kind : {TString("Inner"), TString("Left"), TString("Right"),
+                                       TString("Full"), TString("Exclusion")}) {
+                NTests::TIdTestContext f;
+                f.Config->OptShuffleElimination = true;
+                const auto leftKey = f.Id("left"), rightKey = f.Id("right"), count = f.Id("count");
+                auto left = f.Read({leftKey}), right = f.Read({rightKey});
+                left->Props.Metadata.emplace();
+                right->Props.Metadata.emplace();
+                left->Props.Metadata->ColumnsCount = right->Props.Metadata->ColumnsCount = 1;
+                left->Props.Metadata->ShuffledByColumns = {leftKey};
+                right->Props.Metadata->ShuffledByColumns = {rightKey};
+                auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, kind, TJoinIUs{{leftKey, rightKey}});
+                join->Props.JoinAlgo = algo;
+                join->ComputeMetadata(f.RboCtx, f.Props);
+                const bool bothSidesNullable = kind == "Full" || kind == "Exclusion";
+                const auto expected = bothSidesNullable || (kind == "Right" && algo == EJoinAlgoType::MapJoin)
+                    ? TOrderedIUs<>{} : TOrderedIUs<>{kind == "Right" ? rightKey : leftKey};
+                UNIT_ASSERT_C(join->Props.Metadata->ShuffledByColumns == expected,
+                    kind << " advertises a distribution that unmatched rows need not preserve");
+                if (bothSidesNullable) {
+                    auto aggregate = MakeIntrusive<TOpAggregate>(join,
+                        TAggregationIUs{{count, {rightKey, "count", false, false}}},
+                        TOrderedIUs<>{leftKey}, EOpPhase::Undefined, false, f.Pos);
+                    UNIT_ASSERT(!CanEliminateAggregateShuffle(*aggregate, f.RboCtx));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(GroupedAggregateRetainsKnownGroupingUniqueness) {
+        for (const bool knownInputKey : {true, false}) {
+            NTests::TIdTestContext f;
+            const auto key = f.Id("key"), value = f.Id("value"), total = f.Id("total");
+            auto read = f.Read({key, value});
+            read->Props.Metadata.emplace();
+            read->Props.Metadata->ColumnsCount = 2;
+            if (knownInputKey) {
+                read->Props.Metadata->KeyColumns = {key};
+            }
+            auto aggregate = MakeIntrusive<TOpAggregate>(read,
+                TAggregationIUs{{total, {value, "sum", false, false}}},
+                TOrderedIUs<>{key, value}, EOpPhase::Undefined, false, f.Pos);
+            aggregate->ComputeMetadata(f.RboCtx, f.Props);
+            const auto expected = knownInputKey ? TOrderedIUs<>{key} : TOrderedIUs<>{key, value};
+            UNIT_ASSERT_C(aggregate->Props.Metadata->KeyColumns == expected,
+                "Grouped aggregate lost uniqueness when its input key was unknown");
+        }
+    }
+
 
     Y_UNIT_TEST(PhysicalSemiJoinUsesPerEdgeLiveIn) {
         NTests::TIdTestContext f;

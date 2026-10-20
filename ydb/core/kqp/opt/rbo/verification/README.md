@@ -34,10 +34,10 @@ Virtual address space is capped separately at 64 GiB so the linker can map
 read-only archives and debug sections; those mappings still count toward the
 aggregate RSS guard when resident. Use `RBO_BUILD_CPUS=1` and `--threads=1`
 for a conservative link retry that reuses the existing compilation cache.
-For the server-sized `integration_ut`, `benchmark_ut`, and `ydb/core/kqp/ut/rbo`
+For the server-sized `integration_ut`, `benchmark_ut`, `prefix_capture/bin`, and `ydb/core/kqp/ut/rbo`
 executables on Linux, add `-DRBO_LOW_MEMORY_LINK=yes`. This opt-in setting strips
-debug sections only when linking these test executables and disables their GDB
-index. It reuses the `relwithdebinfo` objects; the resulting test executables have
+debug sections only when linking these executables and disables their GDB
+index. It reuses the `relwithdebinfo` objects; the resulting executables have
 no source-level debug information. Normal builds retain their debug information.
 After measuring memory headroom, `RBO_BUILD_CPUS=4` and `--threads=4` permit
 four workers with the same memory limits. The guard rejects CPU counts above four.
@@ -196,6 +196,13 @@ captured interval, then descends to every adjacent step. Equivalent endpoints
 do not prune an interval: transformations can cancel. Its explicit
 `OPTIMIZER_TRANSFORMATION_PAIR` scope is diagnostic, not a normal Initial/Final
 proof. The optional sequential strategy retains the earlier first-prefix scan.
+
+For exhaustive audits, `--strategy adjacent --all-steps` checks the initial/final
+pair and every adjacent boundary, including the final suffix. It omits coarse
+interval proofs while retaining the same per-step coverage and snapshot guards.
+For N nonzero events this requires N+2 proof calls, compared with 2N+1 for the
+default midpoint schedule. Export failures and solver timeouts remain coverage
+gaps; neither schedule attributes them to optimizer bugs.
 
 Preserve the exact query, snapshots, raw verdict, formula, inspector trace,
 confirmation streams, and relevant prefix captures. A model error and a runtime

@@ -30,10 +30,11 @@ TIntrusivePtr<IOperator> TFuseFiltersRule::SimpleMatchAndApply(const TIntrusiveP
 
     conjunctions.insert(conjunctions.end(), bottomConjunctions.begin(), bottomConjunctions.end());
 
-    topFilter->SetFilterExpression(MakeConjunction(conjunctions));
-    topFilter->ReplaceChild(bottomFilter, bottomFilter->GetInput());
-
-    return topFilter;
+    // ISimplifiedRule reports a rewrite only when the owning pointer changes.
+    // Replacing the filter also triggers property invalidation and a traversal
+    // restart; mutating topFilter in place would silently skip both.
+    return MakeIntrusive<TOpFilter>(bottomFilter->GetInput(), topFilter->Pos,
+        topFilter->Props, MakeConjunction(conjunctions), topFilter->PartiallyPushedDown);
 }
 }
 }

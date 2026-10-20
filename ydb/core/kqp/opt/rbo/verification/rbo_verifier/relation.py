@@ -12,6 +12,7 @@ from . import decimal, floating, join as join_kernel, smt, sort_network, sort_st
 from . import window as window_kernel
 from .errors import RelationError
 from .analysis import AnalysisError, AnalyzedPlan, analyze_snapshot
+from .ir import plan_node_inputs  # noqa: F401 - public traversal helper used by verifier callers
 from .ir import (
     Aggregate,
     AggregateTrait,
@@ -37,7 +38,6 @@ from .ir import (
     Subplan,
     UnionAll,
     expression_columns,
-    plan_node_inputs,
 )
 from .scalar import (
     DecimalAverageState,
@@ -49,7 +49,7 @@ from .scalar import (
     decimal_sum_state_terms,
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
-from .types import BOOL, DATE, DOUBLE, family, is_decimal_type, is_ordered_type
+from .types import BOOL, DATE_TIME_BOUNDS, DOUBLE, family, is_decimal_type, is_ordered_type
 from .value_transport import (
     ValueTransportError,
     select_scalar,
@@ -352,6 +352,8 @@ MAX_SORT_NETWORK_KEY_COLUMNS = 64
 # back to the ordinary exact decomposition preserves semantics at either cap.
 MAX_PREFERRED_KEYED_MISMATCH_BRANCHES = 64
 MAX_PREFERRED_KEYED_MISMATCH_COMPARISONS = 256
+MIN_GROUPED_PHYSICAL_OUTCOMES = 16
+GROUPED_MISMATCH_BRANCH_WIDTH = 4
 
 
 def _require_relation_rows(count: int, operation: str) -> None:
@@ -375,10 +377,11 @@ def _require_grouped_distinct_capacity(
     row_count: int,
     group_candidate_count: int,
 ) -> None:
-    if not any(trait.distinct for trait in node.aggregates):
+    distinct_traits = sum(trait.distinct for trait in node.aggregates)
+    if not distinct_traits:
         return
     equality_terms = (
-        group_candidate_count * row_count * (row_count - 1) // 2
+        distinct_traits * group_candidate_count * row_count * (row_count - 1) // 2
     )
     if equality_terms > MAX_RELATION_ROW_PAIRS:
         raise RelationError(
@@ -467,8 +470,8 @@ class Database:
                     )
                     if family(column.type) == "string":
                         script.register_string_term(value)
-                    elif column.type == DATE:
-                        script.assert_global(date_domain(value))
+                    elif column.type in DATE_TIME_BOUNDS:
+                        script.assert_global(date_domain(value, column.type))
                     elif family(column.type) == "int":
                         script.assert_global(integer_domain(value, column.type))
                     elif decimal.is_type(column.type):
@@ -644,10 +647,15 @@ class Evaluator:
                 }
                 present = row.present
                 if node.predicate is not None:
+                    predicate_values = dict(values)
+                    predicate_values.update(
+                        (mapping.output, row.values[mapping.source])
+                        for mapping in node.predicate_columns
+                    )
                     present = smt.and_(
                         present,
                         self.scalar.is_true(
-                            self.scalar.evaluate(node.predicate, values)
+                            self.scalar.evaluate(node.predicate, predicate_values)
                         ),
                     )
                 rows.append(
@@ -1503,7 +1511,7 @@ class Evaluator:
             node.phase,
             values,
             non_null,
-            integral_average=self.scalar.integral_int64_average,
+            integral_average=self.scalar.integral_integer_average,
             carry_sum_state=(
                 (node.id, trait.output) in self._context.decimal_sum_state_producers
             ),
@@ -2507,10 +2515,15 @@ class Evaluator:
             for right_row in right.rows:
                 values = dict(left_row.values) | dict(right_row.values)
                 key_matches = tuple(
-                    self.scalar.is_true(
-                        self.scalar.equal(
-                            left_row.values[key.left],
-                            right_row.values[key.right],
+                    (
+                        self.scalar.not_distinct(
+                            left_row.values[key.left], right_row.values[key.right],
+                        )
+                        if key.equal_nulls
+                        else self.scalar.is_true(
+                            self.scalar.equal(
+                                left_row.values[key.left], right_row.values[key.right],
+                            )
                         )
                     )
                     for key in node.keys
@@ -5152,11 +5165,20 @@ def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Ter
             )
         )
 
-    equalities: list[smt.Term] = []
-    for candidate, candidate_names in (
-        *((row, left_names) for row in left_rows),
-        *((row, right_names) for row in right_rows),
-    ):
+    # Matching every value represented on one side accounts for all of that
+    # side's rows. Equal total cardinality then excludes any extra value on the
+    # other side. Multiplicities are nonnegative and not_distinct is an exact
+    # equivalence relation, including NULL and raw Decimal/Double payloads.
+    # Choose the smaller slot set without assuming any symbolic row is present.
+    candidates, candidate_names = (
+        (left_rows, left_names) if len(left_rows) <= len(right_rows)
+        else (right_rows, right_names)
+    )
+    equalities = [smt.eq(
+        smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in left_rows)),
+        smt.add(*(smt.ite(row.present, smt.ONE, smt.ZERO) for row in right_rows)),
+    )]
+    for candidate in candidates:
         counts_equal = smt.eq(
             multiplicity(left_rows, left_names, candidate, candidate_names),
             multiplicity(right_rows, right_names, candidate, candidate_names),
@@ -5875,13 +5897,29 @@ def _family_mismatch(
     left_to_right_equal: tuple[tuple[smt.Term, ...], ...],
 ) -> FamilyMismatch:
     universal = scalar.binary64 is not None
-    right_to_left_equal = () if universal else _outcome_equal_matrix(right, left, scalar, ordered)
+    # Result equality is symmetric, including NULLs, order, and query errors.
+    # Reuse the exact terms before the language-inclusion quantifiers bind
+    # opposite choice vectors; rebuilding them doubles pairwise comparison work.
+    right_to_left_equal = () if universal else tuple(zip(*left_to_right_equal))
     mismatch = _language_mismatch(
         left.outcomes, right.outcomes, left_to_right_equal, right_to_left_equal, universal=universal,
     )
-    return mismatch if universal else replace(mismatch, preferred_branches=_preferred_keyed_mismatch_branches(
-        left, right, scalar, ordered,
-    ))
+    if universal:
+        return mismatch
+    preferred = _preferred_keyed_mismatch_branches(left, right, scalar, ordered)
+    if preferred is None and len(left.outcomes) == 1 and len(right.outcomes) >= MIN_GROUPED_PHYSICAL_OUTCOMES:
+        # One logical outcome against many physical schedules benefits from
+        # small exact disjunctions. Every original branch, including the two
+        # language-nonemptiness checks and the final short group, is retained.
+        # Multiple logical outcomes keep the canonical-first strategy.
+        width = GROUPED_MISMATCH_BRANCH_WIDTH
+        preferred = tuple(
+            MismatchBranch(f"outcome_group_{index // width}", smt.or_(
+                *(branch.predicate for branch in mismatch.branches[index:index + width])
+            ))
+            for index in range(0, len(mismatch.branches), width)
+        )
+    return replace(mismatch, preferred_branches=preferred)
 
 
 def _language_mismatch(

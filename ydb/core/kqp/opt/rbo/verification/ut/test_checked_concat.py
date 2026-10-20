@@ -1,5 +1,6 @@
 import os
 import unittest
+from itertools import product
 
 try:
     import yatest.common as yatest_common
@@ -190,6 +191,20 @@ def _staged_snapshot():
     return raw
 
 
+def _staged_alias_snapshot():
+    raw = _staged_snapshot()
+    raw["plan"]["nodes"].append({
+        "id": "alias", "op": "project", "input": "checked", "ordered": True,
+        "columns": [{"output": "id", "expression": _column("id")},
+                    {"output": "result", "expression": _column("name")}],
+    })
+    raw["plan"]["root"] = "alias"
+    raw["plan"]["output"] = ["id", "result"]
+    raw["stage_graph"]["stages"][1]["nodes"].append("alias")
+    raw["stage_graph"]["stages"][1]["outputs"][0]["node"] = "alias"
+    return raw
+
+
 def _six_scan_snapshot():
     tables = [_table("T0")]
     tables.extend(
@@ -296,6 +311,25 @@ def _six_scan_snapshot():
 
 
 class CheckedConcatIrTest(unittest.TestCase):
+    def test_stored_text_types_are_admitted_without_erasing_type_identity(self):
+        for types, result_type in ((("Utf8", "Utf8"), "Utf8"), (("Utf8", "Utf8"), "String"),
+                                   (("String", "Utf8"), "String"), (("Utf8", "String"), "String")):
+            with self.subTest(types=types, result_type=result_type):
+                raw = _root_project_snapshot()
+                for column, type_name in zip(raw["schema"]["tables"][0]["columns"][1:], types):
+                    column["type"] = type_name
+                raw["plan"]["nodes"][1]["columns"][1]["expression"]["type"] = result_type
+                snapshot = parse_snapshot(raw)
+                corridor = checked_concat_corridor(snapshot)
+                self.assertIsNotNone(corridor)
+                self.assertEqual(snapshot.plan.node_map()["checked"].columns[1].expression.result_type, result_type)
+
+    def test_utf8_result_cannot_hide_a_string_input(self):
+        raw = _root_project_snapshot()
+        raw["plan"]["nodes"][1]["columns"][1]["expression"]["type"] = "Utf8"
+        with self.assertRaisesRegex(SnapshotError, "Utf8 checked_concat cannot consume a stored String"):
+            parse_snapshot(raw)
+
     def test_exact_logical_corridor_is_admitted(self):
         snapshot = parse_snapshot(_logical_snapshot())
         corridor = checked_concat_corridor(snapshot)
@@ -320,7 +354,7 @@ class CheckedConcatIrTest(unittest.TestCase):
         mutations = (
             (
                 "result type",
-                lambda expression: expression.update(type="Utf8"),
+                lambda expression: expression.update(type="Bool"),
                 "result must be non-null String",
             ),
             (
@@ -331,14 +365,14 @@ class CheckedConcatIrTest(unittest.TestCase):
             (
                 "no arguments",
                 lambda expression: expression.update(args=[]),
-                "one or two stored-String arguments",
+                "one or two stored-text arguments",
             ),
             (
                 "three arguments",
                 lambda expression: expression.update(
                     args=[_column("a.last"), _column("a.first"), _column("a.id")]
                 ),
-                "one or two stored-String arguments",
+                "one or two stored-text arguments",
             ),
             (
                 "generic opaque root",
@@ -376,7 +410,7 @@ class CheckedConcatIrTest(unittest.TestCase):
                 lambda expression: expression["args"].__setitem__(
                     0, _column("a.id")
                 ),
-                "stored String columns",
+                "stored String or Utf8 columns",
             ),
         )
         for label, mutate, message in mutations:
@@ -535,27 +569,97 @@ class CheckedConcatIrTest(unittest.TestCase):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(raw)
 
-    def test_staged_checked_concat_must_be_the_result_project(self):
-        raw = _staged_snapshot()
-        raw["plan"]["nodes"].append(
-            {
-                "id": "alias",
-                "op": "project",
-                "input": "checked",
-                "ordered": False,
-                "columns": [
-                    {"output": "id", "expression": _column("id")},
-                    {"output": "result", "expression": _column("name")},
-                ],
-            }
-        )
-        raw["plan"]["root"] = "alias"
-        raw["plan"]["output"] = ["id", "result"]
+    def test_staged_checked_concat_allows_pure_result_projection(self):
+        snapshot = parse_snapshot(_staged_alias_snapshot())
+        corridor = checked_concat_corridor(snapshot)
+        self.assertEqual(corridor.producer.id, "checked")
+        self.assertEqual(corridor.selectors, ())
 
-        with self.assertRaisesRegex(
-            SnapshotError,
-            "staged checked_concat Project must be the plan root",
-        ):
+    def test_checked_concat_copy_retains_and_audits_the_original_column(self):
+        for staged in (False, True):
+            with self.subTest(staged=staged):
+                raw = _staged_alias_snapshot()
+                alias = raw["plan"]["nodes"][-1]
+                alias["columns"].append({"output": "name", "expression": _column("name")})
+                if not staged:
+                    raw["stage_graph"] = None
+                snapshot = parse_snapshot(raw)
+                self.assertEqual(checked_concat_corridor(snapshot).producer.id, "checked")
+
+                # The next copy deliberately reads the retained original, not
+                # the first alias. Both remain part of the audited lineage.
+                raw["plan"]["nodes"].append({
+                    "id": "copy_again", "op": "project", "input": "alias", "ordered": True,
+                    "columns": [
+                        {"output": "id", "expression": _column("id")},
+                        {"output": "name", "expression": _column("name")},
+                        {"output": "result", "expression": _column("result")},
+                        {"output": "answer", "expression": _column("name")},
+                    ],
+                })
+                raw["plan"]["root"] = "copy_again"
+                raw["plan"]["output"] = ["id", "answer"]
+                if staged:
+                    stage = raw["stage_graph"]["stages"][1]
+                    stage["nodes"].append("copy_again")
+                    stage["outputs"][0]["node"] = "copy_again"
+                self.assertEqual(checked_concat_corridor(parse_snapshot(raw)).producer.id, "checked")
+
+    def test_checked_concat_rejects_transforming_a_retained_original(self):
+        raw = _staged_alias_snapshot()
+        raw["stage_graph"] = None
+        raw["plan"]["nodes"][-1]["columns"].append({"output": "name", "expression": _column("name")})
+        raw["plan"]["nodes"].append({
+            "id": "transform", "op": "project", "input": "alias", "ordered": True,
+            "columns": [
+                {"output": "id", "expression": _column("id")},
+                {"output": "result", "expression": _column("result")},
+                {"output": "changed", "expression": {"kind": "exists", "arg": _column("name")}},
+            ],
+        })
+        raw["plan"]["root"] = "transform"
+        with self.assertRaisesRegex(SnapshotError, "one direct column transport"):
+            parse_snapshot(raw)
+
+    def test_staged_checked_concat_rejects_computation_selectors_and_fanout(self):
+        for mutation in ("computation", "limit", "duplicate", "not_returned"):
+            with self.subTest(mutation=mutation):
+                raw = _staged_alias_snapshot()
+                alias = raw["plan"]["nodes"][-1]
+                if mutation == "computation":
+                    alias["columns"][0]["expression"] = _literal("Int64", 0)
+                    message = "only pure column Projects"
+                elif mutation == "limit":
+                    raw["plan"]["nodes"][-1] = {
+                        "id": "alias", "op": "limit", "input": "checked",
+                        "count": _literal("Uint64", 1), "offset": None, "phase": "undefined",
+                    }
+                    raw["plan"]["output"] = ["id", "name"]
+                    message = "only pure column Projects"
+                elif mutation == "duplicate":
+                    alias["columns"].append({"output": "extra", "expression": _column("name")})
+                    message = "one direct column transport"
+                else:
+                    raw["plan"]["output"] = ["id"]
+                    message = "output must be returned"
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(raw)
+
+    def test_staged_checked_concat_rejects_transport_across_stage_boundary(self):
+        raw = _staged_alias_snapshot()
+        graph = raw["stage_graph"]
+        graph["stages"][1]["nodes"] = ["checked"]
+        graph["stages"][1]["outputs"][0]["node"] = "checked"
+        graph["stages"].append({
+            "id": "result", "nodes": ["alias"], "inputs": ["checked"],
+            "outputs": [{"index": 0, "node": "alias"}], "source_storage": None,
+        })
+        graph["edges"].append({
+            "id": "result_input", "producer": "root", "consumer": "result",
+            "occurrence": 0, "producer_output": 0, "consumer_input": 0, "kind": "map",
+        })
+        graph["root_stage"] = "result"
+        with self.assertRaisesRegex(SnapshotError, "must belong to the final stage"):
             parse_snapshot(raw)
 
     def test_corridor_rejects_filter_join_and_fanout_consumers(self):
@@ -925,6 +1029,39 @@ class CheckedConcatCardinalityGateTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class CheckedConcatProofTest(unittest.TestCase):
+    def test_text_types_preserve_values_and_failure_across_stage_gather(self):
+        for first, last, result_type in (("Utf8", "Utf8", "Utf8"), ("Utf8", "Utf8", "String"),
+                                         ("String", "Utf8", "String"), ("Utf8", "String", "String")):
+            for drop_failure in (False, True):
+                with self.subTest(first=first, last=last, result_type=result_type, drop_failure=drop_failure):
+                    before, after = _root_project_snapshot(), _staged_snapshot()
+                    for raw in (before, after):
+                        for column, type_name in zip(raw["schema"]["tables"][0]["columns"][1:], (first, last)):
+                            column["type"] = type_name
+                        raw["plan"]["nodes"][1]["columns"][1]["expression"]["type"] = result_type
+                    if drop_failure:
+                        after["plan"]["nodes"][1]["columns"][1]["expression"]["kind"] = "opaque"
+                    result = solve(build_problem(parse_snapshot(before), parse_snapshot(after), 2, 30_000),
+                                   SOLVER, 2, 30_000)
+                    self.assertEqual(result.status, "COUNTEREXAMPLE" if drop_failure else "VERIFIED_BOUNDED")
+
+    def test_result_projection_preserves_checked_failure(self):
+        for drop_failure, retain_identity in product((False, True), repeat=2):
+            with self.subTest(drop_failure=drop_failure, retain_identity=retain_identity):
+                after = _staged_alias_snapshot()
+                before = _root_project_snapshot()
+                before["plan"]["nodes"][1]["columns"][1]["output"] = "result"
+                before["plan"]["output"] = ["id", "result"]
+                if retain_identity:
+                    after["plan"]["nodes"][-1]["columns"].append(
+                        {"output": "name", "expression": _column("name")}
+                    )
+                if drop_failure:
+                    after["plan"]["nodes"][1]["columns"][1]["expression"]["kind"] = "opaque"
+                result = solve(build_problem(parse_snapshot(before),
+                                             parse_snapshot(after), 2, 30_000), SOLVER, 2, 30_000)
+                self.assertEqual(result.status, "COUNTEREXAMPLE" if drop_failure else "VERIFIED_BOUNDED")
+
     def test_shared_checked_value_and_failure_prove_across_stage_gather(self):
         # The final Map is evaluated independently in both source tasks and its
         # errors are gathered at the staged root.  Sharing the audited value and

@@ -105,6 +105,29 @@ TInfoUnitId PortId(TOpReplicate& port, TInfoUnitId source) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
+    Y_UNIT_TEST(ScalarAggregatesRestoreTheEmptyDomainRowBeforeProjection) {
+        for (const TString& function : {TString("count"), TString("sum"), TString("min"), TString("max")}) {
+            TPlan plan;
+            const auto parameter = plan.Id(), local = plan.Id(), value = plan.Id(), aggregateValue = plan.Id(), output = plan.Id();
+            auto aggregate = MakeIntrusive<TOpAggregate>(plan.Producer(parameter, local, value),
+                TAggregationIUs{{aggregateValue, {value, function, false, false}}},
+                TOrderedIUs<>{}, EOpPhase::Undefined, false, plan.Pos);
+            TMapIUs projection;
+            projection.Add(output, MakeBinaryPredicate("Coalesce", plan.Column(aggregateValue),
+                MakeConstant("Uint64", "0", plan.Pos, &plan.Ctx)));
+            auto projected = MakeIntrusive<TOpMap>(aggregate, plan.Pos, std::move(projection));
+            plan.Attach(projected, {parameter});
+            plan.Rewrite();
+            bool restoresDomain = false;
+            for (const auto& item : IterateSubtree(&plan.Root)) {
+                if (item.Current->Kind == EOperator::Join) {
+                    restoresDomain = restoresDomain || CastOperator<TOpJoin>(*item.Current).JoinKind == "Left";
+                }
+            }
+            UNIT_ASSERT_C(restoresDomain, function << " lost the scalar aggregate row for an empty domain group");
+        }
+    }
+
     Y_UNIT_TEST(DomainKeysPreserveKnownNullabilityBeforeRetyping) {
         for (const bool annotated : {false, true}) {
             for (const bool nullable : {false, true}) {

@@ -81,6 +81,7 @@ An exhaustive investigation emits `format: "ydb-rbo-transformation-localization"
 | `comparisons` | Midpoint-first checks with ID `left:right`, endpoint ordinals, `adjacent`, raw `verifier`, and artifact references. |
 | `findings` | Failing adjacent comparison ID plus its event or global-suffix region. |
 | `gaps` | Every unresolved comparison ID, endpoints, status, and adjacency. |
+| `inconsistencies` | A failing nonadjacent comparison and the complete chain of adjacent bounded proofs that contradicts it. |
 | `completeness` | `COMPLETE` when every adjacent check is conclusive; otherwise `GAPS`. A coarse timeout need not leave an adjacent gap. |
 | `events_attempted`, `events_checked` | All event boundaries visited; adjacent event pairs actually sent to the verifier, respectively. Export gaps are not counted as checked. |
 
@@ -92,6 +93,10 @@ bound through the endpoint ordinals and hashed boundary snapshots. Findings
 and gaps refer back to the comparison's exact verdict; witness data is not
 duplicated into each finding.
 
+`LOCALIZATION_INCONSISTENT` means a counterexample or schema mismatch contradicts
+its complete chain of adjacent bounded proofs. Investigate that disagreement
+before attributing a defect to an optimizer event; the result retains both the
+failing comparison and its proof chain and exits with code 2.
 `LOCALIZED_FAILURES` means at least one observed adjacent failure, possibly
 with gaps; inspect `completeness`. `LOCALIZATION_INCOMPLETE` means gaps without
 an adjacent finding. `STEPS_VERIFIED_BOUNDED` means every adjacent check was
@@ -140,6 +145,14 @@ and prepares the query once with new RBO enabled and fallback disabled.
 `--benchmark-column-store` applies the dashboard's schema rewrite and query
 prelude. Inputs must be nonempty regular files; output directories must be
 new or empty. `capture.json` is written last as the commit marker.
+
+The default `--query-mode data` keeps the normal data-query preparation path.
+Use `--query-mode generic` to audit generic-query preparation, or
+`--query-mode generic-spilling` to explicitly enable channel spilling there.
+The latter permits shared native RBO producers that cannot be duplicated under
+data-query settings. Each successful capture records the selected mode in
+`preparation.json`. Keep separate coverage results for each mode; a proof with
+spilling enabled does not resolve a default-mode preparation failure.
 
 The stream records committed `TRuleBasedStage` applications as
 `RULE_APPLICATION`, and each mutating non-rule stage as `ATOMIC_STAGE_COMMIT`.

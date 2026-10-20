@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, TypeAlias
 
-from . import decimal, floating, smt
+from . import decimal, floating, smt, stable_pickle
 from .ir import Expr
-from .types import BOOL, DATE, DOUBLE, MAX_DATE, VOID, family, integer_bounds, integer_width
+from .types import BOOL, DATE, DATE_TIME_BOUNDS, DOUBLE, VOID, family, integer_bounds, integer_width
 
 
 DecimalSumState = decimal.DecimalSumState
@@ -17,10 +17,10 @@ def smt_sort(scalar_type: str) -> str:
     return smt.BOOL if family(scalar_type) in {"bool", "unit"} else smt.INT
 
 
-def date_domain(value: smt.Term) -> smt.Term:
+def date_domain(value: smt.Term, scalar_type: str = DATE) -> smt.Term:
     return smt.and_(
         smt.not_(smt.lt(value, smt.ZERO)),
-        smt.lt(value, smt.int_value(MAX_DATE)),
+        smt.lt(value, smt.int_value(DATE_TIME_BOUNDS[scalar_type])),
     )
 
 
@@ -135,6 +135,7 @@ class Encoder:
         self.semantic_mode = semantic_mode
         self.binary64 = floating.Kernel(script) if semantic_mode is not None else None
         self._opaque: dict[tuple[object, ...], _OpaqueFunctions] = {}
+        self._stable_pickle = stable_pickle.Kernel(script)
         self._checked_concat_failure: dict[tuple[object, ...], smt.Function] = {}
         self._integral_average: smt.Function | None = None
 
@@ -142,25 +143,26 @@ class Encoder:
     def uses_abstract_integral_average(self) -> bool:
         return self._integral_average is not None
 
-    def integral_int64_average(
+    def integral_integer_average(
         self,
         count: smt.Term,
         minimum: smt.Term,
         maximum: smt.Term,
+        source_type: str = "Int64",
     ) -> smt.Term:
         """Shared carrier, interpreted exactly only after proving count <= 2."""
 
         if self.binary64 is not None:
             # The existing domain exclusion still proves count <= 2. Finite
-            # Int64 casts and their two-term sum cannot overflow binary64; their
+            # Fixed-width integer casts and their two-term sum cannot overflow binary64; their
             # runtime sum is independent of the two input/partition orders.
-            lower = self.binary64.from_integer(minimum, "Int64")
-            upper = self.binary64.from_integer(maximum, "Int64")
+            lower = self.binary64.from_integer(minimum, source_type)
+            upper = self.binary64.from_integer(maximum, source_type)
             pair = self.binary64.div(self.binary64.add(lower, upper), floating.literal_bits(0x4000000000000000))
             return smt.ite(smt.eq(count, smt.ONE), lower.bits, pair.bits)
         if self._integral_average is None:
             self._integral_average = self.script.fresh_function(
-                "integral_int64_average_at_most_two",
+                "integral_integer_average_at_most_two",
                 (smt.INT, smt.INT, smt.INT),
                 smt.INT,
             )
@@ -525,6 +527,13 @@ class Encoder:
                 bound,
             )
 
+        if expression.kind == "stable_pickle":
+            argument = self._evaluate(expression.args[0], row, bindings, relational_values)
+            if argument.type != expression.source_type:
+                raise smt.SmtError("StablePickle source type disagrees with its argument")
+            return Value("String", smt.FALSE, self._stable_pickle.encode(
+                argument.type, argument.is_null, argument.value))
+
         if expression.kind in {"opaque", "opaque_double", "checked_concat"}:
             return self._evaluate_opaque(
                 expression,
@@ -619,9 +628,9 @@ class Encoder:
         )
         if family(result.type) == "string":
             self.script.register_string_term(result.value)
-        elif result.type == DATE:
+        elif result.type in DATE_TIME_BOUNDS:
             self.script.assert_choice_invariant(
-                smt.or_(result.is_null, date_domain(result.value))
+                smt.or_(result.is_null, date_domain(result.value, result.type))
             )
         elif family(result.type) == "int":
             self.script.assert_choice_invariant(
@@ -647,7 +656,7 @@ class Encoder:
 
         assert expression.kind == "checked_concat"
         assert expression.fingerprint is not None
-        assert expression.result_type == "String"
+        assert expression.result_type in {"String", "Utf8"}
         assert expression.nullable is False
         application = self._opaque_application(expression, row, (), {})
         function = self._checked_concat_failure.get(application.key)

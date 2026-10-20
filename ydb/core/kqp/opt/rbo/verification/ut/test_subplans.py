@@ -3853,7 +3853,7 @@ class InSubplanSolverTest(unittest.TestCase):
         return solve(problem, SOLVER, row_bound, 10_000)
 
     def test_in_is_bounded_equivalent_to_left_semi(self):
-        for scalar_type in ("Int32", "Date", "String"):
+        for scalar_type in ("Int32", "Date", "String", "Utf8"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
 
@@ -3887,7 +3887,7 @@ class InSubplanSolverTest(unittest.TestCase):
         self.assertIsNotNone(result.witness)
 
     def test_nullable_in_is_bounded_equivalent_to_left_semi(self):
-        for scalar_type in ("Int32", "Date", "String"):
+        for scalar_type in ("Int32", "Date", "String", "Utf8"):
             for lookup_nullable, output_nullable in (
                 (True, False),
                 (False, True),
@@ -3912,7 +3912,7 @@ class InSubplanSolverTest(unittest.TestCase):
                     self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_not_in_is_bounded_equivalent_to_left_anti(self):
-        for scalar_type in ("Int32", "String"):
+        for scalar_type in ("Int32", "String", "Utf8"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(
                     scalar_type=scalar_type,
@@ -3927,7 +3927,7 @@ class InSubplanSolverTest(unittest.TestCase):
                 self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_wrong_lookup_lowering_has_a_solver_counterexample(self):
-        for scalar_type in ("Int32", "String"):
+        for scalar_type in ("Int32", "String", "Utf8"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
                 raw["schema"]["tables"][0]["columns"].append(
@@ -5018,6 +5018,7 @@ class InSubplanValidationTest(unittest.TestCase):
             "Uint64",
             "Date",
             "String",
+            "Utf8",
         )
         for scalar_type in supported_types:
             for lookup_nullable, output_nullable in product(
@@ -5054,7 +5055,7 @@ class InSubplanValidationTest(unittest.TestCase):
                 ):
                     parse_snapshot(raw)
 
-        for scalar_type in ("Bool", "Utf8", "Decimal(7,2)"):
+        for scalar_type in ("Bool", "Decimal(7,2)"):
             with self.subTest(scalar_type=scalar_type):
                 raw = _in_snapshot(scalar_type=scalar_type)
                 with self.assertRaisesRegex(

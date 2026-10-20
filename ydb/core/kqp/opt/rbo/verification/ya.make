@@ -16,6 +16,7 @@ PY_SRCS(
     rbo_verifier/relation.py
     rbo_verifier/scalar.py
     rbo_verifier/smt.py
+    rbo_verifier/stable_pickle.py
     rbo_verifier/sort_network.py
     rbo_verifier/sort_strategy.py
     rbo_verifier/stages.py

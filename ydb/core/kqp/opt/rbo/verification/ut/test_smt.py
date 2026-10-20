@@ -36,6 +36,106 @@ def _structurally_repeated_successor_comparison(name):
 
 
 class SmtTest(unittest.TestCase):
+    def test_scope_cache_preserves_obligations_after_declaration_and_assertion_changes(self):
+        def exercise():
+            script = smt.Script(timeout_ms=100)
+            value = script.fresh_constant("value", smt.INT)
+            bound = smt.symbol("rbo_let_0", smt.INT)
+            shared = smt.add(bound, value)
+            body = smt.eq(smt.add(shared, shared), smt.mul(smt.int_value(2), shared))
+            quantified = smt.forall((bound,), body)
+            script.assert_obligation(quantified)
+            outputs = [script.render()]
+            outputs.append(script.render_branch(smt.not_(quantified)))
+            script.fresh_constant("later", smt.BOOL)
+            script.assert_global(smt.lt(value, smt.int_value(20)))
+            outputs.append(script.render_branch(smt.not_(quantified)))
+            outputs.append(script.render(values=(value,)))
+            return outputs, script._scope_render_cache
+
+        with mock.patch.object(smt, "_MIN_SCOPE_CACHE_DAG_NODES", 0):
+            cached, cache = exercise()
+        self.assertTrue(cache.entries)
+        with (
+            mock.patch.object(smt, "_MIN_SCOPE_CACHE_DAG_NODES", 0),
+            mock.patch.object(smt, "_MAX_RENDERED_SCOPE_BYTES", 0),
+        ):
+            uncached, cache = exercise()
+        self.assertEqual(cached, uncached)
+        self.assertFalse(cache.entries)
+        self.assertEqual(cache.bytes, 0)
+
+    def test_scope_cache_caps_bytes_and_entries_without_changing_rendered_terms(self):
+        roots = [_structurally_repeated_successor_comparison(name)
+                 for name in ("rbo_let_0", "rbo_let_1", "rbo_let_2")]
+        cache = smt._ScopeRenderCache()
+        with mock.patch.object(smt, "_MAX_RENDERED_SCOPE_ENTRIES", 1):
+            rendered = [cache.render(root) for root in roots]
+            self.assertEqual(len(cache.entries), 1)
+            self.assertIs(next(iter(cache.entries.values()))[0], roots[-1])
+            self.assertEqual([cache.render(root) for root in roots], rendered)
+        for limit in (0, 1, 256):
+            cache = smt._ScopeRenderCache()
+            with mock.patch.object(smt, "_MAX_RENDERED_SCOPE_BYTES", limit):
+                self.assertEqual([cache.render(root) for root in roots], rendered)
+                self.assertLessEqual(cache.bytes, limit)
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_cached_quantifier_scopes_match_inline_semantics_with_shadowed_alias_names(self):
+        cache = smt._ScopeRenderCache()
+        for name in ("rank", "rbo_let_0", "rbo_let_1"):
+            bound = smt.symbol(name, smt.INT)
+            successor = smt.add(bound, smt.ONE)
+            body = smt.eq(smt.add(successor, successor), smt.int_value(4))
+            # The exact same body is used under both quantifiers. Its free
+            # symbol is rebound by the enclosing quantifier each time.
+            quantified = smt.and_(smt.exists((bound,), body), smt.not_(smt.forall((bound,), body)))
+            shadowed = smt.forall((bound,), smt.or_(smt.lt(bound, smt.ZERO), quantified))
+            for term in (quantified, shadowed, smt.not_(shadowed)):
+                context = smt._RenderContext((name,), cache)
+                context.reserve((term,))
+                rendered = smt._render_scope(term, context)
+                formula = "(set-logic ALL)\n(assert (not (= " + term.render() + " " + rendered + ")))\n(check-sat)\n"
+                solved = subprocess.run((SOLVER, "-in"), input=formula, text=True,
+                                        capture_output=True, check=False, timeout=15)
+                self.assertEqual(solved.returncode, 0, solved.stderr)
+                self.assertEqual(solved.stdout.strip(), "unsat", solved.stdout)
+
+    @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3")
+    def test_cached_body_source_names_prevent_capture_by_an_outer_let(self):
+        cache = smt._ScopeRenderCache()
+        free = smt.symbol("rbo_let_0", smt.INT)
+        bound = smt.symbol("bound", smt.INT)
+        body = smt.eq(smt.add(bound, free), bound)
+        cache.render(body)
+        self.assertIn("rbo_let_0", cache.source_names(body))
+        term = smt.and_(
+            _structurally_repeated_successor_comparison("other"),
+            smt.forall((bound,), body),
+        )
+        context = smt._RenderContext((), cache)
+        context.reserve((term,))
+        self.assertIn("rbo_let_0", context.reserved)
+        rendered = smt._render_scope(term, context)
+        formula = ("(set-logic ALL)\n(declare-fun rbo_let_0 () Int)\n"
+                   "(declare-fun other () Int)\n(assert (not (= "
+                   + term.render() + " " + rendered + ")))\n(check-sat)\n")
+        solved = subprocess.run((SOLVER, "-in"), input=formula, text=True,
+                                capture_output=True, check=False, timeout=15)
+        self.assertEqual(solved.returncode, 0, solved.stderr)
+        self.assertEqual(solved.stdout.strip(), "unsat", solved.stdout)
+
+    def test_small_scripts_retain_the_original_quantifier_renderer(self):
+        script = smt.Script()
+        bound = smt.symbol("bound", smt.INT)
+        body = _structurally_repeated_successor_comparison("bound")
+        script.assert_obligation(smt.forall((bound,), body))
+        with mock.patch.object(smt._ScopeRenderCache, "render", side_effect=AssertionError("small scope cached")):
+            formula = script.render()
+        self.assertIn("(forall", formula)
+        self.assertFalse(script._scope_render_cache.entries)
+        self.assertEqual(script._scope_render_cache.bytes, 0)
+
     def test_repeated_render_preserves_branches_models_and_later_declarations(self):
         def exercise():
             script = smt.Script(timeout_ms=100)

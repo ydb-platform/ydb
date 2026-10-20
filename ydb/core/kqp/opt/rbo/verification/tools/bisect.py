@@ -62,10 +62,10 @@ def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, A
     status = final_verdict["status"]
     if status not in {"VERIFIED_BOUNDED", "UNSUPPORTED", "UNKNOWN", "COUNTEREXAMPLE", "SCHEMA_MISMATCH"}:
         raise LocalizationError(f"cannot localize final verifier status {status}")
-    if config.strategy == "divide-and-conquer" and (
+    if config.strategy in {"divide-and-conquer", "adjacent"} and (
         config.all_steps or status in {"COUNTEREXAMPLE", "SCHEMA_MISMATCH"}
     ):
-        return _divide_and_conquer(config, completion, final_verdict, run)
+        return _compare_boundaries(config, completion, final_verdict, run)
     if status in {"VERIFIED_BOUNDED", "UNSUPPORTED", "UNKNOWN"}:
         outcome = {
             "VERIFIED_BOUNDED": "FINAL_VERIFIED_BOUNDED",
@@ -172,16 +172,17 @@ def localize(config: Config, runner: CommandRunner | None = None) -> dict[str, A
     )
 
 
-def _divide_and_conquer(
+def _compare_boundaries(
     config: Config,
     completion: Capture,
     final_verdict: Mapping[str, Any],
     run: CommandRunner,
 ) -> dict[str, Any]:
-    """Check both halves before descending; even equivalent intervals are split.
+    """Audit every adjacent boundary using the selected comparison schedule.
 
-    Only adjacent comparisons attribute events. N events plus the final suffix
-    require N+1 adjacent checks; binary scheduling does not make this logarithmic.
+    Midpoint scheduling also checks coarse intervals. Adjacent scheduling
+    avoids those extra obligations while retaining every event and final suffix.
+    Neither mode assumes monotone equivalence or skips compensating rewrites.
     """
     events = completion.events
     final = len(events) + 1
@@ -236,8 +237,8 @@ def _divide_and_conquer(
             "id": f"{left}:{right}", "before": left, "after": right,
             "adjacent": right == left + 1, "verifier": dict(verdict),
             "artifacts": artifacts(directory, {"verdict": "verdict.json", "formula": "obligation.smt2",
-                                                "command": "verifier.command.json",
-                                                "stdout": "verifier.stdout", "stderr": "verifier.stderr"}),
+                                               "command": "verifier.command.json",
+                                               "stdout": "verifier.stdout", "stderr": "verifier.stderr"}),
         }
         comparisons[left, right] = result
         return result
@@ -252,7 +253,11 @@ def _divide_and_conquer(
         descend(middle, right)
 
     compare(0, final)
-    descend(0, final)
+    if config.strategy == "adjacent":
+        for ordinal in range(final):
+            compare(ordinal, ordinal + 1)
+    else:
+        descend(0, final)
     findings, gaps = [], []
     for comparison in comparisons.values():
         left, right = comparison["before"], comparison["after"]
@@ -285,10 +290,26 @@ def _divide_and_conquer(
                          and "observation_kind" in comparison["verifier"]}
     if len(observation_kinds) > 1:
         raise LocalizationError("verifier observation kind changed across comparisons")
+    inconsistencies = []
+    for comparison in comparisons.values():
+        if comparison["adjacent"] or comparison["verifier"]["status"] not in {
+            "COUNTEREXAMPLE", "SCHEMA_MISMATCH",
+        }:
+            continue
+        chain = [comparisons[ordinal, ordinal + 1]
+                 for ordinal in range(comparison["before"], comparison["after"])]
+        if all(item["verifier"]["status"] == "VERIFIED_BOUNDED" for item in chain):
+            inconsistencies.append({
+                "comparison": comparison["id"],
+                "status": comparison["verifier"]["status"],
+                "verified_chain": [item["id"] for item in chain],
+                "reason": "failing interval contradicts its complete chain of bounded equivalence proofs",
+            })
     result = {
         "format": "ydb-rbo-transformation-localization", "version": 1,
-        "status": "LOCALIZED_FAILURES" if findings else "LOCALIZATION_INCOMPLETE" if incomplete else "STEPS_VERIFIED_BOUNDED",
-        "strategy": "divide-and-conquer", "all_steps": config.all_steps,
+        "status": ("LOCALIZATION_INCONSISTENT" if inconsistencies else "LOCALIZED_FAILURES" if findings
+                   else "LOCALIZATION_INCOMPLETE" if incomplete else "STEPS_VERIFIED_BOUNDED"),
+        "strategy": config.strategy, "all_steps": config.all_steps,
         "row_bound": config.rows, "task_bound": TASK_BOUND,
         "timeout_ms": config.timeout_ms,
         "construction_timeout_ms": config.construction_timeout_ms,
@@ -303,6 +324,7 @@ def _divide_and_conquer(
         "final_verifier": dict(final_verdict), "artifacts": str(config.artifacts),
         "events": [event.to_json() for event in events], "boundaries": boundaries,
         "comparisons": list(comparisons.values()), "findings": findings, "gaps": gaps,
+        "inconsistencies": inconsistencies,
     }
     (config.artifacts / "result.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return result

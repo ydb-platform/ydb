@@ -6,6 +6,7 @@ TEST_SRCS(
     test_cardinality_projection.py
     test_checked_concat.py
     test_cli_budget.py
+    test_integral_average.py
     test_ir.py
     test_analysis.py
     test_join.py
@@ -28,6 +29,8 @@ TEST_SRCS(
     test_subplans.py
     test_union_all_variadic.py
     test_smt.py
+    test_stable_pickle.py
+    test_temporal.py
     test_verify.py
     test_window_avg.py
     test_window_rank.py

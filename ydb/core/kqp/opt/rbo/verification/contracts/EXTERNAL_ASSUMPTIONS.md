@@ -33,6 +33,19 @@ the SMT obligation itself:
 - each accepted concrete String or Utf8 literal denotes exactly its recorded
   strict-UTF-8 byte sequence, and runtime equality across those two families is
   raw byte equality without normalization;
+- Date, Datetime and Timestamp use unsigned epoch counts in days, seconds and
+  microseconds with exclusive upper bounds 49,673, 4,291,747,200 and
+  4,291,747,200,000,000, respectively, matching `udf_data_type.h`;
+- the reviewed String/Utf8-to-Date `SafeCast` is deterministic, preserves input
+  NULL, and returns NULL on parse failure. Its nullable parser function is an
+  overapproximation; literal-only casts still use the runtime parser exactly;
+- each accepted fixed-width integer, Boolean, temporal or text `StablePickle` uses
+  MiniKQL's stable `TValuePacker`. Within one base type it is injective on
+  present values and NULL; present Optional values have the same encoding as
+  their required counterparts. The model's shared encoder and two left inverses
+  express these facts without prescribing actual bytes or byte ordering.
+  Different base types may collide, and all axioms apply under every registered
+  bounded choice. Native packer tests cover boundary values and optional identity;
 - the accepted nullable Unicode-uppercase bridge identifies the deterministic
   built-in `Unicode.ToUpper`; `SafeCast` from String to Utf8 deterministically
   returns NULL for invalid bytes and otherwise supplies that UDF with the
@@ -70,7 +83,7 @@ the SMT obligation itself:
   coercion, correlation, or fanout beyond the admitted form;
 - each accepted dynamic-`IN` descriptor represents one uncorrelated
   existential membership test over the recorded lookup/result columns; for an
-  independently nullable fixed-width-integral, Date, or String pair, the binding occurs
+  independently nullable fixed-width-integral, Date, String, or Utf8 pair, the binding occurs
   only as a direct positive top-level Filter conjunct where FALSE and UNKNOWN
   both reject the outer row; Date values obey the recorded bounded domain, and
   there is no hidden coercion, correlation, cardinality-error, or fanout
@@ -92,13 +105,18 @@ the SMT obligation itself:
   concatenation, has no hidden failure within the audited type, metadata,
   source-size, and allocation bounds, and therefore equals the emitted
   canonical literal;
-- each catalog bound carried into a restricted stored-String `Concat` is a true
+- each catalog bound carried into a restricted stored-text `Concat` is a true
   runtime upper bound: Datashard enforces 16 MiB per value and validated Arrow
-  `BinaryType` storage bounds one Olap cell by `INT32_MAX`; MiniKQL concatenates
+  `BinaryType`/`StringType` storage bounds one Olap cell by `INT32_MAX` bytes; MiniKQL concatenates
   the audited leaves in fingerprint order, returns that deterministic byte
   string when every intermediate sum fits `UINT32_MAX`, and raises an observable
   deterministic query error when a sum exceeds it, with no modeled failure
   depending on stage, task, evaluation count, or ambient allocation pressure;
+  exact `String`/`Utf8` types and nullability follow catalog provenance through
+  direct aliases and supported relational operators. `Concat(Utf8, Utf8)`
+  returns `Utf8`; either `String` operand makes the result `String`. UTF-8
+  codepoint counts never replace the byte bound. The accepted nullable leaf
+  remains a stored member coalesced with an empty literal of the same type;
 - every row counted by an accepted unstaged checked-Concat corridor is demanded
   when its selector is nonbinding at the declared row bound, and a checked
   Project at the staged result root is demanded for every present result row;
@@ -109,9 +127,16 @@ the SMT obligation itself:
   non-key payload does not inspect or alter its runtime Double value;
 - each certified `ExpandMultiDistinct` physical
   `Nothing(Optional<Tuple<Decimal(35,s),Uint64>>)` pad denotes an absent
-  logical Decimal AVG lane, identity `UnionAll` and payload-only StageGraph
-  transport do not inspect or alter that state, and the matching Final AVG
-  consumes the intermediate `(sum,count)` states with count-weighted semantics;
+  logical Decimal AVG lane. Pure same-binding Map transport, explicit
+  per-input `UnionAll` bindings (including variadic unions), and payload-only
+  StageGraph transport do not inspect or alter that state. Each union maps
+  its selected input state exactly once; the audited tree has one matching
+  Intermediate AVG producer and one Final AVG consumer. Other traits may
+  coexist in the producer but cannot inspect its hidden state. The matching
+  Final AVG consumes `(sum,count)` states with count-weighted semantics.
+  The same complete carrier tree denotes these intermediate states before
+  physical stage assignment; logical-prefix proofs evaluate it over the
+  original bag, while staged proofs retain task routing and transport;
 - each accepted directly linked intermediate/final Decimal `SUM` ignores NULL
   original inputs, materializes exactly the visible intermediate scalar
   represented by the private state, and applies the same special-aware
@@ -121,8 +146,9 @@ the SMT obligation itself:
   selected original bags and composing their partial states are therefore
   observationally identical;
 - each accepted integral `AVG` trait denotes exactly the recorded
-  `Optional<Int64> -> Optional<Double>` runtime aggregate, intermediate
-  `(count,min,max)` is an exact summary of its original non-NULL inputs and
+  fixed-width integer-to-Double runtime aggregate, preserving source optionality
+  in intermediate carriers and making a completed scalar result Optional;
+  intermediate `(count,min,max)` is an exact summary of its original non-NULL inputs and
   composes exactly across the directly linked final phase, and non-NULL count
   at most two makes that summary sufficient to identify the unordered input
   multiset;
@@ -130,10 +156,11 @@ the SMT obligation itself:
   completed integral AVG carried through only the certified direct dataflow,
   and runtime binary64 ordering of those results is a total preorder whose
   equivalence classes can be embedded in the verifier's integer rank;
-- each accepted fixed-width integral `MIN`/`MAX` trait uses the recorded
-  signed/unsigned comparison for its exact input/output type, ignores NULL
+- each accepted fixed-width integral, String/Utf8 or temporal `MIN`/`MAX` trait
+  uses its exact signed/unsigned, raw-byte or same-unit order, ignores NULL
   inputs, and combines intermediate values with the same associative extremum
-  operation;
+  operation. Required grouped inputs return required extrema; empty keyless
+  groups and all-NULL groups preserve the runtime nullable result contract;
 - the producer observer sees every successful completed integral-AVG result
   before any parent transformation, and the completed certificate has no
   runtime value or downstream transport semantics beyond constructing the

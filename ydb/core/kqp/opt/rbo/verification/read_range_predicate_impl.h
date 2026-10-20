@@ -44,12 +44,14 @@ public:
                 catalogKey = &column;
             }
         }
-        if (!catalogKey || catalogKey->Type != "Int64" ||
+        if (!catalogKey || (catalogKey->Type != "Int64" && catalogKey->Type != "Int32") ||
             catalogKey->Nullable)
         {
             Unsupported(
-                "Read range primary key must be a catalog non-null Int64");
+                "Read range primary key must be a catalog non-null Int32 or Int64");
         }
+
+        KeyType = catalogKey->Type;
 
         // The column resolver rejects ambiguous physical-to-ID mappings.
         const auto* physical = ResolveOlapColumn(physicalKey, Columns);
@@ -72,7 +74,7 @@ public:
             "RangeFinalize",
             1,
             1);
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             finalize,
             true,
             "RangeFinalize result");
@@ -81,7 +83,7 @@ public:
             "RangeMultiply",
             2,
             2);
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             multiply,
             false,
             "outer RangeMultiply result");
@@ -91,7 +93,7 @@ public:
             "RangeUnion",
             1,
             3);
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             rangeUnion,
             false,
             "outer RangeUnion result");
@@ -111,8 +113,15 @@ public:
             }
             result = ExportFinitePointSet(body);
         } else {
-            Unsupported(
-                "Read range is not an audited point or finite point-set shape");
+            TStringBuilder shape;
+            shape << body.Content() << "[";
+            for (size_t index = 0; index < std::min<size_t>(body.ChildrenSize(), 4); ++index) {
+                if (index) { shape << ","; }
+                shape << body.Child(index)->Content();
+            }
+            shape << "]";
+            Unsupported(TStringBuilder()
+                << "Read range is not an audited point or finite point-set shape: " << shape);
         }
 
         AuditExactScalarExpression(result);
@@ -201,7 +210,7 @@ private:
         }
     }
 
-    void ExactInt64RangeListType(
+    void ExactKeyRangeListType(
         const TExprNode& node,
         bool finalized,
         TStringBuf field)
@@ -254,11 +263,11 @@ private:
             }
         };
         if (finalized) {
-            checkComponent(0, "Int64", true);
+            checkComponent(0, KeyType, true);
             checkComponent(1, "Int32", false);
         } else {
             checkComponent(0, "Int32", false);
-            checkComponent(1, "Int64", true);
+            checkComponent(1, KeyType, true);
             checkComponent(2, "Int32", false);
         }
     }
@@ -298,7 +307,7 @@ private:
         return LiteralExpr(node);
     }
 
-    void Int64Descriptor(
+    void KeyDescriptor(
         const TExprNode& node,
         bool optional,
         TStringBuf field,
@@ -311,7 +320,7 @@ private:
             {
                 Unsupported(TStringBuilder()
                     << "Read range " << field
-                    << " must be OptionalType(DataType(Int64))");
+                    << " must be OptionalType(DataType(" << KeyType << "))");
             }
             Node(node.ChildPtr(0), depth + 1);
             if (!node.Child(0)->IsCallable("DataType") ||
@@ -319,24 +328,24 @@ private:
             {
                 Unsupported(TStringBuilder()
                     << "Read range " << field
-                    << " must be OptionalType(DataType(Int64))");
+                    << " must be OptionalType(DataType(" << KeyType << "))");
             }
             Node(node.Child(0)->ChildPtr(0), depth + 2);
         } else {
             if (!node.IsCallable("DataType") || node.ChildrenSize() != 1) {
                 Unsupported(TStringBuilder()
-                    << "Read range " << field << " must be DataType(Int64)");
+                    << "Read range " << field << " must be DataType(" << KeyType << ")");
             }
             Node(node.ChildPtr(0), depth + 1);
         }
 
         bool nullable = false;
-        if (DataTypeDescriptorName(node, &nullable) != "Int64" ||
+        if (DataTypeDescriptorName(node, &nullable) != KeyType ||
             nullable != optional)
         {
             Unsupported(TStringBuilder()
                 << "Read range " << field
-                << " has a mismatched Int64 type descriptor");
+                << " has a mismatched " << KeyType << " type descriptor");
         }
         if (node.GetTypeAnn() &&
             node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Type)
@@ -350,7 +359,7 @@ private:
                 node.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             bool describedNullable = false;
             if (!described ||
-                TypeName(described, &describedNullable) != "Int64" ||
+                TypeName(described, &describedNullable) != KeyType ||
                 describedNullable != optional)
             {
                 Unsupported(TStringBuilder()
@@ -372,7 +381,7 @@ private:
                 ->Cast<TTypeExprType>()->GetType();
             bool dataNullable = false;
             if (!dataType ||
-                TypeName(dataType, &dataNullable) != "Int64" ||
+                TypeName(dataType, &dataNullable) != KeyType ||
                 dataNullable)
             {
                 Unsupported(TStringBuilder()
@@ -414,13 +423,13 @@ private:
         if (!node.IsCallable("RangeFor") || node.ChildrenSize() != 3) {
             Unsupported("Read range point must be a three-argument RangeFor");
         }
-        ExactInt64RangeListType(node, false, "RangeFor result");
+        ExactKeyRangeListType(node, false, "RangeFor result");
         Atom(node.ChildPtr(0), "===", "point operation", depth + 1);
         if (expectedValue && node.Child(1) != expectedValue) {
             Unsupported(
                 "Read range point value must be the exact point-lambda argument");
         }
-        Int64Descriptor(
+        KeyDescriptor(
             *node.Child(2),
             false,
             "point key descriptor",
@@ -630,7 +639,7 @@ private:
         return result;
     }
 
-    void CheckFullInt64Range(const TExprNode& node, size_t depth) {
+    void CheckFullKeyRange(const TExprNode& node, size_t depth) {
         Node(node, depth);
         if (!node.IsCallable("AsRange") || node.ChildrenSize() != 1) {
             Unsupported(
@@ -646,7 +655,7 @@ private:
         const auto& boundary = Node(ranges.ChildPtr(0), depth + 2);
         if (!boundary.IsList() || boundary.ChildrenSize() != 2) {
             Unsupported(
-                "Read range full AsRange has an invalid Int64 boundary");
+                "Read range full AsRange has an invalid key boundary");
         }
         if ((ranges.GetTypeAnn() == nullptr) !=
             (boundary.GetTypeAnn() == nullptr))
@@ -682,10 +691,10 @@ private:
             depth + 3);
         ExactScalarType(
             nothing,
-            "Int64",
+            KeyType,
             true,
             "full-range sentinel");
-        Int64Descriptor(
+        KeyDescriptor(
             *nothing.Child(0),
             true,
             "full-range sentinel descriptor",
@@ -713,17 +722,17 @@ private:
             Unsupported(
                 "Read range full AsRange inclusivity sentinel must be zero");
         }
-        ExactInt64RangeListType(node, false, "full AsRange result");
+        ExactKeyRangeListType(node, false, "full AsRange result");
     }
 
-    void CheckEmptyInt64Range(const TExprNode& node, size_t depth) {
+    void CheckEmptyKeyRange(const TExprNode& node, size_t depth) {
         Node(node, depth);
         if (!node.IsCallable("RangeEmpty") || node.ChildrenSize() != 1) {
             Unsupported(
                 "Read range missing collection branch must be RangeEmpty");
         }
-        ExactInt64RangeListType(node, false, "RangeEmpty result");
-        Int64Descriptor(
+        ExactKeyRangeListType(node, false, "RangeEmpty result");
+        KeyDescriptor(
             *node.Child(0),
             false,
             "empty-range descriptor",
@@ -743,7 +752,7 @@ private:
             Unsupported(
                 "Read range point expansion must FlatMap its collection argument");
         }
-        ExactInt64RangeListType(flatMap, false, "point FlatMap result");
+        ExactKeyRangeListType(flatMap, false, "point FlatMap result");
         Node(flatMap.ChildPtr(0), depth + 1);
         const auto& lambda = UnaryLambda(
             flatMap.ChildPtr(1),
@@ -762,7 +771,7 @@ private:
             2,
             2,
             depth + 2);
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             multiply,
             false,
             "point RangeMultiply result");
@@ -808,7 +817,7 @@ private:
             Unsupported(
                 "Read range present lambda argument has the wrong List type");
         }
-        CheckEmptyInt64Range(*ifPresent.Child(2), 5);
+        CheckEmptyKeyRange(*ifPresent.Child(2), 5);
 
         const auto& strict = Callable(
             lambda.ChildPtr(1),
@@ -816,7 +825,7 @@ private:
             3,
             3,
             6);
-        ExactInt64RangeListType(strict, false, "point IfStrict result");
+        ExactKeyRangeListType(strict, false, "point IfStrict result");
         const auto& comparison = Callable(
             strict.ChildPtr(0),
             ">",
@@ -847,14 +856,14 @@ private:
             1,
             1,
             9);
-        ExactInt64RangeListType(collect, false, "point Collect result");
+        ExactKeyRangeListType(collect, false, "point Collect result");
         const auto& take = Callable(
             collect.ChildPtr(0),
             "Take",
             2,
             2,
             10);
-        ExactInt64RangeListType(take, false, "point Take result");
+        ExactKeyRangeListType(take, false, "point Take result");
         CheckPointFlatMap(
             *take.Child(0),
             collectionArgument,
@@ -866,14 +875,14 @@ private:
             "overflow probe",
             11);
 
-        CheckFullInt64Range(*strict.Child(1), 7);
+        CheckFullKeyRange(*strict.Child(1), 7);
         const auto& finalUnion = Callable(
             strict.ChildPtr(2),
             "RangeUnion",
             1,
             1,
             7);
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             finalUnion,
             false,
             "finite point RangeUnion result");
@@ -881,7 +890,7 @@ private:
             Unsupported(
                 "Read range overflow check and final union must share one Collect");
         }
-        ExactInt64RangeListType(
+        ExactKeyRangeListType(
             ifPresent,
             false,
             "finite point IfPresent result");
@@ -912,5 +921,6 @@ private:
     const TOlapColumnMap& Columns;
     TExactScalarBudget SourceBudget;
     TString KeyOutput;
+    TString KeyType;
     const TTypeAnnotationNode* StaticPointItemType = nullptr;
 };

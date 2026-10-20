@@ -12,6 +12,7 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/getopt/last_getopt.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/resource/resource.h>
 
 #include <util/folder/path.h>
@@ -36,6 +37,7 @@ struct TOptions {
     TString OutputPath;
     ui64 TransformationOrdinal = 0;
     bool BenchmarkColumnStore = false;
+    TString QueryMode = "data";
 };
 
 class TRecordingSink final : public IRBOSemanticSnapshotSink {
@@ -79,6 +81,9 @@ TOptions ParseOptions(int argc, char** argv) {
         .Required()
         .RequiredArgument("PATH")
         .StoreResult(&result.QueryPath);
+    options.AddLongOption("query-mode", "Preparation mode: data, generic, or generic-spilling")
+        .RequiredArgument("MODE")
+        .StoreResult(&result.QueryMode);
     options.AddLongOption(
             "benchmark-column-store",
             "Apply benchmark_ut's exact TPCH/TPCDS column-store schema rewrite and query prelude")
@@ -97,6 +102,9 @@ TOptions ParseOptions(int argc, char** argv) {
         .RequiredArgument("DIR")
         .StoreResult(&result.OutputPath);
     NLastGetopt::TOptsParseResult parsed(&options, argc, argv);
+    if (result.QueryMode != "data" && result.QueryMode != "generic" && result.QueryMode != "generic-spilling") {
+        ythrow yexception() << "--query-mode must be data, generic, or generic-spilling";
+    }
     if (result.TransformationOrdinal == 0) {
         ythrow yexception()
             << "--rbo-transformation-prefix-ordinal must be a positive integer";
@@ -162,7 +170,7 @@ TIntrusivePtr<IKqpGateway> MakeGateway(Tests::TServer& server) {
         server.GetSettings().AppConfig->GetQueryServiceConfig());
 }
 
-NYql::TKikimrConfiguration::TPtr MakeConfiguration() {
+NYql::TKikimrConfiguration::TPtr MakeConfiguration(TStringBuf queryMode) {
     auto config = MakeIntrusive<NYql::TKikimrConfiguration>();
     const TString defaultsData = NResource::Find("kqp_default_settings.txt");
     TStringInput defaultsStream(defaultsData);
@@ -182,6 +190,9 @@ NYql::TKikimrConfiguration::TPtr MakeConfiguration() {
     config->SetBackportMode(
         NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     config->_ResultRowsLimit.Clear();
+    if (queryMode == "generic-spilling") {
+        config->_KqpEnableSpilling = true;
+    }
     return config;
 }
 
@@ -200,13 +211,14 @@ TKikimrRunner MakeRunner() {
 TIntrusivePtr<IKqpHost> MakeHost(
     Tests::TServer& server,
     NYql::IModuleResolver::TPtr moduleResolver,
-    std::shared_ptr<IRBOSemanticSnapshotSink> sink)
+    std::shared_ptr<IRBOSemanticSnapshotSink> sink,
+    TStringBuf queryMode)
 {
     return CreateKqpHost(
         MakeGateway(server),
         TestCluster,
         "/Root",
-        MakeConfiguration(),
+        MakeConfiguration(queryMode),
         std::move(moduleResolver),
         std::nullopt,
         nullptr,
@@ -243,7 +255,7 @@ void WriteNew(const TFsPath& path, const TString& contents) {
     TFileOutput(path.GetPath()).Write(contents);
 }
 
-void WriteCapture(const TFsPath& output, const TCaptureOutput& capture) {
+void WriteCapture(const TFsPath& output, const TCaptureOutput& capture, const TOptions& options) {
     WriteNew(output / "initial.json", capture.InitialSnapshot);
     switch (capture.Status) {
         case ECaptureStatus::PrefixCaptured:
@@ -256,6 +268,12 @@ void WriteCapture(const TFsPath& output, const TCaptureOutput& capture) {
         case ECaptureStatus::FinalUnsupported:
             break;
     }
+    NJson::TJsonValue preparation(NJson::JSON_MAP);
+    preparation["query_mode"] = options.QueryMode;
+    preparation["benchmark_column_store"] = options.BenchmarkColumnStore;
+    preparation["new_rbo"] = true;
+    preparation["fallback_to_yql_optimizer"] = false;
+    WriteNew(output / "preparation.json", NJson::WriteJson(preparation, true, true));
     // The manifest is the commit marker and is deliberately written last.
     WriteNew(output / "capture.json", RenderManifest(capture));
 }
@@ -286,7 +304,8 @@ int Run(const TOptions& options) {
     auto host = MakeHost(
         runner.GetTestServer(),
         std::move(moduleResolver),
-        sink);
+        sink,
+        options.QueryMode);
     IKqpHost::TPrepareSettings settings;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
     // Constant-expression evaluation expects the actor activation context used
@@ -294,9 +313,17 @@ int Run(const TOptions& options) {
     const auto prepared = runner.GetTestServer().GetRuntime()->RunCall([
         host,
         query = std::move(query),
-        settings
+        settings,
+        generic = options.QueryMode != "data"
     ] {
-        return host->SyncPrepareDataQuery(query, settings);
+        if (!generic) {
+            return host->SyncPrepareDataQuery(query, settings);
+        }
+        auto preparing = host->PrepareGenericQuery(query, settings);
+        while (!preparing->HasResult()) {
+            preparing->Continue().GetValueSync();
+        }
+        return preparing->GetResult();
     });
 
     auto capture = ClassifyCapture(
@@ -304,7 +331,7 @@ int Run(const TOptions& options) {
         prepared.Success(),
         sink->Take(),
         prepared.Issues().ToString());
-    WriteCapture(output, capture);
+    WriteCapture(output, capture, options);
     Cout << StatusName(capture.Status) << Endl;
     return 0;
 }

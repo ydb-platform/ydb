@@ -13,7 +13,7 @@ from .bisect import Config, LocalizationError, localize
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description="Localize new-RBO changes using exhaustive midpoint-first comparisons"
+        description="Localize new-RBO changes by comparing captured transformations"
     )
     result.add_argument("--verifier", type=Path, required=True)
     result.add_argument("--solver", type=Path, required=True)
@@ -24,7 +24,7 @@ def parser() -> argparse.ArgumentParser:
                         help="separate bounded snapshot/model/formula construction budget per comparison")
     result.add_argument("--capture-timeout-seconds", type=int, default=300)
     result.add_argument("--max-events", type=int, default=10_000)
-    result.add_argument("--strategy", choices=("divide-and-conquer", "sequential"),
+    result.add_argument("--strategy", choices=("divide-and-conquer", "adjacent", "sequential"),
                         default="divide-and-conquer")
     result.add_argument("--all-steps", action="store_true",
                         help="audit every step even when the final check has no counterexample")

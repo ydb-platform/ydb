@@ -16,7 +16,7 @@ from .ir import (
     MAX_WINDOW_ROWS_PER_PROJECT, MAX_WINDOW_ROWS_PER_SNAPSHOT,
     MAX_WINDOW_ROWS_PROJECTS_PER_SNAPSHOT, Q51_PRICE_TYPE, Q51_WINDOW_NAMES,
     WHOLE_PARTITION_DECIMAL_SUM_TYPE, WINDOW_ROWS_KINDS,
-    _expression_kind_count, _fail, _node_expressions, _plan_descendants, _unique,
+    _expression_kind_count, _fail, _node_expressions, _plan_descendants,
     plan_node_inputs,
 )
 
@@ -109,7 +109,23 @@ def _validate_whole_partition_decimal_window_corridor(
     assert isinstance(project, Project)
     _validate_window_subplan_separation(snapshot, project)
     nodes = snapshot.plan.node_map()
+    # Alias Projects retain their actual row/error/stage semantics in the
+    # plan. Trace only direct, total column lineage back to the grouped SUM.
+    aliases: list[Project] = []
     aggregate = nodes.get(project.input)
+    while isinstance(aggregate, Project):
+        if len(aliases) == 8:
+            _fail(f"node {project.id!r}.input", "window alias corridor exceeds eight Projects")
+        if any(
+            column.expression.kind != "column"
+            or column.error_on_null
+            or column.require_total
+            or column.require_at_most_one is not None
+            for column in aggregate.columns
+        ):
+            _fail(f"node {aggregate.id!r}", "window aliases require total direct column Projects")
+        aliases.append(aggregate)
+        aggregate = nodes.get(aggregate.input)
     if not (
         isinstance(aggregate, Aggregate)
         and aggregate.phase in {"undefined", "final"}
@@ -118,7 +134,7 @@ def _validate_whole_partition_decimal_window_corridor(
     ):
         _fail(
             f"node {project.id!r}.input",
-            f"{kind} Project must directly consume one grouped, "
+            f"{kind} Project must consume, through at most eight column aliases, one grouped, "
             "logical or final Aggregate",
         )
 
@@ -142,7 +158,13 @@ def _validate_whole_partition_decimal_window_corridor(
 
     window = find(expressions[0])
     assert window.window_input is not None and window.partition_by is not None
-    if any(partition not in aggregate.keys for partition in window.partition_by):
+    argument = window.window_input
+    partitions = window.partition_by
+    for alias in aliases:
+        bindings = {column.output: column.expression.column for column in alias.columns}
+        argument = bindings[argument]
+        partitions = tuple(bindings[partition] for partition in partitions)
+    if any(partition not in aggregate.keys for partition in partitions):
         _fail(
             f"node {project.id!r}.columns",
             f"{kind} partition must contain only direct keys of its Aggregate input",
@@ -150,7 +172,7 @@ def _validate_whole_partition_decimal_window_corridor(
     matching_traits = tuple(
         trait
         for trait in aggregate.aggregates
-        if trait.output == window.window_input
+        if trait.output == argument
     )
     if not (
         len(matching_traits) == 1
@@ -213,11 +235,14 @@ def _validate_whole_partition_decimal_window_corridor(
     for consumer in snapshot.plan.nodes:
         for producer in plan_node_inputs(consumer):
             consumers[producer].append(consumer)
-    if consumers[aggregate.id] != [project]:
-        _fail(
-            f"node {aggregate.id!r}",
-            f"a {kind} Aggregate must have one direct Project consumer and no fanout",
-        )
+    consumer = project
+    for producer in [*aliases, aggregate]:
+        if consumers[producer.id] != [consumer]:
+            _fail(
+                f"node {producer.id!r}",
+                f"a {kind} alias corridor must have one direct consumer and no fanout",
+            )
+        consumer = producer
     if intermediate is not None and consumers[intermediate.id] != [aggregate]:
         _fail(
             f"node {intermediate.id!r}",
@@ -232,19 +257,18 @@ def _validate_whole_partition_decimal_window_corridor(
 
     # The ordinary type checker already established both direct operands.
     expected_partition_types = (
-        {ValueType("String", True)}
+        {ValueType("String", True), ValueType("Utf8", True)}
         if kind == "window_sum"
-        else {ValueType("Int64", True), ValueType("String", True)}
+        else {ValueType("Int64", True), ValueType("String", True), ValueType("Utf8", True)}
     )
     assert all(
         schemas[aggregate.id][partition].value_type in expected_partition_types
-        for partition in window.partition_by
+        for partition in partitions
     )
-    assert schemas[aggregate.id][window.window_input].value_type == ValueType(
+    assert schemas[aggregate.id][argument].value_type == ValueType(
         WHOLE_PARTITION_DECIMAL_SUM_TYPE,
         True,
     )
-
 
 
 def _validate_window_rank_dataflow(
@@ -368,7 +392,6 @@ def _validate_window_rank_dataflow(
                     f"node {project_id!r}",
                     "a staged window_rank Project output must not fan out",
                 )
-
 
 
 def _validate_window_rows_dataflow(

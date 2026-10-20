@@ -9,7 +9,7 @@ try:
 except ImportError:
     yatest_common = None
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import decimal, smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, decimal, smt
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Expr,
     SnapshotError,
@@ -1070,6 +1070,26 @@ class DecimalKernelTest(unittest.TestCase):
                 self.assertEqual(result.type, decimal_type)
                 self.assertEqual(result.is_null, smt.FALSE)
                 self.assertEqual(_ground(result.value), 100 * integer)
+
+    def test_bounded_average_division_matches_runtime_rounding_and_specials(self):
+        total = smt.symbol("left", smt.INT)
+        count = smt.symbol("right", smt.INT)
+        # Include the optimized ceiling and larger counts using the general
+        # fallback. Odd signed coefficients exercise both even-tie directions.
+        for bound in (0, 1, 2, 8, 9, 17):
+            evaluate = _compile_ground(aggregate._divide_decimal_average(
+                total, count, "Decimal(35,2)", "Uint64", bound,
+            ))
+            for value in (*range(-35, 36), -(10**35 - 1), 10**35 - 1, -decimal.INF, decimal.INF, decimal.NAN):
+                for divisor in range(bound + 1):
+                    if value == decimal.NAN or not divisor and not value:
+                        expected = decimal.NAN
+                    elif not divisor or value in (-decimal.INF, decimal.INF):
+                        expected = -decimal.INF if value < 0 else decimal.INF
+                    else:
+                        expected = _ref_ndecimal_divide(value, divisor)
+                    with self.subTest(bound=bound, total=value, count=divisor):
+                        self.assertEqual(evaluate(value, divisor), expected)
 
     def test_decimal_divide_integral_preserves_scale_for_every_integer_type(self):
         scalar_type = "Decimal(35,2)"

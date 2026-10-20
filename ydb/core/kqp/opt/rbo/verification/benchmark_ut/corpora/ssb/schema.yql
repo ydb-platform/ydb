@@ -1,0 +1,77 @@
+CREATE TABLE `/Root/date` (
+    d_datekey Int32 NOT NULL,
+    d_date String NOT NULL,
+    d_dayofweek String NOT NULL,
+    d_month String NOT NULL,
+    d_year Int32 NOT NULL,
+    d_yearmonthnum Int32 NOT NULL,
+    d_yearmonth String NOT NULL,
+    d_daynuminweek Int32 NOT NULL,
+    d_daynuminmonth Int32 NOT NULL,
+    d_daynuminyear Int32 NOT NULL,
+    d_monthnuminyear Int32 NOT NULL,
+    d_weeknuminyear Int32 NOT NULL,
+    d_sellingseason String NOT NULL,
+    d_lastdayinweekfl Int32 NOT NULL,
+    d_lastdayinmonthfl Int32 NOT NULL,
+    d_holidayfl Int32 NOT NULL,
+    d_weekdayfl Int32 NOT NULL,
+    PRIMARY KEY (d_datekey)
+);
+
+CREATE TABLE `/Root/supplier` (
+    s_suppkey Int32 NOT NULL,
+    s_name String NOT NULL,
+    s_address String NOT NULL,
+    s_city String NOT NULL,
+    s_nation String NOT NULL,
+    s_region String NOT NULL,
+    s_phone String NOT NULL,
+    PRIMARY KEY (s_suppkey)
+);
+
+CREATE TABLE `/Root/customer` (
+    c_custkey Int32 NOT NULL,
+    c_name String NOT NULL,
+    c_address String NOT NULL,
+    c_city String NOT NULL,
+    c_nation String NOT NULL,
+    c_region String NOT NULL,
+    c_phone String NOT NULL,
+    c_mktsegment String NOT NULL,
+    PRIMARY KEY (c_custkey)
+);
+
+CREATE TABLE `/Root/part` (
+    p_partkey Int32 NOT NULL,
+    p_name String NOT NULL,
+    p_mfgr String NOT NULL,
+    p_category String NOT NULL,
+    p_brand1 String NOT NULL,
+    p_color String NOT NULL,
+    p_type String NOT NULL,
+    p_size Int32 NOT NULL,
+    p_container String NOT NULL,
+    PRIMARY KEY (p_partkey)
+);
+
+CREATE TABLE `/Root/lineorder` (
+    lo_orderkey Int32 NOT NULL,
+    lo_linenumber Int32 NOT NULL,
+    lo_custkey Int32 NOT NULL,
+    lo_partkey Int32 NOT NULL,
+    lo_suppkey Int32 NOT NULL,
+    lo_orderdate Int32 NOT NULL,
+    lo_orderpriority String NOT NULL,
+    lo_shippriority String NOT NULL,
+    lo_quantity Int32 NOT NULL,
+    lo_extendedprice Decimal(18,2) NOT NULL,
+    lo_ordtotalprice Decimal(18,2) NOT NULL,
+    lo_discount Int32 NOT NULL,
+    lo_revenue Decimal(18,2) NOT NULL,
+    lo_supplycost Decimal(18,2) NOT NULL,
+    lo_tax Int32 NOT NULL,
+    lo_commitdate Int32 NOT NULL,
+    lo_shipmode String NOT NULL,
+    PRIMARY KEY (lo_orderkey, lo_linenumber)
+);

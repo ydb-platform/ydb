@@ -195,9 +195,11 @@ class _SolverBudget:
             raise SolverError("solver timeout must be a positive integer")
         now = time.monotonic()
         solver_deadline = now + timeout_ms / 1000.0
+        # Results arriving after this deadline cannot establish a proof or
+        # supply a model, so do not keep the subprocess alive for extra grace.
         return cls(
             solver_deadline,
-            solver_deadline + _PROCESS_TERMINATION_GRACE_SECONDS,
+            solver_deadline,
         )
 
     def remaining_ms(self) -> int | None:

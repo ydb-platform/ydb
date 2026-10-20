@@ -2486,12 +2486,12 @@ class IntegralAverageRankSortTest(unittest.TestCase):
     def test_equality_and_order_use_the_same_shared_average_carriers(self):
         script = smt.Script()
         scalar = ScalarEncoder(script)
-        left_rank = scalar.integral_int64_average(
+        left_rank = scalar.integral_integer_average(
             smt.ONE,
             smt.int_value(-3),
             smt.int_value(-3),
         )
-        right_rank = scalar.integral_int64_average(
+        right_rank = scalar.integral_integer_average(
             smt.int_value(2),
             smt.int_value(-2),
             smt.int_value(4),

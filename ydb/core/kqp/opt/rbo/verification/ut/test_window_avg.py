@@ -444,7 +444,99 @@ def _concrete_window_average(rows):
     )
 
 
+def _with_window_aliases(snapshot, count=1, rename=True):
+    snapshot = deepcopy(snapshot)
+    project = next(node for node in snapshot["plan"]["nodes"] if node["id"] == "project")
+    names = [column["output"] for column in project["columns"][:-1]]
+    mapping = {name: name for name in names}
+    aliases = []
+    previous = project["input"]
+    for index in range(count):
+        bindings = {name: f"alias{index}.{name}" if rename else name for name in mapping}
+        alias = {
+            "id": f"aliases{index}", "op": "project", "input": previous, "ordered": False,
+            "columns": [
+                {"output": bindings[name], "expression": _column(source)}
+                for name, source in mapping.items()
+            ],
+        }
+        aliases.append(alias)
+        previous = alias["id"]
+        mapping = bindings
+    offset = snapshot["plan"]["nodes"].index(project)
+    snapshot["plan"]["nodes"][offset:offset] = aliases
+    project["input"] = previous
+
+    def rewrite(expression):
+        if not isinstance(expression, dict):
+            return
+        if expression.get("kind") == "column":
+            expression["column"] = mapping[expression["column"]]
+        elif expression.get("kind") in {"window_sum", "window_avg"}:
+            expression["input"] = mapping[expression["input"]]
+            keys = expression["partition_by"]
+            expression["partition_by"] = mapping[keys] if isinstance(keys, str) else [mapping[key] for key in keys]
+        for value in expression.values():
+            if isinstance(value, dict):
+                rewrite(value)
+
+    for column in project["columns"]:
+        rewrite(column["expression"])
+    if snapshot["stage_graph"]:
+        stage = next(stage for stage in snapshot["stage_graph"]["stages"] if "project" in stage["nodes"])
+        index = stage["nodes"].index("project")
+        stage["nodes"][index:index] = [alias["id"] for alias in aliases]
+    return snapshot
+
+
 class WindowAverageTest(unittest.TestCase):
+
+    def test_utf8_partitions_preserve_routing_and_detect_split_partitions(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+
+        def utf8(snapshot):
+            for table in snapshot["schema"]["tables"]:
+                for column in table["columns"]:
+                    if column["type"] == "String":
+                        column["type"] = "Utf8"
+            return parse_snapshot(snapshot)
+        before = utf8(_snapshot())
+        after = utf8(_staged_snapshot(['part_i', 'part_s']))
+        mutation = utf8(_staged_snapshot(['part_i', 'part_s', 'item']))
+        self.assertEqual(solve(build_problem(before, after, 2, 2), SOLVER, 2, 30_000).status, "VERIFIED_BOUNDED")
+        self.assertEqual(solve(build_problem(before, mutation, 2, 2), SOLVER, 2, 30_000).status, "COUNTEREXAMPLE")
+
+    def test_window_column_alias_corridors_preserve_staged_results(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+        before = parse_snapshot(_snapshot())
+        for count in (1, 8):
+            for rename in (False, True):
+                with self.subTest(count=count, rename=rename):
+                    after = parse_snapshot(_with_window_aliases(_staged_snapshot(["part_i", "part_s"]), count, rename))
+                    problem = build_problem(before, after, 2, 2)
+                    self.assertEqual(solve(problem, SOLVER, 2, 30_000).status, "VERIFIED_BOUNDED")
+
+    def test_aliased_window_partition_mutation_has_a_counterexample(self):
+        if SOLVER is None:
+            self.skipTest("Z3 is unavailable")
+        before = _with_window_aliases(_snapshot(), 8)
+        changed = deepcopy(before)
+        expression = changed["plan"]["nodes"][-1]["columns"][-1]["expression"]
+        expression["partition_by"] = expression["partition_by"][:1]
+        problem = build_logical_kernel_problem_for_tests(parse_snapshot(before), parse_snapshot(changed), 2)
+        self.assertEqual(solve(problem, SOLVER, 2, 30_000).status, "COUNTEREXAMPLE")
+
+    def test_window_alias_corridor_bound_and_error_markers_are_rejected(self):
+        with self.assertRaisesRegex(SnapshotError, "exceeds eight"):
+            parse_snapshot(_with_window_aliases(_snapshot(), 9))
+        guarded = _with_window_aliases(_snapshot())
+        alias = next(node for node in guarded["plan"]["nodes"] if node["id"] == "aliases0")
+        alias["columns"][-1]["error_on_null"] = True
+        with self.assertRaises(SnapshotError):
+            parse_snapshot(guarded)
+
     def test_rank_and_average_share_one_source_outcome(self):
         raw = _snapshot()
         raw["plan"]["nodes"][2]["columns"].append({"output": "rank", "expression": {
@@ -587,7 +679,7 @@ class WindowAverageTest(unittest.TestCase):
             ("partition_by", ["part_i"] * 6, "between 1 and 5"),
             ("partition_by", ["part_i", "part_i"], "duplicate name"),
             ("partition_by", ["missing"], "not available"),
-            ("partition_by", ["item"], "Optional<Int64> or Optional<String>"),
+            ("partition_by", ["item"], "Optional<Int64>, Optional<String> or Optional<Utf8>"),
             ("input", "missing", "window input column"),
             ("nullable", False, "Optional<Decimal"),
             ("type", "Decimal(34,2)", "Optional<Decimal"),
@@ -654,7 +746,10 @@ class WindowAverageTest(unittest.TestCase):
             },
         )
         stale["plan"]["nodes"][3]["input"] = "carrier"
-        with self.assertRaisesRegex(SnapshotError, "directly consume"):
+        stale["plan"]["nodes"][2]["columns"][-1]["expression"] = {
+            "kind": "null", "type": "Decimal(35,2)",
+        }
+        with self.assertRaisesRegex(SnapshotError, "total direct column"):
             parse_snapshot(stale)
 
         mismatched_final = _staged_snapshot(["part_i", "part_s"])

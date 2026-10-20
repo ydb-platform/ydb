@@ -17,9 +17,9 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column, Expr, Join, JoinKey, Plan, Scan, ScanColumn, Snapshot, Table, UniqueKey,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
-    Database, Evaluator, PartitionFact, RelationError, bag_equal,
+    Database, Evaluator, PartitionFact, Relation, RelationError, Row, bag_equal,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Encoder, Value
 
 
 SOLVER = (
@@ -67,14 +67,14 @@ def _evaluator(snapshot):
     return script, scalar, evaluator, snapshot.plan.node_map()["join"]
 
 
-def _reference(kind, left, right):
+def _reference(kind, left, right, *, equal_nulls=False):
     """Concrete bag oracle: no symbolic terms or production join policy."""
 
     pairs = [
         (i, j)
         for i, l in enumerate(left) for j, r in enumerate(right)
         if l is not ABSENT and r is not ABSENT
-        and (kind == "cross" or (l is not None and r is not None and l == r))
+        and (kind == "cross" or (l == r and (equal_nulls or (l is not None and r is not None))))
     ]
     result = Counter()
     if kind in {"cross", "inner", "left", "right", "full"}:
@@ -199,3 +199,51 @@ class JoinEncodingTest(unittest.TestCase):
         self.assertEqual(matched.occurrence.inputs, (left.rows[0].occurrence, right.rows[0].occurrence))
         self.assertEqual(left_only.occurrence.inputs, (left.rows[0].occurrence,))
         self.assertEqual(right_only.occurrence.inputs, (right.rows[0].occurrence,))
+
+
+class NullEqualJoinEncodingTest(unittest.TestCase):
+    def test_every_join_kind_matches_concrete_null_equal_bags(self):
+        for kind in KINDS:
+            snapshot = _snapshot(kind, unique=False)
+            tables = tuple(replace(table, columns=(Column("k", "Int64", True),)) for table in snapshot.tables)
+            node = replace(snapshot.plan.nodes[-1], keys=() if kind == "cross" else (JoinKey("L.k", "R.k", True),))
+            snapshot = replace(snapshot, tables=tables, plan=replace(snapshot.plan, nodes=snapshot.plan.nodes[:-1] + (node,)))
+            _, _, evaluator, _ = _evaluator(snapshot)
+            for left, right in product(product((ABSENT, None, 0, 1), repeat=2), repeat=2):
+                inputs = []
+                for name, values in (("L.k", left), ("R.k", right)):
+                    rows = tuple(Row(smt.bool_value(value is not ABSENT), {
+                        name: Value("Int64", smt.bool_value(value is None),
+                                    smt.int_value(value if type(value) is int else 0)),
+                    }) for value in values)
+                    inputs.append(Relation((Column(name, "Int64", True),), rows))
+                result = evaluator._join(node, *inputs, encoding="baseline")
+                actual = Counter()
+                for row in result.rows:
+                    if row.present == smt.FALSE:
+                        continue
+                    self.assertEqual(row.present, smt.TRUE)
+                    payload = []
+                    for column in result.columns:
+                        value = row.values[column.name]
+                        self.assertIn(value.is_null, (smt.TRUE, smt.FALSE))
+                        self.assertEqual(value.value.operation, "int")
+                        payload.append(None if value.is_null == smt.TRUE else value.value.atom)
+                    actual[tuple(payload)] += 1
+                self.assertEqual(actual, _reference(kind, left, right, equal_nulls=True),
+                                 (kind, left, right))
+
+    @unittest.skipUnless(SOLVER, "set RBO_Z3 to check symbolic encoding equivalence")
+    def test_null_equal_compact_join_preserves_nonnullable_unique_rhs(self):
+        for kind in ("inner", "left"):
+            snapshot = _snapshot(kind)
+            node = replace(snapshot.plan.nodes[-1], keys=(JoinKey("L.k", "R.k", True),))
+            snapshot = replace(snapshot, plan=replace(snapshot.plan, nodes=snapshot.plan.nodes[:-1] + (node,)))
+            script, scalar, evaluator, _ = _evaluator(snapshot)
+            left, right = (evaluator.node(name).certain() for name in ("L", "R"))
+            baseline = evaluator._join(node, left, right, encoding="baseline")
+            compact = evaluator._join(node, left, right, encoding="compact")
+            script.assert_term(smt.not_(bag_equal(baseline, compact, scalar)))
+            solved = subprocess.run([SOLVER, "-in"], input=script.render(), text=True,
+                                    capture_output=True, timeout=30, check=True)
+            self.assertEqual(solved.stdout.strip(), "unsat", solved.stderr)

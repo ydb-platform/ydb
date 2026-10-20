@@ -6,6 +6,7 @@ UNITTEST_FOR(ydb/core/kqp/opt/rbo)
 SRCS(
     native_snapshot_ut.cpp
     ../../../../host/kqp_translate.cpp
+    ../../../../host/kqp_transform.cpp
     ../../../../gateway/utils/scheme_helpers.cpp
 )
 
@@ -20,7 +21,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/providers/common/dq
     yql/essentials/providers/common/provider
-    yql/essentials/public/udf/service/stub
+    yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg
 )
 

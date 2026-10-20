@@ -1627,6 +1627,45 @@ class SnapshotTest(unittest.TestCase):
 
         self.assertEqual(snapshot.plan.subplans, ())
 
+    def test_private_scan_predicate_bindings_do_not_escape_the_scan(self):
+        value = minimal_snapshot()
+        scan = value["plan"]["nodes"][0]
+        scan["columns"] = [{"source": "flag", "output": "a.flag"}]
+        scan["predicate_columns"] = [{"source": "k", "output": "private.k"}]
+        scan["predicate"] = {"kind": "gte", "left": {"kind": "column", "column": "private.k"},
+                             "right": {"kind": "literal", "type": "Int64", "value": 0}}
+        value["plan"].update(nodes=[scan], root="scan", output=["a.flag"])
+        value["stage_graph"] = {
+            "root_stage": "source",
+            "stages": [{"id": "source", "nodes": ["scan"], "inputs": [],
+                        "outputs": [{"index": 0, "node": "scan"}], "source_storage": "column"}],
+            "edges": [], "assumptions": [],
+        }
+        parsed = parse_snapshot(value)
+        self.assertEqual(len(parsed.plan.nodes[0].predicate_columns), 1)
+        for field, new_value in (("source", "missing"), ("source", "flag"), ("output", "a.flag")):
+            broken = copy.deepcopy(value)
+            broken["plan"]["nodes"][0]["predicate_columns"][0][field] = new_value
+            with self.subTest(field=field, value=new_value), self.assertRaises(SnapshotError):
+                parse_snapshot(broken)
+        broken = copy.deepcopy(value)
+        broken["plan"]["nodes"][0]["predicate"] = None
+        with self.assertRaisesRegex(SnapshotError, "private scan inputs require"):
+            parse_snapshot(broken)
+        broken = copy.deepcopy(value)
+        broken["plan"]["output"] = ["private.k"]
+        with self.assertRaises(SnapshotError):
+            parse_snapshot(broken)
+        broken = copy.deepcopy(value)
+        broken["plan"]["nodes"].append({
+            "id": "leak", "op": "filter", "input": "scan", "predicate": scan["predicate"],
+        })
+        broken["plan"]["root"] = "leak"
+        broken["stage_graph"]["stages"][0]["nodes"].append("leak")
+        broken["stage_graph"]["stages"][0]["outputs"][0]["node"] = "leak"
+        with self.assertRaisesRegex(SnapshotError, "column 'private.k' is not available"):
+            parse_snapshot(broken)
+
     def test_pushed_scan_predicate_is_strict_typed_and_column_only(self):
         value = minimal_snapshot()
         value["plan"]["nodes"][0]["predicate"] = {
@@ -1650,6 +1689,13 @@ class SnapshotTest(unittest.TestCase):
         }
         snapshot = parse_snapshot(value)
         self.assertEqual(snapshot.plan.nodes[0].predicate.kind, "gte")
+
+        logical = copy.deepcopy(value)
+        logical["stage_graph"] = None
+        self.assertEqual(parse_snapshot(logical).plan.nodes[0].predicate.kind, "gte")
+        logical["plan"]["nodes"][0]["pushed_limit"] = {"kind": "literal", "type": "Uint64", "value": 1}
+        with self.assertRaisesRegex(SnapshotError, "pushed scan limit requires"):
+            parse_snapshot(logical)
 
         row_source = copy.deepcopy(value)
         row_source["plan"]["nodes"] = [row_source["plan"]["nodes"][0]]
@@ -1828,6 +1874,33 @@ class SnapshotTest(unittest.TestCase):
                     [(key.left, key.right) for key in join.keys],
                     [("shared.k", "shared.k")],
                 )
+
+    def test_null_equal_join_keys_are_explicit_and_strict(self):
+        for flag in (False, True):
+            value = shared_join_snapshot()
+            value["plan"]["nodes"][-1]["keys"][0]["equal_nulls"] = flag
+            parsed = parse_snapshot(value)
+            self.assertIs(parsed.plan.nodes[-1].keys[0].equal_nulls, flag)
+        self.assertIs(parse_snapshot(shared_join_snapshot()).plan.nodes[-1].keys[0].equal_nulls, False)
+        for bad in (0, 1, None, "true", []):
+            value = shared_join_snapshot()
+            value["plan"]["nodes"][-1]["keys"][0]["equal_nulls"] = bad
+            with self.assertRaisesRegex(SnapshotError, "expected a Boolean"):
+                parse_snapshot(value)
+        for scalar_type in (*INTEGER_TYPES, "Bool", "String", "Utf8", "Date", "Datetime", "Timestamp"):
+            value = shared_join_snapshot()
+            for table in value["schema"]["tables"]:
+                table["columns"][0]["type"] = scalar_type
+            value["plan"]["nodes"][-1]["keys"][0]["equal_nulls"] = True
+            parse_snapshot(value)
+        for left_type, right_type in (("Int64", "Int32"), ("String", "Utf8"),
+                                      ("Decimal(15,2)", "Decimal(15,2)")):
+            value = shared_join_snapshot()
+            for table, scalar_type in zip(value["schema"]["tables"], (left_type, right_type)):
+                table["columns"][0]["type"] = scalar_type
+            value["plan"]["nodes"][-1]["keys"][0]["equal_nulls"] = True
+            with self.assertRaisesRegex(SnapshotError, "identical reviewed scalar types"):
+                parse_snapshot(value)
 
     def test_shared_join_inputs_remain_distinct_stage_occurrences(self):
         value = shared_join_snapshot()
@@ -2580,15 +2653,17 @@ class SnapshotTest(unittest.TestCase):
             parse_snapshot(bad_phase)
 
     def test_direct_count_distinct_has_one_exact_logical_contract(self):
-        for input_type, grouped in product(
+        for input_type, grouped, nullable in product(
             sorted(INTEGER_TYPES),
             (False, True),
+            (False, True),
         ):
-            with self.subTest(input_type=input_type, grouped=grouped):
+            with self.subTest(input_type=input_type, grouped=grouped, nullable=nullable):
                 value = count_distinct_integer_snapshot(
                     input_type,
                     grouped,
                 )
+                value["schema"]["tables"][0]["columns"][0]["nullable"] = nullable
                 expected = (
                     [
                         ("a.flag", "Bool", True),
@@ -2644,10 +2719,6 @@ class SnapshotTest(unittest.TestCase):
         unwrapped["plan"]["nodes"][-1]["aggregates"][0]["unwrap"] = True
         mutations.append(("unwrap", unwrapped))
 
-        nullable_input = copy.deepcopy(value)
-        nullable_input["schema"]["tables"][0]["columns"][0]["nullable"] = True
-        mutations.append(("input nullability", nullable_input))
-
         wrong_input_type = copy.deepcopy(value)
         wrong_input_type["schema"]["tables"][0]["columns"][0]["type"] = "Date"
         mutations.append(("input type", wrong_input_type))
@@ -2668,7 +2739,7 @@ class SnapshotTest(unittest.TestCase):
                         "unwrap is modeled only for a keyless final"
                         if label == "unwrap"
                         else "direct distinct is modeled only for a "
-                        "phase-undefined count of a non-null fixed-width "
+                        "phase-undefined count of a fixed-width "
                         "integer or nullable canonical Decimal"
                     ),
                 ):
@@ -2678,7 +2749,7 @@ class SnapshotTest(unittest.TestCase):
         non_null_decimal["schema"]["tables"][0]["columns"][0]["nullable"] = False
         with self.assertRaisesRegex(
             SnapshotError,
-            "non-null fixed-width integer or nullable canonical Decimal",
+            "fixed-width integer or nullable canonical Decimal",
         ):
             parse_snapshot(non_null_decimal)
 
@@ -2697,9 +2768,14 @@ class SnapshotTest(unittest.TestCase):
         repeated_trait["output"] = "second"
         repeated["plan"]["nodes"][-1]["aggregates"].append(repeated_trait)
         repeated["plan"]["output"].append("second")
+        parse_snapshot(repeated)
+        third_trait = copy.deepcopy(repeated_trait)
+        third_trait["output"] = "third"
+        repeated["plan"]["nodes"][-1]["aggregates"].append(third_trait)
+        repeated["plan"]["output"].append("third")
         with self.assertRaisesRegex(
             SnapshotError,
-            "at most one direct distinct aggregate trait",
+            "at most two direct distinct aggregate traits",
         ):
             parse_snapshot(repeated)
 
@@ -3038,7 +3114,7 @@ class SnapshotTest(unittest.TestCase):
 
             unsupported = snapshot_value(
                 function,
-                input_type="Date",
+                input_type="Bool",
                 phase="undefined",
                 grouped=False,
                 input_nullable=False,
@@ -3047,7 +3123,7 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(function=function, mutation="unsupported input type"):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only Decimal and fixed-width integers are modeled",
+                    "only modeled ordered scalar types are supported",
                 ):
                     parse_snapshot(unsupported)
 
@@ -3226,27 +3302,20 @@ class SnapshotTest(unittest.TestCase):
 
         unstaged = decimal_avg_union_carrier_snapshot()
         unstaged["stage_graph"] = None
-        mutations.append((
-            "carrier without physical scope",
-            unstaged,
-            "indirect Decimal avg carrier requires a StageGraph",
-        ))
+        # A logical rewrite prefix already has the complete typed state tree.
+        parse_snapshot(unstaged)
 
         ordered_union = decimal_avg_union_carrier_snapshot()
         node(ordered_union, "first_union")["ordered"] = True
         mutations.append((
             "ordered union",
             ordered_union,
-            "unordered identity UnionAll carrier",
+            "unordered UnionAll carrier",
         ))
 
         ordered_project = decimal_avg_union_carrier_snapshot()
         node(ordered_project, "average_project")["ordered"] = True
-        mutations.append((
-            "ordered project",
-            ordered_project,
-            "carrier Project must be unordered",
-        ))
+        parse_snapshot(ordered_project)
 
         renamed = decimal_avg_union_carrier_snapshot()
         average_partial = node(renamed, "average_partial")
@@ -3271,10 +3340,17 @@ class SnapshotTest(unittest.TestCase):
         node(non_identity, "first_union")["inputs"][1][
             "columns"
         ] = ["_renamed_state"]
+        parse_snapshot(non_identity)
+
+        fanout = decimal_avg_union_carrier_snapshot()
+        first_union = node(fanout, "first_union")
+        first_union["output"].append("_state_copy")
+        for source in first_union["inputs"]:
+            source["columns"].append(source["columns"][0])
         mutations.append((
-            "renamed union input",
-            non_identity,
-            "unordered identity UnionAll carrier",
+            "one state mapped into two UnionAll outputs",
+            fanout,
+            "may not fan out its state",
         ))
 
         literal_pad = decimal_avg_union_carrier_snapshot()
@@ -3442,6 +3518,30 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(SnapshotError, message):
                     parse_snapshot(malformed)
+
+    def test_decimal_avg_union_binding_names_can_change_at_each_hop(self):
+        value = decimal_avg_union_carrier_snapshot()
+        nodes = {node["id"]: node for node in value["plan"]["nodes"]}
+        nodes["first_union"]["output"] = ["_union_one"]
+        nodes["second_union"]["inputs"][0]["columns"] = ["_union_one"]
+        nodes["second_union"]["output"] = ["_union_two"]
+        nodes["final"]["aggregates"][0]["input"] = "_union_two"
+        nodes["average_project"]["ordered"] = True
+        nodes["average_partial"]["aggregates"].append({
+            "input": "a.k", "function": "count", "output": "_other_count",
+            "type": "Uint64", "nullable": False, "distinct": False, "unwrap": False,
+        })
+        parse_snapshot(value)
+
+        # The state must remain payload even when the union gives it a fresh ID.
+        for output, edge_id in (("_union_one", "first_union"), ("_union_two", "second_union")):
+            routed = copy.deepcopy(value)
+            edge = next(edge for edge in routed["stage_graph"]["edges"] if edge["id"] == edge_id)
+            edge.pop("parallel")
+            edge.update(kind="hash_shuffle", keys=[output], hash_function="HashV1", use_spilling=False)
+            with self.subTest(output=output):
+                with self.assertRaisesRegex(SnapshotError, "only be transported as payload"):
+                    parse_snapshot(routed)
 
     def test_decimal_avg_carrier_is_stage_payload_only_at_every_hop(self):
         value = decimal_avg_union_carrier_snapshot()

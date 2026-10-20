@@ -1899,17 +1899,17 @@ class IntegralAverageCarrierTest(unittest.TestCase):
         script = smt.Script()
         encoder = Encoder(script)
 
-        first = encoder.integral_int64_average(
+        first = encoder.integral_integer_average(
             smt.int_value(2),
             smt.int_value(-3),
             smt.int_value(5),
         )
-        second = encoder.integral_int64_average(
+        second = encoder.integral_integer_average(
             smt.int_value(2),
             smt.int_value(-3),
             smt.int_value(5),
         )
-        reordered = encoder.integral_int64_average(
+        reordered = encoder.integral_integer_average(
             smt.int_value(2),
             smt.int_value(-3),
             smt.int_value(6),
@@ -1919,7 +1919,7 @@ class IntegralAverageCarrierTest(unittest.TestCase):
         self.assertEqual(first.operation, reordered.operation)
         self.assertNotEqual(first.arguments, reordered.arguments)
         self.assertEqual(
-            script.render().count('"integral_int64_average_at_most_two"'),
+            script.render().count('"integral_integer_average_at_most_two"'),
             1,
         )
 
@@ -2060,7 +2060,7 @@ class FloatingKernelTest(unittest.TestCase):
         cast = Expr("cast_double", args=(_literal("Int64", 2**53 + 1),), result_type="Double", nullable=False)
         self.assertEqual(_native(encoder.binary64, floating.Binary64(encoder.evaluate(cast, {}).value)), float(2**53 + 1))
         for count in (1, 2):
-            bits = encoder.integral_int64_average(smt.int_value(count), smt.int_value(-(2**63)), smt.int_value(2**63 - 1))
+            bits = encoder.integral_integer_average(smt.int_value(count), smt.int_value(-(2**63)), smt.int_value(2**63 - 1))
             expected = float(-(2**63)) if count == 1 else (float(-(2**63)) + float(2**63 - 1)) / 2.0
             self.assertEqual(_native(encoder.binary64, floating.Binary64(bits)), expected)
         self.assertIsNone(Encoder(smt.Script()).binary64)

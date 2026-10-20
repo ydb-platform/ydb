@@ -1712,18 +1712,25 @@ bool IsResultlessScalarAggregate(const IOperator& op) {
 
 void BypassEmptyOperators(TOpRoot& root, TExprContext& ctx) {
     root.ComputeParents();
-    TVector<TIntrusivePtr<IOperator>*> pending{&root.MutableChild(0)};
+    struct TPendingSlot {
+        TIntrusivePtr<IOperator>* Owner;
+        bool AggregateTemplate;
+    };
+    TVector<TPendingSlot> pending{{&root.MutableChild(0), false}};
     for (const auto& [id, subplan] : root.PlanProps.Subplans) {
-        pending.push_back(&root.PlanProps.Subplans.MutablePlan(id));
+        pending.push_back({&root.PlanProps.Subplans.MutablePlan(id), false});
     }
     absl::flat_hash_set<TReplicate*> visited;
     while (!pending.empty()) {
-        auto& owner = *pending.back();
+        const auto [slot, aggregateTemplate] = pending.back();
+        auto& owner = *slot;
         pending.pop_back();
         // No borrowed traversal survives deletion. Descendant slots are queued
         // only after their owner is final.
         while (true) {
-            if (IsResultlessScalarAggregate(*owner)) {
+            // GroupingSets consumes an Aggregate definition, not its result
+            // stream. Keep that template even when all its traits are pruned.
+            if (!aggregateTemplate && IsResultlessScalarAggregate(*owner)) {
                 owner = MakeIntrusive<TOpEmptySource>(owner->Pos);
             } else if (IsEmptyPassthrough(*owner)) {
                 auto input = CastOperator<IUnaryOperator>(*owner).GetInput();
@@ -1735,11 +1742,11 @@ void BypassEmptyOperators(TOpRoot& root, TExprContext& ctx) {
         if (owner->Kind == EOperator::Replicate) {
             auto& hub = CastOperator<TOpReplicate>(*owner).GetReplicate();
             if (visited.insert(&hub).second) {
-                pending.push_back(&hub.GetInput());
+                pending.push_back({&hub.GetInput(), false});
             }
         } else {
             for (size_t child = 0; child < owner->GetChildCount(); ++child) {
-                pending.push_back(&owner->MutableChild(child));
+                pending.push_back({&owner->MutableChild(child), owner->Kind == EOperator::GroupingSets});
             }
         }
     }

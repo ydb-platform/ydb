@@ -169,12 +169,34 @@ class SequentialLocalizationTest(unittest.TestCase):
         return [
             {
                 "ordinal": ordinal,
-                "kind": kinds[ordinal - 1],
+                "kind": kinds[(ordinal - 1) % len(kinds)],
                 "stage": "rewrite",
-                "name": names[ordinal - 1],
+                "name": names[(ordinal - 1) % len(names)],
             }
             for ordinal in range(1, count + 1)
         ]
+
+    def test_capture_failure_retains_diagnostic_tail_and_complete_artifacts(self):
+        for stderr in ("", "initial snapshot is unsupported: Void count carrier",
+                       "prefix log\n" * 1000 + "Cannot execute shared Limit with channel spilling disabled"):
+            with self.subTest(stderr_length=len(stderr)), tempfile.TemporaryDirectory() as temporary:
+                config = self.config(Path(temporary) / "artifacts")
+
+                def failed_capture(arguments, timeout):
+                    del timeout
+                    return subprocess.CompletedProcess(arguments, 2, "capture output", stderr)
+
+                with self.assertRaises(LocalizationError) as raised:
+                    localize(config, failed_capture)
+                message = str(raised.exception)
+                self.assertIn("ordinal 11 with exit code 2", message)
+                self.assertLess(len(message), 4300)
+                if stderr:
+                    self.assertIn(stderr.strip()[-4096:], message)
+                else:
+                    self.assertNotIn("stderr tail", message)
+                self.assertEqual((config.artifacts / "completion/capture.stderr").read_text(), stderr)
+                self.assertEqual((config.artifacts / "completion/capture.stdout").read_text(), "capture output")
 
     def test_verified_final_does_not_inspect_transient_prefixes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -336,6 +358,112 @@ class SequentialLocalizationTest(unittest.TestCase):
         self.assertEqual(result["status"], "LOCALIZED_FAILURES")
         self.assertEqual(result["completeness"], "COMPLETE")
         self.assertFalse(result["gaps"])
+
+    def test_adjacent_mode_finds_cancelled_changes_without_coarse_proofs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "artifacts"
+            config = replace(self.config(root), strategy="adjacent", all_steps=True)
+            harness = Harness(self.events(4), [], "VERIFIED_BOUNDED", states=[0, 1, 0, 2, 0, 0])
+            result = localize(config, harness)
+            for owner in [*result["boundaries"], *result["comparisons"]]:
+                for artifact in owner["artifacts"].values():
+                    self.assertEqual(digest(root / artifact["path"]), artifact["sha256"])
+        self.assertEqual(harness.capture_ordinals, [11, 1, 2, 3, 4])
+        self.assertEqual(harness.verifier_pairs, [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)])
+        self.assertEqual([finding["event"]["ordinal"] for finding in result["findings"]], [1, 2, 3, 4])
+        self.assertEqual(result["strategy"], "adjacent")
+        self.assertEqual(result["events_checked"], 4)
+        self.assertEqual(result["status"], "LOCALIZED_FAILURES")
+        self.assertEqual(result["completeness"], "COMPLETE")
+
+    def test_adjacent_mode_retains_gaps_and_detects_final_suffix(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = replace(self.config(Path(temporary) / "artifacts"), strategy="adjacent")
+            harness = Harness(self.events(4), [], "COUNTEREXAMPLE", states=[0, 1, 2, 3, 3, 4],
+                              export_gaps={2}, pair_verdicts={(3, 4): "UNKNOWN"})
+            result = localize(config, harness)
+        self.assertEqual(result["findings"][0]["event"]["ordinal"], 1)
+        self.assertEqual(result["findings"][1], {"comparison": "4:5", "status": "COUNTEREXAMPLE",
+                                                 "region": "GLOBAL_SUFFIX_AFTER_TRANSFORMATIONS"})
+        self.assertEqual(result["completeness"], "GAPS")
+        self.assertEqual([gap["comparison"] for gap in result["gaps"]], ["1:2", "2:3", "3:4"])
+        self.assertEqual(harness.verifier_pairs, [(0, 1), (3, 4), (4, 5)])
+
+    def test_adjacent_mode_keeps_snapshot_and_observation_guards(self):
+        for mutation in ("initial", "sequence", "cached", "observation"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"), strategy="adjacent", all_steps=True)
+                harness = Harness(self.events(4), [], "VERIFIED_BOUNDED", states=[0] * 6,
+                                  mutate_initial_at=1 if mutation == "initial" else None,
+                                  mutate_sequence_at=1 if mutation == "sequence" else None,
+                                  mutate_cached=mutation == "cached",
+                                  verdict_overrides={"observation_snapshot_sha256": "0" * 64}
+                                  if mutation == "observation" else None)
+                with self.assertRaisesRegex(LocalizationError, "snapshot changed|sequence changed|observation"):
+                    localize(config, harness)
+
+    def test_adjacent_mode_handles_empty_traces_and_explicit_all_steps(self):
+        for count in (0, 1, 8):
+            for all_steps in (False, True):
+                with self.subTest(count=count, all_steps=all_steps), tempfile.TemporaryDirectory() as temporary:
+                    config = replace(self.config(Path(temporary) / "artifacts"), strategy="adjacent", all_steps=all_steps)
+                    harness = Harness(self.events(count), [], "VERIFIED_BOUNDED", states=[0] * (count + 2))
+                    result = localize(config, harness)
+                    self.assertEqual(result["status"], "STEPS_VERIFIED_BOUNDED" if all_steps else "FINAL_VERIFIED_BOUNDED")
+                    expected = count + 2 if all_steps and count else 1
+                    self.assertEqual(len(harness.verifier_diagnostics), expected)
+
+    def test_adjacent_audit_continues_when_final_snapshot_cannot_be_exported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            config = replace(self.config(Path(temporary) / "artifacts"), strategy="adjacent", all_steps=True)
+            harness = Harness(self.events(4), [], "UNSUPPORTED", states=[0, 0, 1, 1, 1, 1],
+                              final_export_unsupported=True)
+            result = localize(config, harness)
+        self.assertEqual(harness.verifier_pairs, [(0, 1), (1, 2), (2, 3), (3, 4)])
+        self.assertEqual(result["events_checked"], 4)
+        self.assertEqual(result["findings"][0]["event"]["ordinal"], 2)
+        self.assertEqual(result["completeness"], "GAPS")
+        self.assertEqual([gap["comparison"] for gap in result["gaps"]], ["0:5", "4:5"])
+
+    def test_complete_step_proofs_do_not_hide_a_contradictory_final_failure(self):
+        for strategy in ("adjacent", "divide-and-conquer"):
+            for status in ("COUNTEREXAMPLE", "SCHEMA_MISMATCH"):
+                with self.subTest(strategy=strategy, status=status), tempfile.TemporaryDirectory() as temporary:
+                    config = replace(self.config(Path(temporary) / "artifacts"), strategy=strategy)
+                    harness = Harness(self.events(), [], status, states=[0, 0, 0, 0])
+                    result = localize(config, harness)
+                    self.assertEqual(result["status"], "LOCALIZATION_INCONSISTENT")
+                    self.assertEqual(result["inconsistencies"][0]["comparison"], "0:3")
+                    self.assertEqual(result["inconsistencies"][0]["verified_chain"], ["0:1", "1:2", "2:3"])
+                    self.assertEqual(result["findings"], [])
+                    self.assertEqual(result["completeness"], "COMPLETE")
+
+    def test_interval_consistency_requires_every_adjacent_proof(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"),
+                                 strategy="divide-and-conquer", all_steps=True)
+                verdicts = {(1, 3): "COUNTEREXAMPLE"}
+                if missing:
+                    verdicts[1, 2] = "UNKNOWN"
+                harness = Harness(self.events(), [], "VERIFIED_BOUNDED", states=[0, 0, 0, 0],
+                                  pair_verdicts=verdicts)
+                result = localize(config, harness)
+                self.assertEqual(result["status"], "LOCALIZATION_INCOMPLETE" if missing else "LOCALIZATION_INCONSISTENT")
+                self.assertEqual([item["comparison"] for item in result["inconsistencies"]],
+                                 [] if missing else ["1:3"])
+
+    def test_adjacent_cli_retains_explicit_audit_and_existing_default(self):
+        from ydb.core.kqp.opt.rbo.verification.tools.cli import parser
+
+        arguments = ["--verifier", "verify", "--solver", "z3", "--artifacts", "out"]
+        options = parser().parse_args(arguments + ["--strategy", "adjacent", "--all-steps", "--", "capture"])
+        self.assertEqual(options.strategy, "adjacent")
+        self.assertTrue(options.all_steps)
+        self.assertEqual(options.capture_command, ["--", "capture"])
+        default = parser().parse_args(arguments + ["--", "capture"])
+        self.assertEqual(default.strategy, "divide-and-conquer")
+        self.assertFalse(default.all_steps)
 
     def test_all_steps_is_explicit_and_detects_cancelled_final_failure(self):
         for all_steps in (False, True):

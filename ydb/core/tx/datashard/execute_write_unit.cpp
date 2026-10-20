@@ -498,17 +498,21 @@ public:
 
                 TSmallVec<TRawTypeValue> key;
 
-                if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+                const bool operationNeedsRowState =
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT ||
                     operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT_INCREMENT ||
+                    (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                        && validatedOperation.GetDefaultFilledColumnCount() != 0) ||
                     (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        && userDb.GetCollectAffectedRows()) ||
-                    userDb.NeedToReadBeforeWrite(fullTableId))
-                {
+                        && (userDb.GetCollectAffectedRows()
+                            || userDb.GetLockMode() == TDataShardUserDb::ELockMode::OptimisticSnapshotIsolation));
+
+                if (operationNeedsRowState || userDb.NeedToReadBeforeWrite(fullTableId)) {
                     for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
                         FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
-                        userDb.PrechargeRow(fullTableId, key);
+                        userDb.PrechargeRow(fullTableId, key, operationNeedsRowState);
                     }
                 }
             }

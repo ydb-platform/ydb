@@ -92,6 +92,16 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         if (itTable.second.SpecialTableType != 0) {
             delta.SetSpecialTableType(table, itTable.second.SpecialTableType);
         }
+
+        // Tiers refer to rooms, the policy refers to tiers and to a column
+        for (const auto& it : itTable.second.Tiers) {
+            const auto& tier = it.second;
+            delta.SetTier(table, it.first, tier.Room, tier.Codec, tier.Cache, tier.CacheMode);
+        }
+
+        if (itTable.second.TieringPolicy) {
+            delta.SetTieringPolicy(table, *itTable.second.TieringPolicy);
+        }
     }
 
     delta.SetRedo(Redo.Annex);
@@ -421,6 +431,51 @@ TAlter& TAlter::SetSpecialTableType(ui32 tableId, ui32 type)
     delta.SetDeltaType(TAlterRecord::SetTable);
     delta.SetTableId(tableId);
     delta.SetSpecialTableType(type);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetTier(ui32 tableId, ui32 tierId, ui32 room, ECodec codec, ECache cache, ECacheMode cacheMode)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    auto* tier = delta.AddSetTiers();
+    tier->SetTierId(tierId);
+    tier->SetRoomId(room);
+    tier->SetCodec(ui32(codec));
+    tier->SetCache(ui32(cache));
+    tier->SetCacheMode(ui32(cacheMode));
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::DropTier(ui32 tableId, ui32 tierId)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.AddDropTiers(tierId);
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    TieringPolicyToProto(policy, *delta.MutableTieringPolicy());
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::ResetTieringPolicy(ui32 tableId)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetResetTieringPolicy(true);
 
     return ApplyLastRecord();
 }

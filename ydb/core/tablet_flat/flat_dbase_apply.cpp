@@ -1,4 +1,5 @@
 #include "flat_dbase_apply.h"
+#include "flat_tier_predicate.h"
 #include "util_fmt_abort.h"
 #include "bloom_filter_defaults.h"
 
@@ -211,6 +212,62 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
             changes |= ChangeTableSetting(table, tableInfo.SpecialTableType, type);
         }
 
+        for (const auto& tierProto : delta.GetSetTiers()) {
+            const ui32 tierId = tierProto.GetTierId();
+            Y_ENSURE(tierId != TTierPredicate::DefaultTierId && tierId != Max<ui32>(), "Invalid tier id " << tierId);
+            Y_ENSURE(tableInfo.Rooms.contains(tierProto.GetRoomId()),
+                "Room " << tierProto.GetRoomId() << " of tier " << tierId << " does not exist");
+
+            TScheme::TTier tier;
+            tier.Room = tierProto.GetRoomId();
+            tier.Codec = ECodec(tierProto.GetCodec());
+            tier.Cache = ECache(tierProto.GetCache());
+            tier.CacheMode = ECacheMode(tierProto.GetCacheMode());
+            Y_ENSURE(ui32(tier.Codec) <= 1, "Invalid page encoding code value");
+            Y_ENSURE(ui32(tier.Cache) <= 2, "Invalid pages cache policy value");
+            Y_ENSURE(ui32(tier.CacheMode) <= 1, "Invalid cache mode value");
+
+            if (!tableInfo.Tiers.contains(tierId)) {
+                PreserveTable(table);
+                changes |= true;
+            }
+            changes |= ChangeTableSetting(table, tableInfo.Tiers[tierId], tier);
+        }
+
+        if (delta.HasTieringPolicy()) {
+            std::optional<TTieringPolicy> policy = TieringPolicyFromProto(delta.GetTieringPolicy());
+            TTierPredicate::Validate(*policy);
+
+            const auto* column = tableInfo.Columns.FindPtr(policy->ColumnTag);
+            Y_ENSURE(column, "Tiering column " << policy->ColumnTag << " does not exist");
+            TTierPredicate::ValidateColumn(*policy, column->PType);
+
+            for (const auto& rule : policy->Rules) {
+                Y_ENSURE(tableInfo.Tiers.contains(rule.TierId),
+                    "Tiering policy refers to tier " << rule.TierId << " that does not exist");
+            }
+
+            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, policy);
+        }
+
+        if (delta.GetResetTieringPolicy()) {
+            changes |= ChangeTableSetting(table, tableInfo.TieringPolicy, std::optional<TTieringPolicy>());
+        }
+
+        for (const ui32 tierId : delta.GetDropTiers()) {
+            if (!tableInfo.Tiers.contains(tierId)) {
+                continue;
+            }
+            if (tableInfo.TieringPolicy) {
+                for (const auto& rule : tableInfo.TieringPolicy->Rules) {
+                    Y_ENSURE(rule.TierId != tierId, "Cannot drop tier " << tierId << " used by the tiering policy");
+                }
+            }
+            PreserveTable(table);
+            tableInfo.Tiers.erase(tierId);
+            changes |= true;
+        }
+
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
         if (delta.HasExecutorCacheSize())
             changes |= SetExecutorCacheSize(delta.GetExecutorCacheSize());
@@ -404,6 +461,8 @@ bool TSchemeModifier::DropColumn(ui32 tid, ui32 id)
     auto *table = Table(tid);
     auto it = table->Columns.find(id);
     if (it != table->Columns.end()) {
+        Y_ENSURE(!table->TieringPolicy || table->TieringPolicy->ColumnTag != id,
+            "Cannot drop column " << id << " used by the tiering policy");
         PreserveTable(tid);
         table->ColumnNames.erase(it->second.Name);
         table->Columns.erase(it);

@@ -3,6 +3,7 @@
 #include "bloom_filter_defaults.h"
 #include "flat_table_column.h"
 #include "flat_page_iface.h"
+#include "flat_tier_policy.h"
 #include "util_basics.h"
 
 #include <ydb/core/base/localdb.h>
@@ -56,6 +57,24 @@ public:
         ECacheMode CacheMode = ECacheMode::Regular;
     };
 
+    /* Placement of a non-default tier. Tier 0 is not stored: it is placed by
+        column families as usual. A tier refers to a room for its channels,
+        just like a family does. An external tier (e.g. S3) will keep its
+        metadata pages in the room and add a reference to the external storage
+        for data pages, without secrets (resolved at runtime).
+     */
+    struct TTier {
+        using ECodec = NPage::ECodec;
+        using ECacheMode = NPage::ECacheMode;
+
+        ui32 Room = DefaultRoom;
+        ECache Cache = ECache::None;
+        ECodec Codec = ECodec::Plain;
+        ECacheMode CacheMode = ECacheMode::Regular;
+
+        bool operator==(const TTier&) const = default;
+    };
+
     using TColumn = NTable::TColumn;
 
     struct TTableSchema {
@@ -96,6 +115,9 @@ public:
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
         ui32 SpecialTableType = 0; // maps to NKikimrSchemeOp::ESpecialTableType
+
+        THashMap<ui32, TTier> Tiers; // non-default tiers by tier id
+        std::optional<TTieringPolicy> TieringPolicy;
 
         // When true this table has an in-memory caching enabled that has not been processed yet
         mutable bool PendingCacheEnable = false; // has unprocessed NPage::ECache change
@@ -262,6 +284,10 @@ public:
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
     TAlter& SetSpecialTableType(ui32 tableId, ui32 type);
+    TAlter& SetTier(ui32 tableId, ui32 tierId, ui32 room, ECodec codec, ECache cache, ECacheMode cacheMode);
+    TAlter& DropTier(ui32 tableId, ui32 tierId);
+    TAlter& SetTieringPolicy(ui32 tableId, const TTieringPolicy& policy);
+    TAlter& ResetTieringPolicy(ui32 tableId);
     TAlter& SetRewrite();
 
     TAutoPtr<TSchemeChanges> Flush();

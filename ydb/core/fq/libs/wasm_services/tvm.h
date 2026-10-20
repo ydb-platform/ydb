@@ -1,5 +1,7 @@
 #pragma once
 
+#include "credentials.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 
@@ -14,25 +16,10 @@ struct TTvmCredentials {
     TString Secret;
 };
 
-constexpr ui64 MaxTvmTicketBytes = 16384;
-
-enum class ETvmTicketStatus {
-    Ready,
-    Failed
-};
-
-struct TTvmTicketResult {
-    ETvmTicketStatus Status = ETvmTicketStatus::Failed;
-    TString Ticket;
-};
-
-// Nonblocking acquisition. Cancel drops this waiter, not other callers waiting
-// for the same ticket. Destruction must also detach the waiter without blocking.
-class ITvmTicketRequest {
-public:
-    virtual ~ITvmTicketRequest() = default;
-    virtual void Cancel() noexcept = 0;
-};
+constexpr ui64 MaxTvmTicketBytes = MaxCredentialBytes;
+using ETvmTicketStatus = ECredentialStatus;
+using TTvmTicketResult = TCredentialResult;
+using ITvmTicketRequest = ICredentialRequest;
 
 // Host-owned and shared between transforms. Implementations must be thread-safe;
 // Request/Cancel must not perform blocking I/O on the calling thread.

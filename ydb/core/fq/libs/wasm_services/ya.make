@@ -2,7 +2,7 @@ LIBRARY()
 
 YQL_LAST_ABI_VERSION()
 
-SRCS(tracing.cpp metrics.cpp transport.cpp readiness.cpp grpc_readiness.cpp tvm.cpp)
+SRCS(auth_cache.cpp auth_module.cpp tracing.cpp metrics.cpp transport.cpp readiness.cpp grpc_readiness.cpp tvm.cpp)
 
 PEERDIR(
     library/cpp/time_provider

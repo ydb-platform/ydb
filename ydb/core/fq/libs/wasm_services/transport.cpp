@@ -333,6 +333,7 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
     struct TRequest {
         // Destroy the lease last: credits remain charged through physical cleanup.
         TLease Lease;
+        std::shared_ptr<TCallTrace> Trace, TicketTrace;
         THandle Handle;
         EOperationKind Kind;
         ui32 Binding = 0;
@@ -369,7 +370,13 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
 
         // Serialize logical completion with cancellation. Native owners retain
         // the lease independently until their buffers and callbacks are drained.
-        void CompleteMetricsLocked(EMetricOutcome outcome, std::optional<ui64> payload = {}) {
+        void CompleteMetricsLocked(EMetricOutcome outcome, std::optional<ui64> payload = {}, int code = -1, int error = -1) {
+            if (Trace) {
+                Trace->Complete(outcome, payload, code, error);
+            }
+            if (TicketTrace) {
+                TicketTrace->Complete(outcome);
+            }
             if (Lease.Metrics) {
                 Lease.Metrics->Complete(outcome, payload);
             }
@@ -378,9 +385,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             }
         }
 
-        void CompleteMetrics(EMetricOutcome outcome, std::optional<ui64> payload = {}) {
+        void CompleteMetrics(EMetricOutcome outcome, std::optional<ui64> payload = {}, int code = -1, int error = -1) {
             std::lock_guard lock(MetricsMutex);
-            CompleteMetricsLocked(outcome, payload);
+            CompleteMetricsLocked(outcome, payload, code, error);
         }
 
         bool StartTicketMetrics(const std::shared_ptr<TRequestMetrics>& metrics) {
@@ -393,6 +400,13 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             if (metrics) {
                 TicketMetrics = metrics->Start("auth.tvm", EMetricKind::Internal);
             }
+            if (Trace) {
+                TicketTrace = TCallTrace::Start(Trace->Context(), "External call");
+                if (TicketTrace) {
+                    TicketTrace->Attribute("call_alias", metrics ? metrics->Get("auth.tvm", EMetricKind::Internal)->Alias : TString("auth.tvm"));
+                    TicketTrace->Attribute("protocol", TString("internal"));
+                }
+            }
             return true;
         }
 
@@ -403,6 +417,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
 
         void CompleteTicketMetrics(EMetricOutcome outcome) {
             std::lock_guard lock(MetricsMutex);
+            if (TicketTrace) {
+                TicketTrace->Complete(outcome);
+            }
             if (TicketMetrics) {
                 TicketMetrics->Complete(outcome);
             }
@@ -448,6 +465,7 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
 
     std::shared_ptr<TTransportExecutor::TImpl> Executor;
     TTransportLimits Limits;
+    TTraceContext TraceContext;   // protected by Mutex
     TVector<TResolvedBinding> Bindings;
     std::shared_ptr<TAccounting> Accounting = std::make_shared<TAccounting>();
     std::mutex Mutex;
@@ -545,6 +563,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             submit = !Requests.empty() && !std::exchange(Scheduled, true);
             if (submit) {
                 for (auto& [_, request] : Requests) {
+                    if (request->Trace) {
+                        request->Trace->Queued();
+                    }
                     if (request->Lease.Metrics) {
                         request->Lease.Metrics->Queued();
                     }
@@ -592,6 +613,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             std::lock_guard lock(Mutex);
             Scheduled = false;   // a concurrent notification must enqueue another turn
             for (auto& [_, request] : Requests) {
+                if (request->Trace) {
+                    request->Trace->Dispatched();
+                }
                 if (request->Lease.Metrics) {
                     request->Lease.Metrics->Dispatched();
                 }
@@ -706,7 +730,8 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                              : status == EOperationStatus::Cancelled ? EMetricOutcome::Cancelled
                              : status == EOperationStatus::Ready     ? EMetricOutcome::Success
                                                                      : EMetricOutcome::Error;
-        request->CompleteMetrics(outcome, request->Kind == EOperationKind::Timer ? std::nullopt : std::optional<ui64>(body.size()));
+        request->CompleteMetrics(outcome, request->Kind == EOperationKind::Timer ? std::nullopt : std::optional<ui64>(body.size()),
+            code || request->GrpcDone ? code : -1, int(error));
         if (request->TicketRequest) {
             request->TicketRequest->Cancel();
             request->TicketRequest.reset();
@@ -733,6 +758,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                             metric->Queued();
                         }
                         if (auto request = pending.lock(); request && !request->Finished && !request->Cancelled) {
+                            if (request->TicketTrace) {
+                                request->TicketTrace->Queued();
+                            }
                             if (result.Ticket.size() > MaxTvmTicketBytes) {
                                 result = { .Status = ETvmTicketStatus::Failed };
                             }
@@ -748,6 +776,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                         }
                     });
                 Y_ENSURE(request->TicketRequest, "Missing TVM ticket request");
+            }
+            if (request->TicketTrace) {
+                request->TicketTrace->Dispatched();
             }
             if (auto metric = request->GetTicketMetrics()) {
                 metric->Dispatched();
@@ -1032,6 +1063,11 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
     }
 
     TCancel Start(THandle handle, EOperationKind kind, TString bytes, TInstant deadline, TCompletion completion) {
+        TTraceContext traceContext;
+        {
+            std::lock_guard lock(Mutex);
+            traceContext = TraceContext;
+        }
         auto request = std::make_shared<TRequest>();
         request->Handle = handle;
         request->Kind = kind;
@@ -1074,24 +1110,53 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                                      ? sizeof(TRequestMetrics::TOperation) *
                                            (1 + (kind != EOperationKind::Timer && bool(Bindings[request->Binding].Config.TvmProvider)))
                                      : 0;
-        const auto reserve = metricBytes + 2 * (payload.size() + bindingBytes) + 3 * Limits.MaxPayloadBytes + sizeof(TResponseHeader) +
-                             sizeof(TRequest) + sizeof(TGrpcReadiness::TTag) + MaxHeaderBytes + certificateBytes;
+        // Bounded request/auth span state, including protobuf attributes. Prefer
+        // dropping optional tracing over rejecting an otherwise admissible RPC.
+        const ui64 traceBytes = traceContext.Parent && kind != EOperationKind::Timer ? 8192 : 0;
+        bool traceReserved = traceBytes != 0;
+        ui64 reserve = traceBytes + metricBytes + 2 * (payload.size() + bindingBytes) + 3 * Limits.MaxPayloadBytes + sizeof(TResponseHeader) +
+                       sizeof(TRequest) + sizeof(TGrpcReadiness::TTag) + MaxHeaderBytes + certificateBytes;
         {
             std::lock_guard lock(Mutex);
             Y_ENSURE(!Closing && !Requests.contains(handle), "Transport is closed or operation handle is duplicated");
             {
                 std::lock_guard accountingLock(Accounting->Mutex);
-                std::optional<EAdmissionReason> rejected;
-                if (deadline <= TInstant::Now()) {
-                    rejected = EAdmissionReason::Deadline;
-                } else if (Accounting->Stats.Operations >= Limits.MaxOperations) {
-                    rejected = EAdmissionReason::LocalOperations;
-                } else if (reserve > Limits.MaxReservedBytes - Accounting->Stats.ReservedBytes) {
-                    rejected = EAdmissionReason::LocalBytes;
-                } else {
-                    rejected = Executor->Reserve(reserve);
+                const auto tryReserve = [&]() -> std::optional<EAdmissionReason> {
+                    if (deadline <= TInstant::Now()) {
+                        return EAdmissionReason::Deadline;
+                    }
+                    if (Accounting->Stats.Operations >= Limits.MaxOperations) {
+                        return EAdmissionReason::LocalOperations;
+                    }
+                    if (reserve > Limits.MaxReservedBytes - Accounting->Stats.ReservedBytes) {
+                        return EAdmissionReason::LocalBytes;
+                    }
+                    return Executor->Reserve(reserve);
+                };
+                auto rejected = tryReserve();
+                if (traceReserved && (rejected == EAdmissionReason::LocalBytes || rejected == EAdmissionReason::SharedBytes)) {
+                    // A failed Reserve has not acquired any credits.
+                    reserve -= traceBytes;
+                    traceReserved = false;
+                    if (traceContext.Budget) {
+                        ++traceContext.Budget->Dropped;
+                    }
+                    rejected = tryReserve();
                 }
                 if (rejected) {
+                    if (auto trace = TCallTrace::Start(traceContext, "External admission rejected")) {
+                        static constexpr const char* reasons[] = { "local_operations", "local_bytes", "shared_operations", "shared_bytes",
+                            "closed", "deadline" };
+                        trace->Attribute("reason", TString(reasons[static_cast<size_t>(*rejected)]));
+                        const auto normalized = MonitoringAlias(alias);
+                        const TString label = normalized.empty() ? TString("unlabeled") : TString(normalized.data(), normalized.size());
+                        trace->Attribute("call_alias",
+                            Executor->Metrics ? Executor->Metrics->Get(TStringBuf(alias.data(), alias.size()), metricKind)->Alias : label);
+                        trace->Attribute("protocol", TString(metricKind == EMetricKind::Http   ? "http"
+                                                             : metricKind == EMetricKind::Grpc ? "grpc"
+                                                                                               : "internal"));
+                        trace->Complete(*rejected == EAdmissionReason::Deadline ? EMetricOutcome::Timeout : EMetricOutcome::Error);
+                    }
                     if (Executor->Metrics) {
                         Executor->Metrics->Reject(Executor->Metrics->Get(TStringBuf(alias.data(), alias.size()), metricKind), *rejected);
                     }
@@ -1103,6 +1168,17 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                     request->Lease.Bytes = reserve;
                     ++Accounting->Stats.Operations;
                     Accounting->Stats.ReservedBytes += reserve;
+                    if (traceReserved) {
+                        request->Trace = TCallTrace::Start(traceContext, "External call");
+                        if (request->Trace) {
+                            auto normalized = MonitoringAlias(alias);
+                            const TString label = normalized.empty() ? TString("unlabeled") : TString(normalized.data(), normalized.size());
+                            request->Trace->Attribute("call_alias",
+                                Executor->Metrics ? Executor->Metrics->Get(TStringBuf(alias.data(), alias.size()), metricKind)->Alias : label);
+                            request->Trace->Attribute("protocol", TString(metricKind == EMetricKind::Http ? "http" : "grpc"));
+                            request->Trace->Attribute("request_payload_bytes", i64(payload.size()));
+                        }
+                    }
                     if (Executor->Metrics) {
                         request->Lease.Metrics = Executor->Metrics->Start(TStringBuf(alias.data(), alias.size()), metricKind, reserve,
                             kind == EOperationKind::Timer ? std::nullopt : std::optional<ui64>(payload.size()));
@@ -1133,6 +1209,11 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
         };
     }
 };
+
+void TTransport::SetTraceContext(TTraceContext context) {
+    std::lock_guard lock(Impl_->Mutex);
+    Impl_->TraceContext = std::move(context);
+}
 
 TTransport::TTransport(TVector<TBinding> bindings, std::shared_ptr<TTransportExecutor> executor, TTransportLimits limits)
     : Impl_(std::make_shared<TImpl>(std::move(bindings), std::move(executor), limits))

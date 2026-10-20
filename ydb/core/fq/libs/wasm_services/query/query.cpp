@@ -103,6 +103,7 @@ struct TPreparedConfig {
     TServiceManifest Manifest;
     ui32 MaxRows = 65536;
     ui64 MaxBufferedBytes = 64 << 20;
+    ui32 MaxTraceSpans = 4096;
     ui32 BatchRows = 1;
     ui32 BatchBytes = MaxServiceBatchBytes;
     TDuration Timeout = TDuration::Seconds(30);
@@ -213,6 +214,20 @@ public:
         , Alloc(std::move(args.Alloc))
         , HolderFactory(args.HolderFactory)
     {
+        TraceContext = TTraceContext::Create(std::move(args.TraceId), NActors::TActivationContext::ActorSystem(), Config->MaxTraceSpans);
+        TransformTrace = TCallTrace::Start(TraceContext, "WASM transform");
+        if (TransformTrace) {
+            TransformTrace->Attribute("module", Config->Manifest.Name.substr(0, 128));
+            TransformTrace->Attribute("service_method", Method.Name.substr(0, 128));
+            TransformTrace->Attribute("service_method_id", i64(Method.Id));
+            TransformTrace->Attribute("task_id", i64(args.TaskId));
+            for (const char* key : { "fq.query_id", "fq.job_id", "fq.restart_count" }) {
+                if (auto it = args.TaskParams.find(key); it != args.TaskParams.end()) {
+                    TransformTrace->Attribute(key, it->second.substr(0, 128));
+                }
+            }
+            TraceContext = TransformTrace->Context();
+        }
         Stats.Level = args.StatsLevel;
         ValidateMethod(Method, Config->BatchBytes, Config->BatchRows, Config->MaxBufferedBytes);
         const auto& desc = args.OutputDesc.GetTransform();
@@ -411,6 +426,10 @@ private:
                     }
                     return;
                 }
+                if (InvocationTrace) {
+                    InvocationTrace->Complete(EMetricOutcome::Success);
+                }
+                InvocationTrace.reset();
             }
             while (!Results.empty()) {
                 auto guard = Guard(*Alloc);
@@ -444,13 +463,24 @@ private:
                 const TServiceRequest header{ ServiceMagic, ServiceVersion, Method.Id, 0, Binding.Protocol == EProtocol::Http ? 0u : 1u,
                     ActiveCount, Config->BatchBytes, Config->BatchRows > 1 ? 1u : 0u };
                 const auto bytes = Encode(header, { rows.data(), rows.size() });
-                Call = Runtime->Start(TStringBuf(bytes.data(), bytes.size()), TInstant::Now() + Config->Timeout);
+                InvocationTrace = TCallTrace::Start(TraceContext, "WASM invocation");
+                if (InvocationTrace) {
+                    InvocationTrace->Attribute("invocation_id", i64(++InvocationSequence));
+                    InvocationTrace->Attribute("batch_rows", i64(ActiveCount));
+                }
+                Transport->SetTraceContext(InvocationTrace ? InvocationTrace->Context() : TTraceContext{});
+                InvocationDeadline = TInstant::Now() + Config->Timeout;
+                Call = Runtime->Start(TStringBuf(bytes.data(), bytes.size()), InvocationDeadline);
                 Schedule(Config->Timeout, new NActors::TEvents::TEvWakeup(Call));
                 Send(SelfId(), new TEvReady);
             } else if (Finished && !Acknowledged) {
                 auto guard = Guard(*Alloc);
                 Output->Finish();
                 Acknowledged = true;
+                if (TransformTrace) {
+                    TransformTrace->Attribute("detail_spans_dropped", i64(TraceContext.Budget->Dropped.load()));
+                    TransformTrace->Complete(EMetricOutcome::Success);
+                }
                 Callback->OnAsyncOutputFinished(Index);
             }
         } catch (...) {
@@ -462,6 +492,13 @@ private:
         if (std::exchange(Failed, true)) {
             return;
         }
+        const auto outcome = InvocationTrace && TInstant::Now() >= InvocationDeadline ? EMetricOutcome::Timeout : EMetricOutcome::Error;
+        if (InvocationTrace) {
+            InvocationTrace->Complete(outcome);
+        }
+        if (TransformTrace) {
+            TransformTrace->Complete(outcome);
+        }
         Runtime.reset();
         Pending.clear();
         Results.clear();
@@ -472,6 +509,13 @@ private:
     }
 
     void Cleanup() {
+        const auto outcome = InvocationTrace && TInstant::Now() >= InvocationDeadline ? EMetricOutcome::Timeout : EMetricOutcome::Cancelled;
+        if (InvocationTrace) {
+            InvocationTrace->Complete(outcome);
+        }
+        if (TransformTrace) {
+            TransformTrace->Complete(outcome);
+        }
         Runtime.reset();
         Transport.reset();
         auto guard = Guard(*Alloc);
@@ -491,6 +535,10 @@ private:
     ui32 MaxRows, DispatchRows, ActiveCount = 0;
     TDqAsyncStats Stats;
     TDeque<TString> Pending, Results;
+    TTraceContext TraceContext;
+    std::shared_ptr<TCallTrace> TransformTrace, InvocationTrace;
+    ui64 InvocationSequence = 0;
+    TInstant InvocationDeadline;
     NAsync::THandle Call = 0;
     bool Finished = false, Acknowledged = false, Failed = false;
     std::shared_ptr<TTransport> Transport;
@@ -582,6 +630,9 @@ void RegisterServiceTransforms(TDqAsyncIoFactory& factory, const NConfig::TWasmS
             Y_ENSURE(NJson::ReadJsonTree(settings.GetInvokeUrl(), &invocation, true) && invocation.IsMap(), "Invalid WASM service invocation");
             const auto module = source->Load(invocation["module"].GetStringSafe());
             auto prepared = std::make_shared<TPreparedConfig>();
+            if (config.GetMaxTraceSpansPerTransform()) {
+                prepared->MaxTraceSpans = config.GetMaxTraceSpansPerTransform();
+            }
             prepared->Module = module->ModuleBytecode;
             prepared->Libraries = module->Libraries;
             prepared->Manifest = *module->Manifest.Services;

@@ -8,6 +8,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/testlib/test_client.h>
 
+#include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -16,7 +17,10 @@
 
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <util/stream/file.h>
+#include <util/string/hex.h>
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NKikimrRun;
@@ -24,6 +28,51 @@ using namespace NKikimrRun;
 namespace NFqRun {
 
 namespace {
+
+class TLocalTraceCollector: public NActors::TActorBootstrapped<TLocalTraceCollector> {
+public:
+    using TSpans = TVector<opentelemetry::proto::trace::v1::Span>;
+
+    struct TEvSnapshot: NActors::TEventLocal<TEvSnapshot, NActors::TEvents::ES_PRIVATE * 65536 + 77> {
+        NThreading::TPromise<TSpans> Promise;
+
+        explicit TEvSnapshot(NThreading::TPromise<TSpans> promise)
+            : Promise(std::move(promise))
+        {
+        }
+    };
+
+    void Bootstrap() {
+        Become(&TLocalTraceCollector::StateWork);
+    }
+
+    void Handle(NWilson::TEvWilson::TPtr& ev) {
+        const auto bytes = ev->Get()->Span.ByteSizeLong();
+        if (Spans.size() >= 10000 || bytes > (16 << 20) - Bytes) {
+            ++Dropped;
+            return;
+        }
+        Bytes += bytes;
+        Spans.push_back(std::move(ev->Get()->Span));
+    }
+
+    void Handle(TEvSnapshot::TPtr& ev) {
+        if (Dropped) {
+            Cerr << "Tracing: dropped " << Dropped << " spans at local capture limit" << Endl;
+        }
+        ev->Get()->Promise.SetValue(std::move(Spans));
+        Bytes = 0;
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(NWilson::TEvWilson, Handle);
+        hFunc(TEvSnapshot, Handle);
+    );
+
+private:
+    TSpans Spans;
+    size_t Bytes = 0, Dropped = 0;
+};
 
 TRequestResult GetStatus(const NYql::TIssues& issues) {
     return TRequestResult(issues ? Ydb::StatusIds::BAD_REQUEST : Ydb::StatusIds::SUCCESS, issues);
@@ -58,6 +107,9 @@ private:
 
     NFq::NConfig::TConfig GetFqProxyConfig(ui32 grpcPort) const {
         auto fqConfig = Settings.AppConfig.GetFederatedQueryConfig();
+        if (Settings.TraceFile) {
+            fqConfig.MutableWasmServices()->SetTraceSamplePerMillion(1000000);
+        }
 
         fqConfig.MutableControlPlaneStorage()->AddSuperUsers(BUILTIN_ACL_ROOT);
         fqConfig.MutablePrivateProxy()->AddGrantedUsers(BUILTIN_ACL_ROOT);
@@ -210,6 +262,10 @@ public:
 
         InitializeYqlLogger();
         InitializeServer(grpcPort);
+        if (Settings.TraceFile) {
+            TraceCollector = GetRuntime()->Register(new TLocalTraceCollector);
+            GetRuntime()->RegisterService(NWilson::MakeWilsonUploaderId(), TraceCollector);
+        }
         InitializeFqProxy(grpcPort);
         InitializeTenantNodes();
 
@@ -220,6 +276,30 @@ public:
     }
 
     ~TImpl() {
+        if (TraceCollector) {
+            try {
+                auto promise = NThreading::NewPromise<TLocalTraceCollector::TSpans>();
+                GetRuntime()->GetActorSystem(0)->Send(TraceCollector, new TLocalTraceCollector::TEvSnapshot(promise));
+                Y_ENSURE(promise.GetFuture().Wait(TDuration::Seconds(5)), "trace snapshot timed out");
+                TFileOutput out(Settings.TraceFile);
+                for (auto span : promise.GetFuture().GetValueSync()) {
+                    span.set_trace_id(HexEncode(span.trace_id()));
+                    span.set_span_id(HexEncode(span.span_id()));
+                    span.set_parent_span_id(HexEncode(span.parent_span_id()));
+                    if (span.name() == "SQL execution") {
+                        for (const auto& attr : span.attributes()) {
+                            if (attr.key() == "query_id") {
+                                Cout << "Query " << attr.value().string_value() << " trace_id=" << span.trace_id() << Endl;
+                            }
+                        }
+                    }
+                    NProtobufJson::Proto2Json(span, out, NProtobufJson::TProto2JsonConfig());
+                    out << '\n';
+                }
+            } catch (const std::exception& e) {
+                Cerr << "Tracing export failed: " << e.what() << Endl;
+            }
+        }
         if (YqSharedResources) {
             YqSharedResources->Stop();
         }
@@ -380,6 +460,7 @@ private:
     NFq::IYqSharedResources::TPtr YqSharedResources;
     TPortManager PortManager;
 
+    NActors::TActorId TraceCollector;
     std::optional<NActors::TActorId> AsyncQueryRunnerActorId;
 };
 

@@ -1,6 +1,9 @@
 """Real ydbd/UDF Store integration; no local module paths in FQ configuration."""
 import json
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
 
 import grpc
 import pytest
@@ -38,13 +41,66 @@ def wait_for_store_storage(endpoint, database):
                     time.sleep(0.5)
 
 
+def trace_attrs(span):
+    return {a.key: a.value.string_value for a in span.attributes}
+
+
 @pytest.fixture
-def store_server():
+def trace_collector():
+    class Collector:
+        def __init__(self):
+            self.spans = []
+            self.lock = threading.Lock()
+
+        def export(self, request, context):
+            with self.lock:
+                for resource in request.resource_spans:
+                    for scope in resource.scope_spans:
+                        self.spans.extend(scope.spans)
+            return b''
+
+        def query_spans(self, query_id):
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                with self.lock:
+                    roots = [s for s in self.spans if s.name == 'SQL execution' and trace_attrs(s).get('query_id') == query_id]
+                    if roots:
+                        spans = [s for s in self.spans if s.trace_id == roots[-1].trace_id]
+                        if any(s.name == 'External call' for s in spans):
+                            return roots[-1], spans
+                time.sleep(0.05)
+            pytest.fail('SQL trace did not reach OTLP collector: ' + query_id)
+
+    collector = Collector()
+    server = grpc.server(ThreadPoolExecutor(max_workers=2))
+    server.add_generic_rpc_handlers((grpc.method_handlers_generic_handler(
+        'opentelemetry.proto.collector.trace.v1.TraceService', {
+            'Export': grpc.unary_unary_rpc_method_handler(
+                collector.export,
+                request_deserializer=trace_service_pb2.ExportTraceServiceRequest.FromString,
+                response_serializer=lambda response: response,
+            ),
+        }),))
+    collector.server = server
+    collector.port = server.add_insecure_port('127.0.0.1:0')
+    server.start()
+    try:
+        yield collector
+    finally:
+        server.stop(0).wait()
+
+
+@pytest.fixture
+def store_server(trace_collector):
     ports = KikimrPortManagerPortAllocator()
     config = KikimrConfigGenerator(
         port_allocator=ports, extra_feature_flags=['enable_wasm_compile_controller'],
         extra_grpc_services=['udf', 'yq', 'yq_private'],
     )
+    config.yaml_config['tracing_config'] = {
+        'backend': {'opentelemetry': {'collector_url': f'grpc://127.0.0.1:{trace_collector.port}', 'service_name': 'wasm-store-test'}},
+        'uploader': {'max_batch_accumulation_milliseconds': 10, 'max_exported_spans_per_second': 10000, 'span_export_timeout_seconds': 5},
+    }
     config.yaml_config['udf_store_config'] = {'enabled': True, 'enable_wasm_udf': True, 'kv_storage_media': 'hdd'}
     cluster = KiKiMR(configurator=config)
     cluster.start()
@@ -56,7 +112,7 @@ def store_server():
         # node receives this configuration, keeping FQ and its Store together.
         settings = config.yaml_config['federated_query_config']
         settings.update(enabled=True, enable_task_counters=True)
-        settings['wasm_services'] = {'enabled': True, 'call_timeout_ms': 180000}  # UDF_STORE is the default.
+        settings['wasm_services'] = {'enabled': True, 'call_timeout_ms': 180000, 'trace_sample_per_million': 1000000}  # UDF_STORE is the default.
         settings['common']['keep_internal_errors'] = True
         settings['control_plane_storage'].update(
             available_connection=['EXTERNAL_SERVICE'], super_users=['root@builtin'],
@@ -116,14 +172,14 @@ def await_profile(client, alias):
             assert rows[0].items[0].uint64_value == 42
             assert rows[0].items[1].text_value == 'Ada'
             assert rows[0].items[2].uint32_value == 97
-            return
+            return query_id
         issues = str(description.issue)
         assert time.monotonic() < deadline, issues
         assert 'Unknown' in issues or 'not loaded' in issues or 'not found' in issues, issues
         time.sleep(0.5)
 
 
-def test_service_only_store_module_http_and_grpc(store_server, services):
+def test_service_only_store_module_http_and_grpc(store_server, services, trace_collector):
     endpoint, database, monitoring_port = store_server
 
     class DatabaseClient(FederatedQueryClient):
@@ -148,8 +204,27 @@ def test_service_only_store_module_http_and_grpc(store_server, services):
             upload(stub, metadata, invalid_manifest, body, StatusIds.BAD_REQUEST)
             upload(stub, metadata, manifest, body)
             wait_for_module(stub, metadata, manifest['module_name'])
-            await_profile(client, 'profiles_http')
-            await_profile(client, 'profiles_grpc')
+            query_ids = [await_profile(client, 'profiles_http'), await_profile(client, 'profiles_grpc')]
+            trace_ids = set()
+            for query_id, protocol in zip(query_ids, ('http', 'grpc')):
+                root, spans = trace_collector.query_spans(query_id)
+                trace_ids.add(root.trace_id)
+                by_id = {s.span_id: s for s in spans}
+                calls = [s for s in spans if s.name == 'External call']
+                assert len(calls) == 1, spans
+                call = calls[0]
+                assert trace_attrs(call)['call_alias'] == 'profile.lookup'
+                assert trace_attrs(call)['protocol'] == protocol
+                assert trace_attrs(call)['outcome'] == 'success'
+                for name in ('WASM invocation', 'WASM transform', 'ComputeActor', 'SQL execution'):
+                    call = by_id[call.parent_span_id]
+                    assert call.name == name, spans
+                assert call.span_id == root.span_id
+                assert not any('host-secret' in str(s) for s in spans)
+            assert len(trace_ids) == 2
+            # The remaining Store replacement/pending-call checks run with an
+            # unavailable exporter. Query progress must not depend on tracing.
+            trace_collector.server.stop(0).wait()
             # ydbd Store modules use the same instrumented transport as fqrun.
             from urllib.request import urlopen
             with urlopen(f'http://localhost:{monitoring_port}/counters/counters=yq/json', timeout=10) as response:

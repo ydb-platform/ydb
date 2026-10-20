@@ -10,6 +10,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/colorizer
+    library/cpp/protobuf/json
+    ydb/library/actors/wilson
     library/cpp/protobuf/interop
     library/cpp/testing/unittest
     ydb/core/fq/libs/config/protos

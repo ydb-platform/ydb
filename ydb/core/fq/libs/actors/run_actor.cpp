@@ -22,6 +22,7 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
+#include <ydb/core/fq/libs/wasm_services/tracing.h>
 #include <ydb/core/kqp/script_executions/common/kqp_script_execution_compression.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -361,6 +362,17 @@ public:
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
 
     void Bootstrap() {
+        const auto& wasm = Params.Config.GetWasmServices();
+        if (wasm.GetEnabled() && Params.RandomProvider->GenRand64() % 1000000 < std::min<ui32>(wasm.GetTraceSamplePerMillion(), 1000000)) {
+            ExecutionTrace = NWasmServices::TCallTrace::Start(NWasmServices::TTraceContext::Create(NWilson::TTraceId::NewTraceId(15, 64),
+                                                                  NActors::TActivationContext::ActorSystem(), 1), "SQL execution");
+            ExecutionTrace->Attribute("query_id", Params.QueryId);
+            ExecutionTrace->Attribute("job_id", Params.JobId);
+            ExecutionTrace->Attribute("restart_count", i64(Params.RestartCount));
+            ExecutionTrace->Attribute("execution_id", ExecutionTrace->Context().Parent->GetHexTraceIdLowerCase());
+            YDB_LOG_INFO("SQL execution trace", {"queryId", Params.QueryId},
+                {"traceId", ExecutionTrace->Context().Parent->GetHexTraceIdLowerCase()});
+        }
         YDB_LOG_DEBUG("Start run actor. Compute",
             {"queryId", Params.QueryId},
             {"state", FederatedQuery::QueryMeta::ComputeStatus_Name(Params.Status)});
@@ -1716,6 +1728,10 @@ private:
         *request.MutableColumns() = dqGraphParams.GetColumns();
         auto& commonTaskParams = *request.MutableCommonTaskParams();
         commonTaskParams["fq.job_id"] = Params.JobId;
+        commonTaskParams["fq.query_id"] = Params.QueryId;
+        if (ExecutionTrace) {
+            commonTaskParams["dq.wilson.traceparent"] = ExecutionTrace->Context().Parent->ToTraceresponseHeader();
+        }
         commonTaskParams["fq.restart_count"] = ToString(Params.RestartCount);
         request.SetStatsMode(StatsMode);
 
@@ -1906,6 +1922,13 @@ private:
         YDB_LOG_DEBUG("Is about to finish query with status",
             {"queryId", Params.QueryId},
             {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
+        if (ExecutionTrace) {
+            const auto outcome = status == FederatedQuery::QueryMeta::COMPLETED          ? NWasmServices::EMetricOutcome::Success
+                                 : status == FederatedQuery::QueryMeta::ABORTED_BY_USER  ? NWasmServices::EMetricOutcome::Cancelled
+                                 : Params.Deadline && TInstant::Now() >= Params.Deadline ? NWasmServices::EMetricOutcome::Timeout
+                                                                                         : NWasmServices::EMetricOutcome::Error;
+            ExecutionTrace->Complete(outcome);
+        }
         Finishing = true;
         FinalQueryStatus = status;
 
@@ -2408,6 +2431,7 @@ private:
     TActorId FetcherId;
     TActorId ProgramRunnerId;
     TRunActorParams Params;
+    std::shared_ptr<NWasmServices::TCallTrace> ExecutionTrace;
     THashMap<TString, FederatedQuery::Connection> YqConnections;
 
     TProgramPtr Program;

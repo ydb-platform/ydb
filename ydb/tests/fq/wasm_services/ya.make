@@ -4,6 +4,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.in
 
 PEERDIR(
     ydb/public/api/grpc
+    contrib/proto/opentelemetry
     contrib/python/grpcio
     contrib/python/ydb/py3
     library/python/testing/yatest_common

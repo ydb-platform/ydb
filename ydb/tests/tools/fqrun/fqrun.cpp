@@ -353,6 +353,12 @@ protected:
             .RequiredArgument("file")
             .StoreResult(&SecretsFile);
 
+        options
+            .AddLongOption(
+                "trace-file", "Capture sampled SQL and external-call Wilson spans as JSON lines (enables sampling for all executions)")
+            .RequiredArgument("file")
+            .StoreResult(&RunnerOptions.FqSettings.TraceFile);
+
         options.AddLongOption("tvm-mock", "Return a fake TVM service ticket for local mock services")
             .NoArgument()
             .SetFlag(&RunnerOptions.FqSettings.MockTvm);

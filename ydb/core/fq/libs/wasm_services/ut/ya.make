@@ -4,7 +4,7 @@ YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
 
-SRCS(metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
+SRCS(tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
 
 PEERDIR(
     library/cpp/http/server
@@ -21,6 +21,7 @@ PEERDIR(
     ydb/core/fq/libs/wasm_services/ut/protos
     ydb/core/security/certificate_check/test_utils
     ydb/library/actors/http
+    ydb/library/actors/wilson/test_util
     ydb/library/actors/testlib
     ydb/library/services
     ydb/udfs/wasm/profile/contract

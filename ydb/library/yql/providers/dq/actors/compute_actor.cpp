@@ -37,6 +37,16 @@ IActor* CreateComputeActor(
     memoryLimits.MinMemFreeSize = options.MkqlMinAllocSize;
 
     auto computeRuntimeSettings = NDq::TComputeRuntimeSettings();
+    Yql::DqsProto::TTaskMeta taskMeta;
+    task->GetMeta().UnpackTo(&taskMeta);
+    if (auto it = taskMeta.GetTaskParams().find("dq.wilson.traceparent"); it != taskMeta.GetTaskParams().end()) {
+        // Task metadata crosses the worker allocation boundary. Invalid context
+        // disables tracing; it must never fail execution.
+        auto trace = NWilson::TTraceId::FromTraceparentHeader(it->second);
+        if (trace) {
+            computeRuntimeSettings.TraceId = std::make_shared<const NWilson::TTraceId>(std::move(trace));
+        }
+    }
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = (statsMode != NDqProto::DQ_STATS_MODE_UNSPECIFIED) ? statsMode : NDqProto::DQ_STATS_MODE_FULL;
     computeRuntimeSettings.AsyncInputPushLimit = 64_MB;

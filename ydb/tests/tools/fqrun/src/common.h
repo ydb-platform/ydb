@@ -50,6 +50,7 @@ struct TFqSetupSettings: public NKikimrRun::TServerSettings {
     bool MockTvm = false;
     ui32 MockTvmDelayMs = 100;
     bool EnableTraceOpt = false;
+    TString TraceFile;
 
     bool EnableQuotas = false;
     std::optional<TExternalDatabase> RateLimiterDatabase;

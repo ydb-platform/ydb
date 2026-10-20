@@ -146,6 +146,24 @@ Y_UNIT_TEST_SUITE(TTierPredicatePg) {
         UNIT_ASSERT(!timestamp.Matches("1969-12-22 00:00:00.000001", {}, now, offset));
     }
 
+    Y_UNIT_TEST(Infinities) {
+        // Postgres -infinity is older than any threshold, infinity is newer
+        TPgCase date(DATEOID);
+        UNIT_ASSERT(date.Matches("-infinity"));
+        UNIT_ASSERT(!date.Matches("infinity"));
+
+        TPgCase timestamp(TIMESTAMPOID);
+        UNIT_ASSERT(timestamp.Matches("-infinity"));
+        UNIT_ASSERT(!timestamp.Matches("infinity"));
+
+        // A threshold below the timestamp range still matches -infinity only
+        // (TDuration::Max) avoids the Max(x, y) macro from Postgres headers
+        const TInstant zero = TInstant::Zero();
+        const TDuration maxOffset = (TDuration::Max)();
+        UNIT_ASSERT(timestamp.Matches("-infinity", {}, zero, maxOffset));
+        UNIT_ASSERT(!timestamp.Matches("4713-01-01 00:00:00 BC", {}, zero, maxOffset));
+    }
+
     Y_UNIT_TEST(AroundPostgresEpoch) {
         // Postgres stores dates and timestamps relative to 2000-01-01
         const TInstant now = TInstant::Seconds(946684800) + TDuration::Days(1);

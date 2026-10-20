@@ -7,6 +7,7 @@
 #include <util/system/byteorder.h>
 #include <util/system/unaligned_mem.h>
 
+#include <algorithm>
 #include <type_traits>
 
 namespace NKikimr {
@@ -272,22 +273,22 @@ namespace {
                 break;
             case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
+                    // Postgres stores -infinity and infinity as the minimum and the maximum
+                    // of the type, so a threshold below the type range saturates to the
+                    // minimum (only -infinity matches) instead of matching nothing
                     case EPgKind::Date: {
                         // A date denotes the start of its day
                         const i64 days = FloorDiv(thresholdUs, MicrosPerDay) - PgEpochDays;
                         if (days > Max<i32>()) {
                             result.Kind = EKind::AlwaysMatch;
-                        } else if (days < Min<i32>()) {
-                            result.Kind = EKind::NeverMatch;
                         } else {
-                            setSigned(days);
+                            setSigned(std::max<i64>(days, Min<i32>()));
                         }
                         break;
                     }
                     case EPgKind::Timestamp:
                         if (thresholdUs < Min<i64>() + PgEpochMicros) {
-                            // Every value is after such a threshold
-                            result.Kind = EKind::NeverMatch;
+                            setSigned(Min<i64>());
                         } else {
                             setSigned(thresholdUs - PgEpochMicros);
                         }

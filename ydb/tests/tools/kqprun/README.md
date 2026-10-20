@@ -168,3 +168,10 @@ server initialization, including when Store is enabled through app config.
 This limit does not apply to local-module mode. Persistent tenants are restored
 before validation: reopening `--storage-path` with `--wasm-service-store` does
 not require repeating `--dedicated`/`--shared`. Module revisions remain unpinned.
+
+SQL `WITH ..., BATCH_SIZE=8` overrides `WasmServices.MaxBatchRows` for an
+individual external function invocation. The config value is a default, not a
+cap: a config default of one still permits SQL batching. Valid SQL values are
+constant Int32 values in 1..64; one selects scalar mode. Omitting the SQL option
+preserves the configured default. Manifest and byte limits may reduce actual
+batch cardinality. This is shared with fqrun and ydbd, for local and Store modules.

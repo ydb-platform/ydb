@@ -13,6 +13,8 @@ message TWasmServicesConfig {
     uint32 MaxBufferedRows = 4;
     uint32 CallTimeoutMs = 5;
     // Zero/one retains the single-row service protocol; 2..64 enables batching.
+    // Default batch size when SQL BATCH_SIZE is absent, not a cap on SQL.
+    // Zero selects the built-in default (one row).
     uint32 MaxBatchRows = 6;
     // Application request/response and guest result byte cap (default 32768).
     uint32 MaxBatchBytes = 7;

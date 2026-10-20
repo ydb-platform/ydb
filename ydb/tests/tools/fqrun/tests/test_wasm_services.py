@@ -671,3 +671,86 @@ def test_streaming_mode_with_checkpoints(service, tmp_path, protocol, execution,
     assert runner.wait(process) == 0, runner.output()
     assert len(service.requests) == 2
     assert all(request[0] == protocol for request in service.requests)
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('default_rows,sql_rows', [(1, 8), (1, 64), (64, 1), (8, None), (0, None)])
+def test_sql_batch_size(service, tmp_path, protocol, default_rows, sql_rows):
+    runner = Runner(tmp_path, service, default_rows)
+    alias = 'profiles_' + protocol
+    ids = list(range(1000, 1200))
+    sql = profile_query(alias, ids, batch_size=sql_rows)
+    assert runner.wait(runner.start(alias, sql)) == 0, runner.output()
+    assert [int(row['id']) for row in runner.rows()] == ids
+    effective = (default_rows or 1) if sql_rows is None else sql_rows
+    batches = [request for _, request, _ in service.requests]
+    assert batches
+    if effective == 1:
+        assert all(not isinstance(request, tuple) for request in batches), batches
+    else:
+        assert all(isinstance(request, tuple) and 1 <= len(request) <= effective for request in batches), batches
+        assert any(len(request) > 1 for request in batches), batches
+    received = [value for request in batches for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == ids
+
+
+@pytest.mark.parametrize('sql_rows', ['0', '-1', '65', '2147483648', '"eight"'])
+def test_sql_batch_size_invalid(service, tmp_path, sql_rows):
+    protocol, default_rows = 'http', 1
+    runner = Runner(tmp_path, service, default_rows)
+    alias = 'profiles_' + protocol
+    sql = profile_query(alias, batch_size=sql_rows)
+    assert runner.wait(runner.start(alias, sql)) != 0, runner.output()
+    assert 'BATCH_SIZE' in runner.output() or 'Int32' in runner.output(), runner.output()
+    assert not service.requests
+
+
+@pytest.mark.parametrize('sql_rows', [1, 8])
+def test_sql_batch_size_scalar_manifest(service, tmp_path, sql_rows):
+    runner = Runner(tmp_path, service, 64)
+    alias = 'profiles_http'
+    manifest = tmp_path / 'scalar.manifest.json'
+    original = yatest.common.source_path('ydb/udfs/wasm/profile/manifest.json')
+    manifest.write_text(Path(original).read_text())
+    runner.config.write_text(runner.config.read_text().replace(original, str(manifest)))
+    document = json.loads(manifest.read_text())
+    method = document['service_methods'][0]
+    method.update(batch=False, max_batch_rows=1)
+    manifest.write_text(json.dumps(document))
+    sql = profile_query(alias, batch_size=sql_rows)
+    code = runner.wait(runner.start(alias, sql))
+    if sql_rows == 1:
+        assert code == 0, runner.output()
+        assert len(runner.rows()) == 2
+        assert all(not isinstance(request, tuple) for _, request, _ in service.requests)
+    else:
+        assert code != 0, runner.output()
+        assert 'does not support batching' in runner.output()
+        assert not service.requests
+
+
+def test_sql_batch_size_per_invocation(service, tmp_path):
+    runner = Runner(tmp_path, service, 64)
+    alias = 'profiles_http'
+    scalar = profile_query(alias, range(1000, 1016), batch_size=1)
+    batch = profile_query(alias, range(2000, 2016), batch_size='$batch_size')
+    # Keep both calls in one execution, sharing module/method/connection.
+    scalar = scalar[:scalar.index('SELECT id, name, score FROM $profiles')]
+    scalar = scalar.replace('$input', '$scalar_input').replace('$profiles', '$scalar_profiles')
+    batch = batch[:batch.index('SELECT id, name, score FROM $profiles')]
+    sql = '$batch_size=8;' + scalar + batch + 'SELECT * FROM $scalar_profiles UNION ALL SELECT * FROM $profiles;'
+    assert runner.wait(runner.start(alias, sql)) == 0, runner.output()
+    received = []
+    batched = False
+    for _, request, _ in service.requests:
+        if isinstance(request, tuple):
+            assert 1 <= len(request) <= 8 and all(2000 <= value < 2016 for value in request)
+            batched |= len(request) > 1
+            received.extend(request)
+        else:
+            assert 1000 <= request < 1016
+            received.append(request)
+    assert batched
+    expected = list(range(1000, 1016)) + list(range(2000, 2016))
+    assert sorted(received) == expected
+    assert sorted(int(row['id']) for row in runner.rows()) == expected

@@ -135,8 +135,12 @@ running query's snapshot. For streaming, also allow `EXTERNAL_SERVICE` in an
 explicit `AvailableStreamingConnection` list; an empty list inherits
 `AvailableConnection` according to the existing FQ configuration rule.
 
-`MaxBatchRows` zero/one selects scalar mode; 2..64 requests batching. Selected
-methods must declare batch support. Cardinality is capped by the method limit,
+`BATCH_SIZE` in SQL overrides the host default `MaxBatchRows` for that invocation.
+It must be a constant Int32 in 1..64: one selects scalar mode, larger values
+request batching and require method batch support. Without the SQL setting,
+`MaxBatchRows` is used (zero means the built-in default of one). The configuration
+is a default, not a cap: SQL `BATCH_SIZE=64` works with `MaxBatchRows: 1`.
+Different invocations of the same connection may select different batch sizes. Cardinality is capped by the method limit,
 its maximum input/output row sizes and `MaxBatchBytes` (default 32768, hard cap
 32768). The byte limit must fit a request/result header plus one declared row.
 For Profile the minimum remains 304 bytes. No timer waits for a full batch;

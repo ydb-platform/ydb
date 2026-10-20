@@ -373,12 +373,15 @@ The SQL uses the current prototype interface:
 $input = SELECT 42ul AS id;
 $profiles = PROCESS $input USING EXTERNAL FUNCTION('WASM_PROFILE', 'Profile')
   WITH CONNECTION='profiles_http', INPUT_TYPE=Struct<id:Uint64>,
-       OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>;
+       OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>, BATCH_SIZE=8;
 SELECT * FROM $profiles;
 ```
 
-`MaxBatchRows: 1` selects scalar calls. Larger values request batching supported
-by the method; DQ can deliver smaller batches. `CallTimeoutMs` bounds an adapter
+`BATCH_SIZE=1` in the `WITH` clause selects scalar calls; `BATCH_SIZE=64`
+requests batches of up to 64 rows. The value must be a constant Int32 in 1..64.
+When omitted, `MaxBatchRows` supplies the default (zero also means one), not a
+cap on SQL. The method must support batching for values above one; its row and
+byte limits and DQ delivery can produce smaller batches. `CallTimeoutMs` bounds an adapter
 call. SIGINT/SIGTERM requests FQ query cancellation and waits up to 30 seconds
 for terminal status before local runtime shutdown. The default FQ control
 heartbeat can take 15 seconds to deliver cancellation. Interrupted runs exit

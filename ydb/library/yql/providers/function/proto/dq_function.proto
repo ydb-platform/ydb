@@ -5,4 +5,6 @@ package NYql.NProto;
 
 message TFunctionTransform {
   string InvokeUrl = 1;
+  // Absent in legacy plans: use the executor's configured default.
+  optional uint32 BatchSize = 2;
 }

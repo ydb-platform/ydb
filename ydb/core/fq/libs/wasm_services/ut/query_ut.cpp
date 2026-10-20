@@ -3,6 +3,106 @@
 using namespace NFq::NWasmServices::NTestHelpers;
 
 Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
+    Y_UNIT_TEST(QueryBatchSizeCheckpointAndRestore200Rows) {
+        THttpMock http;
+        TGrpcMock grpc;
+        TVector<ui64> delivered;
+        size_t requestIndex = 0;
+        for (ui32 epoch = 0; epoch < 2; ++epoch) {
+            TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, 1, 0, 65536, 0, true, false, false, {}, 8);
+            if (epoch) {
+                env.Setup.LoadSink({}, NYql::NDq::CreateCheckpoint(1));
+            }
+            TVector<ui64> ids;
+            for (ui64 i = 1000 + epoch * 100; i < 1100 + epoch * 100; ++i) {
+                ids.push_back(i);
+            }
+            env.Output->BlockAfterRows = 1;
+            env.Start(ids, false);
+            env.Setup.AsyncOutputWrite([](auto&) {
+                return NKikimr::NMiniKQL::TUnboxedValueBatch{};
+            }, NYql::NDq::CreateCheckpoint(epoch + 1));
+            for (size_t offset = 0; offset < ids.size(); offset += 8) {
+                TVector<ui64> batch(ids.begin() + offset, ids.begin() + std::min(offset + 8, ids.size()));
+                const auto request = http.State->Wait(requestIndex);
+                NJson::TJsonValue payload;
+                UNIT_ASSERT(NJson::ReadJsonTree(request->Payload, &payload));
+                const auto& actual = payload["ids"].GetArraySafe();
+                UNIT_ASSERT_VALUES_EQUAL(actual.size(), batch.size());
+                for (size_t i = 0; i < batch.size(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(actual[i].GetUIntegerSafe(), batch[i]);
+                }
+                http.State->Reply(requestIndex++, HttpBatchPayload(batch), 200);
+                if (!offset) {
+                    Eventually([&] {
+                        return env.Output->Blocked.load();
+                    });
+                    {
+                        std::lock_guard lock(env.Output->Mutex);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Output->Events, (TVector<TString>{ TStringBuilder() << "row:" << ids.front() }));
+                    }
+                    env.Output->BlockAfterRows = 0;
+                    env.Output->Blocked = false;
+                    env.Setup.Execute([](auto& actor) {
+                        actor.DqAsyncOutput->OnOutputConsumerReady();
+                    });
+                }
+            }
+            Eventually([&] {
+                std::lock_guard lock(env.Output->Mutex);
+                return env.Output->Events.size() == 101;
+            });
+            {
+                std::lock_guard lock(env.Output->Mutex);
+                UNIT_ASSERT_VALUES_EQUAL(env.Output->Events.back(), TStringBuilder() << "checkpoint:" << epoch + 1);
+                for (const auto& row : env.Output->Rows) {
+                    delivered.push_back(row.Id);
+                }
+            }
+            env.Setup.Execute([&](auto& actor) {
+                actor.DqAsyncOutput->CommitState(NYql::NDq::CreateCheckpoint(epoch + 1));
+            });
+            env.Setup.Terminate();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(delivered.size(), 200);
+        for (size_t i = 0; i < delivered.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(delivered[i], 1000 + i);
+        }
+    }
+
+    Y_UNIT_TEST(QueryBatchSizeOverridesDefaultAndByteLimitStillApplies) {
+        for (const bool useStore : { false, true }) {
+            for (const ui32 requested : { 1, 8, 64 }) {
+                THttpMock http;
+                TGrpcMock grpc;
+                // A deliberately different default makes ignoring the SQL
+                // setting observable in both directions.
+                TQueryTransformEnv env(Bindings(http, grpc)[2], 5000, requested == 1 ? 64 : 1,
+                    sizeof(TProfileBatchHeader) + 2 * sizeof(TProfileResult), 65536, 0, true, useStore, false, {}, requested);
+                env.Start({ 42, 43, 44 });
+                const TVector<TVector<ui64>> batches =
+                    requested == 1 ? TVector<TVector<ui64>>{ { 42 }, { 43 }, { 44 } } : TVector<TVector<ui64>>{ { 42, 43 }, { 44 } };
+                for (size_t i = 0; i < batches.size(); ++i) {
+                    const auto request = http.State->Wait(i);
+                    if (requested == 1) {
+                        UNIT_ASSERT_VALUES_EQUAL(request->Payload, TStringBuilder() << "{\"id\":" << batches[i][0] << "}");
+                        http.State->Reply(
+                            i, TStringBuilder() << "{\"id\":" << batches[i][0] << ",\"name\":\"Ada\",\"score\":97,\"version\":1}", 200);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(request->Payload, i == 0 ? "{\"ids\":[42,43]}" : "{\"ids\":[44]}");
+                        http.State->Reply(i, HttpBatchPayload(batches[i]), 200);
+                    }
+                }
+                Eventually([&] {
+                    return env.Output->Finished.load();
+                });
+                std::lock_guard lock(env.Output->Mutex);
+                UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(http.State->Count(), batches.size());
+            }
+        }
+    }
+
     Y_UNIT_TEST(StreamingSlowV1DownstreamCheckpointAndRestore) {
         THttpMock http;
         TGrpcMock grpc;

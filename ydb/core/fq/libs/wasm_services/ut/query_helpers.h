@@ -113,7 +113,8 @@ struct TQueryTransformEnv {
     NYql::NDq::IDqOutputChannel::TPtr RealChannel;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
-        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false)
+        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false,
+        std::function<void(NFq::NConfig::TWasmServicesConfig&)> configure = {}, std::optional<ui32> batchSize = {})
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -130,6 +131,9 @@ struct TQueryTransformEnv {
         config.SetMaxBatchBytes(batchBytes);
         config.SetMaxBufferedRows(maxBufferedRows);
         config.SetMaxBufferedBytes(maxBufferedBytes);
+        if (configure) {
+            configure(config);
+        }
         auto connection = TestServiceConnection("profiles");
         auto* entry = connection.mutable_content()->mutable_setting()->mutable_external_service();
         entry->set_endpoint(binding.Endpoint);
@@ -191,6 +195,9 @@ struct TQueryTransformEnv {
             desc.MutableTransform()->SetOutputType(SerializeNode(output, actor.TypeEnv));
             NYql::NProto::TFunctionTransform settings;
             settings.SetInvokeUrl(description.InvokeUrl);
+            if (batchSize) {
+                settings.SetBatchSize(*batchSize);
+            }
             desc.MutableTransform()->MutableSettings()->PackFrom(settings);
             THashMap<TString, TString> params;
             params[ServiceConnectionKey("profiles")] = PrepareServiceConnection(connection, {});

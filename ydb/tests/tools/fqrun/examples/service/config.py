@@ -48,14 +48,14 @@ def connection_ddl(name, endpoint, protocol='HTTP', certificate='', auth='TOKEN'
     return 'CREATE EXTERNAL DATA SOURCE `%s` WITH (\n%s\n);\n' % (name, ',\n'.join(entries))
 
 
-def profile_query(alias, ids=(42, 43)):
+def profile_query(alias, ids=(42, 43), batch_size=None):
     source = ' UNION ALL '.join('SELECT %dul AS id' % value for value in ids)
     return '''$input = %s;
 $profiles = PROCESS $input USING EXTERNAL FUNCTION('WASM_PROFILE', 'Profile')
     WITH CONNECTION='%s', INPUT_TYPE=Struct<id:Uint64>,
-         OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>;
+         OUTPUT_TYPE=Struct<id:Uint64,name:Utf8,score:Uint32>%s;
 SELECT id, name, score FROM $profiles ORDER BY id;
-''' % (source, alias)
+''' % (source, alias, '' if batch_size is None else ', BATCH_SIZE=%s' % batch_size)
 
 
 def echo_query():

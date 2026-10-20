@@ -65,6 +65,7 @@ TString Invocation(const TString& module, const TString& method, const TResolved
 }
 
 void ValidateMethod(const TServiceMethod& method, ui32 bytes, ui32 rows, ui64 bufferedBytes) {
+    Y_ENSURE(rows >= 1 && rows <= MaxServiceBatchRows, "WASM service BATCH_SIZE must be between 1 and 64");
     Y_ENSURE(sizeof(TServiceRequest) + method.MaxInputRowBytes <= bytes && sizeof(TServiceResult) + method.MaxOutputRowBytes <= bytes,
         "WASM service row cannot fit byte limit");
     Y_ENSURE(rows <= 1 || method.Batch, "WASM service method does not support batching");
@@ -74,19 +75,21 @@ void ValidateMethod(const TServiceMethod& method, ui32 bytes, ui32 rows, ui64 bu
 class TServiceGateway final: public NYql::IDqFunctionGateway {
 public:
     TServiceGateway(std::shared_ptr<const TServiceManifest> manifest, TString alias, NThreading::TFuture<TResolvedServiceConnection> connection,
-        ui32 bytes, ui32 rows, ui64 bufferedBytes)
+        ui32 bytes, ui64 bufferedBytes)
         : Manifest(std::move(manifest))
         , Alias(std::move(alias))
         , Connection(std::move(connection))
         , Bytes(bytes)
-        , Rows(rows)
         , BufferedBytes(bufferedBytes)
     {
     }
 
     NThreading::TFuture<NYql::NDqFunction::TDqFunctionDescription> ResolveFunction(const TString&, const TString& name) override {
         Y_ENSURE(Manifest->Methods.contains(name), "Unknown WASM service method");
-        ValidateMethod(Manifest->Methods.at(name), Bytes, Rows, BufferedBytes);
+        // Batch size belongs to the SQL invocation, not to a cached connection
+        // description. Validate batch support after applying that invocation's
+        // settings against the manifest actually loaded by the executor.
+        ValidateMethod(Manifest->Methods.at(name), Bytes, 1, BufferedBytes);
         return Connection.Apply([module = Manifest->Name, alias = Alias, name](const auto& future) {
             const auto& connection = future.GetValue();
             Y_ENSURE(connection.Id, "Missing WASM service connection id");
@@ -100,7 +103,7 @@ private:
     const std::shared_ptr<const TServiceManifest> Manifest;
     const TString Alias;
     const NThreading::TFuture<TResolvedServiceConnection> Connection;
-    const ui32 Bytes, Rows;
+    const ui32 Bytes;
     const ui64 BufferedBytes;
 };
 
@@ -611,12 +614,11 @@ NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactoryWithResolver(
     auto source = CreateServiceModuleSource(config);
     auto factory = MakeIntrusive<NYql::TDqFunctionGatewayFactory>();
     const ui32 bytes = config.GetMaxBatchBytes() ? config.GetMaxBatchBytes() : MaxServiceBatchBytes;
-    const ui32 rows = config.GetMaxBatchRows() ? config.GetMaxBatchRows() : 1;
     const ui64 bufferedBytes = config.GetMaxBufferedBytes() ? config.GetMaxBufferedBytes() : 64 << 20;
     for (auto& module : source->Describe()) {
         auto manifest = std::make_shared<TServiceManifest>(std::move(module));
-        factory->Register(manifest->Name, [manifest, resolver, bytes, rows, bufferedBytes](const auto&, const TString& connection) {
-            return std::make_shared<TServiceGateway>(manifest, connection, resolver(connection), bytes, rows, bufferedBytes);
+        factory->Register(manifest->Name, [manifest, resolver, bytes, bufferedBytes](const auto&, const TString& connection) {
+            return std::make_shared<TServiceGateway>(manifest, connection, resolver(connection), bytes, bufferedBytes);
         });
     }
     return factory;
@@ -671,11 +673,15 @@ void RegisterServiceTransformsWithResolver(TDqAsyncIoFactory& factory, const NCo
             if (config.GetMaxBatchRows()) {
                 prepared->BatchRows = config.GetMaxBatchRows();
             }
+            if (settings.HasBatchSize()) {
+                prepared->BatchRows = settings.GetBatchSize();
+            }
             if (config.GetMaxBatchBytes()) {
                 prepared->BatchBytes = config.GetMaxBatchBytes();
             }
             const auto method = prepared->Manifest.Methods.find(invocation["method"].GetStringSafe());
             Y_ENSURE(method != prepared->Manifest.Methods.end(), "Unknown WASM service method");
+            ValidateMethod(method->second, prepared->BatchBytes, prepared->BatchRows, prepared->MaxBufferedBytes);
             auto binding = resolver(settings.GetInvokeUrl(), args.SecureParams);
             auto* actor = new TServiceTransform(prepared, method->second, std::move(binding), sharedTransport, std::move(args));
             return std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(actor, actor);

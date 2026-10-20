@@ -32,7 +32,8 @@
           "Base": "TCallable",
           "Match": {"Type": "Callable", "Name": "FunctionTransformSettings"},
           "Children": [
-            {"Index": 0, "Name": "InvokeUrl", "Type": "TCoAtom"}
+            {"Index": 0, "Name": "InvokeUrl", "Type": "TCoAtom"},
+            {"Index": 1, "Name": "BatchSize", "Type": "TCoAtom", "Optional": true}
           ]
         }
     ]

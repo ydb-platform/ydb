@@ -88,6 +88,7 @@ public:
         TString connectionName;
         TExprNode::TPtr inputType;
         TExprNode::TPtr outputType;
+        TExprNode::TPtr batchSize;
 
         for (const auto &tuple: callable.Settings().Ref().Children()) {
             const auto paramName = tuple->Head().Content();
@@ -97,7 +98,14 @@ public:
                 inputType = tuple->TailPtr();
             } else if (paramName == "output_type") {
                 outputType = tuple->TailPtr();
-            } else {
+            } else if (paramName == "batch_size") {
+                const auto value = TExprBase(tuple->TailPtr()).Maybe<TCoInt32>();
+                i32 rows = 0;
+                if (!value || !TryFromString(value.Cast().Literal().Value(), rows) || rows <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tuple->Pos()), "BATCH_SIZE must be a positive constant Int32"));
+                    return {};
+                }
+                batchSize = value.Cast().Literal().Ptr();
             }
         }
 
@@ -119,9 +127,12 @@ public:
                 .Connection().Build(connectionName)
                 .Done();
 
-        auto settings = Build<TFunctionTransformSettings>(ctx, node.Pos())
-                .InvokeUrl<TCoAtom>().Build(description->InvokeUrl)
-                .Done();
+        auto settingsBuilder = Build<TFunctionTransformSettings>(ctx, node.Pos())
+                .InvokeUrl<TCoAtom>().Build(description->InvokeUrl);
+        if (batchSize) {
+            settingsBuilder.BatchSize(batchSize);
+        }
+        auto settings = settingsBuilder.Done();
 
         const auto& runtimeType = description->TransformType.empty() ? transformType : description->TransformType;
         auto dqTransform = Build<TDqTransform>(ctx, node.Pos())

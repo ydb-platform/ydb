@@ -457,5 +457,5 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
-    optional bool EnableCsPatternIndexHints = 370 [default = false]
+    optional bool EnableCsPatternIndexHints = 370 [default = false];
 }

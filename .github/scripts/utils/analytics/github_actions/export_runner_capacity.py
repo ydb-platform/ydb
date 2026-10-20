@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,9 +19,9 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 try:
-    from ydb.iam import ServiceAccountCredentials
+    import jwt
 except ImportError:
-    ServiceAccountCredentials = None
+    jwt = None
 
 _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
@@ -55,7 +56,6 @@ GHRUN_NAME_PREFIXES = ("ghrun-", "static-", "tiny-worker-", "analytic-node-")
 PR_EVENTS = ("pull_request", "pull_request_target")
 RUN_PAGE_SIZE = 100
 RUN_MAX_PAGES = 30
-METADATA_TOKEN_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
 QUOTA_URL = "https://quota-manager.api.cloud.yandex.net/quota-manager/v1/quotaLimits"
 FOLDERS_URL = "https://resource-manager.api.cloud.yandex.net/resource-manager/v1/folders"
 INSTANCES_URL = "https://compute.api.cloud.yandex.net/compute/v1/instances"
@@ -592,34 +592,58 @@ def snapshot_summary(rows: List[Dict[str, Any]]) -> str:
     )
 
 
+IAM_TOKEN_URL = "https://iam.api.cloud.yandex.net/iam/v1/tokens"
+
+
+def iam_token_from_key_file(path: str) -> str:
+    key = json.loads(Path(path).read_text())
+    if jwt is None:
+        raise RuntimeError("PyJWT is missing; install it to mint an IAM token from the CI service-account key")
+    now = int(time.time())
+    assertion = jwt.encode(
+        {
+            "iss": key.get("service_account_id") or key.get("user_account_id"),
+            "aud": IAM_TOKEN_URL,
+            "iat": now,
+            "exp": now + 3600,
+        },
+        key["private_key"],
+        algorithm="PS256",
+        headers={"kid": key["id"], "typ": "JWT"},
+    )
+    if isinstance(assertion, bytes):
+        assertion = assertion.decode()
+    req = urllib.request.Request(
+        IAM_TOKEN_URL,
+        data=json.dumps({"jwt": assertion}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = (exc.read() or b"").decode("utf-8", "replace").strip().splitlines()
+        raise RuntimeError(body[-1] if body else "IAM token request failed") from exc
+    token = (payload.get("iamToken") or payload.get("iam_token") or "").strip()
+    if not token:
+        raise RuntimeError("IAM token response has no iamToken")
+    return token
+
+
 def iam_token() -> str:
+    key = (
+        os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
+        or os.environ.get("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
+        or ""
+    )
+    if key and os.path.isfile(key):
+        return iam_token_from_key_file(key)
     for name in ("YC_TOKEN", "YC_IAM_TOKEN"):
         token = (os.environ.get(name) or "").strip()
         if token:
             return token
-    try:
-        req = urllib.request.Request(METADATA_TOKEN_URL, headers={"Metadata-Flavor": "Google"})
-        with urllib.request.urlopen(req, timeout=2) as resp:
-            payload = json.loads(resp.read().decode())
-        token = (payload.get("access_token") or "").strip()
-        if token:
-            return token
-    except (OSError, urllib.error.URLError, ValueError, json.JSONDecodeError):
-        pass
-    key = os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS") or os.environ.get("YC_SA_KEY_FILE") or ""
-    if key and os.path.isfile(key):
-        if ServiceAccountCredentials is None:
-            raise RuntimeError('install "ydb[yc]" to mint an IAM token from a service-account key')
-        token = (ServiceAccountCredentials.from_file(key).get_auth_token() or "").strip()
-        if token:
-            return token
-    try:
-        token = subprocess.check_output(["yc", "iam", "create-token"], text=True, stderr=subprocess.DEVNULL).strip()
-    except (OSError, subprocess.CalledProcessError):
-        token = ""
-    if token:
-        return token
-    raise RuntimeError("no Cloud IAM token: set YC_TOKEN, run on a Compute VM, or provide a service-account key")
+    raise RuntimeError("no Cloud IAM token: set CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
 
 
 def cloud_get(url: str, token: str, params: Dict[str, str]) -> Any:

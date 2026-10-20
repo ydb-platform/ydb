@@ -592,6 +592,9 @@ private:
             if (!ctx.Event.ExtractSensitiveFields && resultConnections.rbegin()->content().setting().has_external_service()) {
                 auto* service = resultConnections.rbegin()->mutable_content()->mutable_setting()->mutable_external_service();
                 service->clear_headers();
+                if (service->has_tvm_auth()) {
+                    service->mutable_tvm_auth()->clear_secret();
+                }
                 if (service->auth().has_token()) {
                     service->mutable_auth()->mutable_token()->clear_token();
                 }
@@ -620,6 +623,9 @@ private:
         if (!ctx.Event.ExtractSensitiveFields && ctx.Response.connection().content().setting().has_external_service()) {
             auto* service = ctx.Response.mutable_connection()->mutable_content()->mutable_setting()->mutable_external_service();
             service->clear_headers();
+            if (service->has_tvm_auth()) {
+                service->mutable_tvm_auth()->clear_secret();
+            }
             if (service->auth().has_token()) {
                 service->mutable_auth()->mutable_token()->clear_token();
             }

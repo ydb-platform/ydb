@@ -52,8 +52,20 @@ NYql::TIssues ValidateExternalService(const FederatedQuery::ExternalService& ser
     }
 
     const auto& auth = service.auth();
-    if (!service.has_auth() || auth.identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
+    if (service.has_auth() == service.has_tvm_auth()) {
+        error("Exactly one of external_service.auth and external_service.tvm_auth must be specified");
+    }
+    if (service.has_auth() && auth.identity_case() == FederatedQuery::IamAuth::IDENTITY_NOT_SET) {
         error("external_service.auth is not specified");
+    }
+    if (service.has_tvm_auth()) {
+        const auto& tvm = service.tvm_auth();
+        if (!tvm.source_id() || !tvm.destination_id()) {
+            error("external_service.tvm_auth requires nonzero source_id and destination_id");
+        }
+        if (tvm.secret().empty() || tvm.secret().size() > 4096) {
+            error("external_service.tvm_auth secret must contain 1 to 4096 bytes");
+        }
     }
     if (auth.has_current_iam() && disableCurrentIam) {
         error("current iam authorization is disabled");
@@ -77,8 +89,9 @@ NYql::TIssues ValidateExternalService(const FederatedQuery::ExternalService& ser
         const bool validValue = std::all_of(value.begin(), value.end(), [grpc](unsigned char c) {
             return c != 0 && c != '\r' && c != '\n' && (!grpc || (c >= 32 && c < 127));
         });
-        if (!validKey || (grpc && key != lower) || !validValue || lower == "authorization" || lower == "host" || lower == "content-length" ||
-            lower == "transfer-encoding" || lower == "connection" || lower == "te" || lower == "trailer" || (grpc && lower.EndsWith("-bin"))) {
+        if (!validKey || (grpc && key != lower) || !validValue || lower == "authorization" || lower == "x-ya-service-ticket" ||
+            lower == "x-ya-user-ticket" || lower == "host" || lower == "content-length" || lower == "transfer-encoding" ||
+            lower == "connection" || lower == "te" || lower == "trailer" || (grpc && lower.EndsWith("-bin"))) {
             error("Invalid or reserved external_service header");
         }
         bytes += key.size() + value.size();

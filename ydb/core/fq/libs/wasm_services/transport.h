@@ -1,6 +1,7 @@
 #pragma once
 
 #include "metrics.h"
+#include "tvm.h"
 #include "wire.h"
 
 #include <ydb/services/udf_store/wasm/async_runtime/runtime.h>
@@ -21,11 +22,13 @@ enum class EProtocol {
 };
 
 // Trusted, already resolved binding supplied by the owner, never by guest code.
-// Metadata/ACL resolution belongs to FQ.
+// Metadata/ACL resolution belongs to FQ; TVM ticket refresh belongs to the provider.
 struct TBinding {
     EProtocol Protocol = EProtocol::Http;
     TString Endpoint;
     TVector<std::pair<TString, TString>> Headers;
+    std::shared_ptr<ITvmTicketProvider> TvmProvider;
+    TTvmCredentials TvmCredentials;
     TString CaFile;
     TString CaCertificate;
     std::shared_ptr<grpc::ChannelCredentials> GrpcCredentials;

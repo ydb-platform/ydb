@@ -293,7 +293,7 @@ FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setti
         case FederatedQuery::ConnectionSetting::kIceberg:
             return setting.mutable_iceberg()->mutable_warehouse_auth();
         case FederatedQuery::ConnectionSetting::kExternalService:
-            return setting.mutable_external_service()->mutable_auth();
+            return setting.external_service().has_auth() ? setting.mutable_external_service()->mutable_auth() : nullptr;
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             return nullptr;
     }

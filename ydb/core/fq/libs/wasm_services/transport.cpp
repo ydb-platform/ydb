@@ -21,6 +21,7 @@
 #include <chrono>
 #include <limits>
 #include <mutex>
+#include <optional>
 
 namespace NFq::NWasmServices {
 namespace {
@@ -339,6 +340,13 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
         TString Method;
         TString Path;
         TString Body;
+        TString TvmTicket;
+        // Protected by MetricsMutex: cancellation may run off the user pool.
+        std::shared_ptr<TRequestMetrics::TOperation> TicketMetrics;
+        std::shared_ptr<ITvmTicketRequest> TicketRequest;
+        bool TicketStarted = false;
+        std::mutex TicketMutex;
+        std::optional<TTvmTicketResult> TicketResult;
         bool GrpcOk = false;   // published by GrpcDone with release/acquire
         std::atomic<bool> GrpcDone{ false };
         std::atomic<bool> GrpcStarted{ false };
@@ -365,11 +373,44 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             if (Lease.Metrics) {
                 Lease.Metrics->Complete(outcome, payload);
             }
+            if (TicketMetrics) {
+                TicketMetrics->Complete(outcome);
+            }
         }
 
         void CompleteMetrics(EMetricOutcome outcome, std::optional<ui64> payload = {}) {
             std::lock_guard lock(MetricsMutex);
             CompleteMetricsLocked(outcome, payload);
+        }
+
+        bool StartTicketMetrics(const std::shared_ptr<TRequestMetrics>& metrics) {
+            std::lock_guard lock(MetricsMutex);
+            // Do not create a new logical dependency after cancellation. Holding
+            // this lock across creation also makes concurrent cancellation see it.
+            if (Cancelled) {
+                return false;
+            }
+            if (metrics) {
+                TicketMetrics = metrics->Start("auth.tvm", EMetricKind::Internal);
+            }
+            return true;
+        }
+
+        std::shared_ptr<TRequestMetrics::TOperation> GetTicketMetrics() {
+            std::lock_guard lock(MetricsMutex);
+            return TicketMetrics;
+        }
+
+        void CompleteTicketMetrics(EMetricOutcome outcome) {
+            std::lock_guard lock(MetricsMutex);
+            if (TicketMetrics) {
+                TicketMetrics->Complete(outcome);
+            }
+        }
+
+        void ResetTicketMetrics() {
+            std::lock_guard lock(MetricsMutex);
+            TicketMetrics.reset();
         }
 
         void Cancel() {
@@ -388,6 +429,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
 
         ~TRequest() {
             CompleteMetrics(EMetricOutcome::Cancelled);
+            if (TicketRequest) {
+                TicketRequest->Cancel();
+            }
             if (Easy) {
                 curl_easy_cleanup(Easy);
             }
@@ -445,12 +489,26 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                 }
                 TResolvedBinding resolved;
                 resolved.Bytes = binding.Endpoint.size();
+                Y_ENSURE(binding.TvmProvider || (!binding.TvmCredentials.SourceId && !binding.TvmCredentials.DestinationId &&
+                                                    binding.TvmCredentials.Secret.empty()), "TVM credentials require a ticket provider");
+                if (binding.TvmProvider) {
+                    Y_ENSURE(binding.TvmCredentials.SourceId && binding.TvmCredentials.DestinationId && !binding.TvmCredentials.Secret.empty() &&
+                                 binding.TvmCredentials.Secret.size() <= 4096, "Invalid TVM credentials");
+                    resolved.Bytes += MaxTvmTicketBytes + binding.TvmCredentials.Secret.size();
+                }
                 for (const auto& [name, value] : binding.Headers) {
                     Y_ENSURE(!name.empty() && name.find_first_of("\r\n:") == TString::npos && value.find_first_of("\r\n") == TString::npos,
                         "Invalid trusted transport header");
+                    if (binding.TvmProvider) {
+                        const auto lower = to_lower(name);
+                        Y_ENSURE(lower != "x-ya-service-ticket" && lower != "x-ya-user-ticket" && lower != "authorization",
+                            "TVM authentication headers are host-owned");
+                    }
                     resolved.Bytes += name.size() + value.size() + 4;
                 }
-                Y_ENSURE(resolved.Bytes <= Limits.MaxPayloadBytes, "Binding exceeds transport quota");
+                // Credentials and ticket reservations are independent of the application payload cap.
+                // Admission still charges these bytes against the shared transport memory budget.
+                Y_ENSURE(resolved.Bytes <= MaxHeaderBytes + 32 * 4 + MaxTvmTicketBytes + 4096 + MaxPathBytes, "Binding metadata exceeds quota");
                 if (binding.Protocol == EProtocol::Grpc) {
                     Y_ENSURE(binding.GrpcCredentials && !binding.Endpoint.empty(), "Invalid gRPC binding");
                     for (const auto& [name, _] : binding.Headers) {
@@ -649,7 +707,75 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                              : status == EOperationStatus::Ready     ? EMetricOutcome::Success
                                                                      : EMetricOutcome::Error;
         request->CompleteMetrics(outcome, request->Kind == EOperationKind::Timer ? std::nullopt : std::optional<ui64>(body.size()));
+        if (request->TicketRequest) {
+            request->TicketRequest->Cancel();
+            request->TicketRequest.reset();
+        }
+        request->ResetTicketMetrics();
         Notify(request->Completion, status, Response(code, error, nativeCode, body));
+    }
+
+    bool AcquireTicket(const std::shared_ptr<TRequest>& request) {
+        const auto& binding = Bindings[request->Binding].Config;
+        if (!binding.TvmProvider) {
+            return true;
+        }
+        try {
+            if (!request->TicketStarted) {
+                if (!request->StartTicketMetrics(Executor->Metrics)) {
+                    return false;
+                }
+                request->TicketStarted = true;
+                request->TicketRequest = binding.TvmProvider->Request(binding.TvmCredentials, request->Deadline,
+                    [weak = weak_from_this(), pending = std::weak_ptr<TRequest>(request), metric = request->GetTicketMetrics()](
+                        TTvmTicketResult result) {
+                        if (metric) {
+                            metric->Queued();
+                        }
+                        if (auto request = pending.lock(); request && !request->Finished && !request->Cancelled) {
+                            if (result.Ticket.size() > MaxTvmTicketBytes) {
+                                result = { .Status = ETvmTicketStatus::Failed };
+                            }
+                            {
+                                std::lock_guard lock(request->TicketMutex);
+                                if (!request->TicketResult) {
+                                    request->TicketResult = std::move(result);
+                                }
+                            }
+                            if (auto owner = weak.lock()) {
+                                owner->Wake();
+                            }
+                        }
+                    });
+                Y_ENSURE(request->TicketRequest, "Missing TVM ticket request");
+            }
+            if (auto metric = request->GetTicketMetrics()) {
+                metric->Dispatched();
+            }
+            TTvmTicketResult result;
+            {
+                std::lock_guard lock(request->TicketMutex);
+                if (!request->TicketResult) {
+                    return false;
+                }
+                result = std::move(*request->TicketResult);
+            }
+            const auto& ticket = result.Ticket;
+            if (result.Status == ETvmTicketStatus::Ready && !result.Ticket.empty() && result.Ticket.size() <= MaxTvmTicketBytes &&
+                std::all_of(ticket.begin(), ticket.end(), [](unsigned char c) {
+                    return c > 32 && c < 127;
+                })) {
+                request->CompleteTicketMetrics(EMetricOutcome::Success);
+                request->TvmTicket = std::move(result.Ticket);
+                request->TicketRequest.reset();
+                request->ResetTicketMetrics();
+                return true;
+            }
+        } catch (...) {
+            // Provider errors may contain credentials. Only return the fixed error code.
+        }
+        Finish(request, EOperationStatus::Failed, 0, EClientError::Authentication);
+        return false;
     }
 
     void StartGrpc(const std::shared_ptr<TRequest>& request) {
@@ -660,6 +786,9 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             std::chrono::system_clock::time_point(std::chrono::microseconds(std::min<ui64>(request->Deadline.MicroSeconds(), maxMicros))));
         for (const auto& [name, value] : binding.Config.Headers) {
             request->Context.AddMetadata(name, value);
+        }
+        if (!request->TvmTicket.empty()) {
+            request->Context.AddMetadata("x-ya-service-ticket", request->TvmTicket);
         }
         const grpc::Slice slice(request->Payload.data(), request->Payload.size());
         request->GrpcRequest = grpc::ByteBuffer(&slice, 1);
@@ -730,6 +859,11 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
             Y_ENSURE(headers, "curl header allocation failed");
             request.HttpHeaders = headers;
         }
+        if (!request.TvmTicket.empty()) {
+            auto* headers = curl_slist_append(request.HttpHeaders, ("X-Ya-Service-Ticket: " + request.TvmTicket).c_str());
+            Y_ENSURE(headers, "curl TVM header allocation failed");
+            request.HttpHeaders = headers;
+        }
         auto* headers = curl_slist_append(request.HttpHeaders, "Expect:");
         Y_ENSURE(headers, "curl header allocation failed");
         request.HttpHeaders = headers;
@@ -767,6 +901,10 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
                 }
             } else if (!request->Easy) {
                 try {
+                    if (!AcquireTicket(request)) {
+                        continue;
+                    }
+                    // Acquisition is part of this operation's budget, including a ready ticket.
                     if (request->Cancelled || TInstant::Now() >= request->Deadline) {
                         continue;
                     }
@@ -931,7 +1069,11 @@ struct TTransport::TImpl: std::enable_shared_from_this<TImpl>, TTransportExecuto
         }
         // Reserve response capacity before dispatch, including framing and gRPC
         // copies.
-        const ui64 metricBytes = Executor->Metrics ? sizeof(TRequestMetrics::TOperation) : 0;
+        // Parent reservation owns both metric handles; auth never double-charges it.
+        const ui64 metricBytes = Executor->Metrics
+                                     ? sizeof(TRequestMetrics::TOperation) *
+                                           (1 + (kind != EOperationKind::Timer && bool(Bindings[request->Binding].Config.TvmProvider)))
+                                     : 0;
         const auto reserve = metricBytes + 2 * (payload.size() + bindingBytes) + 3 * Limits.MaxPayloadBytes + sizeof(TResponseHeader) +
                              sizeof(TRequest) + sizeof(TGrpcReadiness::TTag) + MaxHeaderBytes + certificateBytes;
         {

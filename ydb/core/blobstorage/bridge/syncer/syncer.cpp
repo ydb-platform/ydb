@@ -23,29 +23,23 @@ namespace NKikimr::NBridge {
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '}';
 
         const auto& state = Info->Group->GetBridgeGroupState();
-        bool found = false;
-        for (size_t i = 0; i < state.PileSize(); ++i) {
-            const auto& pile = state.GetPile(i);
-            const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-            if (groupId == SourceGroupId) {
-                if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
-                    Y_DEBUG_ABORT("TGroupState.TPile is not in SYNCED state for primary pile");
-                    return Terminate("group is not synced for primary pile");
-                }
-                SourceGroupGeneration = pile.GetGroupGeneration();
-            } else if (groupId == TargetGroupId) {
-                Stage = pile.GetStage();
-                if (Stage == NKikimrBridge::TGroupState::SYNCED) {
-                    return Terminate(std::nullopt); // everything is already synced
-                }
-                TargetGroupGeneration = pile.GetGroupGeneration();
-                found = true;
+        if (const auto *source = NBridge::FindGroupPileByGroupId(state, SourceGroupId)) {
+            if (source->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                Y_DEBUG_ABORT("TGroupState.TPile is not in SYNCED state for primary pile");
+                return Terminate("group is not synced for primary pile");
             }
+            SourceGroupGeneration = source->GetGroupGeneration();
         }
-        if (!found) {
+        const auto *target = NBridge::FindGroupPileByGroupId(state, TargetGroupId);
+        if (!target) {
             Y_DEBUG_ABORT("target group not found in TGroupState");
             return Terminate("target group not found in TGroupState");
         }
+        Stage = target->GetStage();
+        if (Stage == NKikimrBridge::TGroupState::SYNCED) {
+            return Terminate(std::nullopt); // everything is already synced
+        }
+        TargetGroupGeneration = target->GetGroupGeneration();
 
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '#'
             << NKikimrBridge::TGroupState::EStage_Name(Stage) << '}';

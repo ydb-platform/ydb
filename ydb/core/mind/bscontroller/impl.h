@@ -1005,17 +1005,16 @@ public:
 
         bool IsLayoutCorrect(const TGroupFinder& finder) const {
             if (BridgeGroupInfo) {
-                for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                // look for the pile with incorrect layout
+                return !NBridge::FindGroupPile(BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
                     const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
                     if (groupId == ID) { // inline pile
-                        if (!LayoutCorrect) {
-                            return false;
-                        }
-                    } else if (const TGroupInfo *group = finder(groupId); !group || !group->IsLayoutCorrect(finder)) {
-                        return false;
+                        return !LayoutCorrect;
                     }
-                }
-                return true;
+                    const TGroupInfo *group = finder(groupId);
+                    return !group || !group->IsLayoutCorrect(finder);
+                });
             } else {
                 return LayoutCorrect;
             }
@@ -1338,6 +1337,7 @@ public:
         Table::DefaultGroupSizeInUnits::Type DefaultGroupSizeInUnits;
         Table::BridgeMode::Type BridgeMode = false;
         Table::DDisk::Type DDisk = false;
+        Table::PersistentBufferAllocationMode::Type PersistentBufferAllocationMode = NKikimrBlobStorage::BALANCED;
         TMaybe<Table::VDiskHeapAllocatorNumLeadingDisks::Type> VDiskHeapAllocatorNumLeadingDisks;
 
         bool IsSameGeometry(const TStoragePoolInfo& other) const {
@@ -1445,6 +1445,7 @@ public:
                     Table::BridgeMode,
                     Table::DDisk,
                     Table::VDiskHeapAllocatorNumLeadingDisks,
+                    Table::PersistentBufferAllocationMode,
                     TInlineTable<TUserIds, Schema::BoxStoragePoolUser>,
                     TInlineTable<TPDiskFilters, Schema::BoxStoragePoolPDiskFilter>
                 > adapter(
@@ -1475,6 +1476,7 @@ public:
                     &TStoragePoolInfo::BridgeMode,
                     &TStoragePoolInfo::DDisk,
                     &TStoragePoolInfo::VDiskHeapAllocatorNumLeadingDisks,
+                    &TStoragePoolInfo::PersistentBufferAllocationMode,
                     &TStoragePoolInfo::UserIds,
                     &TStoragePoolInfo::PDiskFilters
                 );

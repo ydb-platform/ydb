@@ -56,14 +56,35 @@ Tab **Runners capacity** `captab01`. Self-hosted ghrun and Compute quota, not `u
 
 `di5qgcbc4td0w` reads `analytics/ci_capacity`. Kinds `quota` / `fit` / `summary` / `runner` / `queue`. PK `(sampled_at, date, kind, name)`, TTL 1 year.
 
+## Setup
+
+Do this before any get/update. The human adds the MCP in the client; you cannot.
+
+1. If DataLens tools (`list_commands`) are missing, show this config and stop until the tools appear. [README](https://github.com/datalens-tech/datalens-mcp)
+
+```json
+{
+  "mcpServers": {
+    "datalens": {
+      "command": "npx",
+      "args": ["-y", "--prefer-online", "@datalens-tech/mcp@latest"],
+      "env": { "DATALENS_ORG_ID": "bpfssp32nspchhs4df3c" }
+    }
+  }
+}
+```
+
+2. If `yc` is not on `PATH`, show https://yandex.cloud/docs/cli/quickstart. Do not run the installer unless the human asks: `curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash`, then `yc init`.
+3. After `yc` exists, run `yc iam create-token >/dev/null` and check only the exit code. Do not print the token. Never commit a token. If create-token fails, tell the human to run `yc init`. Static token: `DATALENS_YC_STATIC_AUTH=1` and `DATALENS_API_AUTH_HEADER="Bearer <iam-token>"`.
+4. `getDashboard` `dashboardId` `135ob2ntmr0ok` `workbookId` `ev4an7f2ncmk2` `branch` `saved`. 401/403 means the human needs access to that workbook in org `bpfssp32nspchhs4df3c`. Stop.
+
 ## Trace the changed contract
 
-1. If DataLens MCP tools are missing, stop. Tell the human to add `@datalens-tech/mcp` with `DATALENS_ORG_ID=bpfssp32nspchhs4df3c`. Default auth is `yc iam create-token`. A static token needs `DATALENS_YC_STATIC_AUTH=1` and `DATALENS_API_AUTH_HEADER`. Never commit a token.
-2. `list_commands`, then `describe_commands` for the get/update (`getEditorChart` / `updateEditorChart`, `getDataset` / `updateDataset`, `getDashboard` / `updateDashboard`). Invoke with `invoke_read_command` or `invoke_write_command`: `command_name` plus `parameters` for the command inputs.
-3. `getDashboard` with `dashboardId`, `workbookId`, `branch` `saved`. The MCP envelope is `{trust, data}` where `data` is a JSON string of `{entry:{data,revId,savedId,publishedId,annotation}}`. `updateDashboard` replaces the whole dash: send that `entry.data` (`counter`, `salt`, `tabs`, `settings`, and `schemeVersion` when get or a 400 names it; current value is 8), plus `entryId` and `meta`. Do not send a tab diff. Do not put `workbookId` or `dashboardId` on the update. If HTTP 400 names those keys, retry without them.
-4. Change only the intended object. Chart: keep `entry.type` from get (`advanced-chart_node` here) and edit `data.sources` or `data.prepare`. Dataset: `dataset.sources[].parameters.subsql`. Dashboard: the widget row in Objects (`tabs[].items` and `tabs[].layout`). A new item needs `id`, `namespace` `default`, a layout cell `{i,h,w,x,y}`, and a higher `counter`. A text item is `type` `text`, `data.text` markdown, `data.autoHeight` true.
-5. Each `(run_id, run_attempt)` is its own run. In Duration and p-diff dataset SQL the run id field is `ci_run_id` (DataLens alias), not `run_id`. Do not `COALESCE` a missing conclusion to `in_progress`.
-6. Chart or dashboard: `update*` with `mode` `save`, take `entry.revId` or `savedId` from the parsed response, then the same body with `mode` `publish` and that id on `entry.revId`. Dataset: one `updateDataset`. Put the revision on the field `describe_commands` lists for that command.
+1. `list_commands`, then `describe_commands` for the get/update (`getEditorChart` / `updateEditorChart`, `getDataset` / `updateDataset`, `getDashboard` / `updateDashboard`). Invoke with `invoke_read_command` or `invoke_write_command`: `command_name` plus `parameters` for the command inputs.
+2. `getDashboard` with `dashboardId`, `workbookId`, `branch` `saved`. The MCP envelope is `{trust, data}` where `data` is a JSON string of `{entry:{data,revId,savedId,publishedId,annotation}}`. `updateDashboard` replaces the whole dash: send that `entry.data` (`counter`, `salt`, `tabs`, `settings`, and `schemeVersion` when get or a 400 names it; current value is 8), plus `entryId` and `meta`. Do not send a tab diff. Do not put `workbookId` or `dashboardId` on the update. If HTTP 400 names those keys, retry without them.
+3. Change only the intended object. Chart: keep `entry.type` from get (`advanced-chart_node` here) and edit `data.sources` or `data.prepare`. Dataset: `dataset.sources[].parameters.subsql`. Dashboard: the widget row in Objects (`tabs[].items` and `tabs[].layout`). A new item needs `id`, `namespace` `default`, a layout cell `{i,h,w,x,y}`, and a higher `counter`. A text item is `type` `text`, `data.text` markdown, `data.autoHeight` true.
+4. Each `(run_id, run_attempt)` is its own run. In Duration and p-diff dataset SQL the run id field is `ci_run_id` (DataLens alias), not `run_id`. Do not `COALESCE` a missing conclusion to `in_progress`.
+5. Chart or dashboard: `update*` with `mode` `save`, take `entry.revId` or `savedId` from the parsed response, then the same body with `mode` `publish` and that id on `entry.revId`. Dataset: one `updateDataset`. Put the revision on the field `describe_commands` lists for that command.
 
 If MCP `user-ydb-qa` is present, read tables with `ydb_query`. Otherwise ask the human.
 

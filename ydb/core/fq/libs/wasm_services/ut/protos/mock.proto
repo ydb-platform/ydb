@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package NFq.NWasmServices.NTest;
+
+import "google/protobuf/wrappers.proto";
+
+service MockService {
+    rpc Other(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+    rpc Call(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+}

@@ -404,6 +404,10 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvDone::TPtr&
 
 template<bool UseMigrationProtocol>
 void TWriteSessionActor<UseMigrationProtocol>::CheckACL(const TActorContext& ctx) {
+    if (!Token) {
+        CloseSession("Cannot check ACL without a user token", PersQueue::ErrorCode::ACCESS_DENIED, ctx);
+        return;
+    }
     //AFL_ENSURE(ACLCheckInProgress);
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;

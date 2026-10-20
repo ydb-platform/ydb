@@ -165,6 +165,8 @@ namespace NKikimr::NStorage {
             return error;
         } else if (auto error = TrimHistoryEntries(config)) { // trims unsynced history entries
             return error;
+        } else if (auto error = UpdateBridgeGroupStateGenerations(config)) { // needs final cluster state generation
+            return error;
         } else if (auto error = ExtractStateStorageConfig(config)) { // extract final state storage config
             return error;
         }
@@ -262,6 +264,32 @@ namespace NKikimr::NStorage {
             }
         }
 
+        return std::nullopt;
+    }
+
+    std::optional<TString> TDistributedConfigKeeper::UpdateBridgeGroupStateGenerations(
+            NKikimrBlobStorage::TStorageConfig *config) {
+        if (!config->HasClusterState()) {
+            return std::nullopt;
+        }
+        THashMap<TGroupId, ui32> prevGenerations;
+        for (const auto& group : config->GetPrevConfig().GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            prevGenerations.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+                group.GetGroupGeneration());
+        }
+        // the state of bridged static group that has been changed (along with its generation) is made for the cluster
+        // state being committed; proxies won't serve the group with older one
+        const ui64 generation = config->GetClusterState().GetGeneration();
+        for (auto& group : *config->MutableBlobStorageConfig()->MutableServiceSet()->MutableGroups()) {
+            if (!group.HasBridgeGroupState()) {
+                continue;
+            }
+            const auto it = prevGenerations.find(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID));
+            if (it == prevGenerations.end() || it->second != group.GetGroupGeneration()) {
+                auto *state = group.MutableBridgeGroupState();
+                state->SetClusterStateGeneration(Max(state->GetClusterStateGeneration(), generation));
+            }
+        }
         return std::nullopt;
     }
 

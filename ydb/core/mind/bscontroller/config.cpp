@@ -462,6 +462,13 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
                     pile.SetGroupGeneration(referenced->Generation);
                 });
+
+                // the new group state is made for the cluster state we know; proxies won't serve the group with older one
+                auto *bridgeGroupState = group->BridgeGroupInfo->MutableBridgeGroupState();
+                if (StorageConfig) {
+                    bridgeGroupState->SetClusterStateGeneration(Max(bridgeGroupState->GetClusterStateGeneration(),
+                        StorageConfig->GetClusterState().GetGeneration()));
+                }
             }
 
             bool errors = false;

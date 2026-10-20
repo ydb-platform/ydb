@@ -649,6 +649,7 @@ namespace NKikimr::NStorage {
         static std::optional<TString> CheckSynchronizedPiles(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> UpdateClusterStateGeneration(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> TrimHistoryEntries(NKikimrBlobStorage::TStorageConfig *config);
+        static std::optional<TString> UpdateBridgeGroupStateGenerations(NKikimrBlobStorage::TStorageConfig *config);
         static std::optional<TString> ExtractStateStorageConfig(NKikimrBlobStorage::TStorageConfig *config);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -63,6 +63,12 @@ namespace {
         return env.Invoke(request); // channel profiles are generated from the group's own pool
     }
 
+    NKikimrBlobStorage::TConfigResponse RecommissionGroup(TEnvironmentSetup& env, ui32 groupId) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableRecommissionGroups()->AddGroupIds(groupId);
+        return env.Invoke(request);
+    }
+
     NKikimrBlobStorage::TGroupDecommitStatus::E GetDecommitStatus(TEnvironmentSetup& env, ui32 groupId) {
         return FindGroup(env.FetchBaseConfig(), groupId).GetVirtualGroupInfo().GetDecommitStatus();
     }
@@ -346,6 +352,22 @@ Y_UNIT_TEST_SUITE(BridgeDecommit) {
         TFilterChain chain(env);
         const auto vanished = RunDecommission(env, chain, checker, groupId, {4, 12});
         UNIT_ASSERT_VALUES_EQUAL(vanished.size(), 2);
+    }
+
+    // recommission is not supported in bridge mode: the group in progress keeps its VDisks in piles, and the decommitted
+    // one would get them outside of any pile
+    Y_UNIT_TEST(RecommissionRefused) {
+        TEnvironmentSetup env(MakeBridgedSettings());
+        TDataChecker checker(env);
+        const ui32 groupId = PrepareBridgedCluster(env, checker);
+
+        auto expectRefused = [&] {
+            const auto response = RecommissionGroup(env, groupId);
+            UNIT_ASSERT(!response.GetSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "bridge mode");
+        };
+        TFilterChain chain(env);
+        RunDecommission(env, chain, checker, groupId, {}, {.InProgress = expectRefused, .Done = expectRefused});
     }
 
     // group converted into an inline pile keeps its id, so it stays in place as the virtual group, but loses its VDisks

@@ -58,6 +58,13 @@ at the first supported failure, reporting a conservative interval across any
 gaps. It uses `OPTIMIZER_TRANSFORMATION_PREFIX` scope and does not accept
 `--all-steps`. It does not claim to find every non-equivalent adjacent step.
 
+The per-comparison `--construction-timeout-ms` budget defaults to 120 seconds,
+separate from the global solver budget `--timeout-ms`. The outer process deadline
+allows both budgets plus 30 seconds for startup and artifact I/O. A construction
+deadline returns an `UNKNOWN` gap; it can lack an observation kind if construction
+stopped before deriving it. Its original-anchor hash and comparison scope remain
+mandatory, and other intervals continue to be checked.
+
 ## Saved result
 
 All snapshots, capture manifests, raw process streams, raw verdicts, exact

@@ -20,6 +20,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--artifacts", type=Path, required=True)
     result.add_argument("--rows", type=int, default=2)
     result.add_argument("--timeout-ms", type=int, default=10_000)
+    result.add_argument("--construction-timeout-ms", type=int, default=120_000,
+                        help="separate bounded snapshot/model/formula construction budget per comparison")
     result.add_argument("--capture-timeout-seconds", type=int, default=300)
     result.add_argument("--max-events", type=int, default=10_000)
     result.add_argument("--strategy", choices=("divide-and-conquer", "sequential"),
@@ -47,6 +49,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         artifacts=options.artifacts,
         rows=options.rows,
         timeout_ms=options.timeout_ms,
+        construction_timeout_ms=options.construction_timeout_ms,
         capture_timeout_seconds=options.capture_timeout_seconds,
         max_events=options.max_events,
         strategy=options.strategy,

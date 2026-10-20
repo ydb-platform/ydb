@@ -108,6 +108,7 @@ class Harness:
             anchor = Path(arguments[arguments.index("--diagnostic-observation-snapshot") + 1])
             if anchor.read_text(encoding="utf-8") != "stable":
                 raise AssertionError("pair comparison lost its initial observation anchor")
+
             def ordinal(filename):
                 text = Path(filename).read_text(encoding="utf-8")
                 return 0 if text == "stable" else len(self.events) + 1 if text == "final" else int(text.split()[1])
@@ -390,6 +391,75 @@ class SequentialLocalizationTest(unittest.TestCase):
                                   verdict_overrides=overrides)
                 with self.assertRaisesRegex(LocalizationError, "observation"):
                     localize(config, harness)
+
+    def test_comparison_deadline_includes_construction_and_solver_budgets(self):
+        calls = []
+        harness = Harness(self.events(), [], "VERIFIED_BOUNDED")
+
+        def run(arguments, timeout):
+            calls.append((arguments, timeout))
+            return harness(arguments, timeout)
+        with tempfile.TemporaryDirectory() as temporary:
+            config = replace(self.config(Path(temporary) / "artifacts"),
+                             timeout_ms=17_342, construction_timeout_ms=123_456)
+            result = localize(config, run)
+        self.assertEqual(result["status"], "FINAL_VERIFIED_BOUNDED")
+        arguments, timeout = next(call for call in calls if call[0][0] == "verify")
+        self.assertEqual(arguments[arguments.index("--construction-timeout-ms") + 1], "123456")
+        self.assertEqual(arguments[arguments.index("--timeout-ms") + 1], "17342")
+        self.assertEqual(timeout, 171)
+
+    def test_construction_timeout_is_a_gap_before_observation_kind_is_known(self):
+        class ConstructionTimeoutHarness(Harness):
+            def verify(self, arguments):
+                process = super().verify(arguments)
+                if "--diagnostic-transformation-pair" not in arguments:
+                    return process
+                verdict = json.loads(process.stdout)
+                verdict.update(status="UNKNOWN", phase="construction", reason="construction deadline exceeded",
+                               construction_timeout_ms=120_000)
+                verdict.pop("observation_kind")
+                Path(arguments[arguments.index("--emit-smt") + 1]).unlink()
+                return subprocess.CompletedProcess(arguments, 2, json.dumps(verdict), "")
+        harness = ConstructionTimeoutHarness(self.events(4), [], "VERIFIED_BOUNDED", states=[0] * 6)
+        with tempfile.TemporaryDirectory() as temporary:
+            config = replace(self.config(Path(temporary) / "artifacts"),
+                             strategy="divide-and-conquer", all_steps=True)
+            result = localize(config, harness)
+        self.assertEqual(result["status"], "LOCALIZATION_INCOMPLETE")
+        self.assertEqual(result["completeness"], "GAPS")
+        self.assertIsNone(result["observation_kind"])
+        self.assertEqual(result["findings"], [])
+        self.assertEqual(result["events_checked"], 4)
+        self.assertEqual({(a, b) for a, b in harness.verifier_pairs if b == a + 1},
+                         {(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)})
+
+    def test_unknown_without_observation_still_requires_exact_construction_receipt(self):
+        for phase, reported_budget in (("solver", 120_000), ("construction", 1),
+                                       ("construction", None), ("construction", True)):
+            class MissingReceiptHarness(Harness):
+                def verify(self, arguments):
+                    process = super().verify(arguments)
+                    if "--diagnostic-transformation-pair" not in arguments:
+                        return process
+                    verdict = json.loads(process.stdout)
+                    verdict.update(status="UNKNOWN", phase=phase, reason="timeout",
+                                   construction_timeout_ms=reported_budget)
+                    verdict.pop("observation_kind")
+                    return subprocess.CompletedProcess(arguments, 2, json.dumps(verdict), "")
+            harness = MissingReceiptHarness(self.events(), [], "VERIFIED_BOUNDED", states=[0] * 4)
+            with self.subTest(phase=phase, budget=reported_budget), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"),
+                                 strategy="divide-and-conquer", all_steps=True)
+                with self.assertRaisesRegex(LocalizationError, "observation|construction timeout"):
+                    localize(config, harness)
+
+    def test_rejects_invalid_construction_budgets(self):
+        for budget in (0, -1, True, None):
+            with self.subTest(budget=budget), tempfile.TemporaryDirectory() as temporary:
+                config = replace(self.config(Path(temporary) / "artifacts"), construction_timeout_ms=budget)
+                with self.assertRaisesRegex(LocalizationError, "construction timeout"):
+                    localize(config, Harness(self.events(), [], "VERIFIED_BOUNDED"))
 
 
 if __name__ == "__main__":

@@ -58,6 +58,7 @@ class Config:
     max_events: int = 10_000
     strategy: str = "divide-and-conquer"
     all_steps: bool = False
+    construction_timeout_ms: int = 120_000
 
 
 CommandRunner = Callable[[Sequence[str], int], subprocess.CompletedProcess[str]]
@@ -108,6 +109,8 @@ def verify(
         str(config.rows),
         "--timeout-ms",
         str(config.timeout_ms),
+        "--construction-timeout-ms",
+        str(config.construction_timeout_ms),
         "--solver",
         str(config.solver),
         "--emit-smt",
@@ -121,11 +124,20 @@ def verify(
             raise LocalizationError("pair comparison requires the initial observation snapshot")
         arguments.extend(("--diagnostic-observation-snapshot", str(observation)))
     input_hashes = {path: digest(path) for path in (before, after, observation) if path is not None}
-    process = run(arguments, max(30, config.timeout_ms // 1000 + 30))
+    # Construction includes canonical formula rendering; solver time is a
+    # separate global budget. Keep the outer process deadline outside both.
+    wall_timeout = (config.construction_timeout_ms + config.timeout_ms + 999) // 1000 + 30
+    process = run(arguments, wall_timeout)
     _save_process(directory / "verifier", process)
     if any(digest(path) != expected for path, expected in input_hashes.items()):
         raise LocalizationError("snapshot changed during verifier execution")
     verdict = _decode_verdict(process)
+    construction_timeout = verdict["status"] == "UNKNOWN" and verdict.get("phase") == "construction"
+    if construction_timeout and (
+        type(verdict.get("construction_timeout_ms")) is not int
+        or verdict["construction_timeout_ms"] != config.construction_timeout_ms
+    ):
+        raise LocalizationError("verifier construction timeout does not match the requested budget")
     bounded = verdict["status"] in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE", "SCHEMA_MISMATCH", "UNKNOWN"}
     for field, expected in {"row_bound": config.rows, "task_bound": TASK_BOUND}.items():
         if (bounded or field in verdict) and (type(verdict.get(field)) is not int or verdict[field] != expected):
@@ -134,7 +146,11 @@ def verify(
         field = "observation_snapshot_sha256"
         if (bounded or field in verdict) and verdict.get(field) != input_hashes[observation]:
             raise LocalizationError("verifier observation snapshot SHA256 does not match the initial anchor")
-        needs_kind = verdict["status"] in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE", "UNKNOWN"}
+        # Construction may expire before the observation contract is derived.
+        # Such UNKNOWN results are gaps, never evidence for a rewrite finding.
+        needs_kind = verdict["status"] in {"VERIFIED_BOUNDED", "COUNTEREXAMPLE"} or (
+            verdict["status"] == "UNKNOWN" and not construction_timeout
+        )
         if (needs_kind or "observation_kind" in verdict) and verdict.get("observation_kind") not in ("bag", "sequence"):
             raise LocalizationError("verifier did not confirm the original observation kind")
     if diagnostic and verdict.get("comparison_scope") != scope:
@@ -184,6 +200,8 @@ def validate_config(config: Config) -> None:
         raise LocalizationError("row bound must not be negative")
     if config.timeout_ms <= 0:
         raise LocalizationError("solver timeout must be positive")
+    if type(config.construction_timeout_ms) is not int or config.construction_timeout_ms <= 0:
+        raise LocalizationError("construction timeout must be a positive integer")
     if config.capture_timeout_seconds <= 0:
         raise LocalizationError("capture timeout must be positive")
     if config.max_events <= 0:

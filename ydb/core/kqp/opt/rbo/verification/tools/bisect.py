@@ -291,6 +291,7 @@ def _divide_and_conquer(
         "strategy": "divide-and-conquer", "all_steps": config.all_steps,
         "row_bound": config.rows, "task_bound": TASK_BOUND,
         "timeout_ms": config.timeout_ms,
+        "construction_timeout_ms": config.construction_timeout_ms,
         "comparison_scope": "OPTIMIZER_TRANSFORMATION_PAIR",
         "observation_boundary": 0,
         "observation_snapshot_sha256": snapshot_hashes[0],

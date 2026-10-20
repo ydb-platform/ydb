@@ -7,6 +7,8 @@
 #include <ydb/core/fq/libs/wasm_services/query/query.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
 #include <ydb/services/udf_store/wasm/single_module_loader.h>
@@ -17,6 +19,7 @@ namespace NFq::NWasmServices::NTestHelpers {
 struct TQueryOutput {
     std::mutex Mutex;
     TVector<TProfile> Rows;
+    TVector<TString> Events;
     std::atomic<bool> Blocked = false;
     std::atomic<bool> Finished = false;
     std::atomic<ui32> BlockAfterRows = 0;
@@ -43,6 +46,7 @@ public:
         profile.Score = row.GetElement(2).Get<ui32>();
         std::lock_guard lock(Output->Mutex);
         Output->Rows.push_back(profile);
+        Output->Events.push_back(TStringBuilder() << "row:" << profile.Id);
         if (Output->BlockAfterRows && Output->Rows.size() >= Output->BlockAfterRows) {
             Output->Blocked = true;
         }
@@ -52,15 +56,19 @@ public:
         UNIT_FAIL("Unexpected wide Profile output");
     }
 
-    void Consume(NYql::NDqProto::TCheckpoint&&) override {
-        UNIT_FAIL("Unexpected checkpoint");
+    void Consume(NYql::NDqProto::TCheckpoint&& checkpoint) override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back(TStringBuilder() << "checkpoint:" << checkpoint.GetId());
     }
 
-    void Consume(NYql::NDqProto::TWatermark&&) override {
-        UNIT_FAIL("Unexpected watermark");
+    void Consume(NYql::NDqProto::TWatermark&& watermark) override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back(TStringBuilder() << "watermark:" << watermark.GetTimestampUs());
     }
 
     void Finish() override {
+        std::lock_guard lock(Output->Mutex);
+        Output->Events.push_back("finish");
         Output->Finished = true;
     }
 
@@ -102,9 +110,10 @@ struct TQueryTransformEnv {
     NYql::NDq::TDqAsyncIoFactory Factory;
     std::shared_ptr<TQueryOutput> Output = std::make_shared<TQueryOutput>();
     NYql::NDq::TFakeCASetup Setup;
+    NYql::NDq::IDqOutputChannel::TPtr RealChannel;
 
     TQueryTransformEnv(const TBinding& binding, ui32 timeoutMs = 5000, ui32 batchRows = 1, ui32 batchBytes = 0, ui32 maxBufferedRows = 65536,
-        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false)
+        ui64 maxBufferedBytes = 0, bool grpcInsecure = true, bool useStore = false, bool realChannel = false)
         : Module(MakeTempName())
         , Manifest(MakeTempName())
     {
@@ -185,9 +194,13 @@ struct TQueryTransformEnv {
             desc.MutableTransform()->MutableSettings()->PackFrom(settings);
             THashMap<TString, TString> params;
             params[ServiceConnectionKey("profiles")] = PrepareServiceConnection(connection, {});
-            auto [sink, sinkActor] =
-                Factory.CreateDqOutputTransform({ .OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1,
-                    .TransformOutput = new TProfileConsumer(Output),
+            NYql::NDq::IDqOutputConsumer::TPtr consumer = new TProfileConsumer(Output);
+            if (realChannel) {
+                RealChannel = NYql::NDq::CreateDqOutputChannel({ .RowType = output, .HolderFactory = &actor.HolderFactory, .ChannelId = 1 });
+                consumer = NYql::NDq::CreateOutputMapConsumer(RealChannel);
+            }
+            auto [sink, sinkActor] = Factory.CreateDqOutputTransform(
+                { .OutputDesc = desc, .OutputIndex = 0, .StatsLevel = NYql::NDq::None, .TxId = {}, .TaskId = 1, .TransformOutput = consumer,
                     .Callback = &actor.GetAsyncOutputCallbacks(),
                     .SecureParams = params,
                     .TaskParams = params,
@@ -201,6 +214,12 @@ struct TQueryTransformEnv {
     }
 
     ~TQueryTransformEnv() {
+        // The channel owns values allocated by the fake compute actor.
+        if (RealChannel) {
+            Setup.Execute([&](auto&) {
+                RealChannel.Reset();
+            });
+        }
         if (UsesStore) {
             NKikimr::NUdfStore::NWasm::GetWasmModuleCatalog().Unregister(TString(ProfileTransformType));
         }

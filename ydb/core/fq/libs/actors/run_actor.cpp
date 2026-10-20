@@ -2106,7 +2106,7 @@ private:
             gatewaysConfig, clusters);
 
         TVector<TDataProviderInitializer> dataProvidersInit;
-        if (Params.Config.GetWasmServices().GetEnabled() && Params.QueryType == FederatedQuery::QueryContent::ANALYTICS) {
+        if (Params.Config.GetWasmServices().GetEnabled()) {
             dataProvidersInit.push_back(GetDqFunctionDataProviderInitializer(
                 nullptr, NWasmServices::CreateServiceGatewayFactory(Params.Config.GetWasmServices(), YqConnections)));
         }

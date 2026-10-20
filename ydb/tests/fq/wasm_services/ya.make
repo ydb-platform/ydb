@@ -3,6 +3,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 PEERDIR(
+    ydb/tests/tools/datastreams_helpers
     ydb/public/api/grpc
     contrib/proto/opentelemetry
     contrib/python/grpcio
@@ -11,7 +12,7 @@ PEERDIR(
     ydb/udfs/wasm/profile/proto/schema
 )
 
-TEST_SRCS(test_query.py test_store.py)
+TEST_SRCS(test_query.py test_store.py test_streaming.py)
 PY_SRCS(conftest.py)
 
 DATA(

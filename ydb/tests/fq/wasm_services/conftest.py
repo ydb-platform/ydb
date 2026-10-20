@@ -25,12 +25,16 @@ class MockServices:
         self.started = threading.Event()
         self.release = threading.Event()
         self.delay_timeout = 30
+        self.pause_all = False
         self.cancelled = threading.Event()
         owner = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
                 body = self.rfile.read(int(self.headers['Content-Length']))
+                if owner.pause_all:
+                    owner.started.set()
+                    owner.release.wait(owner.delay_timeout)
                 if self.path == '/echo':
                     with owner.lock:
                         owner.requests.append(('echo', body, self.headers.get('Authorization')))
@@ -99,7 +103,7 @@ class MockServices:
         if request.id == 999:
             context.add_callback(self.cancelled.set)
             self.started.set()
-            self.cancelled.wait(30)
+            (self.release if self.delay_timeout > 30 else self.cancelled).wait(self.delay_timeout)
         profile = profile_pb2.Profile(id=request.id, name=b'Ada', score=97, version=1)
         return profile_pb2.ProfileReply(payload=profile.SerializeToString())
 
@@ -109,7 +113,7 @@ class MockServices:
         if 999 in request.ids:
             context.add_callback(self.cancelled.set)
             self.started.set()
-            self.cancelled.wait(30)
+            (self.release if self.delay_timeout > 30 else self.cancelled).wait(self.delay_timeout)
         ids = request.ids[:-1] if 401 in request.ids else request.ids
         profiles = profile_pb2.ProfileBatchPayload(profiles=[
             profile_pb2.Profile(id=id, name=b'Ada', score=97, version=1) for id in ids
@@ -163,6 +167,11 @@ class WasmExtension(ExtensionPoint):
         for tenant in kikimr.tenants.values():
             tenant.fq_config['wasm_services'] = config
         kikimr.control_plane.fq_config['control_plane_storage']['available_connection'].append('EXTERNAL_SERVICE')
+        if self.batch_config.get('streaming'):
+            for tenant in kikimr.tenants.values():
+                tenant.fq_config['checkpoint_coordinator'].update(enabled=True, checkpointing_period_millis=1000)
+            kikimr.control_plane.fq_config['control_plane_storage']['task_lease_ttl'] = '3s'
+            kikimr.compute_plane.fq_config['pinger']['ping_period'] = '1s'
 
 
 @pytest.fixture
@@ -181,7 +190,7 @@ def batch_config(request):
 
 @pytest.fixture
 def kikimr(request, services, yq_version, batch_config):
-    timeout = 200 if 'deadline' in request.node.originalname else 30000
+    timeout = 200 if 'deadline' in request.node.originalname else (180000 if batch_config.get('streaming') else 30000)
     extensions = [DefaultConfigExtension(''), YQv2Extension(yq_version), ComputeExtension(),
                   WasmExtension(timeout, batch_config)]
     with start_kikimr(request, extensions) as cluster:
@@ -208,3 +217,13 @@ def client(kikimr, services, batch_config):
         headers={'Content-Type': 'application/octet-stream'},
     )
     return client
+
+
+@pytest.fixture
+def downstream_service():
+    mock = MockServices()
+    mock.delay_timeout = 180
+    try:
+        yield mock
+    finally:
+        mock.stop()

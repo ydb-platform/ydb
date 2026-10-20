@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/providers/function/proto/dq_function.pb.h>
 #include <ydb/services/udf_store/wasm/bridge_resident.h>
 #include <ydb/services/udf_store/wasm/compile.h>
@@ -275,7 +276,9 @@ public:
         // DQ's estimated row size is always at least one byte, but can be
         // smaller than the wire framing (e.g. an empty String). Advertising one
         // byte per reserved row also bounds the final whole row returned by Pop.
-        return Failed || Finished ? 0 : static_cast<i64>(MaxRows - BufferedRows());
+        // Continue accepting control records after Finish, as DQ checkpoints
+        // also traverse finished branches. No rows may follow Finish.
+        return Failed || PendingCheckpoint || PendingWatermark ? 0 : static_cast<i64>(MaxRows - BufferedRows());
     }
 
     bool AllowFreeSpaceOvercommit() const override {
@@ -286,10 +289,15 @@ public:
         return Stats;
     }
 
-    void SendData(TUnboxedValueBatch&& batch, i64, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+    void SendData(TUnboxedValueBatch&& batch, i64 size, const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) override {
+        SendDataWithWatermark(std::move(batch), size, Nothing(), checkpoint, finished);
+    }
+
+    void SendDataWithWatermark(TUnboxedValueBatch&& batch, i64, const TMaybe<NYql::NDqProto::TWatermark>& watermark,
+        const TMaybe<NYql::NDqProto::TCheckpoint>& checkpoint, bool finished) override {
         try {
-            Y_ENSURE(!checkpoint, "WASM services do not support checkpoints");
-            Y_ENSURE(!Finished && !Failed && !batch.IsWide(), "Invalid WASM service input batch");
+            Y_ENSURE(!Failed && !batch.IsWide() && (!Finished || batch.empty()), "Invalid WASM service input batch");
+            Y_ENSURE(!PendingCheckpoint && !PendingWatermark, "WASM service control record is still pending");
             Y_ENSURE(batch.RowCount() <= MaxRows - BufferedRows(), "WASM service row/byte quota exceeded");
             batch.ForEachRow([&](const NUdf::TUnboxedValue& row) {
                 TString bytes(Method.MaxInputRowBytes, '\0');
@@ -324,19 +332,23 @@ public:
                 bytes.resize(writer.Size());
                 Pending.push_back(std::move(bytes));
             });
-            Finished = finished;
+            PendingWatermark = watermark;
+            PendingCheckpoint = checkpoint;
+            Finished |= finished;
             Send(SelfId(), new TEvReady);
         } catch (...) {
             Fail("Invalid WASM service input or row/byte quota exceeded");
         }
     }
 
+    // This is a stateless, barrier-forwarding transform, not a transactional
+    // sink. DQ restores the input/program; uncheckpointed calls may repeat.
+    // It has no separate state and must not call the sink state callbacks.
     void CommitState(const NYql::NDqProto::TCheckpoint&) override {
-        Y_ENSURE(false, "WASM service checkpoints are unsupported");
     }
 
-    void LoadState(const TSinkState&, const NYql::NDqProto::TCheckpoint&) override {
-        Y_ENSURE(false, "WASM service checkpoints are unsupported");
+    void LoadState(const TSinkState& state, const NYql::NDqProto::TCheckpoint&) override {
+        Y_ENSURE(state.Data.Blob.empty(), "Unexpected WASM service checkpoint state");
     }
 
     void OnOutputConsumerReady() override {
@@ -473,8 +485,28 @@ private:
                 Call = Runtime->Start(TStringBuf(bytes.data(), bytes.size()), InvocationDeadline);
                 Schedule(Config->Timeout, new NActors::TEvents::TEvWakeup(Call));
                 Send(SelfId(), new TEvReady);
-            } else if (Finished && !Acknowledged) {
+            } else {
                 auto guard = Guard(*Alloc);
+                if (PendingWatermark || PendingCheckpoint) {
+                    if (Output->GetFillLevel() == HardLimit) {
+                        return;
+                    }
+                    if (PendingWatermark) {
+                        Output->Consume(std::move(*PendingWatermark));
+                        PendingWatermark.Clear();
+                    }
+                    if (PendingCheckpoint) {
+                        Output->Consume(std::move(*PendingCheckpoint));
+                        PendingCheckpoint.Clear();
+                    }
+                    // Consumers must retain the barrier position: FIFO buffers
+                    // queue it, while v1 channels report HardLimit until it drains.
+                    Output->Flush();
+                    Callback->ResumeExecution();
+                }
+                if (!Finished || Acknowledged) {
+                    return;
+                }
                 Output->Finish();
                 Acknowledged = true;
                 if (TransformTrace) {
@@ -535,6 +567,8 @@ private:
     ui32 MaxRows, DispatchRows, ActiveCount = 0;
     TDqAsyncStats Stats;
     TDeque<TString> Pending, Results;
+    TMaybe<NYql::NDqProto::TWatermark> PendingWatermark;
+    TMaybe<NYql::NDqProto::TCheckpoint> PendingCheckpoint;
     TTraceContext TraceContext;
     std::shared_ptr<TCallTrace> TransformTrace, InvocationTrace;
     ui64 InvocationSequence = 0;

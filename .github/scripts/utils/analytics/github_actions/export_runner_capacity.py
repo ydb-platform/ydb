@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Snapshot Yandex Cloud quota and the ghrun pool into analytics/ci_capacity.
-
-Rows live one year (the same TTL as analytics/ci_metrics). One sample is
-quota headroom, how many preset VMs still fit, each runner, and the Actions
-queue. The Runners capacity tab in DataLens reads this table, not ci_metrics.
-"""
+"""Snapshot Cloud quota and the ghrun pool into analytics/ci_capacity."""
 
 from __future__ import annotations
 
@@ -18,6 +13,8 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import yaml
 
 _ANALYTICS_ROOT = Path(__file__).resolve().parents[1]
 if str(_ANALYTICS_ROOT) not in sys.path:
@@ -35,7 +32,6 @@ DEFAULT_CLOUD_ID = "b1ggceeul2pkher8vhb6"
 DEFAULT_ORG = "ydb-platform"
 DEFAULT_REPO = "ydb"
 GIB = 1024.0 ** 3
-# A value at least this large is bytes. 320 (GiB) stays GiB; 1 GiB in bytes does not.
 BYTES_THRESHOLD = 1_000_000.0
 QUOTA_FIELDS = (
     ("compute.instanceCores.count", "cores", False),
@@ -48,41 +44,29 @@ FIT_PRESETS = {
     "release-asan": "build-preset-release-asan",
 }
 JOB_RANK = {"in_progress": 2, "queued": 1}
-# GitHub-hosted images. They do not wait for ghrun and must not count as demand.
 GITHUB_HOSTED_PREFIXES = ("ubuntu-", "windows-", "macos-")
 GHRUN_NAME_PREFIXES = ("ghrun-", "static-", "tiny-worker-", "analytic-node-")
-# GitHub's status filter often returns a short page even when more runs exist.
-# Stop only on an empty page, not on len(batch) < per_page.
+PR_EVENTS = ("pull_request", "pull_request_target")
 RUN_PAGE_SIZE = 100
 RUN_MAX_PAGES = 30
-
-
-class IncompleteGitHubJobs(RuntimeError):
-    """The Actions run list is truncated or internally inconsistent."""
+SIZE_KEYS = ("vcpu", "ram_gb", "nrd_ssd_gb")
+OPTIONAL = (
+    "workflow", "job_name", "branch", "run_url", "pr_number", "pr_title",
+    "state", "zone", "cores", "ram_gib", "nrd_gib",
+    "limit_value", "usage_value", "free_value", "created_at", "age_sec",
+)
 
 COLUMNS = (
     ("sampled_at", "Timestamp", False),
     ("date", "Date", False),
     ("kind", "Utf8", False),
     ("name", "Utf8", False),
-    ("workflow", "Utf8", True),
-    ("job_name", "Utf8", True),
-    ("branch", "Utf8", True),
-    ("run_url", "Utf8", True),
-    ("pr_number", "Utf8", True),
-    ("pr_title", "Utf8", True),
-    ("state", "Utf8", True),
-    ("zone", "Utf8", True),
-    ("cores", "Double", True),
-    ("ram_gib", "Double", True),
-    ("nrd_gib", "Double", True),
-    ("limit_value", "Double", True),
-    ("usage_value", "Double", True),
-    ("free_value", "Double", True),
-    ("created_at", "Timestamp", True),
-    ("age_sec", "Double", True),
-)
+) + tuple((name, "Timestamp" if name == "created_at" else "Double" if name.endswith(("_gib", "_value", "_sec")) or name == "cores" else "Utf8", True) for name in OPTIONAL)
 PRIMARY_KEYS = ("sampled_at", "date", "kind", "name")
+
+
+class IncompleteGitHubJobs(RuntimeError):
+    pass
 
 
 def repo_root() -> Path:
@@ -98,17 +82,15 @@ def resolve_capacity_table_path(ydb_wrapper=None) -> str:
 
 
 def build_create_capacity_table_sql(table_path: str, ttl_minutes: int = TTL_MINUTES) -> str:
-    """Column table. TTL is one year on sampled_at (TTL_MINUTES == 365 days)."""
-    col_defs = []
-    for name, sql_type, nullable in COLUMNS:
-        null_str = "" if nullable else " NOT NULL"
-        col_defs.append(f"            `{name}` {sql_type}{null_str}")
-    columns_sql = ",\n".join(col_defs)
-    pk_sql = ", ".join("`%s`" % key for key in PRIMARY_KEYS)
+    cols = ",\n".join(
+        "            `%s` %s%s" % (name, sql_type, "" if nullable else " NOT NULL")
+        for name, sql_type, nullable in COLUMNS
+    )
+    pk = ", ".join("`%s`" % key for key in PRIMARY_KEYS)
     return f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
-{columns_sql},
-            PRIMARY KEY ({pk_sql})
+{cols},
+            PRIMARY KEY ({pk})
         )
         PARTITION BY HASH(`date`)
         WITH (
@@ -131,15 +113,29 @@ def as_float(value: Any) -> Optional[float]:
 
 
 def bytes_to_gib(value: float) -> float:
-    if value >= BYTES_THRESHOLD:
-        return value / GIB
-    return value
+    return value / GIB if value >= BYTES_THRESHOLD else value
 
 
-def _size_from_raw(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dict[str, float]:
+def _pick(mapping: Any, *keys: str):
+    if not isinstance(mapping, dict):
+        return None
+    for key in keys:
+        value = mapping.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _row(sampled_at: datetime, kind: str, name: str, **fields: Any) -> Dict[str, Any]:
+    row = dict.fromkeys(OPTIONAL)
+    row.update(sampled_at=sampled_at, date=sampled_at.date(), kind=kind, name=name, **fields)
+    return row
+
+
+def _size(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dict[str, float]:
     fallback = fallback or {}
     out: Dict[str, float] = {}
-    for key in ("vcpu", "ram_gb", "nrd_ssd_gb"):
+    for key in SIZE_KEYS:
         number = as_float((raw or {}).get(key))
         if number is None:
             number = as_float(fallback.get(key))
@@ -148,333 +144,176 @@ def _size_from_raw(raw: Any, fallback: Optional[Dict[str, float]] = None) -> Dic
     return out
 
 
-def _parse_footprints_yaml(text: str) -> Dict[str, Any]:
-    """Read footprints / default_footprint when PyYAML is not installed."""
-    data: Dict[str, Any] = {"footprints": {}, "default_footprint": {}, "static_runners": {}}
-    section = None
-    current = None
-    for raw in text.splitlines():
-        if not raw.strip() or raw.lstrip().startswith("#"):
-            continue
-        indent = len(raw) - len(raw.lstrip(" "))
-        line = raw.strip()
-        if indent == 0:
-            current = None
-            if line.startswith("footprints:"):
-                section = "footprints"
-            elif line.startswith("default_footprint:"):
-                section = "default"
-            elif line.startswith("static_runners:"):
-                section = "static"
-            else:
-                section = None
-            continue
-        if section == "footprints" and indent == 2 and line.endswith(":"):
-            current = line[:-1].strip()
-            data["footprints"][current] = {}
-            continue
-        if section == "static" and indent == 2 and line.endswith(":"):
-            current = line[:-1].strip()
-            data["static_runners"][current] = {"footprint": {}}
-            continue
-        if ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        number = as_float(value.strip())
-        if number is None:
-            continue
-        if section == "default" and indent == 2:
-            data["default_footprint"][key.strip()] = number
-        elif section == "footprints" and current and indent >= 4:
-            data["footprints"][current][key.strip()] = number
-        elif section == "static" and current and indent >= 6:
-            data["static_runners"][current].setdefault("footprint", {})[key.strip()] = number
-    return data
-
-
-def _load_footprints_yaml(path: Optional[Path] = None) -> Dict[str, Any]:
+def load_label_footprints(path: Optional[Path] = None):
     path = path or footprints_path()
-    if not path.is_file():
-        return {}
     try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return {}
-    try:
-        import yaml
-    except ImportError:
-        return _parse_footprints_yaml(text)
-    try:
-        data = yaml.safe_load(text) or {}
-    except yaml.YAMLError:
-        return {}
-    return data if isinstance(data, dict) else {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {} if path.is_file() else {}
+    except (OSError, yaml.YAMLError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    default = _size(data.get("default_footprint"))
+    specs: Dict[str, Dict[str, float]] = {}
+    for label, raw in (data.get("footprints") or {}).items():
+        if isinstance(raw, dict):
+            specs[str(label)] = _size(raw, default)
+    for label, raw in (data.get("static_runners") or {}).items():
+        if isinstance(raw, dict):
+            spec = _size(raw.get("footprint") or raw, default)
+            if spec:
+                specs[str(label)] = spec
+    return specs, default
 
 
-def load_fit_footprints(path: Optional[Path] = None) -> Dict[str, Dict[str, float]]:
-    specs, default = load_label_footprints(path)
-    out: Dict[str, Dict[str, float]] = {}
-    for short, label in FIT_PRESETS.items():
-        spec = specs.get(label) or default
-        if spec:
-            out[short] = dict(spec)
-    return out
+def load_fit_footprints(path: Optional[Path] = None, specs=None, default=None) -> Dict[str, Dict[str, float]]:
+    if specs is None:
+        specs, default = load_label_footprints(path)
+    return {
+        short: dict(specs.get(label) or default)
+        for short, label in FIT_PRESETS.items()
+        if specs.get(label) or default
+    }
 
 
-def quota_rows_for(limits: List[Dict[str, Any]], quota_id: str) -> List[Dict[str, Any]]:
-    """Cloud-wide id, or the same id plus a zone suffix after YC split quotas per AZ."""
-    prefix = quota_id + "."
-    out: List[Dict[str, Any]] = []
-    for row in limits:
-        if not isinstance(row, dict):
-            continue
-        name = row.get("quota_id") or ""
-        if name == quota_id or name.startswith(prefix):
-            out.append(row)
-    return out
-
-
-def quota_az(quota_id: str, field: str) -> Optional[str]:
-    """AZ after the field id, empty string for the cloud-wide id, else None."""
+def _quota_az(quota_id: str, field: str) -> Optional[str]:
     if quota_id == field:
         return ""
     prefix = field + "."
-    if quota_id.startswith(prefix):
-        return quota_id[len(prefix):]
-    return None
+    return quota_id[len(prefix):] if quota_id.startswith(prefix) else None
+
+
+def _add_quota(bucket: Dict[str, Dict[str, float]], name: str, limit: float, usage: float) -> None:
+    spec = bucket.setdefault(name, {"limit": 0.0, "usage": 0.0, "free": 0.0})
+    spec["limit"] += limit
+    spec["usage"] += usage
+    spec["free"] = spec["limit"] - spec["usage"]
+
+
+def _quotas(limits: List[Dict[str, Any]]):
+    cloud: Dict[str, Dict[str, float]] = {}
+    zonal: Dict[str, Dict[str, Dict[str, float]]] = {}
+    for row in limits:
+        if not isinstance(row, dict):
+            continue
+        quota_id = row.get("quota_id") or ""
+        limit, usage = as_float(row.get("limit")), as_float(row.get("usage"))
+        if limit is None or usage is None:
+            continue
+        for field, name, as_bytes in QUOTA_FIELDS:
+            az = _quota_az(quota_id, field)
+            if az is None:
+                continue
+            if as_bytes:
+                limit_v, usage_v = limit / GIB, usage / GIB
+            else:
+                limit_v, usage_v = limit, usage
+            _add_quota(cloud, name, limit_v, usage_v)
+            if az:
+                _add_quota(zonal.setdefault(az, {}), name, limit_v, usage_v)
+    return cloud, zonal
 
 
 def quota_headroom(limits: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
-    out: Dict[str, Dict[str, float]] = {}
-    for quota_id, name, as_bytes in QUOTA_FIELDS:
-        limit_total = 0.0
-        usage_total = 0.0
-        found = False
-        for row in quota_rows_for(limits, quota_id):
-            limit = as_float(row.get("limit"))
-            usage = as_float(row.get("usage"))
-            if limit is None or usage is None:
-                continue
-            if as_bytes:
-                limit = limit / GIB
-                usage = usage / GIB
-            limit_total += limit
-            usage_total += usage
-            found = True
-        if found:
-            out[name] = {"limit": limit_total, "usage": usage_total, "free": limit_total - usage_total}
-    return out
+    return _quotas(limits)[0]
 
 
 def quota_headroom_by_zone(limits: List[Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, float]]]:
-    """Per-AZ headroom. Cloud-wide ids (no AZ suffix) are skipped here."""
-    out: Dict[str, Dict[str, Dict[str, float]]] = {}
-    for quota_id, name, as_bytes in QUOTA_FIELDS:
-        for row in limits:
-            if not isinstance(row, dict):
-                continue
-            az = quota_az(row.get("quota_id") or "", quota_id)
-            if not az:
-                continue
-            limit = as_float(row.get("limit"))
-            usage = as_float(row.get("usage"))
-            if limit is None or usage is None:
-                continue
-            if as_bytes:
-                limit = limit / GIB
-                usage = usage / GIB
-            bucket = out.setdefault(az, {})
-            spec = bucket.setdefault(name, {"limit": 0.0, "usage": 0.0, "free": 0.0})
-            spec["limit"] += limit
-            spec["usage"] += usage
-            spec["free"] = spec["limit"] - spec["usage"]
-    return out
+    return _quotas(limits)[1]
 
 
 def hosts_that_fit(headroom: Dict[str, Dict[str, float]], footprint: Dict[str, float]) -> int:
     bounds = []
-    cores = headroom.get("cores")
-    ram = headroom.get("ram_gib")
-    instances = headroom.get("instances")
-    nrd = headroom.get("nrd_gib")
-    if cores is not None and footprint.get("vcpu"):
-        bounds.append(int(cores["free"] // footprint["vcpu"]))
-    if ram is not None and footprint.get("ram_gb"):
-        bounds.append(int(ram["free"] // footprint["ram_gb"]))
-    if instances is not None:
-        bounds.append(int(instances["free"]))
-    if nrd is not None and footprint.get("nrd_ssd_gb"):
-        bounds.append(int(nrd["free"] // footprint["nrd_ssd_gb"]))
-    if not bounds:
-        return 0
-    return max(min(bounds), 0)
+    for key, size_key in (("cores", "vcpu"), ("ram_gib", "ram_gb"), ("nrd_gib", "nrd_ssd_gb")):
+        slot, size = headroom.get(key), footprint.get(size_key)
+        if slot is not None and size:
+            bounds.append(int(slot["free"] // size))
+    if "instances" in headroom:
+        bounds.append(int(headroom["instances"]["free"]))
+    return max(min(bounds), 0) if bounds else 0
 
 
 def is_ghrun(instance: Dict[str, Any]) -> bool:
     labels = instance.get("labels") or {}
-    if isinstance(labels, dict) and "ghrun" in labels:
-        return True
-    name = instance.get("name") or ""
-    return name.startswith(GHRUN_NAME_PREFIXES)
+    return (isinstance(labels, dict) and "ghrun" in labels) or (instance.get("name") or "").startswith(GHRUN_NAME_PREFIXES)
 
 
 def instance_zone(instance: Dict[str, Any]) -> str:
-    raw = instance.get("zoneId") or instance.get("zone_id") or instance.get("zone") or ""
-    return str(raw).strip()
+    return str(_pick(instance, "zoneId", "zone_id", "zone") or "").strip()
 
 
 def instance_cores(instance: Dict[str, Any]) -> Optional[float]:
-    resources = instance.get("resources") or {}
-    return as_float(resources.get("cores", instance.get("cores")))
+    return as_float(_pick(instance.get("resources") or {}, "cores") or instance.get("cores"))
 
 
 def instance_ram_gib(instance: Dict[str, Any]) -> Optional[float]:
-    resources = instance.get("resources") or {}
-    raw = as_float(resources.get("memory", instance.get("ram")))
-    if raw is None:
-        return None
-    return bytes_to_gib(raw)
+    raw = as_float(_pick(instance.get("resources") or {}, "memory") or instance.get("ram"))
+    return None if raw is None else bytes_to_gib(raw)
 
 
-def _disk_size_gib(disk: Dict[str, Any]) -> Optional[float]:
-    spec = disk.get("disk_spec") or disk.get("diskSpec") or disk
-    raw = as_float(spec.get("size") or spec.get("disk_size") or disk.get("size"))
-    if raw is None:
-        return None
-    return bytes_to_gib(raw)
-
-
-def _disk_type(disk: Dict[str, Any]) -> str:
-    spec = disk.get("disk_spec") or disk.get("diskSpec") or disk
-    return str(
-        spec.get("type_id")
-        or spec.get("typeId")
-        or spec.get("type")
-        or disk.get("type")
-        or ""
-    ).lower()
-
-
-def instance_nrd_gib(instance: Dict[str, Any]) -> Optional[float]:
-    """NRD size from the VM disks, or the ghrun footprint when Cloud omits size."""
-    disks: List[Dict[str, Any]] = []
-    boot = instance.get("boot_disk") or instance.get("bootDisk")
+def instance_nrd_gib(instance: Dict[str, Any], specs=None, default=None) -> Optional[float]:
+    disks = []
+    boot = _pick(instance, "boot_disk", "bootDisk")
     if isinstance(boot, dict):
         disks.append(boot)
-    extra = instance.get("secondary_disks") or instance.get("secondaryDisks") or []
+    extra = _pick(instance, "secondary_disks", "secondaryDisks") or []
     if isinstance(extra, list):
         disks.extend(item for item in extra if isinstance(item, dict))
-    total = 0.0
-    found = False
+    total, found = 0.0, False
     for disk in disks:
-        size = _disk_size_gib(disk)
-        if size is None:
-            continue
-        dtype = _disk_type(disk)
-        if "nonreplicated" in dtype or "nrd" in dtype:
-            total += size
+        spec = _pick(disk, "disk_spec", "diskSpec") or disk
+        size = as_float(_pick(spec, "size", "disk_size") or disk.get("size"))
+        dtype = str(_pick(spec, "type_id", "typeId", "type") or disk.get("type") or "").lower()
+        if size is not None and ("nonreplicated" in dtype or "nrd" in dtype):
+            total += bytes_to_gib(size)
             found = True
     if found:
         return total
     if not is_ghrun(instance):
         return None
-    specs, default = load_label_footprints()
+    if specs is None:
+        specs, default = load_label_footprints()
     name = instance.get("name") or ""
     if name.startswith("tiny-worker-"):
         spec = specs.get("tiny-worker") or {}
     elif name.startswith("analytic-node-"):
         spec = specs.get("build-preset-analytic-node") or {}
+    elif (instance_ram_gib(instance) or 0) <= 16 and (instance_cores(instance) or 0) <= 8:
+        spec = specs.get("tiny-worker") or specs.get("build-preset-analytic-node") or {}
     else:
-        ram = instance_ram_gib(instance) or 0.0
-        cores = instance_cores(instance) or 0.0
-        if ram <= 16 and cores <= 8:
-            spec = specs.get("tiny-worker") or specs.get("build-preset-analytic-node") or {}
-        else:
-            spec = default or specs.get("build-preset-relwithdebinfo") or {}
+        spec = default or specs.get("build-preset-relwithdebinfo") or {}
     return spec.get("nrd_ssd_gb")
 
 
 def age_sec(now: datetime, moment: Optional[datetime]) -> Optional[float]:
-    if moment is None:
-        return None
-    return max((now - moment).total_seconds(), 0.0)
-
-
-def _blank(
-    sampled_at: datetime,
-    kind: str,
-    name: str,
-    **fields: Any,
-) -> Dict[str, Any]:
-    row = {
-        "sampled_at": sampled_at,
-        "date": sampled_at.date(),
-        "kind": kind,
-        "name": name,
-        "workflow": None,
-        "job_name": None,
-        "branch": None,
-        "run_url": None,
-        "pr_number": None,
-        "pr_title": None,
-        "state": None,
-        "zone": None,
-        "cores": None,
-        "ram_gib": None,
-        "nrd_gib": None,
-        "limit_value": None,
-        "usage_value": None,
-        "free_value": None,
-        "created_at": None,
-        "age_sec": None,
-    }
-    row.update(fields)
-    return row
-
-
-PR_EVENTS = ("pull_request", "pull_request_target")
+    return None if moment is None else max((now - moment).total_seconds(), 0.0)
 
 
 def pull_info(run: Dict[str, Any]) -> tuple:
-    """PR number and title when the run belongs to a pull request."""
-    if (run or {}).get("event") not in PR_EVENTS:
+    run = run or {}
+    if run.get("event") not in PR_EVENTS:
         return None, None
-    pulls = (run or {}).get("pull_requests") or []
-    if not pulls or not isinstance(pulls[0], dict):
+    pull = (run.get("pull_requests") or [None])[0]
+    if not isinstance(pull, dict) or pull.get("number") is None:
         return None, None
-    pull = pulls[0]
-    number = pull.get("number")
-    if number is None:
-        return None, None
-    title = pull.get("title") or ""
-    if not title:
-        title = (run or {}).get("display_title") or ""
-    return str(number), (str(title) or None)
+    return str(pull["number"]), str(pull.get("title") or run.get("display_title") or "") or None
 
 
 def target_branch(run: Dict[str, Any]) -> str:
-    """PR target branch when the run has one, otherwise the branch the run is on."""
-    pulls = (run or {}).get("pull_requests") or []
-    if pulls and isinstance(pulls[0], dict):
-        base = pulls[0].get("base") or {}
-        if isinstance(base, dict) and base.get("ref"):
-            return str(base["ref"])
-    head = (run or {}).get("head_branch") or ""
-    return str(head)
+    pull = ((run or {}).get("pull_requests") or [None])[0]
+    if isinstance(pull, dict):
+        ref = ((pull.get("base") or {}).get("ref") if isinstance(pull.get("base"), dict) else None)
+        if ref:
+            return str(ref)
+    return str((run or {}).get("head_branch") or "")
 
 
 def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
-    """One job per runner. An in-progress job wins over a queued one."""
     best: Dict[str, Dict[str, Any]] = {}
     for run, job in pairs:
         if not isinstance(job, dict):
             continue
-        runner = job.get("runner_name") or ""
-        status = job.get("status") or ""
-        if not runner or status not in JOB_RANK:
-            continue
-        job_name = job.get("name") or ""
-        if "${{" in job_name:
+        runner, status, job_name = job.get("runner_name") or "", job.get("status") or "", job.get("name") or ""
+        if not runner or status not in JOB_RANK or "${{" in job_name:
             continue
         current = best.get(runner)
         if current is not None and JOB_RANK[status] <= JOB_RANK[current["status"]]:
@@ -493,40 +332,16 @@ def index_runner_jobs(pairs: List[tuple]) -> Dict[str, Dict[str, Any]]:
     return best
 
 
-def load_label_footprints(path: Optional[Path] = None):
-    """Runner size by GitHub label from runners_footprints.yml."""
-    data = _load_footprints_yaml(path)
-    default = _size_from_raw(data.get("default_footprint"))
-    specs: Dict[str, Dict[str, float]] = {}
-    for label, raw in (data.get("footprints") or {}).items():
-        if isinstance(raw, dict):
-            specs[str(label)] = _size_from_raw(raw, default)
-    for label, raw in (data.get("static_runners") or {}).items():
-        if not isinstance(raw, dict):
-            continue
-        spec = _size_from_raw(raw.get("footprint") or raw, default)
-        if spec:
-            specs[str(label)] = spec
-    return specs, default
-
-
 def job_label_names(job: Dict[str, Any]) -> List[str]:
-    names: List[str] = []
+    names = []
     for label in job.get("labels") or []:
-        if isinstance(label, dict):
-            label = label.get("name") or ""
-        text = str(label).strip()
+        text = str(label.get("name") if isinstance(label, dict) else label).strip()
         if text:
             names.append(text)
     return names
 
 
 def is_github_hosted_job(job: Dict[str, Any]) -> bool:
-    """True for ubuntu-latest and other GitHub-hosted images.
-
-    Those jobs never take a ghrun VM. If a job also asks for self-hosted
-    or a build-preset, keep it: that is our pool.
-    """
     labels = [name.lower() for name in job_label_names(job)]
     if "self-hosted" in labels or any(name.startswith("build-preset-") for name in labels):
         return False
@@ -534,14 +349,12 @@ def is_github_hosted_job(job: Dict[str, Any]) -> bool:
 
 
 def job_footprint(job: Dict[str, Any], specs: Dict[str, Dict[str, float]], default: Dict[str, float]) -> Dict[str, float]:
-    """Size of the runner a queued job will ask for."""
     labels = job_label_names(job)
     for label in labels:
         if label in specs:
             return specs[label]
-        prefixed = "build-preset-" + label
-        if prefixed in specs:
-            return specs[prefixed]
+        if "build-preset-" + label in specs:
+            return specs["build-preset-" + label]
     blob = ((job.get("name") or "") + " " + " ".join(labels)).lower()
     if any(token in blob for token in ("asan", "msan", "tsan")):
         return specs.get("build-preset-release-asan", default)
@@ -550,53 +363,32 @@ def job_footprint(job: Dict[str, Any], specs: Dict[str, Dict[str, float]], defau
     return default
 
 
-def queue_row_name(run: Dict[str, Any], job: Dict[str, Any]) -> str:
-    run_id = (run or {}).get("id")
-    job_id = job.get("id")
-    if run_id is not None and job_id is not None:
-        return "q.%s.%s" % (run_id, job_id)
-    workflow = (run or {}).get("name") or "wf"
-    job_name = job.get("name") or "job"
-    return "q.%s.%s" % (workflow, job_name)
-
-
-def queue_jobs(
-    pairs: List[tuple],
-    now: datetime,
-    specs: Optional[Dict[str, Dict[str, float]]] = None,
-    default: Optional[Dict[str, float]] = None,
-) -> List[Dict[str, Any]]:
-    """One row per queued job, with the GitHub link so the dash can open it."""
+def queue_jobs(pairs: List[tuple], now: datetime, specs=None, default=None) -> List[Dict[str, Any]]:
     if specs is None or default is None:
         loaded_specs, loaded_default = load_label_footprints()
-        if specs is None:
-            specs = loaded_specs
-        if default is None:
-            default = loaded_default
-    jobs: List[Dict[str, Any]] = []
-    used = set()
+        specs = loaded_specs if specs is None else specs
+        default = loaded_default if default is None else default
+    jobs, used = [], set()
     for run, job in pairs:
-        if not isinstance(job, dict) or job.get("status") != "queued":
-            continue
-        if is_github_hosted_job(job):
+        if not isinstance(job, dict) or job.get("status") != "queued" or is_github_hosted_job(job):
             continue
         job_name = job.get("name") or ""
         if "${{" in job_name:
             continue
-        workflow = (run or {}).get("name") or "(no workflow)"
-        created = parse_datetime(job.get("created_at") or (run or {}).get("created_at"))
+        run = run or {}
+        created = parse_datetime(job.get("created_at") or run.get("created_at"))
         size = job_footprint(job, specs, default)
-        number, title = pull_info(run or {})
-        name = queue_row_name(run or {}, job)
+        number, title = pull_info(run)
+        name = "q.%s.%s" % (run.get("id") or run.get("name") or "wf", job.get("id") or job_name or "job")
         if name in used:
             name = "%s.%s" % (name, len(used))
         used.add(name)
         jobs.append({
             "name": name,
-            "workflow": workflow,
+            "workflow": run.get("name") or "(no workflow)",
             "job_name": job_name,
-            "branch": target_branch(run or {}) or None,
-            "run_url": job.get("html_url") or (run or {}).get("html_url") or None,
+            "branch": target_branch(run) or None,
+            "run_url": job.get("html_url") or run.get("html_url") or None,
             "pr_number": number,
             "pr_title": title,
             "cores": size["vcpu"],
@@ -610,157 +402,87 @@ def queue_jobs(
 
 
 def count_assigned_and_queued(pairs: Optional[List[tuple]]) -> tuple:
-    """How many runners have an in-progress job, and how many jobs are queued."""
-    busy = set()
-    queued = 0
+    busy, queued = set(), 0
     for _run, job in pairs or []:
         if not isinstance(job, dict):
             continue
-        status = job.get("status") or ""
-        runner = job.get("runner_name") or ""
-        if status == "in_progress" and runner:
-            busy.add(runner)
-        elif status == "queued" and not is_github_hosted_job(job):
+        if job.get("status") == "in_progress" and job.get("runner_name"):
+            busy.add(job["runner_name"])
+        elif job.get("status") == "queued" and not is_github_hosted_job(job):
             queued += 1
     return len(busy), queued
 
 
 def github_jobs_incomplete(ghrun_n: int, busy_n: int, queued_n: int) -> bool:
-    """True when a short in_progress list plus a long queue cannot be real.
-
-    That shape is what a truncated Actions page looks like: VMs stay in the
-    pool, but we never saw the jobs on them, so they are stored as idle.
-    """
     if ghrun_n < 10:
         return False
-    if queued_n >= 20 and busy_n < ghrun_n * 0.35:
-        return True
-    # Truncated in_progress list: a large pool with almost no assigned jobs.
-    return ghrun_n >= 40 and busy_n < ghrun_n * 0.15
+    return (queued_n >= 20 and busy_n < ghrun_n * 0.35) or (ghrun_n >= 40 and busy_n < ghrun_n * 0.15)
 
 
 def runner_state(name: str, jobs: Optional[Dict[str, Dict[str, Any]]], github_ok: bool) -> str:
     if not github_ok or jobs is None:
         return "unknown"
-    job = jobs.get(name)
-    if not job:
-        return "idle"
-    if job["status"] == "in_progress":
-        return "busy"
-    if job["status"] == "queued":
-        return "queued"
-    return "idle"
+    return {"in_progress": "busy", "queued": "queued"}.get((jobs.get(name) or {}).get("status"), "idle")
 
 
 def unique_name(instance: Dict[str, Any], used: set) -> str:
     name = instance.get("name") or instance.get("id") or "unnamed"
-    if name not in used:
-        used.add(name)
-        return name
-    alt = "%s@%s" % (name, instance.get("_folder_id") or "folder")
-    used.add(alt)
-    return alt
+    if name in used:
+        name = "%s@%s" % (name, instance.get("_folder_id") or "folder")
+    used.add(name)
+    return name
 
 
-def quota_and_fit_rows(
-    sampled_at: datetime,
-    headroom: Dict[str, Dict[str, float]],
-    footprints: Dict[str, Dict[str, float]],
-    zone: str,
-) -> List[Dict[str, Any]]:
+def quota_and_fit_rows(sampled_at, headroom, footprints, zone: str) -> List[Dict[str, Any]]:
     suffix = "@%s" % zone if zone else ""
-    rows: List[Dict[str, Any]] = []
+    rows = []
     for name, spec in headroom.items():
-        rows.append(
-            _blank(
-                sampled_at,
-                "quota",
-                name + suffix,
-                zone=zone or None,
-                limit_value=spec["limit"],
-                usage_value=spec["usage"],
-                free_value=spec["free"],
-                cores=spec["free"] if name == "cores" else None,
-                ram_gib=spec["free"] if name == "ram_gib" else None,
-                nrd_gib=spec["free"] if name == "nrd_gib" else None,
-            )
-        )
+        rows.append(_row(
+            sampled_at, "quota", name + suffix, zone=zone or None,
+            limit_value=spec["limit"], usage_value=spec["usage"], free_value=spec["free"],
+            cores=spec["free"] if name == "cores" else None,
+            ram_gib=spec["free"] if name == "ram_gib" else None,
+            nrd_gib=spec["free"] if name == "nrd_gib" else None,
+        ))
     for label, footprint in footprints.items():
-        rows.append(
-            _blank(
-                sampled_at,
-                "fit",
-                "fit.%s%s" % (label, suffix),
-                zone=zone or None,
-                free_value=float(hosts_that_fit(headroom, footprint)),
-                cores=footprint.get("vcpu"),
-                ram_gib=footprint.get("ram_gb"),
-                nrd_gib=footprint.get("nrd_ssd_gb"),
-            )
-        )
+        rows.append(_row(
+            sampled_at, "fit", "fit.%s%s" % (label, suffix), zone=zone or None,
+            free_value=float(hosts_that_fit(headroom, footprint)),
+            cores=footprint.get("vcpu"), ram_gib=footprint.get("ram_gb"), nrd_gib=footprint.get("nrd_ssd_gb"),
+        ))
     return rows
 
 
-def append_runner_summary(
-    rows: List[Dict[str, Any]],
-    sampled_at: datetime,
-    ghruns: List[Dict[str, Any]],
-    zone: str,
-) -> None:
+def append_runner_summary(rows, sampled_at, ghruns, zone: str) -> None:
     suffix = "@%s" % zone if zone else ""
     created = [item for item in ghruns if item["created_at"] is not None]
     newest = max(created, key=lambda item: item["created_at"]) if created else None
     born = [item for item in created if sampled_at - item["created_at"] <= timedelta(hours=24)]
     idle = [item for item in ghruns if item["state"] == "idle"]
     busy = [item for item in ghruns if item["state"] == "busy"]
-    rows.append(
-        _blank(
-            sampled_at,
-            "summary",
-            "runners.ghrun" + suffix,
-            zone=zone or None,
-            usage_value=float(len(ghruns)),
-            free_value=float(len(idle)),
-            cores=sum(item["cores"] or 0 for item in busy),
-            ram_gib=sum(item["ram"] or 0 for item in busy),
-            nrd_gib=sum(item["nrd"] or 0 for item in busy),
-            limit_value=sum(item["ram"] or 0 for item in ghruns),
-        )
-    )
-    rows.append(
-        _blank(
-            sampled_at,
-            "summary",
-            "runners.idle" + suffix,
-            zone=zone or None,
-            usage_value=float(len(idle)),
-            cores=sum(item["cores"] or 0 for item in idle),
-            ram_gib=sum(item["ram"] or 0 for item in idle),
-            nrd_gib=sum(item["nrd"] or 0 for item in idle),
-        )
-    )
-    rows.append(
-        _blank(
-            sampled_at,
-            "summary",
-            "runners.created_24h" + suffix,
-            zone=zone or None,
-            usage_value=float(len(born)),
-        )
-    )
+    zone_v = zone or None
+    rows.append(_row(
+        sampled_at, "summary", "runners.ghrun" + suffix, zone=zone_v,
+        usage_value=float(len(ghruns)), free_value=float(len(idle)),
+        cores=sum(item["cores"] or 0 for item in busy),
+        ram_gib=sum(item["ram"] or 0 for item in busy),
+        nrd_gib=sum(item["nrd"] or 0 for item in busy),
+        limit_value=sum(item["ram"] or 0 for item in ghruns),
+    ))
+    rows.append(_row(
+        sampled_at, "summary", "runners.idle" + suffix, zone=zone_v,
+        usage_value=float(len(idle)),
+        cores=sum(item["cores"] or 0 for item in idle),
+        ram_gib=sum(item["ram"] or 0 for item in idle),
+        nrd_gib=sum(item["nrd"] or 0 for item in idle),
+    ))
+    rows.append(_row(sampled_at, "summary", "runners.created_24h" + suffix, zone=zone_v, usage_value=float(len(born))))
     if newest:
-        rows.append(
-            _blank(
-                sampled_at,
-                "summary",
-                "runners.newest" + suffix,
-                zone=zone or None,
-                job_name=newest["name"],
-                created_at=newest["created_at"],
-                age_sec=age_sec(sampled_at, newest["created_at"]),
-                usage_value=float(len(ghruns)),
-            )
-        )
+        rows.append(_row(
+            sampled_at, "summary", "runners.newest" + suffix, zone=zone_v,
+            job_name=newest["name"], created_at=newest["created_at"],
+            age_sec=age_sec(sampled_at, newest["created_at"]), usage_value=float(len(ghruns)),
+        ))
 
 
 def build_snapshot_rows(
@@ -770,178 +492,105 @@ def build_snapshot_rows(
     pairs: Optional[List[tuple]],
     footprints: Dict[str, Dict[str, float]],
     github_ok: bool,
-    label_specs: Optional[Dict[str, Dict[str, float]]] = None,
-    label_default: Optional[Dict[str, float]] = None,
+    label_specs=None,
+    label_default=None,
 ) -> List[Dict[str, Any]]:
     sampled_at = now.replace(microsecond=0)
-    rows: List[Dict[str, Any]] = []
-    headroom = quota_headroom(limits)
-    rows.extend(quota_and_fit_rows(sampled_at, headroom, footprints, zone=""))
-    for az, zonal in sorted(quota_headroom_by_zone(limits).items()):
-        rows.extend(quota_and_fit_rows(sampled_at, zonal, footprints, zone=az))
+    if label_specs is None or label_default is None:
+        loaded_specs, loaded_default = load_label_footprints()
+        label_specs = loaded_specs if label_specs is None else label_specs
+        label_default = loaded_default if label_default is None else label_default
+    cloud, zonal = _quotas(limits)
+    rows = quota_and_fit_rows(sampled_at, cloud, footprints, "")
+    for az in sorted(zonal):
+        rows.extend(quota_and_fit_rows(sampled_at, zonal[az], footprints, az))
 
     jobs = index_runner_jobs(pairs) if github_ok and pairs is not None else None
-    used: set = set()
-    ghruns: List[Dict[str, Any]] = []
+    used, ghruns = set(), []
     for instance in instances:
-        if not isinstance(instance, dict):
-            continue
-        status = instance.get("status")
-        if status not in (None, "RUNNING"):
+        if not isinstance(instance, dict) or instance.get("status") not in (None, "RUNNING"):
             continue
         name = unique_name(instance, used)
-        cores = instance_cores(instance)
-        ram = instance_ram_gib(instance)
-        nrd = instance_nrd_gib(instance)
-        created = parse_datetime(instance.get("created_at"))
-        zone = instance_zone(instance) or None
+        cores, ram, nrd = instance_cores(instance), instance_ram_gib(instance), instance_nrd_gib(instance, label_specs, label_default)
+        created, zone = parse_datetime(instance.get("created_at")), instance_zone(instance) or None
         if is_ghrun(instance):
             state = runner_state(name, jobs, github_ok)
             job = (jobs or {}).get(name) or {}
-            ghruns.append({
-                "name": name,
-                "created_at": created,
-                "state": state,
-                "cores": cores,
-                "ram": ram,
-                "nrd": nrd,
-                "zone": zone or "",
-            })
-            rows.append(
-                _blank(
-                    sampled_at,
-                    "runner",
-                    name,
-                    workflow=job.get("workflow"),
-                    job_name=job.get("job_name"),
-                    branch=job.get("branch") or None,
-                    run_url=job.get("run_url") or None,
-                    pr_number=job.get("pr_number") or None,
-                    pr_title=job.get("pr_title") or None,
-                    state=state,
-                    zone=zone,
-                    cores=cores,
-                    ram_gib=ram,
-                    nrd_gib=nrd,
-                    created_at=created,
-                    age_sec=age_sec(sampled_at, created),
-                )
-            )
+            ghruns.append({"name": name, "created_at": created, "state": state, "cores": cores, "ram": ram, "nrd": nrd, "zone": zone or ""})
+            rows.append(_row(
+                sampled_at, "runner", name,
+                workflow=job.get("workflow"), job_name=job.get("job_name"),
+                branch=job.get("branch") or None, run_url=job.get("run_url") or None,
+                pr_number=job.get("pr_number") or None, pr_title=job.get("pr_title") or None,
+                state=state, zone=zone, cores=cores, ram_gib=ram, nrd_gib=nrd,
+                created_at=created, age_sec=age_sec(sampled_at, created),
+            ))
         else:
-            rows.append(
-                _blank(
-                    sampled_at,
-                    "runner",
-                    name,
-                    state="other",
-                    zone=zone,
-                    job_name=instance.get("_folder_name") or None,
-                    cores=cores,
-                    ram_gib=ram,
-                    nrd_gib=nrd,
-                    created_at=created,
-                    age_sec=age_sec(sampled_at, created),
-                )
-            )
+            rows.append(_row(
+                sampled_at, "runner", name, state="other", zone=zone,
+                job_name=instance.get("_folder_name") or None,
+                cores=cores, ram_gib=ram, nrd_gib=nrd,
+                created_at=created, age_sec=age_sec(sampled_at, created),
+            ))
 
     append_runner_summary(rows, sampled_at, ghruns, "")
     by_zone: Dict[str, List[Dict[str, Any]]] = {}
     for item in ghruns:
-        az = item.get("zone") or ""
-        if az:
-            by_zone.setdefault(az, []).append(item)
+        if item.get("zone"):
+            by_zone.setdefault(item["zone"], []).append(item)
     for az in sorted(by_zone):
         append_runner_summary(rows, sampled_at, by_zone[az], az)
 
     if github_ok and pairs is not None:
-        if label_specs is None or label_default is None:
-            loaded_specs, loaded_default = load_label_footprints()
-            if label_specs is None:
-                label_specs = loaded_specs
-            if label_default is None:
-                label_default = loaded_default
         for item in queue_jobs(pairs, sampled_at, label_specs, label_default):
-            rows.append(
-                _blank(
-                    sampled_at,
-                    "queue",
-                    item["name"],
-                    workflow=item["workflow"],
-                    job_name=item["job_name"] or None,
-                    branch=item["branch"],
-                    run_url=item["run_url"],
-                    pr_number=item["pr_number"],
-                    pr_title=item["pr_title"],
-                    usage_value=1.0,
-                    age_sec=item["age"],
-                    created_at=item["created_at"],
-                    cores=item["cores"],
-                    ram_gib=item["ram"],
-                    nrd_gib=item["nrd"],
-                )
-            )
+            rows.append(_row(
+                sampled_at, "queue", item["name"],
+                workflow=item["workflow"], job_name=item["job_name"] or None,
+                branch=item["branch"], run_url=item["run_url"],
+                pr_number=item["pr_number"], pr_title=item["pr_title"],
+                usage_value=1.0, age_sec=item["age"], created_at=item["created_at"],
+                cores=item["cores"], ram_gib=item["ram"], nrd_gib=item["nrd"],
+            ))
     return rows
 
 
 def snapshot_summary(rows: List[Dict[str, Any]]) -> str:
     by_key = {(row["kind"], row["name"]): row for row in rows}
+
     def free(name: str) -> str:
         row = by_key.get(("quota", name))
-        if not row:
-            return "?"
-        return "%.0f" % row["free_value"]
+        return "?" if not row else "%.0f" % row["free_value"]
 
-    fit_rel = by_key.get(("fit", "fit.relwithdebinfo"))
-    fit_asan = by_key.get(("fit", "fit.release-asan"))
-    ghrun = by_key.get(("summary", "runners.ghrun"))
-    newest = by_key.get(("summary", "runners.newest"))
-    queued = [row for row in rows if row["kind"] == "queue"]
-    queued_n = sum(row["usage_value"] or 0 for row in queued)
+    fit_rel, fit_asan = by_key.get(("fit", "fit.relwithdebinfo")), by_key.get(("fit", "fit.release-asan"))
+    ghrun, newest = by_key.get(("summary", "runners.ghrun")), by_key.get(("summary", "runners.newest"))
+    queued_n = sum(row["usage_value"] or 0 for row in rows if row["kind"] == "queue")
     newest_at = newest["created_at"].isoformat() if newest and newest["created_at"] else "?"
     return (
         "ram_free=%sGiB cores_free=%s instances_free=%s nrd_free=%sGiB "
         "fit_relwithdebinfo=%s fit_asan=%s ghrun=%s idle=%s queued_jobs=%.0f newest=%s"
         % (
-            free("ram_gib"),
-            free("cores"),
-            free("instances"),
-            free("nrd_gib"),
+            free("ram_gib"), free("cores"), free("instances"), free("nrd_gib"),
             "%.0f" % fit_rel["free_value"] if fit_rel else "?",
             "%.0f" % fit_asan["free_value"] if fit_asan else "?",
             "%.0f" % ghrun["usage_value"] if ghrun else "?",
             "%.0f" % ghrun["free_value"] if ghrun else "?",
-            queued_n,
-            newest_at,
+            queued_n, newest_at,
         )
     )
 
 
 def yc_json(args: List[str], env: Dict[str, str]) -> Any:
-    proc = subprocess.run(
-        ["yc", *args, "--format", "json"],
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
+    proc = subprocess.run(["yc", *args, "--format", "json"], env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-        tail = detail[-1] if detail else "yc exited %s" % proc.returncode
-        raise RuntimeError(tail)
+        raise RuntimeError(detail[-1] if detail else "yc exited %s" % proc.returncode)
     return json.loads(proc.stdout)
 
 
 def open_yc(cloud_id: str):
-    """Use the current yc profile. Fall back to the CI key in a temp HOME."""
     env = os.environ.copy()
     try:
-        configured = subprocess.check_output(
-            ["yc", "config", "get", "cloud-id"],
-            env=env,
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
+        configured = subprocess.check_output(["yc", "config", "get", "cloud-id"], env=env, text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         configured = ""
     if configured:
@@ -953,61 +602,37 @@ def open_yc(cloud_id: str):
     env = os.environ.copy()
     env["HOME"] = home
     env.pop("YC_TOKEN", None)
-    subprocess.check_call(
-        ["yc", "config", "set", "service-account-key", key],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    subprocess.check_call(
-        ["yc", "config", "set", "cloud-id", cloud_id],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    for args in (["yc", "config", "set", "service-account-key", key], ["yc", "config", "set", "cloud-id", cloud_id]):
+        subprocess.check_call(args, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return env, home, cloud_id
 
 
 def fetch_quota(env: Dict[str, str], cloud_id: str) -> List[Dict[str, Any]]:
     payload = yc_json(
-        [
-            "quota-manager",
-            "quota-limit",
-            "list",
-            "--service",
-            "compute",
-            "--resource-type",
-            "resource-manager.cloud",
-            "--resource-id",
-            cloud_id,
-        ],
+        ["quota-manager", "quota-limit", "list", "--service", "compute",
+         "--resource-type", "resource-manager.cloud", "--resource-id", cloud_id],
         env,
     )
-    if isinstance(payload, dict):
-        return list(payload.get("quota_limits") or [])
-    return list(payload or [])
+    return list((payload.get("quota_limits") if isinstance(payload, dict) else payload) or [])
 
 
 def fetch_instances(env: Dict[str, str], cloud_id: str) -> List[Dict[str, Any]]:
     folders = yc_json(["resource-manager", "folder", "list", "--cloud-id", cloud_id], env)
     if isinstance(folders, dict):
         folders = folders.get("folders") or []
-    instances: List[Dict[str, Any]] = []
+    instances = []
     for folder in folders:
-        if not isinstance(folder, dict):
-            continue
-        if folder.get("status") not in (None, "ACTIVE"):
+        if not isinstance(folder, dict) or folder.get("status") not in (None, "ACTIVE"):
             continue
         batch = yc_json(["compute", "instance", "list", "--folder-id", folder["id"]], env)
         if isinstance(batch, dict):
             batch = batch.get("instances") or []
         for instance in batch:
-            if not isinstance(instance, dict):
-                continue
-            copied = dict(instance)
-            copied["_folder_id"] = folder.get("id") or ""
-            copied["_folder_name"] = folder.get("name") or ""
-            instances.append(copied)
+            if isinstance(instance, dict):
+                copied = dict(instance)
+                copied["_folder_id"] = folder.get("id") or ""
+                copied["_folder_name"] = folder.get("name") or ""
+                instances.append(copied)
     return instances
 
 
@@ -1015,37 +640,20 @@ def ensure_github_token() -> bool:
     if os.environ.get("GITHUB_TOKEN"):
         return True
     try:
-        token = subprocess.check_output(
-            ["gh", "auth", "token"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
+        token = subprocess.check_output(["gh", "auth", "token"], text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         return False
-    if not token:
-        return False
-    os.environ["GITHUB_TOKEN"] = token
-    return True
+    if token:
+        os.environ["GITHUB_TOKEN"] = token
+    return bool(token)
 
 
-def list_workflow_runs(
-    org: str,
-    repo: str,
-    status: str,
-    per_page: int = RUN_PAGE_SIZE,
-    max_pages: int = RUN_MAX_PAGES,
-    fetcher=None,
-) -> List[Dict[str, Any]]:
-    """All runs with this status. A short page is not the end of the list."""
+def list_workflow_runs(org, repo, status, per_page=RUN_PAGE_SIZE, max_pages=RUN_MAX_PAGES, fetcher=None):
     get = fetcher or github_get
     url = "https://api.github.com/repos/%s/%s/actions/runs" % (org, repo)
-    runs: List[Dict[str, Any]] = []
-    seen = set()
-    last_batch: List[Dict[str, Any]] = []
-    empty_streak = 0
+    runs, seen, last_batch, empty_streak = [], set(), [], 0
     for page in range(1, max_pages + 1):
-        payload = get(url, params={"status": status, "per_page": per_page, "page": page})
-        last_batch = payload.get("workflow_runs") or []
+        last_batch = (get(url, params={"status": status, "per_page": per_page, "page": page}).get("workflow_runs") or [])
         if not last_batch:
             empty_streak += 1
             if empty_streak >= 2:
@@ -1053,11 +661,9 @@ def list_workflow_runs(
             continue
         empty_streak = 0
         for run in last_batch:
-            run_id = run.get("id")
-            if run_id in seen:
-                continue
-            seen.add(run_id)
-            runs.append(run)
+            if run.get("id") not in seen:
+                seen.add(run.get("id"))
+                runs.append(run)
     raise IncompleteGitHubJobs(
         "workflow runs for status=%s hit max_pages=%s after %s runs (last page %s)"
         % (status, max_pages, len(runs), len(last_batch))
@@ -1065,42 +671,24 @@ def list_workflow_runs(
 
 
 def enrich_run_pull(org: str, repo: str, run: Dict[str, Any]) -> Dict[str, Any]:
-    """Fill the PR number and target branch. Scheduled runs carry unrelated pull_requests."""
-    event = run.get("event") or ""
-    if event not in PR_EVENTS:
-        if run.get("pull_requests"):
-            cleaned = dict(run)
-            cleaned["pull_requests"] = []
-            return cleaned
-        return run
-    return attach_pull_requests(org, repo, run)
+    if run.get("event") in PR_EVENTS:
+        return attach_pull_requests(org, repo, run)
+    if run.get("pull_requests"):
+        cleaned = dict(run)
+        cleaned["pull_requests"] = []
+        return cleaned
+    return run
 
 
 def collect_open_jobs(org: str, repo: str) -> List[tuple]:
-    pairs: List[tuple] = []
+    pairs = []
     for status in ("in_progress", "queued"):
         for run in list_workflow_runs(org, repo, status):
-            run_id = run.get("id")
-            if run_id is None:
+            if run.get("id") is None:
                 continue
             run = enrich_run_pull(org, repo, run)
-            for job in list_run_jobs(org, repo, int(run_id)):
-                pairs.append((run, job))
+            pairs.extend((run, job) for job in list_run_jobs(org, repo, int(run["id"])))
     return pairs
-
-
-def ensure_optional_column(wrapper, path: str, column: str, sql_type: str) -> None:
-    """CREATE TABLE does not add columns to a table that already exists."""
-    try:
-        wrapper.create_table(
-            path,
-            "ALTER TABLE `%s` ADD COLUMN `%s` %s;" % (path, column, sql_type),
-        )
-    except Exception as exc:  # noqa: BLE001 — the column is already there after the first run
-        text = str(exc).lower()
-        if "exist" in text or "already" in text or "duplicate" in text:
-            return
-        raise
 
 
 def write_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> int:
@@ -1116,11 +704,6 @@ def write_rows(rows: List[Dict[str, Any]], table_path: Optional[str] = None) -> 
             return 1
         path = table_path or resolve_capacity_table_path(wrapper)
         wrapper.create_table(path, build_create_capacity_table_sql(path))
-        ensure_optional_column(wrapper, path, "branch", "Utf8")
-        ensure_optional_column(wrapper, path, "run_url", "Utf8")
-        ensure_optional_column(wrapper, path, "pr_number", "Utf8")
-        ensure_optional_column(wrapper, path, "pr_title", "Utf8")
-        ensure_optional_column(wrapper, path, "zone", "Utf8")
         wrapper.bulk_upsert_batches(path, rows, build_column_types(COLUMNS), batch_size=500)
     print("Wrote %d rows to %s" % (len(rows), path))
     return 0
@@ -1132,7 +715,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument("--repo", default=os.environ.get("CI_METRICS_REPO", DEFAULT_REPO))
     parser.add_argument("--cloud-id", default=os.environ.get("YC_CLOUD_ID", DEFAULT_CLOUD_ID))
     parser.add_argument("--table-path", default=None)
-    parser.add_argument("--dry-run", action="store_true", help="Print the summary and do not write YDB")
+    parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -1146,20 +729,15 @@ def main(argv=None) -> int:
     finally:
         if home:
             shutil.rmtree(home, ignore_errors=True)
-    github_ok = True
-    pairs: Optional[List[tuple]] = []
+    github_ok, pairs = True, []
     try:
         if not ensure_github_token():
             raise RuntimeError("GITHUB_TOKEN is unset and gh auth token failed")
         ghrun_n = sum(
-            1
-            for instance in instances
-            if isinstance(instance, dict)
-            and instance.get("status") in (None, "RUNNING")
-            and is_ghrun(instance)
+            1 for instance in instances
+            if isinstance(instance, dict) and instance.get("status") in (None, "RUNNING") and is_ghrun(instance)
         )
         last_incomplete = None
-        pairs = []
         for attempt in range(1, 4):
             pairs = collect_open_jobs(args.org, args.repo)
             busy_n, queued_n = count_assigned_and_queued(pairs)
@@ -1167,23 +745,18 @@ def main(argv=None) -> int:
                 last_incomplete = None
                 break
             last_incomplete = IncompleteGitHubJobs(
-                "in_progress jobs cover %s/%s runners while %s jobs are queued"
-                % (busy_n, ghrun_n, queued_n)
+                "in_progress jobs cover %s/%s runners while %s jobs are queued" % (busy_n, ghrun_n, queued_n)
             )
             print("Warning: GitHub job list attempt %s/3: %s" % (attempt, last_incomplete))
         if last_incomplete:
             raise last_incomplete
     except Exception as exc:  # noqa: BLE001 — quota snapshot is still worth storing
-        github_ok = False
-        pairs = None
+        github_ok, pairs = False, None
         print("Warning: GitHub jobs were not loaded (%s); runners are state=unknown" % exc)
+    specs, default = load_label_footprints()
     rows = build_snapshot_rows(
-        now,
-        limits,
-        instances,
-        pairs,
-        load_fit_footprints(),
-        github_ok,
+        now, limits, instances, pairs, load_fit_footprints(specs=specs, default=default),
+        github_ok, label_specs=specs, label_default=default,
     )
     print(snapshot_summary(rows))
     if args.dry_run:

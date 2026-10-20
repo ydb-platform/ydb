@@ -390,7 +390,7 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     const bool firstGC = FirstGC && CollectGenStepInFlight;
     if (CollectGenStepInFlight) {
         PopGCBarriers(*CollectGenStepInFlight);
-        if (firstGC) {
+        if (FirstGC) {
             gcContext.InitializeFirst(TabletInfo);
             FirstGC = false;
         }

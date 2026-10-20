@@ -28,7 +28,7 @@ bool IsCutHistoryEnabled() {
     return AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->FeatureFlags.GetEnableColumnshardCutHistory();
 }
 
-TDuration ContinuationDelay(const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config) {
+TDuration ComputeContinuationDelay(const NKikimrConfig::TColumnShardConfig::TCutHistoryConfig& config) {
     const ui64 jitter = config.GetContinuationJitterMs();
     return TDuration::MilliSeconds(Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0));
 }
@@ -118,7 +118,7 @@ class TFindEmptyHistoryIntervalsActor: public TActorBootstrapped<TFindEmptyHisto
     }
 
     void ScheduleNext() {
-        Schedule(ContinuationDelay(Config), new TEvFindEmptyHistoryIntervals::TEvContinue());
+        Schedule(ComputeContinuationDelay(Config), new TEvFindEmptyHistoryIntervals::TEvContinue());
     }
 
     void Handle(TEvFindEmptyHistoryIntervals::TEvContinue::TPtr&) {

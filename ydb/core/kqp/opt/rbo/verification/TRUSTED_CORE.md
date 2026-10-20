@@ -53,6 +53,11 @@ Its immutable `ProjectEffects` records window leaves and error-producing
 expressions once. These are syntactic facts, not proofs of totality: evaluation
 still observes actual routed inputs and discharges the existing obligations.
 A strategy choice must not change catalog constraints or the admitted snapshot.
+Bag comparison omits only slots whose presence term is the literal false: their
+multiplicity contribution is zero and their candidate obligation is true.
+Symbolic guards, duplicate counts, NULL equality and schema checks remain in the
+comparison. Differential tests retain the original construction by replacing
+literal absence with a symbolic guard constrained to false.
 For a tiny accepted input, compare the baseline, forced eligible optimization,
 and an independent concrete reference; then mutate a semantic field and an
 eligibility premise separately. Retain error and nondeterministic-outcome tests,

@@ -63,6 +63,53 @@ class EncodingStrategiesTest(unittest.TestCase):
         )
         self.assertEqual(result.stdout.strip(), "unsat", result.stderr)
 
+    @unittest.skipUnless(SOLVER, "set RBO_Z3 to compare bag encodings")
+    def test_absent_bag_slots_match_unpruned_symbolic_reference(self):
+        for left_size, right_size in ((0, 0), (0, 3), (1, 2), (3, 1), (3, 3)):
+            for width in (0, 1, 2):
+                with self.subTest(left_size=left_size, right_size=right_size, width=width):
+                    script = smt.Script()
+                    scalar = Encoder(script)
+                    absent = script.fresh_constant("absent", smt.BOOL)
+                    script.assert_global(smt.not_(absent))
+
+                    def source(prefix, size):
+                        columns = tuple(Column(f"{prefix}:{i}", "Int64", True) for i in range(width))
+                        rows = tuple(relation.Row(
+                            smt.FALSE if index == 0 else script.fresh_constant(f"{prefix}:present:{index}", smt.BOOL),
+                            {column.name: Value(
+                                "Int64", script.fresh_constant(f"{prefix}:null:{index}:{i}", smt.BOOL),
+                                script.fresh_constant(f"{prefix}:value:{index}:{i}", smt.INT),
+                            ) for i, column in enumerate(columns)},
+                        ) for index in range(size))
+                        return relation.Relation(columns, rows)
+
+                    def unpruned(source):
+                        # The same absent slots have symbolic guards fixed to
+                        # false. They therefore retain the original full
+                        # multiplicity/candidate construction without pruning.
+                        return replace(source, rows=tuple(
+                            replace(row, present=absent) if row.present == smt.FALSE else row
+                            for row in source.rows
+                        ))
+
+                    left, right = source("left", left_size), source("right", right_size)
+                    compact = relation.bag_equal(left, right, scalar)
+                    baseline = relation.bag_equal(unpruned(left), unpruned(right), scalar)
+                    script.assert_term(smt.not_(smt.eq(compact, baseline)))
+                    self.assertUnsat(script)
+
+    def test_absent_bag_slots_still_require_compatible_output_types(self):
+        scalar = Encoder(smt.Script())
+        left = relation.Relation((Column("left", "Int64", True),), (
+            relation.Row(smt.FALSE, {"left": Value("Int64", smt.TRUE, smt.ZERO)}),
+        ))
+        right = relation.Relation((Column("right", "Bool", True),), (
+            relation.Row(smt.FALSE, {"right": Value("Bool", smt.TRUE, smt.FALSE)}),
+        ))
+        self.assertEqual(relation.bag_equal(left, right, scalar), smt.FALSE)
+        self.assertEqual(relation.bag_equal(left, relation.Relation((), ()), scalar), smt.FALSE)
+
     @unittest.skipUnless(SOLVER, "set RBO_Z3 to compare symbolic sequence languages")
     def test_forced_sort_encodings_match_enumerated_reference(self):
         for unique, encoding in (

@@ -5116,6 +5116,11 @@ def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Ter
 
     left_names = tuple(column.name for column in left.columns)
     right_names = tuple(column.name for column in right.columns)
+    # A statically absent slot contributes zero to every multiplicity, and its
+    # candidate obligation is true. Avoid constructing its payload comparisons;
+    # symbolic presences must still participate in both counts and candidates.
+    left_rows = tuple(row for row in left.rows if row.present != smt.FALSE)
+    right_rows = tuple(row for row in right.rows if row.present != smt.FALSE)
 
     def row_equal(
         first: Row,
@@ -5131,7 +5136,7 @@ def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Ter
         )
 
     def multiplicity(
-        relation: Relation,
+        rows: tuple[Row, ...],
         names: tuple[str, ...],
         candidate: Row,
         candidate_names: tuple[str, ...],
@@ -5143,18 +5148,18 @@ def bag_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> smt.Ter
                     smt.ONE,
                     smt.ZERO,
                 )
-                for row in relation.rows
+                for row in rows
             )
         )
 
     equalities: list[smt.Term] = []
     for candidate, candidate_names in (
-        *((row, left_names) for row in left.rows),
-        *((row, right_names) for row in right.rows),
+        *((row, left_names) for row in left_rows),
+        *((row, right_names) for row in right_rows),
     ):
         counts_equal = smt.eq(
-            multiplicity(left, left_names, candidate, candidate_names),
-            multiplicity(right, right_names, candidate, candidate_names),
+            multiplicity(left_rows, left_names, candidate, candidate_names),
+            multiplicity(right_rows, right_names, candidate, candidate_names),
         )
         equalities.append(smt.or_(smt.not_(candidate.present), counts_equal))
     return smt.and_(*equalities)

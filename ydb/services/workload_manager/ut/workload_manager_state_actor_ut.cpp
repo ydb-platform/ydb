@@ -9,6 +9,9 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/services/metadata/abstract/common.h>
+#include <ydb/services/metadata/ds_table/config.h>
+#include <ydb/services/metadata/ds_table/service.h>
+#include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
@@ -30,6 +33,7 @@ struct TFixture {
     std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway;
     TActorId SchemeCacheEdge;
     TActorId ServicesEdge;
+    TActorId MetadataEdge;
     TActorId Sender;
     TActorId StateActor;
     ui32 NodeId = 0;
@@ -50,16 +54,16 @@ struct TFixture {
         Runtime.RegisterService(NKqp::MakeKqpSchedulerServiceId(NodeId), ServicesEdge);
         Runtime.RegisterService(MakeServiceId(NodeId), ServicesEdge);
 
+        const std::unique_ptr<IActor> metadataService(NMetadata::NProvider::CreateService(NMetadata::NProvider::TConfig()));
+        MetadataEdge = Runtime.AllocateEdgeActor();
+        Runtime.RegisterService(NMetadata::NProvider::MakeServiceId(NodeId), MetadataEdge);
+
         StateActor = Runtime.Register(CreateWorkloadManagerStateActor(Gateway));
         Runtime.EnableScheduleForActor(StateActor);
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         Runtime.DispatchEvents(options);
-
-        // Force classifier metadata Ready regardless of whether the process-wide
-        // NMetadata::NProvider::TServiceOperator singleton was flipped by a prior test.
-        Runtime.Send(new IEventHandle(StateActor, Sender, new NMetadata::NProvider::TEvRefreshSubscriberData(MakeClassifierSnapshot({}))));
     }
 
     void Warmup(const TString& databasePath) {
@@ -80,6 +84,27 @@ struct TFixture {
             AppData()->WorkloadManagerGateway->SubscribeOnReady(databaseId, subscriber, cookie);
             return 0;
         });
+    }
+
+    TString ClassifyPoolId(const TString& databaseId, const TString& poolId = {}) {
+        auto classifier = Runtime.RunCall([databaseId, poolId] {
+            return AppData()->WorkloadManagerGateway->TryCreateQueryClassifier(databaseId, TClassifyContext{ .PoolId = poolId });
+        });
+        UNIT_ASSERT(classifier);
+        const auto result = classifier->PreCompileClassify(NKqp::TUserRequestContext{});
+        const auto* resolved = std::get_if<IQueryClassifier::TResolvedPoolId>(&result);
+        UNIT_ASSERT(resolved);
+        return resolved->PoolId;
+    }
+
+    void WaitAddPool(const TString& poolId) {
+        while (true) {
+            auto ev = Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(ServicesEdge, WAIT_TIMEOUT);
+            UNIT_ASSERT(ev);
+            if (ev->Get()->PoolId == poolId) {
+                return;
+            }
+        }
     }
 
     void SetResourcePoolsEnabled(bool enabled) {
@@ -125,6 +150,39 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
 
         auto info = fx.EnsureReady("/Root/db1");
         UNIT_ASSERT(info.State == EReadyState::Ready);
+    }
+
+    // Classifier metadata not received yet. The state actor:
+    // - reports the database Ready without waiting for metadata, the query goes to the explicit or default pool,
+    // - applies classifiers once the metadata snapshot arrives.
+    Y_UNIT_TEST(TestClassifyWithoutMetadataSnapshot) {
+        TFixture fx;
+        fx.Init();
+
+        auto subscribe = fx.Runtime.GrabEdgeEvent<NMetadata::NProvider::TEvSubscribeExternal>(fx.MetadataEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT(subscribe);
+
+        fx.InjectFetchResponse(TEST_DB, TEST_DB, /*serverless=*/false, TPathId(1, 1));
+        auto watch = fx.Runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchPathId>(fx.SchemeCacheEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT(watch);
+
+        UNIT_ASSERT(fx.EnsureReady(TEST_DB).State == EReadyState::Ready);
+        UNIT_ASSERT_VALUES_EQUAL(fx.ClassifyPoolId(TEST_DB), NResourcePool::DEFAULT_POOL_ID);
+        UNIT_ASSERT_VALUES_EQUAL(fx.ClassifyPoolId(TEST_DB, "poolB"), "poolB");
+
+        fx.Runtime.Send(new IEventHandle(fx.StateActor, fx.Sender,
+            new NMetadata::NProvider::TEvRefreshSubscriberData(MakeClassifierSnapshot({
+                MakeClassifierConfig(TEST_DB, "c1", /*rank=*/1, "poolA"),
+            }))));
+        fx.WaitAddPool("poolA");
+
+        NResourcePool::TPoolSettings poolSettings;
+        poolSettings.ConcurrentQueryLimit = 10;
+        fx.Runtime.Send(new IEventHandle(fx.StateActor, fx.Sender, new TEvUpdatePoolInfo(TEST_DB, "poolA", poolSettings, std::nullopt)));
+        fx.Runtime.Send(new IEventHandle(fx.StateActor, fx.Sender, new TEvEnsurePoolSubscribed(TEST_DB, "probe")));
+        fx.WaitAddPool("probe");
+
+        UNIT_ASSERT_VALUES_EQUAL(fx.ClassifyPoolId(TEST_DB), "poolA");
     }
 
     // Warmup for an unknown database: the state actor starts a database info fetch (scheme cache navigate) for the path.

@@ -1,7 +1,6 @@
 YQL_LIBRARY()
 
 SRCS(
-    classifier_metadata_tracker.cpp
     cpu_load_actors.cpp
     database_readiness_tracker.cpp
     pool_handlers_actors.cpp

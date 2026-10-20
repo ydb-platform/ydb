@@ -19,12 +19,6 @@ enum class EDatabaseState {
     Unsupported,
 };
 
-enum class EMetadataState {
-    Pending,
-    Ready,
-    TimedOut,
-};
-
 struct TDatabaseInfo {
     EDatabaseState State = EDatabaseState::Pending;
     bool Serverless = false;
@@ -41,7 +35,6 @@ struct TSnapshot {
     NActors::TActorId StateActorId;
     bool EnableResourcePools = false;
     bool EnableResourcePoolsOnServerless = false;
-    EMetadataState Metadata = EMetadataState::Pending;
 
     bool IsResourcePoolsEnabled(const TString& databaseId) const {
         if (!EnableResourcePools) {
@@ -93,8 +86,6 @@ public:
     }
 
 private:
-    static void DoWarmupRequest(const NActors::TActorId& stateActorId, const TString& databaseId);
-
     TSnapshotPtr Snapshot_;
 };
 

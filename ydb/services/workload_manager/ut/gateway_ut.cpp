@@ -31,14 +31,12 @@ struct TGatewayFixture: public NUnitTest::TBaseFixture {
         StateActorEdge = Runtime.AllocateEdgeActor();
     }
 
-    void Publish(THashMap<TString, NPrivate::TDatabaseInfo> databases, NPrivate::EMetadataState metadata = NPrivate::EMetadataState::Ready,
-        bool enableResourcePools = true, THashSet<TString> readyPaths = {}) {
+    void Publish(THashMap<TString, NPrivate::TDatabaseInfo> databases, bool enableResourcePools = true, THashSet<TString> readyPaths = {}) {
         auto* snapshot = new NPrivate::TSnapshot();
         snapshot->Databases = std::move(databases);
         snapshot->ReadyPaths = std::move(readyPaths);
         snapshot->StateActorId = StateActorEdge;
         snapshot->EnableResourcePools = enableResourcePools;
-        snapshot->Metadata = metadata;
         Gateway->PublishSnapshot(NPrivate::TSnapshotPtr(snapshot));
     }
 
@@ -137,11 +135,11 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
 
     // Resource pools disabled: TryCreateQueryClassifier returns nullptr.
     Y_UNIT_TEST_F(TestTryCreateQueryClassifierNullWhenPoolsDisabled, TGatewayFixture) {
-        Publish({ { TEST_DB, DatabaseInfo(NPrivate::EDatabaseState::Ready) } }, NPrivate::EMetadataState::Ready, /*enableResourcePools=*/false);
+        Publish({ { TEST_DB, DatabaseInfo(NPrivate::EDatabaseState::Ready) } }, /*enableResourcePools=*/false);
         UNIT_ASSERT(!TryCreateQueryClassifier(TEST_DB));
     }
 
-    // Database state mapping, metadata Ready. EnsureReady returns:
+    // Database state mapping. EnsureReady returns:
     // - Pending for an unknown or Pending database,
     // - Ready for a Ready database, Disabled for a serverless one,
     // - Disabled for an Unsupported database.
@@ -161,44 +159,10 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         UNIT_ASSERT(EnsureReady("/Root/unsupported").State == EReadyState::Disabled);
     }
 
-    // Ready database, metadata state mapping. EnsureReady returns:
-    // - Pending while metadata is Pending,
-    // - Failed with retryable UNAVAILABLE once metadata timed out,
-    // - Disabled when resource pools are off, whatever the states.
-    Y_UNIT_TEST_F(TestEnsureReadyMetadataStates, TGatewayFixture) {
-        const THashMap<TString, NPrivate::TDatabaseInfo> databases = {
-            { "/Root/ready", DatabaseInfo(NPrivate::EDatabaseState::Ready) },
-        };
-
-        Publish(databases, NPrivate::EMetadataState::Pending);
-        UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Pending);
-
-        Publish(databases, NPrivate::EMetadataState::TimedOut);
-        const auto timedOut = EnsureReady("/Root/ready");
-        UNIT_ASSERT(timedOut.State == EReadyState::Failed);
-        UNIT_ASSERT_VALUES_EQUAL(timedOut.FailureStatus, Ydb::StatusIds::UNAVAILABLE);
-
-        Publish(databases, NPrivate::EMetadataState::Ready, /*enableResourcePools=*/false);
+    // Resource pools off: EnsureReady returns Disabled for a Ready database.
+    Y_UNIT_TEST_F(TestEnsureReadyWhenPoolsDisabled, TGatewayFixture) {
+        Publish({ { "/Root/ready", DatabaseInfo(NPrivate::EDatabaseState::Ready) } }, /*enableResourcePools=*/false);
         UNIT_ASSERT(EnsureReady("/Root/ready").State == EReadyState::Disabled);
-    }
-
-    // Classifier metadata timed out. EnsureReady:
-    // - sends nothing while metadata is Ready,
-    // - sends a warmup to the state actor once metadata timed out.
-    Y_UNIT_TEST_F(TestEnsureReadyRequestsWarmup, TGatewayFixture) {
-        const THashMap<TString, NPrivate::TDatabaseInfo> databases = {
-            { "/Root/ready", DatabaseInfo(NPrivate::EDatabaseState::Ready) },
-            { "/Root/timedout", DatabaseInfo(NPrivate::EDatabaseState::Ready) },
-        };
-
-        Publish(databases, NPrivate::EMetadataState::Ready);
-        EnsureReady("/Root/ready");
-
-        Publish(databases, NPrivate::EMetadataState::TimedOut);
-        EnsureReady("/Root/timedout");
-        auto warmup = Runtime.GrabEdgeEvent<TEvWarmupDatabaseInfo>(StateActorEdge, TDuration::Seconds(10));
-        UNIT_ASSERT(warmup);
-        UNIT_ASSERT_VALUES_EQUAL(warmup->Get()->DatabasePath, "/Root/timedout");
     }
 
     // Warmup gating. The gateway:
@@ -206,10 +170,10 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
     // - sends nothing while resource pools are off,
     // - sends a warmup for any other path.
     Y_UNIT_TEST_F(TestWarmupSkipsReadyDatabase, TGatewayFixture) {
-        Publish({}, NPrivate::EMetadataState::Ready, /*enableResourcePools=*/false);
+        Publish({}, /*enableResourcePools=*/false);
         Warmup("/Root/disabled");
 
-        Publish({}, NPrivate::EMetadataState::Ready, /*enableResourcePools=*/true, { "/Root/ready" });
+        Publish({}, /*enableResourcePools=*/true, { "/Root/ready" });
         Warmup("/Root/ready");
         Warmup("/Root/other");
 

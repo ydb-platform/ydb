@@ -2,11 +2,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
-#include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -32,16 +30,6 @@ struct TWlmFixture {
         Runtime = Server->GetRuntime();
         KqpProxy = MakeKqpProxyID(Runtime->GetNodeId(0));
         Sender = Runtime->AllocateEdgeActor();
-
-        // NMetadata::NProvider::TServiceOperator is a process-wide singleton — if another test
-        // in the same binary already flipped it to enabled, our state actor Bootstrap would send
-        // TEvAskSnapshot into a metadata service that we disabled above, and classifier metadata
-        // would stay Pending until the timeout. Force it Ready with an empty snapshot.
-        Runtime->Send(new IEventHandle(
-            StateActorId(),
-            Sender,
-            new NMetadata::NProvider::TEvRefreshSubscriberData(
-                NWorkloadManager::MakeClassifierSnapshot({}))));
     }
 
     TActorId StateActorId() const {

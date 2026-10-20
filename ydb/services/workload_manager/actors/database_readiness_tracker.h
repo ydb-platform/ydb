@@ -64,9 +64,8 @@ public:
     /// True if any DB fetch is still Pending.
     bool HasPending() const;
 
-    /// Takes subscribers whose DB is settled given the metadata state; metadata TimedOut replies retryable UNAVAILABLE.
-    /// Serverless DBs with pools disabled on serverless are settled regardless of metadata.
-    std::vector<TSubscriberReply> TakeSettledSubscribers(EMetadataState metadata, bool enableResourcePoolsOnServerless);
+    /// Takes subscribers whose DB is settled (Ready or Unsupported) with SUCCESS.
+    std::vector<TSubscriberReply> TakeSettledSubscribers();
 
     /// Takes all subscribers regardless of state (pools disabled, actor shutdown).
     std::vector<TPendingSubscriber> TakeAllSubscribers();
@@ -78,8 +77,7 @@ private:
     std::optional<TString> MarkFetchInFlight(const TString& path);
     static void AppendReplies(TEntry& entry, Ydb::StatusIds::StatusCode status, const TString& message, std::vector<TSubscriberReply>& replies);
     static bool IsRetryable(Ydb::StatusIds::StatusCode status);
-    static bool IsWorkloadManagerDisabled(const TEntry& entry, bool enableResourcePoolsOnServerless);
-    static bool IsSettled(const TEntry& entry, EMetadataState metadata, bool enableResourcePoolsOnServerless);
+    static bool IsSettled(const TEntry& entry);
 
 private:
     const TDuration RequestTimeout_;

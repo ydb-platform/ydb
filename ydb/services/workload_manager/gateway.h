@@ -15,10 +15,10 @@ namespace NKikimr::NWorkloadManager {
 inline constexpr TStringBuf WORKLOAD_MANAGER_NOT_READY_MESSAGE = "Workload manager is not ready for the database, please retry";
 
 enum class EReadyState {
-    Ready,   // DB info and classifiers are known: classify and admit the query
+    Ready,   // DB info is known: classify and admit the query
     Pending,   // state not known yet: wait via SubscribeOnReady
     Disabled,   // WLM is off for the database by config (pools off, serverless, unsupported path): run without WLM
-    Failed,   // state could not be obtained (fetch error or timeout): reply with FailureStatus, retryable if UNAVAILABLE
+    Failed,   // reserved for future use, EnsureReady does not return it now: reply with FailureStatus, retryable if UNAVAILABLE
 };
 
 struct TReadyInfo {
@@ -33,7 +33,8 @@ struct TReadyInfo {
 /// `AppData()->WorkloadManagerGateway`; consumers access it synchronously.
 /// Must be called from an actor handler (uses the activation context).
 /// Callers that can wait use SubscribeOnReady; callers that cannot (e.g. background tablet work) retry later.
-/// The workload manager is never bypassed: if its state cannot be obtained in time, EnsureReady returns Failed (retryable).
+/// The workload manager is never bypassed: if DB info cannot be obtained in time, SubscribeOnReady replies with retryable UNAVAILABLE.
+/// Classifiers are applied as soon as they are loaded; until then queries go to the explicit pool or the default pool.
 ///
 /// TODO: classification context for non-query workloads (compaction, backup).
 ///

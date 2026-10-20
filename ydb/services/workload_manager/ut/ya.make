@@ -41,6 +41,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/operation
+    ydb/services/metadata/ds_table
     ydb/services/workload_manager/service
     ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg_dummy

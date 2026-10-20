@@ -117,16 +117,10 @@ bool TDatabaseReadinessTracker::HasPending() const {
     return false;
 }
 
-std::vector<TSubscriberReply> TDatabaseReadinessTracker::TakeSettledSubscribers(EMetadataState metadata, bool enableResourcePoolsOnServerless) {
+std::vector<TSubscriberReply> TDatabaseReadinessTracker::TakeSettledSubscribers() {
     std::vector<TSubscriberReply> replies;
     for (auto& [_, entry] : Entries_) {
-        if (entry.Subscribers.empty() || !IsSettled(entry, metadata, enableResourcePoolsOnServerless)) {
-            continue;
-        }
-        if (entry.State == EDatabaseState::Ready && metadata == EMetadataState::TimedOut &&
-            !IsWorkloadManagerDisabled(entry, enableResourcePoolsOnServerless)) {
-            AppendReplies(entry, Ydb::StatusIds::UNAVAILABLE, TString(WORKLOAD_MANAGER_NOT_READY_MESSAGE), replies);
-        } else {
+        if (!entry.Subscribers.empty() && IsSettled(entry)) {
             AppendReplies(entry, Ydb::StatusIds::SUCCESS, {}, replies);
         }
     }
@@ -187,20 +181,8 @@ bool TDatabaseReadinessTracker::IsRetryable(Ydb::StatusIds::StatusCode status) {
     }
 }
 
-bool TDatabaseReadinessTracker::IsWorkloadManagerDisabled(const TEntry& entry, bool enableResourcePoolsOnServerless) {
-    return entry.Serverless && !enableResourcePoolsOnServerless;
-}
-
-bool TDatabaseReadinessTracker::IsSettled(const TEntry& entry, EMetadataState metadata, bool enableResourcePoolsOnServerless) {
-    switch (entry.State) {
-        case EDatabaseState::Pending:
-            return false;
-        case EDatabaseState::Ready:
-            return metadata != EMetadataState::Pending || IsWorkloadManagerDisabled(entry, enableResourcePoolsOnServerless);
-        case EDatabaseState::Unsupported:
-            return true;
-    }
-    return false;
+bool TDatabaseReadinessTracker::IsSettled(const TEntry& entry) {
+    return entry.State != EDatabaseState::Pending;
 }
 
 }   // namespace NKikimr::NWorkloadManager::NPrivate

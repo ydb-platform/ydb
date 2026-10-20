@@ -19,17 +19,19 @@ def app_config(source_root, batch_rows=1, timeout_ms=30000):
     return config.replace('FederatedQueryConfig {', 'FederatedQueryConfig {' + wasm, 1)
 
 
-def connection(name, endpoint, protocol='HTTP', certificate='', token='fqrun-example-token'):
+def connection(name, endpoint, protocol='HTTP', certificate='', token='fqrun-example-token', tvm=False):
     # --connection accepts ConnectionContent directly, without a content wrapper.
+    auth = 'tvm_auth { source_id: 2020001 destination_id: 2020002 secret: "fqrun-example-tvm-secret" }' if tvm else \
+        'auth { token { token: %s } }' % json.dumps(token)
     return '''name: %s
 acl { visibility: PRIVATE }
 setting { external_service {
   protocol: %s endpoint: %s insecure: %s
-  auth { token { token: %s } }
+  %s
   ca_certificate: %s
 } }
 ''' % (json.dumps(name), protocol, json.dumps(endpoint),
-       'false' if certificate else 'true', json.dumps(token), json.dumps(certificate))
+       'false' if certificate else 'true', auth, json.dumps(certificate))
 
 
 def connection_ddl(name, endpoint, protocol='HTTP', certificate='', auth='TOKEN'):
@@ -37,6 +39,8 @@ def connection_ddl(name, endpoint, protocol='HTTP', certificate='', auth='TOKEN'
                       AUTH_METHOD=auth)
     if auth == 'TOKEN':
         properties['TOKEN_SECRET_NAME'] = 'example_token'
+    elif auth == 'TVM':
+        properties.update(TVM_SOURCE_ID='2020001', TVM_DESTINATION_ID='2020002', TVM_SECRET_NAME='example_tvm_secret')
     if certificate:
         properties['CA_CERTIFICATE'] = certificate
     entries = ['    %s = %s' % (key, json.dumps(value)) for key, value in properties.items()]
@@ -76,12 +80,15 @@ def write_setup(source_root, output_dir, service, batch_rows=1, timeout_ms=30000
     )
     ddl = []
     for name, endpoint, protocol in specs:
-        ddl.append(connection_ddl(name, endpoint, protocol, service.ca_certificate))
+        ddl.append(connection_ddl(name, endpoint, protocol, service.ca_certificate,
+                                  auth='TVM' if service.require_tvm_ticket else 'TOKEN'))
         (output / (name + '.pb.txt')).write_text(connection(
-            name, endpoint, protocol, service.ca_certificate))
+            name, endpoint, protocol, service.ca_certificate, tvm=service.require_tvm_ticket))
     for alias in ('profiles_http', 'profiles_grpc'):
         (output / (alias + '.sql')).write_text(profile_query(alias))
     (output / 'echo.sql').write_text(echo_query())
     (output / 'connections.sql').write_text('\n'.join(ddl))
-    (output / 'secrets.json').write_text(json.dumps({'example_token': 'fqrun-example-token'}))
+    secrets = {'example_tvm_secret': 'fqrun-example-tvm-secret'} if service.require_tvm_ticket else \
+        {'example_token': 'fqrun-example-token'}
+    (output / 'secrets.json').write_text(json.dumps(secrets))
     (output / 'secrets.json').chmod(0o600)

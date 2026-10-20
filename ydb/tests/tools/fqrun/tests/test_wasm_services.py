@@ -342,6 +342,107 @@ def test_ddl_init_only(service, tmp_path):
     assert not service.requests
 
 
+def tvm_ddl(service):
+    return local_ddl(service).replace('AUTH_METHOD = "NONE"', '''AUTH_METHOD = 'TVM',
+    TVM_SOURCE_ID = '2020001', TVM_DESTINATION_ID = '2020002', TVM_SECRET_NAME = 'tvm_secret' ''')
+
+
+def tvm_options(tmp_path, sql):
+    secret_file = tmp_path / 'tvm-secrets.json'
+    secret_file.write_text(json.dumps({'tvm_secret': 'test-tvm-source-secret'}))
+    return ddl_options(tmp_path, sql) + ('--secrets-file=' + str(secret_file), '--verbosity=3')
+
+
+def test_tvm_ddl_creates_connection_without_requesting_ticket(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql='SELECT 42 AS answer', extra=tvm_options(tmp_path, tvm_ddl(service)))
+    assert runner.wait(process) == 0, runner.output()
+    assert int(runner.rows()[0]['answer']) == 42
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()
+
+
+def test_tvm_stub_fails_explicitly_before_network(service, tmp_path):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql=profile_query('profiles_http'), extra=tvm_options(tmp_path, tvm_ddl(service)))
+    assert runner.wait(process) != 0, runner.output()
+    assert 'TVM ticket provider is not implemented' in runner.output()
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()
+
+
+@pytest.mark.parametrize('service', [False, True], indirect=True)
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+@pytest.mark.parametrize('batch_rows', [1, 2])
+def test_tvm_mock_ticket_reaches_service_with_small_payload_limit(service, tmp_path, protocol, batch_rows):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, batch_rows)
+    # Credential/ticket reservations are independent of the application payload cap.
+    runner.config.write_text(runner.config.read_text().replace('WasmServices {', 'WasmServices { MaxBatchBytes: 4096', 1))
+    process = runner.start(alias=None, sql=profile_query('profiles_' + protocol), extra=(
+        '--tvm-mock', '--init-query=' + str(tmp_path / 'connections.sql'),
+        '--secrets-file=' + str(tmp_path / 'secrets.json'), '--verbosity=3',
+    ))
+    assert runner.wait(process) == 0, runner.output()
+    assert [int(row['id']) for row in runner.rows()] == [42, 43]
+    assert all(row['name'] == 'Ada' and int(row['score']) == 97 for row in runner.rows())
+    assert service.tvm_tickets
+    assert all(kind == protocol and ticket == 'fqrun-mock-tvm-service-ticket'
+               for kind, ticket in service.tvm_tickets)
+    assert all(auth is None for _, _, auth in service.requests)
+    assert 'fqrun-example-tvm-secret' not in runner.output()
+    assert 'fqrun-mock-tvm-service-ticket' not in runner.output()
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_tvm_mock_server_rejects_missing_ticket(service, tmp_path, protocol):
+    runner = Runner(tmp_path, service)
+    # Retain TOKEN connections but require a service ticket on the server.
+    service.require_tvm_ticket = True
+    assert runner.wait(runner.start('profiles_' + protocol, extra=('--tvm-mock',))) != 0, runner.output()
+    assert service.tvm_tickets
+    assert all(kind == protocol and ticket is None for kind, ticket in service.tvm_tickets)
+    assert not service.requests
+
+
+def test_tvm_mock_protobuf_connection_and_echo(service, tmp_path):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service)
+    process = runner.start('echo_http', (tmp_path / 'echo.sql').read_text(), extra=('--tvm-mock',))
+    assert runner.wait(process) == 0, runner.output()
+    row, = runner.rows()
+    assert row['value'] == 'hello' and int(row['length']) == 5
+    assert service.tvm_tickets == [('http', 'fqrun-mock-tvm-service-ticket')]
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_tvm_mock_delay_exceeds_call_timeout(service, tmp_path, protocol):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service, timeout_ms=200)
+    process = runner.start('profiles_' + protocol, extra=('--tvm-mock', '--tvm-mock-delay-ms=30000'))
+    assert runner.wait(process) != 0, runner.output()
+    assert not service.requests
+    assert not service.tvm_tickets
+
+
+@pytest.mark.parametrize('old,new,error', [
+    ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '0'", 'TVM_SOURCE_ID must'),
+    ("TVM_SOURCE_ID = '2020001'", "TVM_SOURCE_ID = '4294967296'", 'TVM_SOURCE_ID must'),
+    ("TVM_DESTINATION_ID = '2020002'", "TVM_DESTINATION_ID = '-1'", 'TVM_DESTINATION_ID must'),
+    ("TVM_SECRET_NAME = 'tvm_secret'", "TVM_SECRET_NAME = 'missing'", 'not present in --secrets-file'),
+    ("AUTH_METHOD = 'TVM'", "AUTH_METHOD = 'NONE'", 'not supported'),
+    ("AUTH_METHOD = 'TVM'", "AUTH_METHOD = 'TVM', TOKEN_SECRET_NAME = 'other'", 'not supported'),
+    ("TVM_SOURCE_ID = '2020001',", '', 'TVM_SOURCE_ID requires key'),
+])
+def test_tvm_invalid_ddl(service, tmp_path, old, new, error):
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, sql='SELECT 1', extra=tvm_options(tmp_path, tvm_ddl(service).replace(old, new)))
+    assert runner.wait(process) != 0, runner.output()
+    assert error in runner.output()
+    assert not service.requests
+    assert 'test-tvm-source-secret' not in runner.output()
+
+
 @pytest.mark.parametrize('signal_number', [signal.SIGTERM, signal.SIGINT])
 @pytest.mark.parametrize('delay_kind', ['loop', 'query'])
 def test_interrupt_between_queries(service, tmp_path, signal_number, delay_kind):
@@ -432,6 +533,23 @@ def test_call_alias_monitoring(service, tmp_path, protocol, batch_rows):
         assert_call_metrics(sensors, 'profile.batch' if batch_rows == 2 else 'profile.lookup', protocol)
         labels = json.dumps([s['labels'] for s in sensors])
         assert 'fqrun-example-token' not in labels and '/profile' not in labels
+    finally:
+        process.terminate()
+        runner.wait(process)
+
+
+@pytest.mark.parametrize('protocol', ['http', 'grpc'])
+def test_auth_uses_universal_call_monitoring(service, tmp_path, protocol):
+    service.require_tvm_ticket = True
+    runner = Runner(tmp_path, service)
+    process = runner.start(alias=None, extra=(
+        '--init-query=' + str(tmp_path / 'connections.sql'), '--secrets-file=' + str(tmp_path / 'secrets.json'),
+        '--tvm-mock', '--tvm-mock-delay-ms=20', '--monitoring', '--hold'),
+        sql=profile_query('profiles_' + protocol))
+    try:
+        sensors = monitoring_snapshot(runner, process)
+        calls = assert_call_metrics(sensors, 'profile.lookup', protocol)
+        assert assert_call_metrics(sensors, 'auth.tvm', 'internal') == calls
     finally:
         process.terminate()
         runner.wait(process)

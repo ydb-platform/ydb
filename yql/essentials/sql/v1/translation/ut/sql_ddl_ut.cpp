@@ -533,6 +533,40 @@ Y_UNIT_TEST(CreateExternalDataSourceWithAws) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+Y_UNIT_TEST(CreateExternalServiceWithTvm) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="2020001", TVM_DESTINATION_ID="2020002", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateExternalServiceWithTvmRequiresDestination) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ExternalService", AUTH_METHOD="TVM", TVM_SOURCE_ID="2020001", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM_DESTINATION_ID requires key");
+}
+
+Y_UNIT_TEST(CreateExternalDataSourceTvmRequiresExternalService) {
+    auto res = SqlToYql(R"sql(
+        USE plato;
+        CREATE EXTERNAL DATA SOURCE profiles WITH (
+            SOURCE_TYPE="ObjectStorage", AUTH_METHOD="TVM",
+            TVM_SOURCE_ID="2020001", TVM_DESTINATION_ID="2020002", TVM_SECRET_NAME="source_secret"
+        );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "TVM authorization requires SOURCE_TYPE=ExternalService");
+}
+
 Y_UNIT_TEST(CreateExternalServiceWithCurrentIam) {
     auto res = SqlToYql(R"sql(
         USE plato;

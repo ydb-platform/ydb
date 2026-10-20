@@ -111,14 +111,15 @@ Transforms share a transport executor actor on the node's user pool
 (`appData->UserPoolId`), created once by `RegisterServiceTransforms`. HTTP uses
 one shared OS socket waiter per executor; its thread only publishes readiness
 notifications. The actor runs `curl_multi_socket_action`, starts requests and
-processes responses on the user pool. gRPC completion callbacks only publish
-their results and wake the actor. WASM resumes through its owning compute
+processes responses on the user pool. gRPC and TVM completion callbacks only
+publish their results and wake the actor. WASM resumes through its owning compute
 actor when data is ready. No transform creates its own transport thread. While
 requests are waiting, the user-pool thread is available to other work.
 
 Each turn processes at most 32 ready transport sessions before yielding to the
 actor scheduler. There is no periodic scan of pending requests. One-shot timers
-cover concrete request deadlines, libcurl timeouts and native timer operations. Request preparation, transport
+cover concrete request deadlines, libcurl timeouts and native timer operations;
+the delayed TVM mock uses a one-shot actor timer. Request preparation, transport
 progress, response processing and owner notifications share the user pool's CPU
 budget.
 
@@ -127,8 +128,8 @@ shared limits for all WASM service transports registered on the FQ node. Their
 defaults are 1024 operations and 256 MiB. Each individual transport also retains
 its limits of 128 operations and 64 MiB. Admission must fit both sets of limits;
 otherwise the operation fails immediately with `ResourceLimit`, without adding
-it to an unbounded waiting queue. Operations waiting for a timer and operations whose cancellation is still
-being cleaned up consume credits.
+it to an unbounded waiting queue. Operations waiting for a TVM ticket or timer,
+and operations whose cancellation is still being cleaned up, consume credits.
 
 The byte limit reserves space conservatively for owned request, response and
 header buffers, including copies. It is not a hard process RSS limit: library
@@ -196,7 +197,8 @@ supplies the HTTP verb/path or gRPC method per call; `METHOD` is not a DDL optio
 URL for HTTP. `CA_CERTIFICATE` accepts PEM trust roots, not a filesystem path.
 TLS verification cannot be disabled. Unknown properties and duplicate keys fail.
 
-`AUTH_METHOD` accepts `NONE`, `CURRENT_IAM` (the runner's `YQL_TOKEN`) or `TOKEN`.
+`AUTH_METHOD` accepts `NONE`, `CURRENT_IAM` (the runner's `YQL_TOKEN`), `TOKEN`,
+or `TVM` (see the provider-stub section below).
 For `TOKEN`, pass `--secrets-file=secrets.json`, a local JSON object:
 
 ```json
@@ -229,6 +231,105 @@ Initialization can run without a query (omit `-C`); with embedded metadata the
 connections last only for that runner invocation. Use `--hold` to keep the runner
 available, or an external `--cp-storage-db` for persistent metadata. Module loading
 still uses `WasmServices.Modules`; DDL does not register or download WASM.
+
+### TVM authorization (ticket provider stub)
+
+TVM connection metadata and transport integration are implemented. The default
+provider is **unavailable**: actual ticket acquisition will be added when the TVM
+client/API contract is supplied. Creating a connection succeeds; executing a
+query that uses it fails with `TVM ticket provider is not implemented`, before
+sending any request to the external service. For local end-to-end testing,
+`fqrun --tvm-mock` selects a test provider that returns the fixed fake ticket
+`fqrun-mock-tvm-service-ticket`. It does not contact TVM or use the source secret
+to mint a real ticket. Without this explicit option, the default provider
+remains unavailable.
+
+The mock delays each ticket by 100 ms by default. Use
+`--tvm-mock --tvm-mock-delay-ms=2000` to simulate a two-second wait, or set the
+delay to `0` for immediate tickets. A one-shot actor timer delivers the completion;
+the mock never polls, sleeps or starts a thread per ticket. Other
+requests continue through the same transport while a ticket is pending, and the
+wait remains subject to the operation's deadline and cancellation.
+
+`DelayedMockTvmAcquisitionDoesNotBlockOtherRequests` tests this using the same
+mock provider as fqrun and a controlled timer scheduler. For both HTTP and gRPC
+it holds the first ticket pending, completes a second request (with no TVM or an
+immediately ready TVM ticket), then fires the timer and completes the first.
+Transport tests run the executor on a user pool with a single thread, so an
+additional pool thread cannot hide blocking ticket acquisition. Separate tests
+exercise shared operation and byte quotas across transports.
+
+```sql
+CREATE EXTERNAL DATA SOURCE profiles_http WITH (
+    SOURCE_TYPE = 'ExternalService',
+    PROTOCOL = 'HTTP',
+    LOCATION = 'https://profiles.example.test',
+    AUTH_METHOD = 'TVM',
+    TVM_SOURCE_ID = '2020001',
+    TVM_DESTINATION_ID = '2020002',
+    TVM_SECRET_NAME = 'profiles_tvm_secret'
+);
+```
+
+Pass `--secrets-file=secrets.json` with a JSON object mapping
+`profiles_tvm_secret` to the source application's secret. Source and destination
+must be nonzero uint32 IDs. TVM cannot be combined with token/IAM credentials.
+For protobuf connections use `external_service.tvm_auth { source_id: ...
+destination_id: ... secret: "..." }` instead of `external_service.auth`.
+The secret is a sensitive credential, omitted from ordinary connection reads and
+masked in diagnostic output. The local file is read at startup; changing its
+contents requires restarting and recreating the connection.
+
+`ITvmTicketProvider` in `ydb/core/fq/libs/wasm_services/tvm.h` is the integration
+point for the real client. It receives only source ID, destination ID, secret and
+deadline. Methods/paths are not inputs to TVM authorization and no TVM method
+allowlist is applied. The WASM guest supplies each request method/path independently.
+The provider must implement nonblocking acquisition, credential isolation,
+ticket caching/refresh, and cancellation of individual waiters.
+`Request(credentials, deadline, completion)` executes on the user pool and
+returns a cancellable waiter. The callback can run inline or on another thread,
+reporting `Ready` or `Failed` exactly once; it only publishes the result and wakes
+the transport actor. `Request()`, `Cancel()` and waiter destruction must return
+promptly, without blocking for a network reply. Cancellation must tolerate a
+racing completion. The provider can be injected into `RegisterServiceTransforms`;
+all transforms share it.
+
+The host obtains credentials for each network operation and adds
+`X-Ya-Service-Ticket` for HTTP or `x-ya-service-ticket` for gRPC. Acquisition counts
+towards the operation's deadline and memory/concurrency limits. Cancellation and
+shutdown detach pending waiters. Reserved TVM headers cannot be supplied through
+connection headers. Tickets and source secrets never enter WASM memory.
+Transport/DQ tests use an explicitly injected test provider. fqrun end-to-end
+tests also exercise `--tvm-mock`; neither validates a real TVM server or issuance
+protocol.
+
+To run the complete local TVM example, build the runner and mock server, then
+start the server in one terminal from the repository root:
+
+```bash
+./ya make --build relwithdebinfo ydb/tests/tools/fqrun ydb/tests/tools/fqrun/examples/server
+ydb/tests/tools/fqrun/examples/server/fqrun-wasm-mock \
+  --output-dir /tmp/fqrun-tvm-example --tvm-mock
+```
+
+This generates TVM connections, a dummy source secret and the WASM configuration.
+The mock checks only that the service-ticket header is nonempty: HTTP requests
+without it receive 401, gRPC calls receive UNAUTHENTICATED. It does not check
+ticket signatures, source/destination IDs, paths or methods for authorization.
+
+In another terminal, run:
+
+```bash
+ydb/tests/tools/fqrun/fqrun -C analytics --compute=in-place --tvm-mock \
+  --cfg=/tmp/fqrun-tvm-example/app.conf \
+  --init-query=/tmp/fqrun-tvm-example/connections.sql \
+  --secrets-file=/tmp/fqrun-tvm-example/secrets.json \
+  --query=/tmp/fqrun-tvm-example/profiles_http.sql
+```
+
+The query returns IDs 42 and 43, name `Ada`, score 97. Replace the query file with
+`profiles_grpc.sql` to test gRPC or `echo.sql` for the Echo module. Existing TVM
+DDL and secret files work with the same runner option.
 
 ### Reproducible HTTP/gRPC example
 
@@ -302,7 +403,8 @@ ordinary analytics with/without explicit backend selection. No installed ydbd or
 external service is required.
 
 Transport unit tests additionally cover progress on a single-thread user pool,
-shared operation/memory limits and release of reservations after cancellation. They also hold HTTP/gRPC responses pending, check that the
+delayed TVM tickets, shared operation/memory limits and release of reservations
+after cancellation. They also hold HTTP/gRPC responses pending, check that the
 executor stops dispatching until readiness arrives, and verify that completion
 runs on the user pool:
 

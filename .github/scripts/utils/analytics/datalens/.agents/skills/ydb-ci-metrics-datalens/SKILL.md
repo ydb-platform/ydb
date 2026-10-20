@@ -7,7 +7,7 @@ description: "Edit or publish the live CI metrics DataLens dashboard via the Dat
 
 [CI metrics](https://datalens.ru/135ob2ntmr0ok-ci-metrics), id `135ob2ntmr0ok`.
 Org `bpfssp32nspchhs4df3c`. Workbook `ev4an7f2ncmk2`.
-This file: https://github.com/naspirato/ydb/blob/ci-metrics-datalens-sources/.github/scripts/utils/analytics/datalens/.agents/skills/ydb-ci-metrics-datalens/SKILL.md
+This file: https://github.com/ydb-platform/ydb/blob/main/.github/scripts/utils/analytics/datalens/.agents/skills/ydb-ci-metrics-datalens/SKILL.md
 Do not add a Python DataLens client. Use only the input schemas from `describe_commands`.
 Keep `ciagent01` on tab CI and `capagent01` on tab Runners capacity as the top full-width text row (`w` 36, `x` 0, `y` 0).
 Their `data.text` is `To change this dashboard, send an agent the [instructions](<this file URL>).`

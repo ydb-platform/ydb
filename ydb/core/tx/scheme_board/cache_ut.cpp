@@ -55,7 +55,7 @@ protected:
         TNavigate::EOp op = TNavigate::EOp::OpPath, bool showPrivatePath = false);
 
     TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
-        const TString& sid = TString());
+        const TString& sid = TString(), bool syncVersion = false);
 
     TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0);
     void TestWatchRemove(const TActorId& watcher, ui64 key = 0);
@@ -123,7 +123,7 @@ TNavigate::TEntry TCacheTestBase::TestNavigateByTableId(const TTableId& tableId,
     return result;
 }
 
-TResolve::TEntry TCacheTestBase::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid) {
+TResolve::TEntry TCacheTestBase::TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus, const TString& sid, bool syncVersion) {
     auto request = MakeHolder<TResolve>();
 
     auto keyDesc = MakeHolder<TKeyDesc>(
@@ -133,6 +133,7 @@ TResolve::TEntry TCacheTestBase::TestResolve(const TTableId& tableId, TResolve::
         TVector<NScheme::TTypeInfo>(), TVector<TKeyDesc::TColumnOp>()
     );
     request->ResultSet.emplace_back(std::move(keyDesc));
+    request->ResultSet[0].SyncVersion = syncVersion;
 
     if (sid) {
         request->UserToken = new NACLib::TUserToken(sid, {});
@@ -247,6 +248,7 @@ public:
     UNIT_TEST(SystemViews);
     UNIT_TEST(SysLocks);
     UNIT_TEST(TableSchemaVersion);
+    UNIT_TEST(TablePartitioningVersion);
     UNIT_TEST(TableDescription);
     UNIT_TEST(MigrationCommon);
     UNIT_TEST(MigrationCommit);
@@ -269,6 +271,7 @@ public:
     void SystemViews();
     void SysLocks();
     void TableSchemaVersion();
+    void TablePartitioningVersion();
     void TableDescription();
     void MigrationCommon();
     void MigrationCommit();
@@ -549,6 +552,66 @@ void TCacheTest::TableSchemaVersion() {
     {
         auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
         UNIT_ASSERT_VALUES_EQUAL(entry.TableId.SchemaVersion, 2);
+    }
+}
+
+void TCacheTest::TablePartitioningVersion() {
+    ui64 txId = 100;
+    TestCreateTable(*Context, ++txId, "/Root", R"(
+        Name: "Table1"
+        Columns { Name: "key" Type: "Uint32" }
+        KeyColumnNames: [ "key" ]
+        PartitionConfig {
+            CompactionPolicy {
+            }
+        }
+    )", {NKikimrScheme::StatusAccepted});
+
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, RootSchemeshardTabletId));
+
+    const auto v1 = DescribePath(*Context, "/Root/Table1", true)
+        .GetPathDescription().GetSelf().GetVersion().GetTablePartitionVersion();
+    UNIT_ASSERT(v1 > 0);
+
+    auto entry = TestNavigate("/Root/Table1", TNavigate::EStatus::Ok);
+    {
+        auto resolve = TestResolve(entry.TableId);
+        UNIT_ASSERT(resolve.KeyDescription->Partitioning);
+        UNIT_ASSERT_VALUES_EQUAL(resolve.KeyDescription->Partitioning->GetVersion(), v1);
+    }
+
+    // Split into two partitions: TablePartitionVersion must bump and the
+    // resolved partitioning must carry the new version
+    // Disable the split/merge part count limit check, it requires the source
+    // datashard to report its stats (ShardState == Ready) first, which is not
+    // guaranteed in this environment
+    SetSplitMergePartCountLimit(Context.Get(), -1);
+
+    const auto describe1 = DescribePath(*Context, "/Root/Table1", true);
+    UNIT_ASSERT_VALUES_EQUAL(describe1.GetPathDescription().TablePartitionsSize(), 1);
+    const auto shardId = describe1.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+    TestSplitTable(*Context, ++txId, "/Root/Table1", Sprintf(R"(
+        SourceTabletId: %lu
+        SplitBoundary {
+            KeyPrefix {
+                Tuple { Optional { Uint32: 5 } }
+            }
+        }
+    )", shardId));
+
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, RootSchemeshardTabletId));
+
+    const auto v2 = DescribePath(*Context, "/Root/Table1", true)
+        .GetPathDescription().GetSelf().GetVersion().GetTablePartitionVersion();
+    UNIT_ASSERT(v2 > v1);
+
+    // SyncVersion makes the cache wait for a version barrier, so the stale
+    // (single-partition) item cannot be used to answer the resolve
+    {
+        auto resolve = TestResolve(entry.TableId, TResolve::EStatus::OkData, TString(), true);
+        UNIT_ASSERT(resolve.KeyDescription->Partitioning);
+        UNIT_ASSERT_VALUES_EQUAL(resolve.KeyDescription->Partitioning->GetVersion(), v2);
     }
 }
 

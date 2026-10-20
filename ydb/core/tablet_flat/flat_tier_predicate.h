@@ -131,8 +131,6 @@ namespace NTable {
          * Tier ids of rules with a bound that could not be converted into the
          * column type. Ranges with such bounds never match,
          * so callers should report them instead of silently skipping tiering.
-         *
-         * Pg date/timestamp bounds before year 1 AD are reported here.
          */
         TVector<ui32> GetUnrepresentableTierIds() const;
 
@@ -175,6 +173,7 @@ namespace NTable {
     private:
         const TTieringPolicy Policy;
         NScheme::TTypeInfo Type;
+        ui32 PgTypeId = 0; // Postgres type oid of a Pg column
         TPos Pos = Max<TPos>();
         TVector<TVector<TCompiledRange>> Compiled;
     };

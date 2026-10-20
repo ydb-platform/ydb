@@ -4,7 +4,10 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/string/cast.h>
-#include <util/string/printf.h>
+#include <util/system/byteorder.h>
+#include <util/system/unaligned_mem.h>
+
+#include <type_traits>
 
 namespace NKikimr {
 namespace NTable {
@@ -24,6 +27,20 @@ namespace {
         Int4,
         Int8,
     };
+
+    // Postgres dates and timestamps count from 2000-01-01
+    constexpr i64 PgEpochDays = 10957;
+    constexpr i64 PgEpochMicros = PgEpochDays * MicrosPerDay;
+
+    // Pg columns hold the Postgres binary (send/recv) format: the supported
+    // types are big-endian integers of a fixed width, so they are compared
+    // as integers without decoding them through Postgres (which allocates)
+    template <typename T>
+    T ReadPgInteger(const TCell& cell) {
+        Y_ENSURE(cell.Size() == sizeof(T), "Unexpected Pg value size " << cell.Size());
+        using TUnsigned = std::make_unsigned_t<T>;
+        return static_cast<T>(InetToHost(ReadUnaligned<TUnsigned>(cell.Data())));
+    }
 
     // Stable PostgreSQL type oids (see catalog/pg_type_d.h)
     constexpr ui32 PgInt8Oid = 20;
@@ -238,50 +255,6 @@ namespace {
         return result;
     }
 
-    struct TCivilDate {
-        i64 Year;
-        ui32 Month;
-        ui32 Day;
-    };
-
-    // Days since the epoch to a proleptic Gregorian date
-    // (http://howardhinnant.github.io/date_algorithms.html#civil_from_days)
-    TCivilDate CivilFromDays(i64 days) {
-        days += 719468;
-        const i64 era = (days >= 0 ? days : days - 146096) / 146097;
-        const i64 doe = days - era * 146097;
-        const i64 yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-        const i64 doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-        const i64 mp = (5 * doy + 2) / 153;
-        const i64 day = doy - (153 * mp + 2) / 5 + 1;
-        const i64 month = mp < 10 ? mp + 3 : mp - 9;
-        return {yoe + era * 400 + (month <= 2 ? 1 : 0), static_cast<ui32>(month), static_cast<ui32>(day)};
-    }
-
-    // Postgres text for a date, years before 1 AD are not supported
-    TMaybe<TString> FormatPgDate(i64 days) {
-        const auto date = CivilFromDays(days);
-        if (date.Year < 1) {
-            return Nothing();
-        }
-        return Sprintf("%04lld-%02u-%02u", static_cast<long long>(date.Year), date.Month, date.Day);
-    }
-
-    // Postgres text for a timestamp without time zone, years before 1 AD are not supported
-    TMaybe<TString> FormatPgTimestamp(i64 micros) {
-        const i64 days = FloorDiv(micros, MicrosPerDay);
-        const i64 timeOfDay = micros - days * MicrosPerDay;
-        auto date = FormatPgDate(days);
-        if (!date) {
-            return Nothing();
-        }
-        return Sprintf("%s %02lld:%02lld:%02lld.%06lld", date->c_str(),
-            static_cast<long long>(timeOfDay / (3600 * MicrosPerSecond)),
-            static_cast<long long>(timeOfDay / (60 * MicrosPerSecond) % 60),
-            static_cast<long long>(timeOfDay / MicrosPerSecond % 60),
-            static_cast<long long>(timeOfDay % MicrosPerSecond));
-    }
-
     // DyNumber binary representation is ordered bytewise, except that negative
     // numbers store inverted digits without a terminator: when one negative
     // mantissa is a prefix of another, the shorter one is the greater number
@@ -407,6 +380,7 @@ namespace {
 
         Type = info->TypeInfo;
         Pos = info->Pos;
+        PgTypeId = Type.GetTypeId() == NScheme::NTypeIds::Pg ? NPg::PgTypeIdFromTypeDesc(Type.GetPgTypeDesc()) : 0;
 
         const i64 nowUs = static_cast<i64>(Min(now.MicroSeconds(), static_cast<ui64>(Max<i64>())));
 
@@ -504,14 +478,6 @@ namespace {
             }
         };
 
-        auto toPg = [&](const TString& text) -> TMaybe<TString> {
-            auto converted = NPg::PgNativeBinaryFromNativeText(text, Type.GetPgTypeDesc());
-            if (converted.Error) {
-                return Nothing();
-            }
-            return std::move(converted.Str);
-        };
-
         auto unitBound = [&](EScale nanosScale) {
             if (Policy.Unit == NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS) {
                 return IntegerBound(micros, lessOrEqual, nanosScale, 1);
@@ -553,15 +519,18 @@ namespace {
                 break;
             case NScheme::NTypeIds::Pg:
                 switch (GetPgKind(Type)) {
-                    case EPgKind::Date:
-                        // A date denotes the start of its day
-                        if (auto text = FormatPgDate(lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay))) {
-                            setSerialized(toPg(*text));
-                        }
+                    case EPgKind::Date: {
+                        // A date denotes the start of its day, Postgres counts days from 2000-01-01
+                        const i64 days = lessOrEqual ? FloorDiv(micros, MicrosPerDay) : CeilDiv(micros, MicrosPerDay);
+                        setSigned(TWide::Signed(days - PgEpochDays), Min<i32>(), Max<i32>());
                         break;
+                    }
                     case EPgKind::Timestamp:
-                        if (auto text = FormatPgTimestamp(micros)) {
-                            setSerialized(toPg(*text));
+                        // Postgres counts microseconds from 2000-01-01
+                        if (micros < Min<i64>() + PgEpochMicros) {
+                            setSigned(TWide::Infinity(-1), Min<i64>(), Max<i64>());
+                        } else {
+                            setSigned(TWide::Signed(micros - PgEpochMicros), Min<i64>(), Max<i64>());
                         }
                         break;
                     case EPgKind::Int4:
@@ -571,9 +540,6 @@ namespace {
                         // all values are either below or above it
                         setSigned(unitBound(EScale::NanosExact),
                             int4 ? Min<i32>() : Min<i64>(), int4 ? Max<i32>() : Max<i64>());
-                        if (result.Kind == EKind::Value) {
-                            setSerialized(toPg(ToString(result.Signed)));
-                        }
                         break;
                     }
                     case EPgKind::Unsupported:
@@ -609,10 +575,16 @@ namespace {
             case NScheme::NTypeIds::DyNumber:
                 return CompareDyNumbers(cell.AsBuf(), threshold.Serialized);
             case NScheme::NTypeIds::Pg:
-                return NPg::PgNativeBinaryCompare(
-                    cell.Data(), cell.Size(),
-                    threshold.Serialized.data(), threshold.Serialized.size(),
-                    Type.GetPgTypeDesc());
+                switch (PgTypeId) {
+                    case PgDateOid:
+                    case PgInt4Oid:
+                        return compare(i64(ReadPgInteger<i32>(cell)), threshold.Signed);
+                    case PgTimestampOid:
+                    case PgInt8Oid:
+                        return compare(ReadPgInteger<i64>(cell), threshold.Signed);
+                    default:
+                        Y_ENSURE(false, "Unreachable");
+                }
             default:
                 Y_ENSURE(false, "Unreachable");
         }

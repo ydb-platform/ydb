@@ -365,6 +365,7 @@ public:
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    // groups of the piles this bridged group has its parts in, in order of pile ids (absent piles are skipped)
     const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
     bool IsBridged() const { return !BridgeGroupIds.empty(); }
     std::optional<TGroupId> GetBridgeProxyGroupId() const { return BridgeProxyGroupId; }

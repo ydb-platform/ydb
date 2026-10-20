@@ -327,7 +327,12 @@ namespace NKikimr::NStorage {
 
         auto *op = std::get_if<TInvokeExternalOperation>(&Query);
         Y_ABORT_UNLESS(op);
-        const ui32 pilesCnt = Self->BridgeInfo ? Self->BridgeInfo->Piles.size() : 1;
+        // every pile has its ring group, except for INACTIVE ones
+        const ui32 pilesCnt = Self->BridgeInfo
+            ? static_cast<ui32>(std::ranges::count_if(Self->BridgeInfo->Piles, [](const auto& pile) {
+                return pile.State != NKikimrBridge::TClusterState::INACTIVE;
+            }))
+            : 1;
         Self->StateStorageSelfHealActor = Register(new TStateStorageSelfhealActor(op->Sender, op->Cookie,
             TDuration::Seconds(waitForConfigStep), std::move(currentConfig), std::move(targetConfig), pilesCnt));
         Finish(TResult::OK, std::nullopt);

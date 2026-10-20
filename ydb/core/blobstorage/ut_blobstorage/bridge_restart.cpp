@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
 using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::SwitchBridgePileState;
 
 Y_UNIT_TEST_SUITE(BridgeRestart) {
     Y_UNIT_TEST(RegistrationSnapshotPrecedesDiskUpdates) {
@@ -33,29 +34,6 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
             return true;
         };
         const auto sender = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        auto invoke = [&](std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
-            runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender, request.release()), 1);
-            auto response = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(sender, false,
-                runtime->GetClock() + TDuration::Seconds(30));
-            UNIT_ASSERT_C(response, "Timed out waiting for a bridge configuration command");
-            UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
-                NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
-            return response->Get()->Record;
-        };
-        auto query = [&] {
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableQueryConfig();
-            return invoke(std::move(request)).GetQueryConfig().GetConfig();
-        };
-        auto change = [&](ui32 index, NKikimrBridge::TClusterState::EPileState state) {
-            auto config = query();
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            auto *next = request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
-            next->CopyFrom(config.GetClusterState());
-            next->SetPerPileState(index, state);
-            next->SetGeneration(next->GetGeneration() + 1);
-            invoke(std::move(request));
-        };
 
         ui32 step = 0;
         auto put = [&](TString data) {
@@ -71,8 +49,8 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
         };
         put("before disconnect");
         put(TString(128_KB, 'a'));
-        change(1, NKikimrBridge::TClusterState::DISCONNECTED);
-        change(2, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
         // The root's acknowledgement can precede propagation to the local bridge proxy.
         runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender,
             new TEvNodeWardenQueryStorageConfig(true)), 1);
@@ -97,8 +75,8 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
         for (ui32 nodeId = 9; nodeId <= 24; ++nodeId) {
             env.StartNode(nodeId);
         }
-        change(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-        change(2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         const auto deadline = runtime->GetClock() + TDuration::Seconds(30);
         while (registeredNodes.size() != 16) {
             UNIT_ASSERT_C(runtime->GetClock() < deadline, "Timed out waiting for registration snapshots");

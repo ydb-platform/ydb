@@ -41,6 +41,28 @@ protected:
     const TDerived *Self() const { return static_cast<const TDerived*>(this); }
     TDerived *Self() { return static_cast<TDerived*>(this); }
 
+    // reply to the failed distconf invocation with the matching status
+    void ReplyWithInvokeError(const NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& record) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        auto *self = Self();
+        switch (record.GetStatus()) {
+            case TResult::NO_QUORUM:
+                self->Reply(Ydb::StatusIds::UNAVAILABLE, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+                break;
+
+            case TResult::RACE:
+                self->Reply(Ydb::StatusIds::ABORTED, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                    self->ActorContext());
+                break;
+
+            default:
+                self->Reply(Ydb::StatusIds::GENERIC_ERROR, record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                break;
+        }
+    }
+
     // operations changing the bridge cluster state are allowed to administrators only
     bool CheckAdministrator(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) const {
         if (!IsAdministrator(AppData(), this->Request_->GetSerializedToken())) {

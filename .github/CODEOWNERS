@@ -41,6 +41,7 @@
 /ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/kqp/ut/tli/ @ydb-platform/datashard
+/ydb/core/kqp/ut/query/kqp_analyze_ut.cpp  @ydb-platform/datashard
 
 /ydb/docs/ @ydb-platform/docs
 

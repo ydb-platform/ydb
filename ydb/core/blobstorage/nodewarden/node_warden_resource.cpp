@@ -400,11 +400,12 @@ void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
 
     ConfigInFlight.emplace(cookie, [this, sender = ev->Sender, cookie = ev->Cookie](TEvBlobStorage::TEvControllerConfigResponse *ev) {
         auto response = std::make_unique<TEvNodeWardenBaseConfig>();
-        if (ev) {
-            auto *record = ev->Record.MutableResponse();
-            if (record->GetSuccess() && record->StatusSize() == 1) {
-                response->BaseConfig = std::move(*record->MutableStatus(0)->MutableBaseConfig());
-            }
+        if (!ev) {
+            response->ErrorReason = "pipe to BSC disconnected";
+        } else if (auto *record = ev->Record.MutableResponse(); record->GetSuccess() && record->StatusSize() == 1) {
+            response->BaseConfig = std::move(*record->MutableStatus(0)->MutableBaseConfig());
+        } else {
+            response->ErrorReason = TStringBuilder() << "BSC failed to provide base config: " << record->GetErrorDescription();
         }
         Send(sender, response.release(), 0, cookie);
     });

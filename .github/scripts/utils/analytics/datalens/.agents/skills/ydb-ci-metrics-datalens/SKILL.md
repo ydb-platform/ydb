@@ -7,7 +7,11 @@ description: "Edit or publish the live CI metrics DataLens dashboard via the Dat
 
 [CI metrics](https://datalens.ru/135ob2ntmr0ok-ci-metrics), id `135ob2ntmr0ok`.
 Org `bpfssp32nspchhs4df3c`. Workbook `ev4an7f2ncmk2`.
+This file: https://github.com/naspirato/ydb/blob/ci-metrics-datalens-sources/.github/scripts/utils/analytics/datalens/.agents/skills/ydb-ci-metrics-datalens/SKILL.md
 Do not add a Python DataLens client. Use only the input schemas from `describe_commands`.
+Keep `ciagent01` on tab CI and `capagent01` on tab Runners capacity as the top full-width text row (`w` 36, `x` 0, `y` 0).
+Their `data.text` is `To change this dashboard, send an agent the [instructions](<this file URL>).`
+The same URL is `annotation.description`.
 
 ## Source map
 
@@ -26,38 +30,43 @@ Do not add a Python DataLens client. Use only the input schemas from `describe_c
 | `analytics/ci_metrics_state` | `.github/scripts/utils/analytics/github_actions/export_github_job_metrics.py` | Nobody on the dash |
 | `analytics/ci_capacity` | `.github/scripts/utils/analytics/github_actions/export_runner_capacity.py` | Tab **Runners capacity** |
 
-Schema: `.github/scripts/utils/analytics/github_actions/README.md`.
+Columns: `.github/scripts/utils/analytics/github_actions/README.md`.
 
 Tab **CI** `citab01`. Dates `interval` default last 4 days. Job status default `success` and `failure`.
 
-| Name | Title | Id | Dataset | Meaning |
-|---|---|---|---|---|
-| `duration` | Duration | `egg8s3g477lmx` | `duration-ds` `z11tcvkyw21gi` | Selected job or step over Dates. Click a point to open Gantt. |
-| `gantt` | Gantt | `466sto4vl396n` | `gantt-ds` `tvvegjgj046oc` | One `(run_id, run_attempt)` as a timeline. |
-| `pdiff` | p diff | `svm2b1l1s15yb` | `duration-ds` | Two windows of the same step. |
-| `pickers-ds` | PR / Run pickers | `nr9x5jtcy8xc6` | itself | PR and Run selectors. |
+| Widget | Chart | Dataset | Meaning |
+|---|---|---|---|
+| `ciagent01` | — | — | Top row. Link to this skill. |
+| `pdiffw01` | `svm2b1l1s15yb` | `z11tcvkyw21gi` | Two windows of the same step. |
+| `ciselect01` | — | `z11tcvkyw21gi` | Step / Dates / branch / workflow / job filters. |
+| `ckoutw01` | `egg8s3g477lmx` | `z11tcvkyw21gi` | Selected job or step over Dates. Click a point to open Gantt. |
+| `cigantt01` | — | `nr9x5jtcy8xc6` | PR / Run selectors. |
+| `ganttw01` | `466sto4vl396n` | `tvvegjgj046oc` | One `(run_id, run_attempt)` as a timeline. |
 
-Tab **Runners capacity** `captab01`. Self-hosted ghrun and Compute quota, not `ubuntu-latest`. Dates same as CI. Zone `cap_zone` default `ru-central1-d`. `cap_pc` default hide. `cap_by` workflow or branch.
+Tab **Runners capacity** `captab01`. Self-hosted ghrun and Compute quota, not `ubuntu-latest`. Dates same as CI. Zone `cap_zone` default `ru-central1-d`. Postcommit `cap_pc` default hide. Split RAM `cap_by` default workflow.
 
-| Name | Title | Id | Dataset | Meaning |
-|---|---|---|---|---|
-| `capacity-queue` | Queue p90 | `8d0ow1ovos8ar` | `duration-ds` | p90 wait for a runner (`github_job` / `queue`). |
-| `capacity-tight` | Free quota | `di5qp2d1kb64w` | `capacity-ds` `di5qgcbc4td0w` | Free instances / vCPU / RAM / SSD and how many preset VMs still fit. |
-| `capacity-use` | Who holds the RAM | `gl8tsc0e1nnez` | `capacity-ds` | RAM by workflow or branch on a UTC timeline. |
-| `capacity-pool` | Runners | `bg3ondk342pku` | `capacity-ds` | Latest snapshot: busy / idle / waiting, percents of the zone quota. |
+| Widget | Chart | Dataset | Meaning |
+|---|---|---|---|
+| `capagent01` | — | — | Top row. Same link as `ciagent01`. |
+| `capby01` | — | — | Dates / Zone / Postcommit / Split RAM filters. |
+| `capqueue01` | `8d0ow1ovos8ar` | `z11tcvkyw21gi` | p90 wait for a runner (`github_job` / `queue`). |
+| `captight01` | `di5qp2d1kb64w` | `di5qgcbc4td0w` | Free instances / vCPU / RAM / SSD and how many preset VMs still fit. |
+| `capuse01` | `gl8tsc0e1nnez` | `di5qgcbc4td0w` | RAM by workflow or branch on a UTC timeline. |
+| `cappool01` | `bg3ondk342pku` | `di5qgcbc4td0w` | Latest snapshot: busy / idle / waiting, percents of the zone quota. |
 
-`capacity-ds` reads `analytics/ci_capacity`. Kinds `quota` / `fit` / `summary` / `runner` / `queue`. PK `(sampled_at, date, kind, name)`, TTL 1 year.
+`di5qgcbc4td0w` reads `analytics/ci_capacity`. Kinds `quota` / `fit` / `summary` / `runner` / `queue`. PK `(sampled_at, date, kind, name)`, TTL 1 year.
 
 ## Trace the changed contract
 
 1. If DataLens MCP tools are missing, stop. Tell the human to add `@datalens-tech/mcp` with `DATALENS_ORG_ID=bpfssp32nspchhs4df3c`. Default auth is `yc iam create-token`. A static token needs `DATALENS_YC_STATIC_AUTH=1` and `DATALENS_API_AUTH_HEADER`. Never commit a token.
-2. `list_commands`, then `describe_commands` for the get/update of chart, dataset, or dashboard (`getEditorChart` / `updateEditorChart`, `getDataset` / `updateDataset`, `getDashboard` / `updateDashboard`). Call the `invoke_tool` named there (`invoke_read_command` or `invoke_write_command`).
-3. Get the live object by id above. Edit only the intended field: chart `data.sources` or `data.prepare`; dataset `dataset.sources[].parameters.subsql`; dashboard `data.tabs`. Keep the defaults in Objects.
-4. Each `(run_id, run_attempt)` is its own run. In Duration and p-diff dataset SQL the run id field is `ci_run_id` (DataLens alias), not `run_id`. Do not `COALESCE` a missing conclusion to `in_progress`.
-5. Chart or dashboard: write with `mode` `save`, take `revId`, then `mode` `publish` with that `revId`. If `updateDashboard` returns HTTP 400 mentioning `workbookId` or `dashboardId`, retry without those keys. Dataset: one `updateDataset` using the revision field from `describe_commands` (`revision_id` or `rev_id`, not `revId`).
+2. `list_commands`, then `describe_commands` for the get/update (`getEditorChart` / `updateEditorChart`, `getDataset` / `updateDataset`, `getDashboard` / `updateDashboard`). Invoke with `invoke_read_command` or `invoke_write_command`: `command_name` plus `parameters` for the command inputs.
+3. `getDashboard` with `dashboardId`, `workbookId`, `branch` `saved`. The MCP envelope is `{trust, data}` where `data` is a JSON string of `{entry:{data,revId,savedId,publishedId,annotation}}`. `updateDashboard` replaces the whole dash: send that `entry.data` (`counter`, `salt`, `tabs`, `settings`, and `schemeVersion` when get or a 400 names it; current value is 8), plus `entryId` and `meta`. Do not send a tab diff. Do not put `workbookId` or `dashboardId` on the update. If HTTP 400 names those keys, retry without them.
+4. Change only the intended object. Chart: keep `entry.type` from get (`advanced-chart_node` here) and edit `data.sources` or `data.prepare`. Dataset: `dataset.sources[].parameters.subsql`. Dashboard: the widget row in Objects (`tabs[].items` and `tabs[].layout`). A new item needs `id`, `namespace` `default`, a layout cell `{i,h,w,x,y}`, and a higher `counter`. A text item is `type` `text`, `data.text` markdown, `data.autoHeight` true.
+5. Each `(run_id, run_attempt)` is its own run. In Duration and p-diff dataset SQL the run id field is `ci_run_id` (DataLens alias), not `run_id`. Do not `COALESCE` a missing conclusion to `in_progress`.
+6. Chart or dashboard: `update*` with `mode` `save`, take `entry.revId` or `savedId` from the parsed response, then the same body with `mode` `publish` and that id on `entry.revId`. Dataset: one `updateDataset`. Put the revision on the field `describe_commands` lists for that command.
 
 If MCP `user-ydb-qa` is present, read tables with `ydb_query`. Otherwise ask the human.
 
 ## Validation
 
-Get the published object and confirm the edited field. If SQL changed and `ydb_query` is available, run the same select.
+`getDashboard` with `branch` `published`. Confirm the edited field and `publishedId` equals `savedId`. If SQL changed and `ydb_query` is available, run the same select.

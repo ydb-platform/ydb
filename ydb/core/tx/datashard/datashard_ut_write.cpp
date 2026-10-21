@@ -752,7 +752,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
             TOperation::EOperationType Type;
             bool ReadsRow;
             ui32 DefaultFilledColumns = 0;
-            bool CollectAffectedRows = false;
         };
 
         for (const auto lockMode : {NKikimrDataEvents::OPTIMISTIC,
@@ -767,8 +766,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                     TCase{TOperation::OPERATION_UPDATE, true},
                     TCase{TOperation::OPERATION_INCREMENT, true},
                     TCase{TOperation::OPERATION_UPSERT_INCREMENT, true},
-                    TCase{TOperation::OPERATION_UPSERT, true, 1},
-                    TCase{TOperation::OPERATION_DELETE, true, 0, true}})
+                    TCase{TOperation::OPERATION_UPSERT, true, 1}})
             {
                 TPortManager pm;
                 TServerSettings settings(pm.GetPort(2134));
@@ -845,8 +843,9 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                     if (ev->Get()->PageCollection->Label().TabletID() == shard &&
                         ev->Cookie == static_cast<ui64>(NSharedCache::ERequestTypeCookie::Transaction))
                     {
-                        for (const auto& page : ev->Get()->Pages) {
-                            dataPages += page.Type == NTable::NPage::EPage::DataPage;
+                        for (const auto pageId : ev->Get()->Pages) {
+                            dataPages += NTable::NPage::EPage(ev->Get()->PageCollection->Page(pageId).Type)
+                                == NTable::NPage::EPage::DataPage;
                         }
                     }
                 });
@@ -855,7 +854,6 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                 auto request = MakeWriteRequest(1001, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
                     testCase.Type, tableId, writeColumnIds, writeCells, testCase.DefaultFilledColumns);
                 request->Record.SetLockMode(lockMode);
-                request->Record.SetCollectAffectedRows(testCase.CollectAffectedRows);
                 if (lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION) {
                     request->Record.MutableMvccSnapshot()->SetStep(writeSnapshot.Step);
                     request->Record.MutableMvccSnapshot()->SetTxId(writeSnapshot.TxId);
@@ -870,8 +868,7 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
                         lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
                 UNIT_ASSERT_VALUES_EQUAL_C(dataPages, readHistory ? warmCount + 1 : 1,
                     "lockMode# " << lockMode << " operation# " << testCase.Type
-                    << " defaultFilledColumns# " << testCase.DefaultFilledColumns
-                    << " collectAffectedRows# " << testCase.CollectAffectedRows);
+                    << " defaultFilledColumns# " << testCase.DefaultFilledColumns);
             }
         }
     }

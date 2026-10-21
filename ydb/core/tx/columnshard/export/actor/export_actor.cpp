@@ -93,6 +93,7 @@ void TActor::AbortExport(const TString& errorMessage) {
             {"message", errorMessage});
         return;
     }
+<<<<<<< HEAD
     if (Stage == EStage::WaitData) {
         Counters.OnAckResponse();
         Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
@@ -105,6 +106,11 @@ void TActor::AbortExport(const TString& errorMessage) {
 void TActor::FinishAbortExport(const TString& errorMessage) {
     ExportSession->Abort(errorMessage);
     ExportSession->MutableCursor().InitNext({}, true);
+=======
+    ExportSession->Abort(errorMessage);
+    ExportSession->MutableCursor().InitNext({}, true);
+    Counters.OnOperationsCancelled();
+>>>>>>> fa302c58f32 (cs import counters has been fixed (#56300))
     KillExporter();
     AbortScanIfKnown(errorMessage);
     Stage = EStage::WaitSaveCursor;
@@ -133,6 +139,7 @@ void TActor::PassAway() {
     YDB_LOG_INFO("",
         {"event", "export_actor_pass_away"},
         {"selfId", SelfId()},
+<<<<<<< HEAD
         {"tabletId", TabletId});
     if (Stage == EStage::WaitData) {
         Counters.OnAckResponse();
@@ -142,9 +149,12 @@ void TActor::PassAway() {
     } else if (Stage == EStage::WaitSaveCursor) {
         Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
     }
+=======
+        {"tabletId", TabletId},
+        {"stage", StageToString(Stage)});
+>>>>>>> fa302c58f32 (cs import counters has been fixed (#56300))
     KillExporter();
     AbortScanIfKnown("export actor destroyed");
-    Counters.OnActorDead();
     TBase::PassAway();
 }
 

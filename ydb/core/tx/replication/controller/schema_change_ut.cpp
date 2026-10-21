@@ -952,6 +952,79 @@ void AssertDestinationWritable(TTestEnv& env) {
         NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
 }
 
+void AssertAttachmentPaths(TTestEnv& env, const TPendingAttachment& attachment, const TPathId& pendingPathId) {
+    NKikimrMiniKQL::TResult result;
+    const auto status = LocalQuery(env.GetRuntime(), attachment.Info.ControllerId, Sprintf(R"((
+        (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+        (return (AsList (SetResult 'Paths (SelectRow 'Targets key
+            '('DstPathLocalId 'DstPathOwnerId 'PendingDstPathLocalId 'PendingDstPathOwnerId)))))
+    ))", attachment.TargetId), result);
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+    const auto& row = result.GetValue().GetStruct(0).GetOptional();
+    UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
+    const auto& paths = row.GetOptional();
+    for (ui32 i = 0; i < 4; ++i) {
+        UNIT_ASSERT_C(paths.GetStruct(i).HasOptional(), result.DebugString());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(TPathId(paths.GetStruct(1).GetOptional().GetUint64(),
+        paths.GetStruct(0).GetOptional().GetUint64()), TPathId());
+    UNIT_ASSERT_VALUES_EQUAL(TPathId(paths.GetStruct(3).GetOptional().GetUint64(),
+        paths.GetStruct(2).GetOptional().GetUint64()), pendingPathId);
+}
+
+void CheckDoneAfterAttachmentError(bool restart, bool doneBeforeError = false) {
+    TTestEnv env;
+    const auto pending = StartPendingAttachment(env);
+    const auto& info = pending.Info;
+    auto& runtime = env.GetRuntime();
+    const auto pipeService = MakePipePerNodeCacheID(false);
+    const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+    TActorId gate;
+
+    const auto requestDone = [&] {
+        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, MakeDoneRequest(info, 105));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+    };
+    if (doneBeforeError) {
+        // Hold the recovery creator's description so it cannot replace the
+        // validation error with a successful result while DONE is waiting.
+        gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(), pending.DstPathId));
+        runtime.RegisterService(pipeService, gate);
+        requestDone();
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
+    }
+
+    // The attachment ALTER has committed, but its post-ALTER description failed
+    // validation. The controller has only the persisted pending path to detach.
+    env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateDstResult(1, pending.TargetId,
+        NKikimrScheme::StatusSchemeError, "Replication consistency level mismatch"));
+    if (!doneBeforeError) {
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }));
+        AssertAttachmentPaths(env, pending, pending.DstPathId);
+
+        if (restart) {
+            RestartController(env, info.ControllerId);
+            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
+            AssertAttachmentPaths(env, pending, pending.DstPathId);
+        }
+        requestDone();
+    }
+
+    AssertEventuallyDone(env, info);
+    AssertDestinationWritable(env);
+    AssertAttachmentPaths(env, pending, {});
+    if (gate) {
+        runtime.RegisterService(pipeService, pipeCache);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+    }
+}
+
 void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
     AssertDestinationWritable(env);
     UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
@@ -965,6 +1038,47 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
+    Y_UNIT_TEST(DoneAfterAttachmentValidationError) {
+        CheckDoneAfterAttachmentError(false);
+    }
+
+    Y_UNIT_TEST(DoneAfterAttachmentValidationErrorAndRestartWithoutSource) {
+        CheckDoneAfterAttachmentError(true);
+    }
+
+    Y_UNIT_TEST(DoneBeforeAttachmentValidationError) {
+        CheckDoneAfterAttachmentError(false, true);
+    }
+
+    Y_UNIT_TEST(DoneAfterPendingDestinationDeleted) {
+        TTestEnv env;
+        const auto pending = StartPendingAttachment(env);
+        const auto& info = pending.Info;
+
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCreateDstResult(1, pending.TargetId,
+            NKikimrScheme::StatusSchemeError, "Cannot validate attached destination"));
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
+        }));
+        AssertAttachmentPaths(env, pending, pending.DstPathId);
+
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint())
+            .Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto drop = session.ExecuteSchemeQuery("DROP TABLE `/Root/replica1`;").GetValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+
+        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
+            info.ControllerId, MakeDoneRequest(info, 106));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        AssertEventuallyDone(env, info);
+        AssertAttachmentPaths(env, pending, {});
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetStatus(),
+            static_cast<ui32>(NKikimrScheme::StatusPathDoesNotExist));
+    }
+
     Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {
         TTestEnv env;
         const auto pending = StartPendingAttachment(env);

@@ -84,6 +84,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             return SubscribeTx(record.GetTxId());
         case NKikimrScheme::StatusMultipleModifications:
             return Retry();
+        case NKikimrScheme::StatusPathDoesNotExist:
+            // A deleted destination has nothing left to detach.
+            return Success();
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
@@ -215,8 +218,13 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    // Attachment validation can fail after the table has become read-only.
+    // DONE must detach that persisted path even without a confirmed destination.
+    const auto& dstPathId = target->GetDstPathId()
+        ? target->GetDstPathId()
+        : target->GetPendingDstPathId();
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState());
+        replication->GetId(), target->GetId(), target->GetKind(), dstPathId, replication->GetDesiredState());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,

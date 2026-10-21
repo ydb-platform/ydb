@@ -75,9 +75,8 @@ std::optional<TString> TPoolSettings::Validate() const {
     }
     // The memory of a pool is limited only by the compute scheduler.
     // Without the actor system (e.g. in tests) the default of the flag applies.
-    const bool memoryLimitSupported = HasAppData()
-        ? AppData()->FeatureFlags.GetEnableComputeSchedulerMemory()
-        : TFeatureFlags().GetEnableComputeSchedulerMemory();
+    const bool memoryLimitSupported =
+        HasAppData() ? AppData()->FeatureFlags.GetEnableComputeSchedulerMemory() : TFeatureFlags().GetEnableComputeSchedulerMemory();
     if (!memoryLimitSupported && TotalMemoryLimitPercentPerNode != -1) {
         return "Invalid resource pool configuration, total_memory_limit_percent_per_node is not supported";
     }

@@ -972,7 +972,10 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     return it->second;
 }
 
-// TODO: Remove this helper as part of https://st.yandex-team.ru/KIKIMR-27401.
+// TODO: Remove this workaround after revisiting revoke semantics.
+// SQL/Scheme do not expose inheritance; matching it can leave older grants untouched.
+// Consider removing Allow ACEs by subject and exact mask, regardless of inheritance.
+// Decide whether Viewer follows this rule or retains explicit inheritance matching.
 void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl) {
     const auto attrs = ConvertYdbPermissionNameToACLAttrs(name);
     acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, attrs.InheritanceType);

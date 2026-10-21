@@ -23,6 +23,7 @@ PY_SRCS(
     internal/nemesis/runners/cluster_tablets.py
     internal/nemesis/runners/datacenter.py
     internal/nemesis/runners/bridge_pile.py
+    internal/nemesis/runners/local_kikimr.py
     internal/nemesis/runners/yaml_gates.py
     internal/nemesis/chaos_dispatch.py
     internal/agent/agent_warden_checker.py
@@ -59,3 +60,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -13,8 +13,8 @@
 namespace NKikimr::NPQ::NClusterTracker {
 
 bool TClustersList::TCluster::operator==(const TCluster& rhs) const {
-    return std::tie(Name, Datacenter, Balancer, IsLocal, IsEnabled, IsFnx, Weight) ==
-           std::tie(rhs.Name, rhs.Datacenter, rhs.Balancer, rhs.IsLocal, rhs.IsEnabled, rhs.IsFnx, rhs.Weight);
+    return std::tie(Name, Datacenter, Balancer, IsLocal, IsEnabled, IsAvailable, IsFnx, Weight) ==
+        std::tie(rhs.Name, rhs.Datacenter, rhs.Balancer, rhs.IsLocal, rhs.IsEnabled, rhs.IsAvailable, rhs.IsFnx, rhs.Weight);
 }
 
 bool TClustersList::operator==(const TClustersList& rhs) const {
@@ -30,6 +30,7 @@ TString TClustersList::TCluster::DebugString() const {
     TStringBuilder builder;
     builder << "(" << Name << ", " << Datacenter << ", " << Balancer << ", ";
     builder << (IsEnabled ? "enabled" : "disabled")  << ", ";
+    builder << (IsAvailable ? "available" : "unavailable") << ", ";
     builder << (IsLocal ? "local" : "remote") << ", ";
     builder << (IsFnx ? "fnx" : "ordinary") << ", ";
     builder << Weight << ")";
@@ -89,10 +90,11 @@ TString BalancerTablePathFromClusterTable(TStringBuf clusterTablePath) {
 }
 
 TString MakeListClustersQuery(TStringBuf clusterTablePath, TStringBuf versionTablePath) {
+    // By-name parsing: an absent column (e.g. `available`, LOGBROKER-10701) reads as default
     return Sprintf(
         R"(
                --!syntax_v1
-               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, V.version FROM `%s` AS C
+               SELECT C.*, V.version AS version FROM `%s` AS C
                CROSS JOIN
                (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
             )", TString(clusterTablePath).c_str(), TString(versionTablePath).c_str());

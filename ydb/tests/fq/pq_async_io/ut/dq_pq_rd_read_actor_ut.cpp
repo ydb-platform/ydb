@@ -968,7 +968,9 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         auto source = Settings;
         source.AddMetadataFields("_yql_sys_create_time");
         source.AddMetadataFields("_yql_sys_user_attributes");
-        source.SetRowType("[StructType; [[_yql_sys_create_time; [DataType; Uint32]]; [_yql_sys_user_attributes; [DictType; [DataType; String]; [DataType; String]]]; [dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
+        source.SetRowType(
+            "[StructType; [[_yql_sys_create_time; [DataType; Uint32]]; [_yql_sys_user_attributes; [DictType; [DataType; String]; [DataType; "
+            "String]]]; [dt; [DataType; Uint64]]; [value; [DataType; String]]]]");
         StartSession(source);
 
         auto messages = std::vector{ Message1 };

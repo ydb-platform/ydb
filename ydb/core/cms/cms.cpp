@@ -3259,6 +3259,13 @@ void TCms::Handle(TEvCms::TEvGetLogTailRequest::TPtr &ev, const TActorContext &c
     Execute(CreateTxGetLogTail(ev), ctx);
 }
 
+void TCms::Handle(NStorage::TEvNodeConfigGetSelfHealState::TPtr &ev, const TActorContext &ctx)
+{
+    if (State->Sentinel) {
+        ctx.Send(ev->Forward(State->Sentinel));
+    }
+}
+
 void TCms::Handle(TEvCms::TEvGetSentinelStateRequest::TPtr &ev, const TActorContext &ctx)
 {
     if (State->Sentinel) {

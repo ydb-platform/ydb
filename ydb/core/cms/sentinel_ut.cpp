@@ -512,6 +512,50 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
 } // TSentinelBaseTests
 
 Y_UNIT_TEST_SUITE(TSentinelTests) {
+    void CheckSelfHealStatePull(bool enabled) {
+        NKikimrCms::TCmsConfig config;
+        auto *selfheal = config.MutableSentinelConfig()->MutableStateStorageSelfHealConfig();
+        selfheal->SetEnable(enabled);
+        selfheal->SetNodeGoodStateLimit(3);
+        selfheal->SetNodePrettyGoodStateLimit(2);
+        TTestEnv env(8, 4, config);
+        const TActorId edge = env.AllocateEdgeActor();
+        auto request = [&] {
+            env.Send(new IEventHandle(env.GetSentinelActor(), edge, new NStorage::TEvNodeConfigGetSelfHealState));
+            // A second request to the same actor is a barrier: the pull request
+            // has been handled before this monitoring response is received.
+            env.Send(new IEventHandle(env.GetSentinelActor(), edge, new TEvCms::TEvGetSentinelStateRequest));
+            env.GrabEdgeEventRethrow<TEvCms::TEvGetSentinelStateResponse>(edge);
+            return env.GrabEdgeEvent<NStorage::TEvNodeConfigInvokeOnRoot>(edge, TDuration::Zero());
+        };
+
+        UNIT_ASSERT(!request());
+        NStorage::TEvNodeConfigInvokeOnRoot::TPtr update;
+        for (ui32 attempt = 0; attempt < 3 && !update; ++attempt) {
+            env.SetPDiskState({}, NKikimrBlobStorage::TPDiskState::Normal);
+            update = request();
+        }
+        UNIT_ASSERT(update);
+        const auto& state = update->Get()->Record.GetSelfHealNodesStateUpdate();
+        UNIT_ASSERT_VALUES_EQUAL(state.GetEnableSelfHealStateStorage(), enabled);
+        UNIT_ASSERT_VALUES_EQUAL(state.NodesStateSize(), 8);
+        for (const auto& node : state.GetNodesState()) {
+            UNIT_ASSERT_VALUES_EQUAL(node.GetState(), 0);
+        }
+        const TString previous = update->Get()->Record.SerializeAsString();
+        update = request();
+        UNIT_ASSERT(update);
+        UNIT_ASSERT_VALUES_EQUAL(update->Get()->Record.SerializeAsString(), previous);
+    }
+
+    Y_UNIT_TEST(SelfHealStatePullWaitsForObservations) {
+        CheckSelfHealStatePull(true);
+    }
+
+    Y_UNIT_TEST(SelfHealStatePullPreservesDisabledSetting) {
+        CheckSelfHealStatePull(false);
+    }
+
     Y_UNIT_TEST(Smoke) {
         TTestEnv env(8, 4);
     }

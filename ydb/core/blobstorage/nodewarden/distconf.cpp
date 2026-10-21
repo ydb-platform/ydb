@@ -72,6 +72,7 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelStateStorageSelfHealRefresh();
         CancelConfigRefill();
         CancelBindingLiveness();
         for (const auto& item : InvokeQ) {

@@ -47,6 +47,10 @@ class BridgeKiKiMRTest(object):
     nodes_count = 16
     pile_names = ("r1", "r2")
     bridge_rpc_timeout = 10
+    cms_config = None
+    self_management_options = {}
+    additional_log_configs = {}
+    node_location_overrides = {}
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -59,6 +63,7 @@ class BridgeKiKiMRTest(object):
             'GRPC_SERVER': LogLevels.DEBUG,
             'GRPC_PROXY': LogLevels.DEBUG,
         }
+        log_configs.update(self.additional_log_configs)
 
         bridge_config = {
             "piles": [{"name": name} for name in self.pile_names]
@@ -75,8 +80,12 @@ class BridgeKiKiMRTest(object):
             use_self_management=True,
             extra_grpc_services=['bridge'],
             additional_log_configs=log_configs,
-            bridge_config=bridge_config
+            bridge_config=bridge_config,
+            cms_config=self.cms_config,
         )
+        self.configurator.yaml_config["self_management_config"].update(self.self_management_options)
+        for node_id, location in self.node_location_overrides.items():
+            self.configurator.yaml_config["hosts"][node_id - 1].setdefault("location", {}).update(location)
 
         self.cluster = KiKiMR(configurator=self.configurator)
         self.cluster.start()

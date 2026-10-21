@@ -7,6 +7,7 @@ namespace NKikimr::NStorage {
     class TStateStorageSelfhealActor : public TActorBootstrapped<TStateStorageSelfhealActor> {
         enum EReconfigurationStep {
             NONE = 0,
+            PREPARE_CURRENT_GROUPS,
             INTRODUCE_NEW_GROUP,
             MAKE_NEW_GROUP_READWRITE,
             MAKE_PREVIOUS_GROUP_WRITEONLY,
@@ -21,7 +22,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TStateStorageConfig CurrentConfig;
         NKikimrBlobStorage::TStateStorageConfig TargetConfig;
         bool AllowNextStep = true;
-        ui32 PilesCount;
+        const bool PrepareCurrentConfig;
 
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
@@ -34,7 +35,8 @@ namespace NKikimr::NStorage {
 
     public:
         TStateStorageSelfhealActor(TActorId sender, ui64 cookie, TDuration waitForConfigStep
-            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig, ui32 pilesCount);
+            , NKikimrBlobStorage::TStateStorageConfig&& currentConfig, NKikimrBlobStorage::TStateStorageConfig&& targetConfig,
+            bool prepareCurrentConfig = false);
 
         void Bootstrap(TActorId parentId);
 

@@ -134,7 +134,8 @@ public:
         return VolatileStateChangeTime;
     }
 
-    bool IsGoodForBalancer(TInstant now) const;
+    bool IsAllowedByBalancerPolicy() const; // balancer policy allows moves and the tablet type is not in the ignore list
+    bool IsInBalancerCooldown(TInstant now) const; // moved by the balancer too recently
 
     void MakeBalancerDecision(TInstant now) {
         LastBalancerDecisionTime = now;
@@ -341,4 +342,3 @@ private:
 
 } // NHive
 } // NKikimr
-

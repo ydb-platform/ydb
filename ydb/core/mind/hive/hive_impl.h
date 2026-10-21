@@ -261,6 +261,8 @@ protected:
 
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
+    // balancerType is empty when the suppression is not about a specific type
+    void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
     void StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
@@ -421,6 +423,8 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
     EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    // last "balancer not started" line written at INFO, repeats of it go to DEBUG
+    std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;

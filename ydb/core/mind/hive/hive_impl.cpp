@@ -2956,8 +2956,7 @@ void THive::HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
 void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
     ProcessTabletBalancerScheduled = false;
     if (!SubActors.empty()) {
-        YDB_LOG_DEBUG("Handle TEvPrivate::TEvProcessTabletBalancer: postponed because of sub-actor activity",
-            {"logPrefix", GetLogPrefix()});
+        LogBalancerNotStarted({}, EBalancerSuppressReason::SubActorActivity);
         ProcessTabletBalancerPostponed = true;
         return;
     }
@@ -2969,6 +2968,7 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
         size_t typeIndex = static_cast<size_t>(settings->Type);
         if (LastBalancerTrigger == settings->Type
             && BalancerStats[typeIndex].LastRunMovements == 0) {
+            LogBalancerNotStarted(EBalancerTypeName(settings->Type), EBalancerSuppressReason::PreviousRunNoMovements);
             return false;
         }
         if (balancersStarted.test(typeIndex) && settings->Type != EBalancerType::Emergency) {
@@ -2997,6 +2997,10 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
             .FilterNodeIds = std::move(objectToBalance.Nodes),
             .ResourceToBalance = EResourceToBalance::Counter,
             .FilterObjectId = objectToBalance.ObjectId,
+            .Trigger = "object imbalance",
+            .TriggerDetails = TStringBuilder() << "objectId=" << objectToBalance.ObjectId
+                << " imbalance=" << ObjectDistributions.GetMaxImbalance()
+                << " threshold=" << GetObjectImbalanceToBalance(),
         });
     }
 
@@ -3029,12 +3033,20 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                     {"logPrefix", GetLogPrefix()},
                     {"overloadedNodes", overloadedNodes},
                     {"maxNodeUsageToKick", GetMaxNodeUsageToKick()});
+                TStringBuilder triggerDetails;
+                triggerDetails << "segment=" << segmentId
+                    << " maxUsage=" << Sprintf("%.3f", stats.MaxUsage) << " maxUsageNode=" << stats.MaxUsageNodeId
+                    << " minUsage=" << Sprintf("%.3f", stats.MinUsage) << " minUsageNode=" << stats.MinUsageNodeId
+                    << " maxNodeUsageToKick=" << Sprintf("%.3f", GetMaxNodeUsageToKick())
+                    << " overloadedNodes=" << overloadedNodes;
                 settings.emplace(TBalancerSettings{
                     .Type = EBalancerType::Emergency,
                     .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnEmergencyBalancer(),
                     .RecheckOnFinish = CurrentConfig.GetContinueEmergencyBalancer(),
                     .MaxInFlight = GetEmergencyBalancerInflight(),
                     .FilterNodeIds = std::move(overloadedNodes),
+                    .Trigger = "node overload",
+                    .TriggerDetails = triggerDetails,
                 });
                 if (maybeStartBalancer()) {
                     continue;
@@ -3091,6 +3103,14 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 {"scatterByResource", stats.ScatterByResource},
                 {"minScatterToBalance", GetMinScatterToBalance()},
                 {"balancerTypeName", EBalancerTypeName(balancerType)});
+            TStringBuilder triggerDetails;
+            triggerDetails << "segment=" << segmentId
+                << " scatter=" << Sprintf("%.3f", TTabletInfo::ExtractResourceUsage(stats.ScatterByResource, resource))
+                << " minScatterToBalance=" << Sprintf("%.3f", minScatter)
+                << " scatterByResource=" << stats.ScatterByResource
+                << " minUsage=" << Sprintf("%.3f", minUsage)
+                << " usageThreshold=" << Sprintf("%.3f", usageThreshold)
+                << " nodesOverThreshold=" << nodeIds.size();
             settings.emplace(TBalancerSettings{
                 .Type = balancerType,
                 .MaxMovements = (int)CurrentConfig.GetMaxMovementsOnAutoBalancer(),
@@ -3098,6 +3118,8 @@ void THive::Handle(TEvPrivate::TEvProcessTabletBalancer::TPtr&) {
                 .MaxInFlight = GetBalancerInflight(),
                 .FilterNodeIds = std::move(nodeIds),
                 .ResourceToBalance = *scatteredResource,
+                .Trigger = "resource scatter",
+                .TriggerDetails = triggerDetails,
             });
             if (maybeStartBalancer()) {
                 continue;
@@ -4861,10 +4883,23 @@ bool THive::IsItPossibleToStartBalancer(EBalancerType balancerType) {
                 {"logPrefix", GetLogPrefix()},
                 {"requestedBalancerType", EBalancerTypeName(balancerType)},
                 {"runningBalancerType", EBalancerTypeName(type)});
+            LogBalancerNotStarted(EBalancerTypeName(balancerType), EBalancerSuppressReason::AnotherBalancerRunning);
             return false;
         }
     }
     return true;
+}
+
+void THive::LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason) {
+    // the same suppression repeats on every balancer tick while the condition holds, so only a change
+    // of (type, reason) is worth an INFO line; a balancer actually starting resets this
+    const std::pair<TString, EBalancerSuppressReason> key(balancerType, reason);
+    const auto priority = (LastBalancerSuppression != key) ? NActors::NLog::PRI_INFO : NActors::NLog::PRI_DEBUG;
+    LastBalancerSuppression = key;
+    YDB_LOG(priority, "Balancer not started",
+        {"logPrefix", GetLogPrefix()},
+        {"balancerType", balancerType},
+        {"reason", EBalancerSuppressReasonName(reason)});
 }
 
 } // NHive

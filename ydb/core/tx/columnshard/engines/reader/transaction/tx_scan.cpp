@@ -18,19 +18,27 @@ namespace NKikimr::NOlap::NReader {
 
 LWTRACE_USING(YDB_CS_SCAN);
 
-bool ReadRequestsPortionId(const TReadDescription& read) {
-    const ui32 portionId = static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID);
-    for (const ui32 columnId : read.ColumnIds) {
-        if (columnId == portionId) {
+bool ReadRequestsColumn(const TReadDescription& read, const ui32 columnId) {
+    for (const ui32 id : read.ColumnIds) {
+        if (id == columnId) {
             return true;
         }
     }
-    if (read.SystemColumnsFilter && read.SystemColumnsFilter->HasConstraint(portionId)) {
+    if (read.SystemColumnsFilter && read.SystemColumnsFilter->HasConstraint(columnId)) {
         return true;
     }
     const auto& program = read.GetProgram();
-    return program.GetSourceColumns().contains(portionId) || program.GetEarlyFilterColumns().contains(portionId) ||
-        program.GetProcessingColumns().contains(portionId);
+    return program.GetSourceColumns().contains(columnId) || program.GetEarlyFilterColumns().contains(columnId) ||
+        program.GetProcessingColumns().contains(columnId);
+}
+
+bool ReadRequestsPortionId(const TReadDescription& read) {
+    return ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID));
+}
+
+bool ReadRequestsOlapSystemColumn(const TReadDescription& read) {
+    return ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PORTION_ID)) ||
+        ReadRequestsColumn(read, static_cast<ui32>(IIndexInfo::ESpecialColumn::PARTITION_ID));
 }
 
 void TTxScan::SendError(const TString& problem, const TString& details, const TActorContext& ctx) const {
@@ -307,6 +315,9 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     if (auto status = InitProgram(read, *scannerConstructor); status.IsFail()) {
         return SendError("cannot parse program", status.GetErrorMessage(), ctx);
+    }
+    if (!AppDataVerified().ColumnShardConfig.GetEnableSystemColumns() && ReadRequestsOlapSystemColumn(read)) {
+        return SendError("system columns are disabled", "", ctx);
     }
     if (readerClass == EReaderClass::Plain && ReadRequestsPortionId(read)) {
         return SendError("PLAIN reader does not support _yql_portion_id", "", ctx);

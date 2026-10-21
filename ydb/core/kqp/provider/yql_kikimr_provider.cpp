@@ -3,7 +3,9 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 
 #include <array>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
@@ -979,11 +981,18 @@ const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
     return Singleton<TKikimrData>()->SystemColumns;
 }
 
+static bool ColumnShardSystemColumnsEnabled() {
+    return NKikimr::HasAppData() && NKikimr::AppData()->ColumnShardConfig.GetEnableSystemColumns();
+}
+
 bool IsKikimrSystemColumn(const TStringBuf columnName, const TKikimrTableMetadata& metadata) {
     if (!KikimrSystemColumns().FindPtr(columnName)) {
         return false;
     }
     if (metadata.IsOlap() && !metadata.SysView.empty()) {
+        return false;
+    }
+    if (metadata.IsOlap() && !ColumnShardSystemColumnsEnabled()) {
         return false;
     }
     if (columnName == NKikimr::YqlPortionColumnName) {

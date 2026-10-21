@@ -12,7 +12,7 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     Y_UNIT_TEST(SystemColumnAndPushdown) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     }
 
     Y_UNIT_TEST(SystemColumnPartitionId) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     // CAST of a constant is folded to a Uint64 literal before the early filter is built.
     // Uint32 and Int64 suffixes must still match the portion.
     Y_UNIT_TEST(SystemColumnPushdownCastLiteralType) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     }
 
     Y_UNIT_TEST(SystemColumnTabletIdIntersection) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
@@ -656,10 +656,47 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
         }
     }
 
+    // Default ColumnShardConfig.EnableSystemColumns is off, so a query cannot reach an old columnshard.
+    Y_UNIT_TEST(SystemColumnsDisabledByDefault) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto scheme = session
+                                .ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/ColumnTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )")
+                                .GetValueSync();
+        UNIT_ASSERT_C(scheme.GetStatus() == NYdb::EStatus::SUCCESS, scheme.GetIssues().ToString());
+
+        for (const char* column : {"_yql_portion_id", "_yql_partition_id"}) {
+            const TString query = TStringBuilder() << "PRAGMA kikimr.EnableSystemColumns = \"true\";\n"
+                                                   << "SELECT " << column << " FROM `/Root/ColumnTable`";
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            TString issues;
+            if (it.IsSuccess()) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                UNIT_ASSERT_C(!streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+                issues = streamPart.GetIssues().ToString();
+            } else {
+                issues = it.GetIssues().ToString();
+            }
+            UNIT_ASSERT_C(issues.Contains("Column not found") || issues.Contains("Member not found"), issues);
+            UNIT_ASSERT_C(issues.Contains(column), issues);
+        }
+    }
+
     // Column-table sys views are loaded as OLAP, but their sources cannot produce
     // _yql_portion_id / _yql_partition_id. Such queries must fail at compile time.
     Y_UNIT_TEST(SystemColumnsOnSysView) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
@@ -783,7 +820,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     }
 
     Y_UNIT_TEST(PlainReaderVirtualColumnsOnePortion) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true).SetColumnShardReaderClassName("PLAIN");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -831,7 +868,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     }
 
     Y_UNIT_TEST(PlainReaderVirtualColumnsTwoPortions) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("PLAIN");
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true).SetColumnShardReaderClassName("PLAIN");
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -878,7 +915,7 @@ Y_UNIT_TEST_SUITE(KqpOlapPortionId) {
     }
 
     Y_UNIT_TEST(PortionIdResourceIdWrap) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardSystemColumnsEnabled(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
         auto tableClient = kikimr.GetTableClient();

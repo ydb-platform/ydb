@@ -469,23 +469,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case NKikimrScheme::StatusSuccess: {
             const auto& desc = record.GetPathDescription();
 
-            if (PendingDstPathId) {
-                DstPathId = PendingDstPathId;
-                if (IsReplica(desc.GetTable())) {
-                    TString error;
-                    if (!CheckReplicationConfig(desc.GetTable().GetReplicationConfig(), Mode, Consistency, error)) {
-                        return Error(NKikimrScheme::StatusSchemeError, error);
-                    }
-                    return Success();
-                }
-                if (NotReplica(desc.GetTable())) {
-                    Attaching = true;
-                    NeedToCheck = true;
-                    return AllocateTxId();
-                }
-                return Error(NKikimrScheme::StatusSchemeError, "Unexpected destination replication mode");
-            }
-
             TString error;
             if (!CheckScheme(desc, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
@@ -498,6 +481,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
             Attaching = true;
             NeedToCheck = true;
+            if (PendingDstPathId) {
+                return AllocateTxId();
+            }
             // The controller must persist this path before SchemeShard may alter it.
             Send(Parent, new TEvPrivate::TEvPrepareAttachDst(ReplicationId, TargetId, DstPathId));
             return Become(&TThis::StateWaitForPrepareAttachDstResult);
@@ -530,6 +516,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     bool CheckScheme(const NKikimrSchemeOp::TPathDescription& desc, TString& error) const {
+        if (PendingDstPathId && DesiredState == TReplication::EState::Done) {
+            const auto& table = desc.GetTable();
+            return NotReplica(table) || CheckReplicationConfig(table.GetReplicationConfig(), Mode, Consistency, error);
+        }
+
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
@@ -856,7 +847,8 @@ public:
             EConsistencyLevel consistency,
             const TString& database,
             bool initialScan,
-            const TPathId& pendingDstPathId)
+            const TPathId& pendingDstPathId,
+            TReplication::EState desiredState)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , YdbProxy(proxy)
@@ -869,6 +861,7 @@ public:
         , Mode(mode)
         , Consistency(consistency)
         , InitialScan(initialScan)
+        , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
         , PendingDstPathId(pendingDstPathId)
@@ -877,7 +870,8 @@ public:
 
     void Bootstrap() {
         YDB_LOG_CREATE_CONTEXT(LogPrefix);
-        if (PendingDstPathId) {
+        // DONE only finishes the pending attachment so it can be detached locally.
+        if (PendingDstPathId && DesiredState == TReplication::EState::Done) {
             return AllocateTxId();
         }
         switch (Kind) {
@@ -918,6 +912,7 @@ private:
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
     const bool InitialScan;
+    const TReplication::EState DesiredState;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
@@ -1002,16 +997,16 @@ IActor* CreateDstCreator(TReplication* replication, ui64 targetId, const TActorC
         replication->GetDatabase(), replication->GetPathId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetDstPath(),
         EReplicationMode::ReadOnly, ConvertConsistencyLevel(replication->GetConfig().GetConsistencySettings()),
-        replication->GetConfig().GetInitialScan(), target->GetPendingDstPathId());
+        replication->GetConfig().GetInitialScan(), target->GetPendingDstPathId(), replication->GetDesiredState());
 }
 
 IActor* CreateDstCreator(const TActorId& parent, ui64 schemeShardId, const TActorId& proxy,
         const TString& database, const TPathId& pathId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TString& srcPath, const TString& dstPath,
         EReplicationMode mode, EConsistencyLevel consistency, bool initialScan,
-        const TPathId& pendingDstPathId)
+        const TPathId& pendingDstPathId, TReplication::EState desiredState)
 {
-    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId);
+    return new TDstCreator(parent, schemeShardId, proxy, pathId, rid, tid, kind, srcPath, dstPath, mode, consistency, database, initialScan, pendingDstPathId, desiredState);
 }
 
 }

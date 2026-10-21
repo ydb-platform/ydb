@@ -1,6 +1,9 @@
 #include "ut_helpers.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/kqp_vector_index_levels_cache.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/datashard/build_index/vector_resolve_actor.h>
@@ -78,6 +81,13 @@ struct TResolveTestEnv {
 
     TActorId CreateResolver(TVectorResolveSettings settings) {
         return Runtime.Register(CreateVectorResolveActor(std::move(settings)));
+    }
+
+    NKqp::TEvKqp::IVectorIndexLevelsCachePtr GetLevelsCache() {
+        Runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(Runtime.GetNodeId(0)), Sender,
+            new NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheRequest()));
+        auto response = Runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvGetVectorIndexLevelsCacheResponse>(Sender);
+        return std::move(response->Get()->CachePtr);
     }
 
     THolder<TEvVectorResolveResponse> Resolve(const TActorId& resolver, ui64 requestId,
@@ -242,6 +252,68 @@ Y_UNIT_TEST_SUITE(TVectorResolveActor) {
         UNIT_ASSERT_VALUES_EQUAL(response->Clusters.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0].size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0][0], SetPostingParentFlag(31));
+    }
+
+    Y_UNIT_TEST(LevelTableCache) {
+        TResolveTestEnv env;
+        env.CreateTables(false);
+
+        env.Upsert(LevelUpsertSql({
+            {0, 1, CentroidA()},
+            {0, 2, CentroidB()},
+            {1, SetPostingParentFlag(11), CentroidA()},
+            {1, SetPostingParentFlag(12), CentroidB()},
+            {2, SetPostingParentFlag(21), CentroidA()},
+            {2, SetPostingParentFlag(22), CentroidB()},
+        }));
+
+        auto resolver = env.CreateResolver(MakeSettings(false));
+
+        // The resolver asks KqpProxyService for the shared levels cache in
+        // Bootstrap. Provision the same cache here because in tests the
+        // maintainer that normally does that only allocates it over time.
+        auto cache = env.GetLevelsCache();
+        UNIT_ASSERT(cache);
+        static_cast<NKqp::TVectorIndexLevelsCache*>(cache.Get())->SetMaxBytes(1 << 20);
+
+        const TVector<TString> vectors = {
+            "\x18\x01\x02", // close to A
+            "\x01\x18\x02", // close to B
+        };
+
+        // The cache pointer and the level table PathId (learned from the first
+        // level read) may arrive in any order, so keep resolving until the
+        // actor has cached something.
+        ui64 requestId = 10;
+        for (ui32 attempt = 0; attempt < 5 && cache->Size() == 0; ++attempt) {
+            auto response = env.Resolve(resolver, requestId++, vectors);
+            UNIT_ASSERT_VALUES_EQUAL(response->Clusters.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0].size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0][0], SetPostingParentFlag(11));
+            UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1].size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1][0], SetPostingParentFlag(22));
+        }
+        UNIT_ASSERT_C(cache->Size() > 0, "Level table rows were not cached");
+
+        // Every parent of this tree is cached now, so resolving the same
+        // vectors must not read the level table at all.
+        size_t levelReads = 0;
+        env.Runtime.SetEventFilter([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvReadTableRangeRequest::EventType) {
+                ++levelReads;
+            }
+            return false;
+        });
+
+        auto response = env.Resolve(resolver, requestId++, vectors);
+        env.Runtime.SetEventFilter(TTestActorRuntimeBase::TEventFilter());
+
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[0][0], SetPostingParentFlag(11));
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1].size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Clusters[1][0], SetPostingParentFlag(22));
+        UNIT_ASSERT_VALUES_EQUAL(levelReads, 0u);
     }
 }
 

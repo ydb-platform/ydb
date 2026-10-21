@@ -3,6 +3,7 @@
 #include "kqp_rbo_utils.h"
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/core/kqp/opt/rbo/kqp_read_ranges_explain.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <algorithm>
@@ -381,6 +382,16 @@ TString StripAliasPrefix(const TString& column) {
     return (dot != TString::npos) ? column.substr(dot + 1) : column;
 }
 
+// The OLAP program with its ID atoms replaced by presentation names.
+template <typename TGetName>
+static TExprNode::TPtr RenameOlapProgramColumns(const TOpRead& read, TExprContext& ctx, TGetName getName) {
+    THashMap<TString, TString> names;
+    for (const auto id : read.GetRequiredColumns(ctx)) {
+        names.emplace(ctx.GetIndexAsString(id), getName(id));
+    }
+    return NOpt::TOlapFilterInspector::RenameColumns(read.OlapFilterLambda, names, ctx);
+}
+
 NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto res = IOperator::ToJson(explainFlags, registry);
 
@@ -409,12 +420,24 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         res["Limit"] = *limit;
     }
 
+    // A full scan shows the whole original predicate; a range scan shows only the pushed
+    // filter, since the ranges already describe the key conditions.
     if (OriginalPredicate && !RangeInfo) {
         res["Predicate"] = OriginalPredicate->ToExplainString(registry);
+    } else if (OlapFilterLambda) {
+        TExprContext ctx;
+        const auto lambda = RenameOlapProgramColumns(*this, ctx, [&](TInfoUnitId id) {
+            return registry.Get(id).GetColumnName();
+        });
+        const auto filter = FindNode(lambda, [](const TExprNode::TPtr& node) {
+            return TKqpOlapFilter::Match(node.Get());
+        });
+        if (filter) {
+            res["Filter"] = NOpt::FormatOlapFilter(TKqpOlapFilter(filter));
+        }
     }
 
-    // Build ReadColumns: for range scans, list ranged key columns first, then remaining columns.
-    // This mirrors the old RBO which embeds key range descriptions into ReadColumns.
+    // Keep storage column names separate from the lexicographic scan ranges.
     NJson::TJsonValue readColumns(NJson::EJsonValueType::JSON_ARRAY);
     THashSet<TString> addedColumns;
     if (RangeInfo) {
@@ -425,14 +448,18 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
             rangedKeys.push_back(StripAliasPrefix(RangeInfo->KeyColumns[i]));
         }
 
-        const auto descriptions = NOpt::BuildReadRangeDescriptions(RangeInfo->ComputeNode, RangeInfo->KeyColumns, usedLen);
-        for (const auto& label : descriptions.empty() ? rangedKeys : descriptions) {
-            readColumns.AppendValue(label);
+        if (const auto descriptions = NOpt::BuildReadRangeDescriptions(RangeInfo->ComputeNode, RangeInfo->KeyColumns)) {
+            NJson::TJsonValue readRanges(NJson::EJsonValueType::JSON_ARRAY);
+            for (const auto& description : *descriptions) {
+                readRanges.AppendValue(description);
+            }
+            res["ReadRanges"] = std::move(readRanges);
         }
 
         NJson::TJsonValue rangeKeys(NJson::EJsonValueType::JSON_ARRAY);
         for (const auto& key : rangedKeys) {
             addedColumns.insert(key);
+            readColumns.AppendValue(key);
             rangeKeys.AppendValue(key);
         }
         res["ReadRangesKeys"] = std::move(rangeKeys);
@@ -449,7 +476,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         }
     }
     res["ReadColumns"] = std::move(readColumns);
-    // ReadColumns names storage fields/ranges; Columns names the produced row.
+    // ReadColumns names storage fields; Columns names the produced row.
     res["Columns"] = TStringBuilder() << "{" << FormatIds(Columns_, &registry) << "}";
 
     return res;
@@ -468,11 +495,10 @@ TString TOpRead::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) 
     const TString storageType = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
     res << " (StorageType: " << storageType << ")";
     if (OlapFilterLambda) {
-        THashMap<TString, TString> names;
-        for (const auto id : GetRequiredColumns(ctx)) {
-            names.emplace(ctx.GetIndexAsString(id), registry.GetDebugName(id));
-        }
-        res << " OlapFilter: (" << PrintRBOExpression(NOpt::TOlapFilterInspector::RenameColumns(OlapFilterLambda, names, ctx), ctx) << ")";
+        const auto lambda = RenameOlapProgramColumns(*this, ctx, [&](TInfoUnitId id) {
+            return registry.GetDebugName(id);
+        });
+        res << " OlapFilter: (" << PrintRBOExpression(lambda, ctx) << ")";
     }
     if (const auto ranges = GetRanges()) {
         res << " Ranges: (" << PrintRBOExpression(ranges, ctx) << ")";

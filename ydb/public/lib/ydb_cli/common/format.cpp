@@ -87,6 +87,14 @@ namespace {
         return choices;
     }
 
+    TString FormatReadRanges(const NJson::TJsonValue& value) {
+        TVector<TString> ranges;
+        for (const auto& range : value.GetArraySafe()) {
+            ranges.push_back(range.GetStringSafe());
+        }
+        return ranges.empty() ? "empty" : JoinStrings(ranges, " OR ");
+    }
+
     bool IsConnectionPlanNode(const NJson::TJsonValue& plan) {
         const auto& node = plan.GetMapSafe();
         return node.contains("PlanNodeType")
@@ -519,7 +527,8 @@ void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<T
             TVector<TString> info;
             for (const auto& [key, value] : op.GetMapSafe()) {
                 if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value));
+                    info.emplace_back(TStringBuilder() << key << ": "
+                        << (key == "ReadRanges" && value.IsArray() ? FormatReadRanges(value) : JsonToString(value)));
                 }
             }
 
@@ -687,8 +696,13 @@ void TQueryPlanPrinter::PrintPrettyTableImpl(const NJson::TJsonValue& plan, TStr
                 } else if (key == "E-Size") {
                     eSize = FormatPrettyTableDouble(value.GetString());
                 } else if (key != "Name") {
-                    std::string valueWithoutInnerVars = JsonToString(value);
-                    valueWithoutInnerVars = std::regex_replace(valueWithoutInnerVars, std::regex(R"((\b(item|state)\.\b))"), "");
+                    std::string valueWithoutInnerVars;
+                    if (key == "ReadRanges" && value.IsArray()) {
+                        valueWithoutInnerVars = FormatReadRanges(value);
+                    } else {
+                        valueWithoutInnerVars = JsonToString(value);
+                        valueWithoutInnerVars = std::regex_replace(valueWithoutInnerVars, std::regex(R"((\b(item|state)\.\b))"), "");
+                    }
 
                     if (key == "SsaProgram") {
                         // skip this attribute

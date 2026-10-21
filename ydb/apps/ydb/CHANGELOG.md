@@ -1,3 +1,4 @@
+* Display new RBO scan ranges as complete key intervals, separate from read columns, with `OR` between ranges in text and SVG query plans.
 * Added support for repeating `--pile` in `ydb admin bridge failover` to disconnect multiple failed piles in one operation.
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
 

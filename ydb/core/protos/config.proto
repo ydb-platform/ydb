@@ -3161,6 +3161,8 @@ message TColumnShardConfig {
     }
 
     optional TBackupSettings BackupSettings = 79;
+    // `_yql_portion_id` and `_yql_partition_id` on column tables
+    optional bool EnableSystemColumns = 80 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

@@ -25,6 +25,7 @@ ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.DropCasc
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropAsyncIndexWithRowConsistency
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError
 ydb/core/tx/replication/controller/ut_schema_change SchemaChangeBarrier.SourceDropIndexWithoutSchemaChangesReportsError
+ydb/core/tx/replication/controller/ut_stream_creator StreamCreator.TerminalSessionAcquisitionFailureReplies
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactBaseCase[TabletRebootsBucket2]
 ydb/core/tx/schemeshard/ut_compaction_reboots SchemeshardForcedCompactionTestReboots.ForceCompactWithIndexCreation[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
@@ -34,6 +35,7 @@ ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/ydb py3test.sole chunk
+ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootTabletOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
@@ -88,6 +90,8 @@ ydb/tests/functional/federation_test TFederationWriteReadTest.CreateRemoteMirror
 ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
+ydb/tests/functional/serverless test_serverless.py.test_connect_permission_not_inherited_in_serverless[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--false]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_message_counters_in_cloud[tables_format_v0-std]
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case

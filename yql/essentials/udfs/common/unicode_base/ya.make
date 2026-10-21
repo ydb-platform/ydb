@@ -1,22 +1,19 @@
 YQL_UDF_CONTRIB(unicode_udf)
-    
-    YQL_ABI_VERSION(
-        2
-        37
-        0
-    )
 
-    SRCS(
-        unicode_base.cpp
-    )
-    
-    PEERDIR(
-        yql/essentials/udfs/common/unicode_base/lib
-    )
-    
-    END()
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+    # Base and full UDFs share the library name but use separate resources.
+    SET(UNICODE_UDF_RESOURCE_DEFAULT ${UNICODE_BASE_UDF_RESOURCE_DEFAULT})
+    SET(UNICODE_UDF_RESOURCE_ASAN ${UNICODE_BASE_UDF_RESOURCE_ASAN})
+    SET(UNICODE_UDF_RESOURCE_MSAN ${UNICODE_BASE_UDF_RESOURCE_MSAN})
+    SET(UNICODE_UDF_RESOURCE_TSAN ${UNICODE_BASE_UDF_RESOURCE_TSAN})
+    SET(UNICODE_UDF_RESOURCE_UBSAN ${UNICODE_BASE_UDF_RESOURCE_UBSAN})
+ENDIF()
+
+INCLUDE(ya.make.inc)
+
+END()
 
 RECURSE_FOR_TESTS(
     test
 )
-

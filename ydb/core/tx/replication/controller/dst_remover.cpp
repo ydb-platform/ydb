@@ -133,7 +133,7 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         YDB_LOG_TRACE("Handle",
             {"ev", ev->Get()->ToString()});
 
-        if (SchemeShardId == ev->Get()->TabletId) {
+        if (SchemeShardId != ev->Get()->TabletId) {
             return;
         }
 

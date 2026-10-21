@@ -14,6 +14,7 @@
 #include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/mon/audit/audit.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
 
@@ -65,6 +66,9 @@ TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
 
 void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
     event->Database = ExtractMonDatabaseParam(event->Request.Get());
+    if (HasAppData() && AppData()->PathNormalizer) {
+        event->Database = AppData()->PathNormalizer->NormalizePath(event->Database);
+    }
 }
 
 void LogAuthorizedHttpRequest(

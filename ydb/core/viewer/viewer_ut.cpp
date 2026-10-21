@@ -878,6 +878,37 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return statusCode;
     }
 
+    Y_UNIT_TEST(DatabaseAlias) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort(8765);
+        auto settings = TServerSettings(ports.GetPort(2134));
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort, true);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/Root");
+        settings.CreateTicketParser = CreateFakeTicketParser;
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort(2135));
+        TClient client(settings);
+        client.InitRootScheme();
+        GrantRead(client);
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = VALID_TOKEN;
+        TStringStream response;
+        const auto status = httpClient.DoGet("/viewer/tenantinfo?database=/alias&direct=true", &response, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+        const auto json = NJson::ReadJsonTree(&response, true);
+        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/Root");
+    }
+
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

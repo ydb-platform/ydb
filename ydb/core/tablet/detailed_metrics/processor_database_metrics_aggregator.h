@@ -1,6 +1,7 @@
 #pragma once
 
 #include "detailed_metrics_binding.h"
+#include "detailed_metrics_tree.h"
 
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/sys_view.pb.h>
@@ -21,8 +22,22 @@ namespace NKikimr {
 
         virtual void DropNode(ui32 nodeId) = 0;
 
+        // Folds or restores the leaves first
         virtual void RecalculateAllCounters() = 0;
+
+        /**
+         * Sets the limit on the estimated series bytes, applied by the next RecalculateAllCounters.
+         *
+         * @param[in] prefixLabels The labels above targetCounterGroup, written in every series
+         */
+        virtual void SetOutputLimit(ui64 maxBytes, const NDetailedMetrics::TSubgroupPath& prefixLabels) = 0;
+
+        // The estimated bytes of the unfolded output: the labels and values of its series, not their encoding
+        virtual ui64 GetEstimatedOutputBytes() const = 0;
     };
+
+    // RecalculateAllCounters calls with leaves in a row that fit, before a folded database publishes its leaves
+    constexpr ui32 DETAILED_OUTPUT_RESTORE_TICKS = 12;
 
     using TProcessorDatabaseMetricsAggregatorPtr = TIntrusivePtr<TProcessorDatabaseMetricsAggregator>;
 
@@ -43,11 +58,22 @@ namespace NKikimr {
      *
      * Every TABLE partial and leaf feeds the public rollup, and leaves are published under tablet_id/follower_id.
      *
+     * The aggregators of one budgetScope share the limit of SetOutputLimit on the estimated bytes of their series:
+     * labels and values, without the overhead of a scrape format.
+     * Rollups always publish. Over the limit, the databases with the most leaf bytes fold: their leaves keep
+     * feeding the rollup unpublished. Each database decides in RecalculateAllCounters, assuming that the ones
+     * with more leaf bytes fold too, so the output can stay over the limit until each has recalculated.
+     * A database folded by the limit publishes its leaves again at 80% of the limit, after
+     * DETAILED_OUTPUT_RESTORE_TICKS RecalculateAllCounters in a row; while between 80% and the limit, it stays
+     * folded. A scoped aggregator starts folded and publishes within the limit after the same ticks.
+     *
+     * @param[in] budgetScope One budget per scope (a node's ydb_detailed group); null: private, starts unfolded
      * @param[in] getDescriptor Replaced by the tests only
      */
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
         const TString& databasePath,
+        NMonitoring::TDynamicCounterPtr budgetScope = nullptr,
         TDetailedMetricsDescriptorGetter getDescriptor = &GetDetailedMetricsDescriptor);
 
 } // namespace NKikimr

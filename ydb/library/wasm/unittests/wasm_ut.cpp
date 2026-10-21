@@ -39,6 +39,60 @@ TEST_F(TWebAssemblyTest, BuiltinSdkRequiresNonEmptyResource)
     }
 }
 
+TEST_F(TWebAssemblyTest, CustomSdkDoesNotRequireBuiltinSdk)
+{
+    // (module (func (export "answer") (result i32) i32.const 42))
+    const ui8 binary[] = {
+        0x00,
+        0x61,
+        0x73,
+        0x6d,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x05,
+        0x01,
+        0x60,
+        0x00,
+        0x01,
+        0x7f,
+        0x03,
+        0x02,
+        0x01,
+        0x00,
+        0x07,
+        0x0a,
+        0x01,
+        0x06,
+        'a',
+        'n',
+        's',
+        'w',
+        'e',
+        'r',
+        0x00,
+        0x00,
+        0x0a,
+        0x06,
+        0x01,
+        0x04,
+        0x00,
+        0x41,
+        0x2a,
+        0x0b,
+    };
+    const TModuleBytecode sdk{
+        .Format = EBytecodeFormat::Binary,
+        .Data = TSharedRef::FromString(TString(reinterpret_cast<const char*>(binary), sizeof(binary))),
+        .ObjectCode = {},
+    };
+    auto compartment = CreateImageFromSdk(sdk);
+    auto answer = TCompartmentFunction<i32()>(compartment.get(), "answer");
+    EXPECT_EQ(answer(), 42);
+}
+
 TEST_F(TWebAssemblyTest, Create)
 {
     std::vector<std::unique_ptr<IWebAssemblyCompartment>> compartments;

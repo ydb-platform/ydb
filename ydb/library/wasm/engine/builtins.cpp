@@ -64,15 +64,12 @@ TModuleBytecode GetBuiltinYtQlUdfs()
     return udfs;
 }
 
-TModuleBytecode GetBuiltinSdk()
+TModuleBytecode FindBuiltinSdk()
 {
     static auto sdk = [] {
         auto bytecode = ::NResource::Has(BuiltinEmscriptenSystemLibrariesResource)
                             ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesResource))
                             : TSharedRef();
-
-        THROW_ERROR_EXCEPTION_IF(
-            bytecode.Empty(), "WebAssembly system library resource %Qv is missing or empty", BuiltinEmscriptenSystemLibrariesResource);
 
         auto objectCode = ::NResource::Has(BuiltinEmscriptenSystemLibrariesObjectCodeResource)
                               ? TSharedRef::FromString(::NResource::Find(BuiltinEmscriptenSystemLibrariesObjectCodeResource))
@@ -85,6 +82,14 @@ TModuleBytecode GetBuiltinSdk()
         };
     }();
 
+    return sdk;
+}
+
+TModuleBytecode GetBuiltinSdk()
+{
+    auto sdk = FindBuiltinSdk();
+    THROW_ERROR_EXCEPTION_IF(
+        sdk.Data.Empty(), "WebAssembly system library resource %Qv is missing or empty", BuiltinEmscriptenSystemLibrariesResource);
     return sdk;
 }
 

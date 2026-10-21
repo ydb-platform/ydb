@@ -2309,7 +2309,7 @@ selector_config: []
             keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
         }
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
-        UNIT_ASSERT(QueryKeeper(runtime, keepers.front(), true).HasScepter());
+        UNIT_ASSERT(QueryKeeper(runtime, keepers.front()).HasScepter());
 
         const TActorId edge = runtime.AllocateEdgeActor(1);
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;

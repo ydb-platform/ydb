@@ -35,8 +35,8 @@ public:
         return TSnapshot(Proto.GetSinceStep(), Proto.GetSinceTxId());
     }
 
-    NOlap::IColumnEngine::TSchemaInitializationData GetSchema() const {
-        return NOlap::IColumnEngine::TSchemaInitializationData(Proto);
+    NOlap::IColumnEngine::TSchemaVersionView GetSchema() const {
+        return NOlap::IColumnEngine::TSchemaVersionView(Proto);
     }
 
     ui64 ColumnsSize() const {

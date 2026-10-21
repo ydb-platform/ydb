@@ -1,6 +1,6 @@
 # Non-uniform bridge clusters in YDB
 
-Design exploration based on source inspection of checkout `c946cc018e2`, followed by the selected scope and implementation checklist. Implementation is in progress on `bridge/non-uniform-cluster`; the corrected remote validation run at `429673e` is in progress.
+Design exploration based on source inspection of checkout `c946cc018e2`, followed by the selected scope and implementation checklist. Implementation at `87fd43406da` on `bridge/non-uniform-cluster` passed 18 selected C++ checks on remote `qa4`; the database functional test passed on an unchanged retry after a bootstrap timeout.
 
 ## Implementation status
 
@@ -11,14 +11,24 @@ The current source changes implement the pool-level interface and allocation pat
 - Activation raises the required bridge feature level to 3. Configuration replacement uses the existing connected-node capability check before raising that requirement. The persisted requirement also fences incompatible nodes on reconnect.
 - Ordinary pools use explicit cross-pile placement for allocation, reassignment, repair, and allocation reserve checks. For explicit `false`, geometry ignores the logical `BridgePileName` prefix during allocation, layout checking, and self-heal; actual `DataCenter`/rack levels and the nodes' pile labels remain intact. Disconnected, inactive, and suspended piles are not new-placement targets.
 - Group moves between different effective modes are rejected. Existing ordinary DSProxy/quorum behavior and the guard against removing a pile that still hosts ordinary VDisks remain in place. Health formatting avoids attributing ordinary-group issues to an empty pile name.
+- BSC [LoadFinished](ydb/core/mind/bscontroller/impl.h#L2474) rechecks unsynchronized piles when bridge configuration is present. This resumes recovery when the controller starts with an already unsynchronized cluster state, including after physically stopped piles rejoin.
 
 The root remains bridged, and existing storage-kind templates carry the override through database creation; no database-mode API is added. Build and test execution is restricted to remote `qa4`.
 
 ### Validation status
 
-The earlier remote run passed seven checks: ordinary-group health attribution, activation validation, connected-node compatibility at feature levels 2 and 3, baseline mapper behavior, rejection with only two datacenters, and baseline three-pile discovery. Four ordinary-allocation checks failed because the logical pile prefix affected physical geometry. That issue was corrected; the current run at `429673e` is pending and its results are not yet claimed here.
+All **18 selected C++ checks passed on `qa4` at `87fd43406da`**:
 
-The added tests target pool policy persistence, growth, restart and disk reassignment; activation and incompatible-mode rejection; ordinary quorum through disconnection/rejoin; and the destructive pile-removal guard. The new functional fixture targets database/table creation, reads and writes, primary promotion, and pool growth. These scenarios require confirmation from the corrected run.
+- Health: ordinary-group attribution without a pile label.
+- NodeWarden: activation validation and `OlderDynamicNode` variants for feature levels 2 and 3.
+- Static placement: `UsesValidExplicitTarget`.
+- Mapper: `AcrossPilesPreservesDatacenterGeometry`, `SimplestMirror3dc`, and `SanitizeGroupTest3dc`.
+- Legacy conversion: `ConvertDynamicGroups` and `PoolErasureOfConvertedGroups`.
+- Failover: `BridgeFailover::TwoFailedPilesPrimaryLost` and `BridgeFailover::TwoFailedPilesPrimarySurvives`.
+- All four `BridgeMixedStorage` tests: policy/data persistence through restart and disk reassignment, activation/validation, shared disconnection with ordinary quorum and rejoin, and rejection with only two datacenters.
+- Recovery/order regressions: `BridgeRejoin::TwoDisconnectedPilesRecoverData` and `BridgeRestart::RegistrationSnapshotPrecedesDiskUpdates`.
+
+The functional `test_mixed_storage.py::TestMixedStorageDatabases::test_create_grow_and_promote` passed on `qa4` at `87fd43406da` in 125.4 seconds on an unchanged retry. The preceding combined run passed all 18 C++ checks but failed functional setup: PDisk metadata writes were still pending when the harness's 30-second cluster-bootstrap deadline expired. The retry completed with exit code 0. The functional test exercises new databases using the two configured storage kinds, table writes and reads before and after primary promotion, pool growth, and physical group counts/geometry. Together, these results establish the covered pool-level and database contracts, including the destructive pile-removal guard, rather than the entire acceptance inventory below.
 
 Remaining acceptance includes explicit GC/block fencing scenarios, Console restart and serverless coverage, custom/table-family/topic and private-Hive channel bindings, pile addition with mixed pools, out-of-space isolation, and workload space measurements. These are not established by the currently added tests. Existing available-group forecasts in [storage_stats_calculator.cpp](ydb/core/mind/bscontroller/storage_stats_calculator.cpp) still use default geometry and erasure/filter aggregation rather than per-pool bridge policy; mode-aware capacity forecasting is not implemented or validated. Actual pool/group counts and physical group geometry are separate assertions in the added tests.
 
@@ -286,4 +296,4 @@ Use BSC tests, [ut_bridge](ydb/core/blobstorage/ut_blobstorage/ut_bridge), Conso
 
 Finish with an operator-facing description of provisioning templates, expected space savings for newly stored data, shared bridge dependencies, and removal restrictions. State explicitly that the root always remains bridged and that existing databases, pools, and data are not migrated by this feature.
 
-Source implementation and remote validation are in progress. The status above records the available evidence; workload/capacity benchmarks have not been run. Build and test execution and result collection use remote `qa4`.
+The selected C++ validation and the functional retry passed at `87fd43406da`. The status above records the covered scenarios, the initial bootstrap failure, and remaining work. Workload/capacity benchmarks have not been run. Build and test execution and result collection use remote `qa4`.

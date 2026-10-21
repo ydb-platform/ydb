@@ -942,6 +942,1509 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             << " lastPDiskError# " << lastPDiskErrorReason);
     }
 
+<<<<<<< HEAD
+=======
+    void TestCutLogAppendsDoNotFragmentDiskIndex(ui64 syncLogMaxMemAmount,
+            bool requireNoMemoryOverflow, const TString& pdiskPathSuffix) {
+        /*
+         * A production VDisk periodically receives TEvCutLog even when SyncLog is far below its
+         * memory limit. If only a few new pages appeared since the previous cut, BuildSwapSnap
+         * writes just those pages. Historically every such append created a separate
+         * TDiskIndexRecord, so every cut increased IndexRecsNum by one and the serialized entry
+         * point by sizeof(TDiskIndexRecord) (12 bytes).
+         *
+         * Keep the real VDisk/PDisk path and explicitly reproduce that cadence. CutLog lags one
+         * batch behind: after batch N is written, request a recovery-log cut at the last LSN of
+         * batch N-1 plus one. Thus the pages selected for the swap no longer contain mutable
+         * Pages.back(). Wait for the complete commit chain before starting another batch. Every
+         * append is much smaller than IndexBulk, so adjacent appends should share index records.
+         * The 1.25 GiB SyncLog disk limit is deliberately large enough that disk-pressure trimming
+         * cannot hide linear index growth.
+         */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
+        testConfig.SyncLogMaxMemAmount = syncLogMaxMemAmount;
+        testConfig.SyncLogMaxDiskAmount = 1_GB + 256_MB;
+        testConfig.MaxLogoBlobDataSize = 192_KB;
+        testConfig.MinHugeBlobInBytes = 64_KB;
+        testConfig.MilestoneHugeBlobInBytes = 128_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = pdiskPathSuffix;
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 maxObservedDataLsn = 0;
+        ui64 lastObservedGcLsn = 0;
+        ui64 lastReportedSyncLogFirstLsnToKeep = 0;
+        ui32 entryPointCommits = 0;
+        ui32 syncLogCommitDoneEvents = 0;
+        TVector<ui32> committedAppendPages;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const bool syncLogEntryPointCommit =
+                msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx &&
+                msg.CommitRecord.IsStartingPoint;
+
+            if (!syncLogEntryPointCommit) {
+                if (!gotOwner) {
+                    owner = msg.Owner;
+                    gotOwner = true;
+                } else if (msg.Owner != owner) {
+                    return;
+                }
+                ownerRound = msg.OwnerRound;
+                maxObservedDataLsn = Max(maxObservedDataLsn, msg.Lsn);
+                if (msg.Signature.GetUnmasked() == TLogSignature::SignatureGC) {
+                    lastObservedGcLsn = msg.Lsn;
+                }
+            } else if (gotOwner && msg.Owner == owner) {
+                ++entryPointCommits;
+            }
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        ++syncLogCommitDoneEvents;
+                        const auto *msg = ev->Get<NSyncLog::TEvSyncLogCommitDone>();
+                        for (const auto& append : msg->Delta.AllAppends) {
+                            committedAppendPages.push_back(append.Pages.size());
+                            UNIT_ASSERT_C(append.Pages.size() < msg->Delta.IndexBulk,
+                                "CutLog disk append must be smaller than IndexBulk"
+                                << " appendPages# " << append.Pages.size()
+                                << " IndexBulk# " << msg->Delta.IndexBulk);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVDiskCutLog: {
+                    const auto *msg = ev->Get<TEvVDiskCutLog>();
+                    if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
+                        lastReportedSyncLogFirstLsnToKeep =
+                            Max(lastReportedSyncLogFirstLsnToKeep, msg->LastKeepLsn);
+                    }
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        const TString data = MakeData(1);
+        auto writeTargetRecords = [&](ui32 records) {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            for (ui32 i = 0; i < records; ++i) {
+                const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep++, 0, data.size(), nextCookie++), 1);
+                multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            }
+
+            runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+            auto putResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge,
+                TDuration::Seconds(120));
+            UNIT_ASSERT_C(putResult, "no put result; lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(putResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                "put status# " << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetStatus())
+                << " lastPDiskError# " << lastPDiskErrorReason);
+        };
+
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](ui32 records) {
+            TVector<TLogoBlobID> doNotKeep;
+            doNotKeep.reserve(records);
+            for (ui32 i = 0; i < records; ++i) {
+                doNotKeep.emplace_back(43, 1, nextStep++, 0, 1, nextCookie++);
+            }
+
+            auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(43, 1,
+                nextCollectCounter++, 0, false, 0, 0, false, nullptr, &doNotKeep, vdiskId,
+                TInstant::Max());
+            runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+            auto collectResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                TDuration::Seconds(120));
+            UNIT_ASSERT_C(collectResult,
+                "no collect result; lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(collectResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                "collect status# "
+                << NKikimrProto::EReplyStatus_Name(collectResult->Get()->Record.GetStatus())
+                << " lastPDiskError# " << lastPDiskErrorReason);
+        };
+
+        auto requestFootprint = [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+                new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge,
+                TDuration::Seconds(5));
+            UNIT_ASSERT(res);
+            return GetSyncLogFootprint(res->Get()->SnapshotPtr);
+        };
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge),
+            "target VDisk did not become ready");
+        writeTargetRecords(16);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return syncLogId && syncLogKeeperId && gotOwner && ownerRound && maxObservedDataLsn;
+        }, 200, TDuration::MilliSeconds(10)),
+            "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
+
+        TSyncLogFootprint previousFootprint = requestFootprint();
+        const TSyncLogFootprint initialFootprint = previousFootprint;
+        const ui32 initialEntryPointCommits = entryPointCommits;
+        const ui32 initialCommitDoneEvents = syncLogCommitDoneEvents;
+        const ui32 initialCommittedAppends = committedAppendPages.size();
+        const ui32 cutIterations = 200;
+        const ui32 recordsPerCut = 1'600;
+        const ui32 minPagesPerAppend = 14;
+        const ui32 maxPagesPerAppend = 20;
+        ui32 minObservedPagesPerAppend = Max<ui32>();
+        ui32 maxObservedPagesPerAppend = 0;
+        ui32 completedCutLogRequests = 0;
+        ui32 cutsThatAddedIndexRecords = 0;
+        ui64 lastRequestedFreeUpToLsn = 0;
+
+        // Batch zero is intentionally left in memory. Every loop iteration first writes the next
+        // batch and only then asks CutLog to persist the preceding one.
+        collectDoNotKeep(recordsPerCut);
+        ui64 previousBatchLastLsn = lastObservedGcLsn;
+        UNIT_ASSERT_C(previousBatchLastLsn,
+            "initial CutLog batch did not advance the target VDisk recovery log");
+        const TSyncLogFootprint afterInitialBatch = requestFootprint();
+        UNIT_ASSERT_VALUES_EQUAL_C(entryPointCommits, initialEntryPointCommits,
+            "initial batch caused a SyncLog commit before TEvCutLog");
+        UNIT_ASSERT_VALUES_EQUAL_C(syncLogCommitDoneEvents, initialCommitDoneEvents,
+            "initial batch completed a SyncLog commit before TEvCutLog");
+        UNIT_ASSERT_VALUES_EQUAL_C(afterInitialBatch.IndexedPages, initialFootprint.IndexedPages,
+            "initial batch reached SyncLog disk before TEvCutLog");
+
+        for (ui32 iteration = 0; iteration < cutIterations; ++iteration) {
+            const ui64 previousWrittenLsn = lastObservedGcLsn;
+            const ui32 commitsBeforeWrite = entryPointCommits;
+            const ui32 commitDoneBeforeWrite = syncLogCommitDoneEvents;
+            collectDoNotKeep(recordsPerCut);
+            const ui64 currentBatchLastLsn = lastObservedGcLsn;
+            UNIT_ASSERT_C(currentBatchLastLsn > previousWrittenLsn,
+                "small write batch did not advance the target VDisk recovery log"
+                << " iteration# " << iteration
+                << " previousWrittenLsn# " << previousWrittenLsn
+                << " currentBatchLastLsn# " << currentBatchLastLsn);
+
+            // Taking a snapshot queues a round trip through SyncLogKeeper after the write. If a
+            // memory-overflow commit was scheduled by the batch, it is visible here, before CutLog.
+            const TSyncLogFootprint beforeCutFootprint = requestFootprint();
+            UNIT_ASSERT_VALUES_EQUAL_C(entryPointCommits, commitsBeforeWrite,
+                "SyncLog entry-point commit was triggered by memory overflow, not TEvCutLog"
+                << " iteration# " << iteration
+                << " beforeCutFootprint# " << beforeCutFootprint.ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(syncLogCommitDoneEvents, commitDoneBeforeWrite,
+                "SyncLog commit completed between the batch write and TEvCutLog"
+                << " iteration# " << iteration
+                << " beforeCutFootprint# " << beforeCutFootprint.ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(beforeCutFootprint.IndexedPages, previousFootprint.IndexedPages,
+                "batch reached SyncLog disk before TEvCutLog"
+                << " iteration# " << iteration
+                << " previousFootprint# " << previousFootprint.ToString()
+                << " beforeCutFootprint# " << beforeCutFootprint.ToString());
+
+            const ui32 previousEntryPointCommits = entryPointCommits;
+            const ui32 previousCommitDoneEvents = syncLogCommitDoneEvents;
+            const ui32 previousCommittedAppends = committedAppendPages.size();
+            lastRequestedFreeUpToLsn = previousBatchLastLsn + 1;
+            runtime.Send(new IEventHandle(syncLogId, edge,
+                new NPDisk::TEvCutLog(owner, ownerRound, lastRequestedFreeUpToLsn, 0, 0, 0, 0)), NodeIndex);
+
+            // One CutLog may require multiple entry-point commits. Do not write the next portion
+            // until the keeper reports that the requested recovery-log position is safe to cut.
+            UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+                return lastReportedSyncLogFirstLsnToKeep >= lastRequestedFreeUpToLsn;
+            }, 1000, TDuration::MilliSeconds(10)),
+                "SyncLog CutLog commit did not settle"
+                << " iteration# " << iteration
+                << " entryPointCommits# " << entryPointCommits
+                << " commitDone# " << syncLogCommitDoneEvents
+                << " previousBatchLastLsn# " << previousBatchLastLsn
+                << " currentBatchLastLsn# " << currentBatchLastLsn
+                << " freeUpToLsn# " << lastRequestedFreeUpToLsn
+                << " reportedFirstLsnToKeep# " << lastReportedSyncLogFirstLsnToKeep
+                << " lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(entryPointCommits > previousEntryPointCommits &&
+                    syncLogCommitDoneEvents > previousCommitDoneEvents,
+                "CutLog reached the requested LSN without completing a new SyncLog commit"
+                << " iteration# " << iteration
+                << " entryPointCommits# " << entryPointCommits
+                << " commitDone# " << syncLogCommitDoneEvents);
+            ++completedCutLogRequests;
+
+            const TSyncLogFootprint footprint = requestFootprint();
+            UNIT_ASSERT_C(footprint.EntryPointIndexRecs == footprint.DiskIndexRecs,
+                "entry point does not describe the live SyncLog disk index"
+                << " iteration# " << iteration
+                << " footprint# " << footprint.ToString());
+            UNIT_ASSERT_C(footprint.DiskLastLsn >= previousBatchLastLsn,
+                "CutLog commit did not flush the requested SyncLog records to disk"
+                << " iteration# " << iteration
+                << " previousBatchLastLsn# " << previousBatchLastLsn
+                << " freeUpToLsn# " << lastRequestedFreeUpToLsn
+                << " footprint# " << footprint.ToString());
+            UNIT_ASSERT_C(footprint.DiskLastLsn < currentBatchLastLsn,
+                "CutLog did not leave the current batch's mutable tail in memory"
+                << " iteration# " << iteration
+                << " previousBatchLastLsn# " << previousBatchLastLsn
+                << " currentBatchLastLsn# " << currentBatchLastLsn
+                << " footprint# " << footprint.ToString());
+
+            const ui32 appendedPages = footprint.IndexedPages - previousFootprint.IndexedPages;
+            UNIT_ASSERT_C(minPagesPerAppend <= appendedPages && appendedPages <= maxPagesPerAppend,
+                "CutLog append is outside the intended small-append range"
+                << " iteration# " << iteration
+                << " appendedPages# " << appendedPages
+                << " expectedRange# [" << minPagesPerAppend << ", " << maxPagesPerAppend << "]"
+                << " previousFootprint# " << previousFootprint.ToString()
+                << " footprint# " << footprint.ToString());
+            UNIT_ASSERT_C(committedAppendPages.size() > previousCommittedAppends,
+                "CutLog commit did not contain a disk append"
+                << " iteration# " << iteration
+                << " previousCommittedAppends# " << previousCommittedAppends
+                << " committedAppends# " << committedAppendPages.size());
+            ui32 deltaPages = 0;
+            for (ui32 i = previousCommittedAppends; i < committedAppendPages.size(); ++i) {
+                deltaPages += committedAppendPages[i];
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(deltaPages, appendedPages,
+                "TEvSyncLogCommitDone delta differs from disk index page growth"
+                << " iteration# " << iteration
+                << " footprint# " << footprint.ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(footprint.DiskUsedPages, footprint.IndexedPages,
+                "closed-batch CutLog workload unexpectedly created physical holes"
+                << " iteration# " << iteration
+                << " footprint# " << footprint.ToString());
+            cutsThatAddedIndexRecords += footprint.DiskIndexRecs > previousFootprint.DiskIndexRecs;
+            minObservedPagesPerAppend = Min(minObservedPagesPerAppend, appendedPages);
+            maxObservedPagesPerAppend = Max(maxObservedPagesPerAppend, appendedPages);
+            previousFootprint = footprint;
+            previousBatchLastLsn = currentBatchLastLsn;
+        }
+
+        const ui32 indexedPagesGrowth = previousFootprint.IndexedPages - initialFootprint.IndexedPages;
+        const ui32 diskIndexGrowth = previousFootprint.DiskIndexRecs - initialFootprint.DiskIndexRecs;
+        const ui32 cutDrivenCommits = entryPointCommits - initialEntryPointCommits;
+        const ui32 completedCutCommits = syncLogCommitDoneEvents - initialCommitDoneEvents;
+        Cerr << "SYNCLOG_CUTLOG_INDEX_FRAGMENTATION"
+            << " syncLogMaxMemAmount# " << syncLogMaxMemAmount
+            << " cutIterations# " << cutIterations
+            << " completedCutLogRequests# " << completedCutLogRequests
+            << " cutDrivenCommits# " << cutDrivenCommits
+            << " completedCutCommits# " << completedCutCommits
+            << " minPagesPerAppend# " << minObservedPagesPerAppend
+            << " maxPagesPerAppend# " << maxObservedPagesPerAppend
+            << " IndexBulk# " << previousFootprint.IndexBulk
+            << " indexedPagesGrowth# " << indexedPagesGrowth
+            << " diskIndexGrowth# " << diskIndexGrowth
+            << " cutsThatAddedIndexRecords# " << cutsThatAddedIndexRecords
+            << " lastFreeUpToLsn# " << lastRequestedFreeUpToLsn
+            << " initialFootprint# " << initialFootprint.ToString()
+            << " finalFootprint# " << previousFootprint.ToString()
+            << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(completedCutLogRequests, cutIterations,
+            "not every CutLog request reached its requested FreeUpToLsn"
+            << " lastFreeUpToLsn# " << lastRequestedFreeUpToLsn
+            << " reportedFirstLsnToKeep# " << lastReportedSyncLogFirstLsnToKeep);
+        UNIT_ASSERT_VALUES_EQUAL_C(completedCutCommits, cutDrivenCommits,
+            "a SyncLog entry-point commit was still in flight after the last CutLog"
+            << " initialEntryPointCommits# " << initialEntryPointCommits
+            << " finalEntryPointCommits# " << entryPointCommits
+            << " initialCommitDoneEvents# " << initialCommitDoneEvents
+                << " finalCommitDoneEvents# " << syncLogCommitDoneEvents);
+        UNIT_ASSERT_C(committedAppendPages.size() > initialCommittedAppends,
+            "CutLog scenario did not produce any SyncLog disk appends");
+
+        if (requireNoMemoryOverflow) {
+            const ui32 maxMemPages = Max<ui32>(2,
+                syncLogMaxMemAmount / previousFootprint.AppendBlockSize);
+            UNIT_ASSERT_C(previousFootprint.MemPages < maxMemPages,
+                "64 MiB scenario unexpectedly reached the SyncLog memory limit"
+                << " maxMemPages# " << maxMemPages
+                << " footprint# " << previousFootprint.ToString());
+        }
+
+        UNIT_ASSERT_C(diskIndexGrowth > 0,
+            "the test must allow the SyncLog disk index to grow as data pages are added");
+        UNIT_ASSERT_C(cutsThatAddedIndexRecords < cutIterations / 2,
+            "SyncLog disk index growth is linear in the number of CutLog commits"
+            << " cutIterations# " << cutIterations
+            << " cutsThatAddedIndexRecords# " << cutsThatAddedIndexRecords
+            << " indexedPagesGrowth# " << indexedPagesGrowth
+            << " diskIndexGrowth# " << diskIndexGrowth
+            << " IndexBulk# " << previousFootprint.IndexBulk
+            << " initialFootprint# " << initialFootprint.ToString()
+            << " finalFootprint# " << previousFootprint.ToString());
+        const ui32 denseIndexBound = (previousFootprint.IndexedPages + previousFootprint.IndexBulk - 1)
+            / previousFootprint.IndexBulk + previousFootprint.DiskChunks;
+        UNIT_ASSERT_C(previousFootprint.DiskIndexRecs <= denseIndexBound,
+            "SyncLog disk index is larger than the physical-page/IndexBulk bound"
+            << " denseIndexBound# " << denseIndexBound
+            << " footprint# " << previousFootprint.ToString());
+    }
+
+    Y_UNIT_TEST(CutLogAppendsDoNotFragmentDiskIndex) {
+        // First prove that CutLog is the source and memory overflow is not involved.
+        TestCutLogAppendsDoNotFragmentDiskIndex(64_MB, true,
+            "synclog_real_cutlog_index_fragmentation_64mib.dat");
+
+        // Then repeat the same scenario with the production memory limit from the incident.
+        TestCutLogAppendsDoNotFragmentDiskIndex(2_MB, false,
+            "synclog_real_cutlog_index_fragmentation_2mib.dat");
+    }
+
+    Y_UNIT_TEST(VCompactCutLogPassesRecordInFlightToKeeper) {
+        /*
+         * The same race with a real source of the cut request. TEvVCompact (ASYNC) goes to the recovery log
+         * writer, which asks to cut the log at CurSentLsn + 1: that includes a record already sent to PDisk
+         * whose completion (and so its TEvSyncLogPut) has not happened yet. PDisk is slow (its mailbox waits,
+         * in order), so the keeper starts a commit for that FreeUpToLsn before the record is written. Then the
+         * record is written and its TEvSyncLogPut waits in the busy SyncLog mailbox, in order, while the keeper
+         * continues the commit chain on its own. Only whole mailboxes are delayed; nothing overtakes anything.
+         */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_vcompact_cut_in_flight.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 maxObservedLsn = 0;
+        ui32 commitDoneEvents = 0;
+        ui64 reportedFirstLsnToKeep = 0;
+        bool holdNextPut = false;
+        bool holdSyncLog = false; // SyncLog is busy: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForSyncLog;
+        bool holdCommitDone = false;
+        bool holdKeeper = false; // the keeper is busy too: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForKeeper;
+        ui64 heldLsn = 0;
+        ui64 keeperCutFreeUpToLsn = 0; // TEvCutLog that reached the keeper
+        bool keeperCommitStarted = false; // a SyncLog entry point write reached PDisk
+        bool holdPDisk = false; // PDisk is slow: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForPDisk;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            if (!gotOwner) {
+                owner = msg.Owner;
+                gotOwner = true;
+            } else if (msg.Owner != owner) {
+                return;
+            }
+            ownerRound = msg.OwnerRound;
+            maxObservedLsn = Max(maxObservedLsn, msg.Lsn);
+            if (msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx && msg.CommitRecord.IsStartingPoint) {
+                keeperCommitStarted = true;
+            }
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    if (holdNextPut && ev->Recipient == syncLogId) {
+                        const auto& recs = ev->Get<NSyncLog::TEvSyncLogPut>()->GetRecs();
+                        heldLsn = reinterpret_cast<const NSyncLog::TRecordHdr*>(recs.GetData())->Lsn;
+                        holdNextPut = false;
+                        holdSyncLog = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        if (holdCommitDone) {
+                            holdCommitDone = false;
+                            holdKeeper = true;
+                            heldForKeeper.push_back(ev);
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        ++commitDoneEvents;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvChunkWrite:
+                    // the committer writes SyncLog pages before its entry point
+                    if (ev->Recipient == storage.PDiskServiceId
+                            && ev->Get<NPDisk::TEvChunkWrite>()->PriorityClass == NPriWrite::SyncLog) {
+                        keeperCommitStarted = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvCutLog:
+                    if (syncLogKeeperId && ev->Recipient == syncLogKeeperId) {
+                        keeperCutFreeUpToLsn = Max(keeperCutFreeUpToLsn, ev->Get<NPDisk::TEvCutLog>()->FreeUpToLsn);
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVDiskCutLog: {
+                    const auto *msg = ev->Get<TEvVDiskCutLog>();
+                    if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
+                        reportedFirstLsnToKeep = Max(reportedFirstLsnToKeep, msg->LastKeepLsn);
+                    }
+                    break;
+                }
+            }
+            if (holdPDisk && ev->Recipient == storage.PDiskServiceId) {
+                heldForPDisk.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (holdKeeper && ev->Recipient == syncLogKeeperId) {
+                heldForKeeper.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (holdSyncLog && ev->Recipient == syncLogId) {
+                heldForSyncLog.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        const TString data = MakeData(1);
+        auto write = [&] {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep, 0, data.size(), nextStep), 1);
+            ++nextStep;
+            multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, TDuration::Seconds(120));
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+        };
+
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "VDisk did not become ready");
+        write();
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return syncLogId && syncLogKeeperId && gotOwner; },
+            200, TDuration::MilliSeconds(10)), "failed to discover SyncLog actors");
+
+        // The next record is sent to PDisk, which is slow.
+        holdPDisk = true;
+        {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep, 0, data.size(), nextStep), 1);
+            ++nextStep;
+            multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+        }
+        const ui64 lsnBeforePut = maxObservedLsn;
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return maxObservedLsn > lsnBeforePut; }, 300, TDuration::MilliSeconds(10)),
+            "the record was not sent to PDisk");
+        const ui64 sentLsn = maxObservedLsn;
+
+        // A user asks for compaction: the log writer requests a cut at CurSentLsn + 1 through Skeleton. The
+        // keeper starts a commit; its writes queue up at PDisk behind the record.
+        runtime.Send(new IEventHandle(vdiskActorId, edge,
+            new TEvBlobStorage::TEvVCompact(vdiskId, NKikimrBlobStorage::TEvVCompact::ASYNC)), NodeIndex);
+        keeperCommitStarted = false;
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return keeperCutFreeUpToLsn == sentLsn + 1 && keeperCommitStarted; },
+            300, TDuration::MilliSeconds(10)),
+            "the real CutLog did not reach the keeper or start a commit"
+            << " sentLsn# " << sentLsn << " keeperCutFreeUpToLsn# " << keeperCutFreeUpToLsn
+            << " keeperCommitStarted# " << keeperCommitStarted);
+
+        // PDisk catches up, in order. The record's TEvSyncLogPut reaches a busy SyncLog and waits there, in order.
+        holdNextPut = true;
+        holdPDisk = false;
+        for (auto& h : heldForPDisk) {
+            runtime.Send(h.Release(), NodeIndex);
+        }
+        heldForPDisk.clear();
+        auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, TDuration::Seconds(120));
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_C(holdSyncLog, "TEvSyncLogPut was not intercepted");
+        Cerr << "SYNCLOG_VCOMPACT sentLsn# " << sentLsn << " heldLsn# " << heldLsn << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(heldLsn, sentLsn, "the waiting TEvSyncLogPut is not the record sent before the cut");
+        PumpUntil(runtime, [&] { return reportedFirstLsnToKeep > heldLsn; }, 300, TDuration::MilliSeconds(10));
+        const ui64 reportedWhileInFlight = reportedFirstLsnToKeep;
+        holdSyncLog = false;
+        for (auto& h : heldForSyncLog) {
+            runtime.Send(h.Release(), NodeIndex);
+        }
+        heldForSyncLog.clear();
+        // Once SyncLog catches up, the keeper must still reach the requested cut.
+        const bool progressed = PumpUntil(runtime, [&] { return reportedFirstLsnToKeep >= sentLsn + 1; },
+            300, TDuration::MilliSeconds(10));
+
+        Cerr << "SYNCLOG_FIRST_LSN_TO_KEEP heldLsn# " << heldLsn
+            << " reportedWhileInFlight# " << reportedWhileInFlight
+            << " commitDoneEvents# " << commitDoneEvents << Endl;
+        UNIT_ASSERT_C(reportedWhileInFlight <= heldLsn,
+            "SyncLog allowed the recovery log to be cut past a record that has not reached it"
+            << " heldLsn# " << heldLsn << " reportedFirstLsnToKeep# " << reportedWhileInFlight);
+        UNIT_ASSERT_C(progressed, "the keeper did not reach the requested cut after SyncLog caught up"
+            << " sentLsn# " << sentLsn << " reportedFirstLsnToKeep# " << reportedFirstLsnToKeep);
+    }
+
+    Y_UNIT_TEST(VCompactCutLogRecordMissingFromSyncLogAfterRestart) {
+        /*
+         * Continues VCompactCutLogPassesRecordInFlightToKeeper: with the SyncLog boundary already past the
+         * record still waiting in the busy SyncLog mailbox, further compaction requests let LogCutter write a
+         * cut past it (confirmed by TEvRecoveryLogCutDone). The VDisk is then restarted with PDisk alive and the
+         * SyncLog mailbox lost. The test looks for the record itself: it must be in SyncLog memory or on its
+         * disk (the disk holds only LSNs up to DiskLastLsn), and the blob must be in Hull.
+         */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_vcompact_record_after_restart.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 maxObservedLsn = 0;
+        ui32 commitDoneEvents = 0;
+        ui64 reportedFirstLsnToKeep = 0;
+        bool holdNextPut = false;
+        bool holdSyncLog = false; // SyncLog is busy: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForSyncLog;
+        bool holdCommitDone = false;
+        bool holdKeeper = false; // the keeper is busy too: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForKeeper;
+        ui64 heldLsn = 0;
+        ui64 cutDoneFirstLsnToKeep = 0;
+        ui64 keeperCutFreeUpToLsn = 0; // TEvCutLog that reached the keeper
+        bool keeperCommitStarted = false; // a SyncLog entry point write reached PDisk
+        bool holdPDisk = false; // PDisk is slow: everything sent to it waits, in order
+        TVector<TAutoPtr<IEventHandle>> heldForPDisk;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            if (!gotOwner) {
+                owner = msg.Owner;
+                gotOwner = true;
+            } else if (msg.Owner != owner) {
+                return;
+            }
+            ownerRound = msg.OwnerRound;
+            maxObservedLsn = Max(maxObservedLsn, msg.Lsn);
+            if (msg.Signature.GetUnmasked() == TLogSignature::SignatureSyncLogIdx && msg.CommitRecord.IsStartingPoint) {
+                keeperCommitStarted = true;
+            }
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    if (holdNextPut && ev->Recipient == syncLogId) {
+                        const auto& recs = ev->Get<NSyncLog::TEvSyncLogPut>()->GetRecs();
+                        heldLsn = reinterpret_cast<const NSyncLog::TRecordHdr*>(recs.GetData())->Lsn;
+                        holdNextPut = false;
+                        holdSyncLog = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        if (holdCommitDone) {
+                            holdCommitDone = false;
+                            holdKeeper = true;
+                            heldForKeeper.push_back(ev);
+                            return TTestActorRuntime::EEventAction::DROP;
+                        }
+                        ++commitDoneEvents;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvChunkWrite:
+                    // the committer writes SyncLog pages before its entry point
+                    if (ev->Recipient == storage.PDiskServiceId
+                            && ev->Get<NPDisk::TEvChunkWrite>()->PriorityClass == NPriWrite::SyncLog) {
+                        keeperCommitStarted = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvRecoveryLogCutDone:
+                    cutDoneFirstLsnToKeep = Max(cutDoneFirstLsnToKeep, ev->Get<TEvRecoveryLogCutDone>()->FirstLsnToKeep);
+                    break;
+
+                case TEvBlobStorage::EvCutLog:
+                    if (syncLogKeeperId && ev->Recipient == syncLogKeeperId) {
+                        keeperCutFreeUpToLsn = Max(keeperCutFreeUpToLsn, ev->Get<NPDisk::TEvCutLog>()->FreeUpToLsn);
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVDiskCutLog: {
+                    const auto *msg = ev->Get<TEvVDiskCutLog>();
+                    if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
+                        reportedFirstLsnToKeep = Max(reportedFirstLsnToKeep, msg->LastKeepLsn);
+                    }
+                    break;
+                }
+            }
+            if (holdPDisk && ev->Recipient == storage.PDiskServiceId) {
+                heldForPDisk.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (holdKeeper && ev->Recipient == syncLogKeeperId) {
+                heldForKeeper.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (holdSyncLog && ev->Recipient == syncLogId) {
+                heldForSyncLog.push_back(ev);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        const TString data = MakeData(1);
+        auto write = [&] {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep, 0, data.size(), nextStep), 1);
+            ++nextStep;
+            multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, TDuration::Seconds(120));
+            UNIT_ASSERT(res);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+        };
+
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "VDisk did not become ready");
+        write();
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return syncLogId && syncLogKeeperId && gotOwner; },
+            200, TDuration::MilliSeconds(10)), "failed to discover SyncLog actors");
+
+        TLogoBlobID heldBlobId;
+        // The next record is sent to PDisk, which is slow.
+        holdPDisk = true;
+        {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            heldBlobId = TLogoBlobID(TLogoBlobID(42, 1, nextStep, 0, data.size(), nextStep), 1);
+            ++nextStep;
+            multiPut->AddVPut(heldBlobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+        }
+        const ui64 lsnBeforePut = maxObservedLsn;
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return maxObservedLsn > lsnBeforePut; }, 300, TDuration::MilliSeconds(10)),
+            "the record was not sent to PDisk");
+        const ui64 sentLsn = maxObservedLsn;
+
+        // A user asks for compaction: the log writer requests a cut at CurSentLsn + 1 through Skeleton. The
+        // keeper starts a commit; its writes queue up at PDisk behind the record.
+        runtime.Send(new IEventHandle(vdiskActorId, edge,
+            new TEvBlobStorage::TEvVCompact(vdiskId, NKikimrBlobStorage::TEvVCompact::ASYNC)), NodeIndex);
+        keeperCommitStarted = false;
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return keeperCutFreeUpToLsn == sentLsn + 1 && keeperCommitStarted; },
+            300, TDuration::MilliSeconds(10)),
+            "the real CutLog did not reach the keeper or start a commit"
+            << " sentLsn# " << sentLsn << " keeperCutFreeUpToLsn# " << keeperCutFreeUpToLsn
+            << " keeperCommitStarted# " << keeperCommitStarted);
+
+        // PDisk catches up, in order. The record's TEvSyncLogPut reaches a busy SyncLog and waits there, in order.
+        holdNextPut = true;
+        holdPDisk = false;
+        for (auto& h : heldForPDisk) {
+            runtime.Send(h.Release(), NodeIndex);
+        }
+        heldForPDisk.clear();
+        auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, TDuration::Seconds(120));
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_C(holdSyncLog, "TEvSyncLogPut was not intercepted");
+        Cerr << "SYNCLOG_VCOMPACT sentLsn# " << sentLsn << " heldLsn# " << heldLsn << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(heldLsn, sentLsn, "the waiting TEvSyncLogPut is not the record sent before the cut");
+        PumpUntil(runtime, [&] { return reportedFirstLsnToKeep > heldLsn; }, 300, TDuration::MilliSeconds(10));
+        Cerr << "SYNCLOG_LOSS2 heldLsn# " << heldLsn << " reported# " << reportedFirstLsnToKeep << Endl;
+
+        // More compaction requests: every component moves on, the SyncLog copy waits behind the put, and
+        // LogCutter writes a cut that SyncLog has allowed.
+        for (ui32 round = 0; round < 20 && cutDoneFirstLsnToKeep <= heldLsn; ++round) {
+            runtime.Send(new IEventHandle(vdiskActorId, edge,
+                new TEvBlobStorage::TEvVCompact(vdiskId, NKikimrBlobStorage::TEvVCompact::ASYNC)), NodeIndex);
+            PumpUntil(runtime, [&] { return cutDoneFirstLsnToKeep > heldLsn; }, 50, TDuration::MilliSeconds(10));
+        }
+        Cerr << "SYNCLOG_LOSS2 cutDone# " << cutDoneFirstLsnToKeep << Endl;
+
+        // Failure model, step 1: the work waiting in the SyncLog mailbox (the put and everything after it) is lost.
+        holdSyncLog = false;
+        heldForSyncLog.clear();
+        // Step 2: the VDisk is stopped with PDisk alive; the stop signal reaches every old actor, and the test
+        // waits until the old SyncLog and keeper are actually gone before a new OwnerRound starts.
+        const TActorId oldSyncLogId = syncLogId;
+        const TActorId oldKeeperId = syncLogKeeperId;
+        runtime.Send(new IEventHandle(storage.VDiskActors[0], edge, new TEvents::TEvPoisonPill), NodeIndex);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return !runtime.FindActor(oldSyncLogId) && !runtime.FindActor(oldKeeperId);
+        }, 300, TDuration::MilliSeconds(10)), "old SyncLog actors did not stop");
+        auto vdiskConfig = MakeTestVDiskConfig(storage.AllVDiskKinds, info, storage.PDiskServiceId, 0, 200, testConfig);
+        const TActorId newFront = runtime.Register(CreateVDisk(vdiskConfig, info,
+            storage.Counters->GetSubgroup("subsystem", "vdisk")->GetSubgroup("slot", "0r")),
+            NodeIndex, 0, TMailboxType::Revolving);
+        runtime.RegisterService(vdiskActorId, newFront, NodeIndex);
+        storage.VDiskActors[0] = newFront;
+        syncLogId = {};
+        syncLogKeeperId = {};
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "VDisk did not restart");
+
+        // A new write discovers the new SyncLog actors.
+        for (ui32 attempt = 0; ; ++attempt) {
+            auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+            const TLogoBlobID blobId(TLogoBlobID(42, 1, nextStep, 0, data.size(), nextStep), 1);
+            ++nextStep;
+            multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+            runtime.Send(new IEventHandle(vdiskActorId, edge, multiPut.release()), NodeIndex);
+            auto r = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, TDuration::Seconds(120));
+            UNIT_ASSERT(r);
+            const auto status = r->Get()->Record.GetStatus();
+            if ((status == NKikimrProto::NOTREADY || status == NKikimrProto::TRYLATER) && attempt < 100) {
+                DispatchFor(runtime, TDuration::MilliSeconds(100));
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+            break;
+        }
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] { return syncLogId && syncLogKeeperId; }, 200, TDuration::MilliSeconds(10)),
+            "failed to discover SyncLog actors after restart");
+
+        // The blob is in Hull with its data intact.
+        {
+            auto get = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, 0,
+                {{heldBlobId, 0, 0}});
+            runtime.Send(new IEventHandle(vdiskActorId, edge, get.release()), NodeIndex);
+            auto r = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVGetResult>(edge, TDuration::Seconds(10));
+            UNIT_ASSERT(r);
+            UNIT_ASSERT_VALUES_EQUAL(r->Get()->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(r->Get()->Record.ResultSize(), 1);
+            const auto& q = r->Get()->Record.GetResult(0);
+            UNIT_ASSERT_VALUES_EQUAL_C(q.GetStatus(), NKikimrProto::OK, "blob is not in Hull");
+            UNIT_ASSERT_VALUES_EQUAL_C(r->Get()->GetBlobData(q).ConvertToString(), data, "blob data differs");
+            Cerr << "SYNCLOG_LOSS2 hull blob# " << heldBlobId << " data OK" << Endl;
+        }
+
+        // Look for the record in SyncLog.
+        runtime.Send(new IEventHandle(syncLogKeeperId, edge, new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+        auto snap = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT(snap);
+        const auto& snapshot = snap->Get()->SnapshotPtr;
+        bool inMemory = false;
+        if (snapshot->MemSnapPtr) {
+            NSyncLog::TMemRecLogSnapshot::TIterator it(snapshot->MemSnapPtr.Get());
+            for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                if (it.Get()->Lsn == heldLsn) {
+                    inMemory = true;
+                    break;
+                }
+            }
+        }
+        const TSyncLogFootprint footprint = GetSyncLogFootprint(snapshot);
+        Cerr << "SYNCLOG_LOSS2 after restart heldLsn# " << heldLsn << " inMemory# " << inMemory
+            << " footprint# " << footprint.ToString() << Endl;
+        // In this scenario nothing at or after the record was written to the SyncLog disk, so the record can
+        // only be in memory.
+        UNIT_ASSERT_C(footprint.DiskLastLsn < heldLsn, "scenario condition: SyncLog disk ends before the record"
+            << " heldLsn# " << heldLsn << " footprint# " << footprint.ToString());
+        UNIT_ASSERT_C(inMemory,
+            "a blob acknowledged to the client and present in Hull has no SyncLog record after restart"
+            << " heldLsn# " << heldLsn << " blob# " << heldBlobId << " footprint# " << footprint.ToString());
+    }
+
+    Y_UNIT_TEST(MutableTailVersionsAreDeduplicatedAfterRestart) {
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
+        testConfig.SyncLogMaxMemAmount = 64_MB;
+        testConfig.SyncLogMaxDiskAmount = 1_GB + 256_MB;
+        testConfig.EnablePhantomFlagStorage = true;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_mutable_tail_versions.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime,
+            TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const TVDiskID targetVDisk = storage.Info->GetVDiskId(0);
+        const TVDiskID sourceVDisk = storage.Info->GetVDiskId(1);
+        const TActorId targetVDiskId = storage.Info->GetActorId(0);
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 lastObservedGcLsn = 0;
+        ui64 lastReportedSyncLogFirstLsnToKeep = 0;
+        ui32 entryPointCommits = 0;
+        ui32 syncLogCommitDoneEvents = 0;
+        bool phantomFlagBuilderFinished = false;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const auto signature = msg.Signature.GetUnmasked();
+            if (signature == TLogSignature::SignatureGC) {
+                owner = msg.Owner;
+                ownerRound = msg.OwnerRound;
+                lastObservedGcLsn = Max(lastObservedGcLsn, msg.Lsn);
+            } else if (signature == TLogSignature::SignatureSyncLogIdx &&
+                    msg.CommitRecord.IsStartingPoint && owner && msg.Owner == owner) {
+                ++entryPointCommits;
+            }
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        ++syncLogCommitDoneEvents;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvPhantomFlagStorageFinishBuilder:
+                    if (ev->Recipient == syncLogKeeperId) {
+                        phantomFlagBuilderFinished = true;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvVDiskCutLog: {
+                    const auto *msg = ev->Get<TEvVDiskCutLog>();
+                    if (ev->Sender == syncLogKeeperId && msg->Component == TEvVDiskCutLog::SyncLog) {
+                        lastReportedSyncLogFirstLsnToKeep =
+                            Max(lastReportedSyncLogFirstLsnToKeep, msg->LastKeepLsn);
+                    }
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, targetVDiskId, targetVDisk, edge),
+            "target VDisk did not become ready");
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](const TActorId& recipient) {
+            TLogoBlobID blobId;
+            do {
+                blobId = TLogoBlobID(TLogoBlobID(123, 1, nextStep++, 0,
+                    1, nextCookie++), 0);
+            } while (!storage.Info->BelongsToSubgroup(targetVDisk, blobId.Hash()) ||
+                    !storage.Info->BelongsToSubgroup(sourceVDisk, blobId.Hash()));
+
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
+                TVector<TLogoBlobID> doNotKeep{blobId};
+                auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(123, 1,
+                    nextCollectCounter, 0, false, 0, 0, false, nullptr, &doNotKeep,
+                    targetVDisk, TInstant::Max());
+                runtime.Send(new IEventHandle(recipient, edge, collect.release()), NodeIndex);
+                auto result = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(result,
+                    "no collect result; blobId# " << blobId
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                const auto status = result->Get()->Record.GetStatus();
+                if (status == NKikimrProto::NOTREADY || status == NKikimrProto::TRYLATER) {
+                    DispatchFor(runtime, TDuration::MilliSeconds(10));
+                    continue;
+                }
+                UNIT_ASSERT_C(status == NKikimrProto::OK,
+                    "collect status# " << NKikimrProto::EReplyStatus_Name(status)
+                    << " blobId# " << blobId
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                ++nextCollectCounter;
+                return blobId;
+            }
+            UNIT_FAIL("collect request did not become ready; blobId# " << blobId);
+            return blobId;
+        };
+
+        auto requestFootprint = [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+                new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            auto result = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge,
+                TDuration::Seconds(5));
+            UNIT_ASSERT(result);
+            return GetSyncLogFootprint(result->Get()->SnapshotPtr);
+        };
+
+        constexpr ui32 iterations = 12;
+        TVector<ui64> expectedLsns;
+        TVector<TLogoBlobID> expectedPhantomFlags;
+        expectedLsns.reserve(iterations);
+        expectedPhantomFlags.reserve(iterations + 1);
+        for (ui32 iteration = 0; iteration < iterations; ++iteration) {
+            const ui64 previousGcLsn = lastObservedGcLsn;
+            expectedPhantomFlags.push_back(collectDoNotKeep(putQueue));
+            UNIT_ASSERT_C(lastObservedGcLsn > previousGcLsn,
+                "DoNotKeep write did not advance the recovery log"
+                << " iteration# " << iteration
+                << " previousGcLsn# " << previousGcLsn
+                << " lastObservedGcLsn# " << lastObservedGcLsn);
+            expectedLsns.push_back(lastObservedGcLsn);
+
+            UNIT_ASSERT_C(syncLogId && syncLogKeeperId && owner && ownerRound,
+                "failed to discover SyncLog actors or target PDisk owner");
+            const ui32 commitsBeforeCut = entryPointCommits;
+            const ui32 commitDoneBeforeCut = syncLogCommitDoneEvents;
+            const ui64 freeUpToLsn = lastObservedGcLsn + 1;
+            runtime.Send(new IEventHandle(syncLogId, edge,
+                new NPDisk::TEvCutLog(owner, ownerRound, freeUpToLsn, 0, 0, 0, 0)), NodeIndex);
+            UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+                return lastReportedSyncLogFirstLsnToKeep >= freeUpToLsn;
+            }, 1000, TDuration::MilliSeconds(10)),
+                "mutable-tail CutLog commit did not settle"
+                << " iteration# " << iteration
+                << " freeUpToLsn# " << freeUpToLsn
+                << " reportedFirstLsnToKeep# " << lastReportedSyncLogFirstLsnToKeep
+                << " lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(entryPointCommits > commitsBeforeCut &&
+                    syncLogCommitDoneEvents > commitDoneBeforeCut,
+                "mutable-tail CutLog did not complete a new entry-point commit"
+                << " iteration# " << iteration
+                << " entryPointCommits# " << entryPointCommits
+                << " commitDone# " << syncLogCommitDoneEvents);
+        }
+
+        const TSyncLogFootprint beforeRestart = requestFootprint();
+        UNIT_ASSERT_VALUES_EQUAL_C(beforeRestart.IndexedPages, 1u,
+            "every CutLog rewrite must drop the superseded mutable page version from the index"
+            << " footprint# " << beforeRestart.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(beforeRestart.DiskUsedPages, iterations,
+            "mutable-page rewrites must advance the physical append position and leave holes"
+            << " footprint# " << beforeRestart.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(beforeRestart.DiskIndexRecs, 1u,
+            "only the latest mutable page version must stay indexed"
+            << " footprint# " << beforeRestart.ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(beforeRestart.DiskLastLsn, expectedLsns.back(),
+            "last mutable page version is missing from the committed entry point"
+            << " footprint# " << beforeRestart.ToString());
+
+        runtime.Send(new IEventHandle(storage.VDiskActors[0], edge,
+            new TEvents::TEvPoisonPill), NodeIndex);
+        DispatchFor(runtime, TDuration::MilliSeconds(100));
+        syncLogId = {};
+        syncLogKeeperId = {};
+        auto restartedConfig = MakeTestVDiskConfig(storage.AllVDiskKinds, storage.Info,
+            storage.PDiskServiceId, 0, 200, testConfig);
+        const TActorId restartedVDisk = runtime.Register(CreateVDisk(restartedConfig, storage.Info,
+            storage.Counters->GetSubgroup("subsystem", "vdisk")->GetSubgroup("slot", "0")),
+            NodeIndex, 0, TMailboxType::Revolving);
+        runtime.RegisterService(targetVDiskId, restartedVDisk, NodeIndex);
+        storage.VDiskActors[0] = restartedVDisk;
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, targetVDiskId, targetVDisk, edge),
+            "target VDisk did not recover the SyncLog entry point after restart");
+
+        // RunSyncer=false is intentional for the test topology, so it does not deliver
+        // TEvSyncLogDbBirthLsn. A post-restart write discovers the new SyncLog actor and also
+        // becomes part of the expected VSync stream; initialize DbBirthLsn explicitly afterwards.
+        const ui64 preRestartLastLsn = expectedLsns.back();
+        expectedPhantomFlags.push_back(collectDoNotKeep(targetVDiskId));
+        UNIT_ASSERT_C(lastObservedGcLsn > preRestartLastLsn,
+            "post-restart probe write did not advance the recovery log");
+        expectedLsns.push_back(lastObservedGcLsn);
+        UNIT_ASSERT_C(syncLogId && syncLogKeeperId,
+            "failed to discover restarted SyncLog actors");
+        runtime.Send(new IEventHandle(syncLogId, edge,
+            new NSyncLog::TEvSyncLogDbBirthLsn(0)), NodeIndex);
+        DispatchFor(runtime, TDuration::MilliSeconds(10));
+
+        TVector<ui64> actualLsns;
+        TSyncState syncState;
+        ui32 diskReads = 0;
+        bool finished = false;
+        for (ui32 request = 0; request < 100 && !finished; ++request) {
+            runtime.Send(new IEventHandle(targetVDiskId, edge,
+                new TEvBlobStorage::TEvVSync(syncState, sourceVDisk, targetVDisk)), NodeIndex);
+            auto result = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVSyncResult>(edge,
+                TDuration::Seconds(120));
+            UNIT_ASSERT_C(result, "no VSync result after VDisk restart");
+            const auto& record = result->Get()->Record;
+            if (record.GetStatus() == NKikimrProto::RESTART) {
+                syncState = SyncStateFromSyncState(record.GetNewSyncState());
+                continue;
+            }
+
+            UNIT_ASSERT_C(record.GetStatus() == NKikimrProto::OK,
+                "unexpected VSync status after restart# "
+                << NKikimrProto::EReplyStatus_Name(record.GetStatus())
+                << " syncState# " << syncState.ToString());
+            if (record.HasData() && !record.GetData().empty()) {
+                NSyncLog::TFragmentReader reader(record.GetData());
+                TString error;
+                UNIT_ASSERT_C(reader.Check(error), "invalid VSync fragment# " << error);
+                for (const NSyncLog::TRecordHdr* hdr : reader.ListRecords()) {
+                    actualLsns.push_back(hdr->Lsn);
+                }
+            }
+            if (record.HasStat()) {
+                diskReads += record.GetStat().GetDiskReads();
+            }
+            syncState = SyncStateFromSyncState(record.GetNewSyncState());
+            finished = record.GetFinished();
+        }
+
+        UNIT_ASSERT_C(finished, "VSync did not finish after VDisk restart");
+        UNIT_ASSERT_C(diskReads > 0,
+            "VSync did not read the recovered mutable-tail versions from SyncLog disk chunks");
+        UNIT_ASSERT_VALUES_EQUAL(actualLsns, expectedLsns);
+        for (ui32 i = 1; i < actualLsns.size(); ++i) {
+            UNIT_ASSERT_C(actualLsns[i - 1] < actualLsns[i],
+                "VSync returned duplicate or unordered LSNs"
+                << " previous# " << actualLsns[i - 1]
+                << " current# " << actualLsns[i]);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(syncState.SyncedLsn, expectedLsns.back());
+
+        // Force the volatile Phantom Flag Storage to build from the SyncLog snapshot. BaldLog
+        // removes the disk chunk from the live index, while the builder retains and reads the old
+        // snapshot with the latest version of the mutable page.
+        runtime.Send(new IEventHandle(targetVDiskId, edge,
+            new TEvBlobStorage::TEvVBaldSyncLog(targetVDisk, true)), NodeIndex);
+        auto baldResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVBaldSyncLogResult>(edge,
+            TDuration::Seconds(120));
+        UNIT_ASSERT_C(baldResult, "no BaldSyncLog result");
+        UNIT_ASSERT_VALUES_EQUAL(baldResult->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return phantomFlagBuilderFinished;
+        }, 1000, TDuration::MilliSeconds(10)),
+            "Phantom Flag Storage builder did not finish reading the SyncLog snapshot");
+
+        runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+            new NSyncLog::TEvPhantomFlagStorageGetSnapshot()), NodeIndex);
+        auto phantomSnapshot = runtime.GrabEdgeEvent<NSyncLog::TEvPhantomFlagStorageGetSnapshotResult>(edge,
+            TDuration::Seconds(120));
+        UNIT_ASSERT_C(phantomSnapshot, "no Phantom Flag Storage snapshot result");
+        UNIT_ASSERT_C(phantomSnapshot->Get()->Eof,
+            "volatile Phantom Flag Storage snapshot must fit in one response");
+
+        TVector<TLogoBlobID> actualPhantomFlags;
+        for (const auto& flag : phantomSnapshot->Get()->Flags) {
+            actualPhantomFlags.push_back(flag.LogoBlobID());
+        }
+        Sort(expectedPhantomFlags);
+        Sort(actualPhantomFlags);
+        UNIT_ASSERT_VALUES_EQUAL(actualPhantomFlags, expectedPhantomFlags);
+    }
+
+    Y_UNIT_TEST(SyncLogMemOverflowSwapsDoNotFragmentDiskIndex) {
+        /*
+         * Reproduces a production incident: a group loses one VDisk (node is down), so SyncLog gets
+         * no sync confirmations and is never trimmed; with a small SyncLogMaxMemAmount and a large
+         * SyncLogMaxDiskAmount the keeper hits memory overflow on nearly every put batch and swaps
+         * only the overflow excess -- typically a single page -- to the disk sync log. Every such
+         * tiny append adds a separate TDiskIndexRecord (TOneChunkIndex never merges neighboring
+         * appends; IndexBulk only splits large ones), and the whole index is re-serialized into the
+         * SyncLog entry point and written into the PDisk common log on every commit. In production
+         * this produced entry points of several megabytes (IndexRecsNum ~ number of disk pages)
+         * rewritten several times per second per VDisk, which exhausted PDisk log chunks.
+         *
+         * The test drives many small writes through a real VDisk while no group neighbor ever
+         * confirms sync (RunSyncer is false for every group member, which models the dead node),
+         * lets memory-overflow-driven commits move data to disk, and then requires the disk index
+         * to stay dense: on average an append must cover at least minAvgPagesPerAppend pages.
+         * Before BuildSwapSnap started swapping down to a low watermark instead of swapping only
+         * the excess, this produced one index record per page, matching the production pattern.
+         */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
+        testConfig.SyncLogMaxMemAmount = 256_KB;
+        testConfig.SyncLogMaxDiskAmount = 8 * 512_KB;
+        testConfig.MaxLogoBlobDataSize = 192_KB;
+        testConfig.MinHugeBlobInBytes = 64_KB;
+        testConfig.MilestoneHugeBlobInBytes = 128_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_index_fragmentation.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        ui64 maxObservedDataLsn = 0;
+        ui32 entryPointCommits = 0;
+        ui64 entryPointBytesMax = 0;
+        ui32 syncLogCommitDoneEvents = 0;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const ui32 signature = msg.Signature.GetUnmasked();
+            const bool syncLogEntryPointCommit = signature == TLogSignature::SignatureSyncLogIdx &&
+                msg.CommitRecord.IsStartingPoint;
+
+            if (!syncLogEntryPointCommit) {
+                if (!gotOwner) {
+                    owner = msg.Owner;
+                    gotOwner = true;
+                } else if (msg.Owner != owner) {
+                    return;
+                }
+                maxObservedDataLsn = Max(maxObservedDataLsn, msg.Lsn);
+                return;
+            }
+
+            if (!gotOwner || msg.Owner != owner) {
+                return;
+            }
+            ++entryPointCommits;
+            entryPointBytesMax = Max<ui64>(entryPointBytesMax, msg.Data.size());
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    ++syncLogCommitDoneEvents;
+                    break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        const TString data = MakeData(1);
+
+        auto writeTargetRecords = [&](ui64 tabletId, ui32 records) {
+            const ui32 batchSize = 64;
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
+                const ui32 batch = Min(batchSize, records - firstRecord);
+                auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                    NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+
+                for (ui32 i = 0; i < batch; ++i) {
+                    const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                }
+
+                runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+                auto putResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(putResult, "no put result; firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                UNIT_ASSERT_C(putResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                    "put status# " << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetStatus())
+                    << " firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                DispatchFor(runtime, TDuration::MilliSeconds(1));
+            }
+        };
+
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](ui64 tabletId, ui32 records) {
+            TVector<TLogoBlobID> doNotKeep;
+            doNotKeep.reserve(records);
+            for (ui32 i = 0; i < records; ++i) {
+                doNotKeep.emplace_back(tabletId, 1, nextStep++, 0, 1, nextCookie++);
+            }
+
+            auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(tabletId, 1,
+                nextCollectCounter++, 0, false, 0, 0, false, nullptr, &doNotKeep, vdiskId,
+                TInstant::Max());
+            runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+            auto collectResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                TDuration::Seconds(120));
+            UNIT_ASSERT_C(collectResult, "no collect result; lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(collectResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                "collect status# " << NKikimrProto::EReplyStatus_Name(collectResult->Get()->Record.GetStatus())
+                << " lastPDiskError# " << lastPDiskErrorReason);
+            DispatchFor(runtime, TDuration::MilliSeconds(1));
+        };
+
+        auto requestFootprint = [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+                new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(res);
+            return GetSyncLogFootprint(res->Get()->SnapshotPtr);
+        };
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "target VDisk did not become ready");
+
+        writeTargetRecords(42, 16);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return syncLogId && syncLogKeeperId && gotOwner && maxObservedDataLsn;
+        }, 200, TDuration::MilliSeconds(10)),
+            "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
+
+        // sanity check of the geometry: the invariant below is only meaningful when memory
+        // holds substantially more pages than the required average append size
+        TSyncLogFootprint footprint = requestFootprint();
+        UNIT_ASSERT(footprint.AppendBlockSize);
+        const ui32 maxMemPages = Max<ui32>(2, testConfig.SyncLogMaxMemAmount / footprint.AppendBlockSize);
+        UNIT_ASSERT_C(maxMemPages >= 16,
+            "test geometry is degenerate, SyncLog memory holds too few pages: " << maxMemPages);
+
+        // Never send NPDisk::TEvCutLog here: all commits must be driven by memory overflow,
+        // exactly like on a loaded VDisk whose group neighbor is down.
+        const ui32 targetIndexedPages = 128;
+        const ui32 recordsPerBatch = 128;
+        for (ui32 i = 0; i < 1500 && footprint.IndexedPages < targetIndexedPages; ++i) {
+            collectDoNotKeep(43, recordsPerBatch);
+            if ((i + 1) % 8 == 0) {
+                footprint = requestFootprint();
+            }
+        }
+
+        // let the last commit settle and take the final snapshot
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return entryPointCommits && syncLogCommitDoneEvents >= entryPointCommits;
+        }, 300, TDuration::MilliSeconds(10)),
+            "SyncLog commit did not settle; entryPointCommits# " << entryPointCommits
+            << " commitDone# " << syncLogCommitDoneEvents
+            << " lastPDiskError# " << lastPDiskErrorReason);
+        footprint = requestFootprint();
+
+        UNIT_ASSERT_C(footprint.IndexedPages >= targetIndexedPages,
+            "test did not push enough SyncLog data to disk"
+            << " footprint# " << footprint.ToString()
+            << " lastPDiskError# " << lastPDiskErrorReason);
+        UNIT_ASSERT(entryPointCommits > 0 && footprint.DiskIndexRecs > 0);
+
+        // The regression itself: overflow-driven swaps must be batched, otherwise the disk index
+        // degenerates into one record per page and the entry point (the full index re-serialized
+        // into the PDisk common log on every commit) grows unbounded together with commit rate.
+        const ui32 minAvgPagesPerAppend = 4;
+        UNIT_ASSERT_C(footprint.IndexedPages >= footprint.DiskIndexRecs * minAvgPagesPerAppend,
+            "SyncLog disk index is fragmented by tiny memory-overflow swaps"
+            << " avgPagesPerAppend# " << (footprint.IndexedPages / footprint.DiskIndexRecs)
+            << " footprint# " << footprint.ToString()
+            << " entryPointCommits# " << entryPointCommits
+            << " entryPointBytesMax# " << entryPointBytesMax);
+    }
+
+>>>>>>> 9cf052b5ca7 (Deliver SyncLog committer reports after earlier puts (#55471))
     Y_UNIT_TEST(SyncLogDuplicateFreeChunkRealPDiskWithoutRestart) {
         /*
          * Same live race as SyncLogDiskOverflowOldSnapshotCreatesDuplicateFreeChunkWithoutRestart

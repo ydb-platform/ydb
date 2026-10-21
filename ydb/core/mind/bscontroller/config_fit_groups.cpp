@@ -48,7 +48,7 @@ namespace NKikimr {
                 , DDisk(storagePool.DDisk)
                 , ExpectedSlotSize(expectedSlotSize)
                 , PDiskSpaceMarginPromille(pdiskSpaceMarginPromille)
-                , Geometry(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool.GetGroupGeometry())
+                , Geometry(TGroupGeometryInfo::FromStoragePool(TBlobStorageGroupType(storagePool.ErasureSpecies), storagePool))
                 , StoragePoolId(storagePoolId)
                 , StoragePool(storagePool)
                 , Status(status)
@@ -854,7 +854,7 @@ namespace NKikimr {
                 groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
-                        return TGroupGeometryInfo(groupInfo->Topology->GType, it->second.GetGroupGeometry());
+                        return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType, it->second);
                     }
                     Y_DEBUG_ABORT(); // this can't normally happen
                     return TGroupGeometryInfo();

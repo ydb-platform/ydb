@@ -21,6 +21,7 @@ namespace NKikimr::NBsController {
         ui32 RealmLevelEnd = 0;
         ui32 DomainLevelBegin = 0;
         ui32 DomainLevelEnd = 0;
+        bool IgnoreBridgePile = false;
 
     public:
         explicit TGroupGeometryInfo() = default;
@@ -77,6 +78,13 @@ namespace NKikimr::NBsController {
             }
         }
 
+        static TGroupGeometryInfo FromStoragePool(TBlobStorageGroupType type, const TStoragePoolInfo& pool) {
+            TGroupGeometryInfo geometry(type, pool.GetGroupGeometry());
+            geometry.IgnoreBridgePile = pool.BridgeModeOverride && !*pool.BridgeModeOverride;
+            return geometry;
+        }
+
+        bool GetIgnoreBridgePile() const { return IgnoreBridgePile; }
         ui32 GetNumFailRealms() const { return NumFailRealms; }
         ui32 GetNumFailDomainsPerFailRealm() const { return NumFailDomainsPerFailRealm; }
         ui32 GetNumVDisksPerFailDomain() const { return NumVDisksPerFailDomain; }

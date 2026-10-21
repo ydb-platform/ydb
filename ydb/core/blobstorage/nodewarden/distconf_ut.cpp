@@ -10862,6 +10862,28 @@ Y_UNIT_TEST_SUITE(TDistconfStaticGroupSelfHealTest) {
             NKikimr::NStorage::TDistributedConfigKeeper::TExConfigError);
     }
 
+    Y_UNIT_TEST(PDiskLocationFilterRestrictsStaticPlacement) {
+        TSetup s = MakeSetup();
+        s.SetNodeRack(3, "selected-rack");
+        auto* settings = s.Config.MutableSelfManagementConfig();
+        settings->MutableGeometry()->CopyFrom(Geometry(1));
+        auto* filter = settings->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::ROT);
+        filter->AddProperty()->MutableLocation()->SetRack("selected-rack");
+        NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+        keeper.AllocateStaticGroup({
+            .Config = &s.Config,
+            .GroupId = TGroupId::FromValue(0),
+            .GroupGeneration = 2,
+            .GroupType = TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+            .ReplacedDisks = {{TVDiskIdShort(0, 0, 0), NBsController::TPDiskId()}},
+            .BaseConfig = &s.BaseConfig,
+            .IgnoreVSlotQuotaCheck = true,
+            .AllowUnusableDisks = true,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(s.GetGroupVDiskPDisk().NodeId, 3u);
+    }
+
     Y_UNIT_TEST(UsesValidExplicitTarget) {
         TSetup s = MakeSetup();
         NKikimr::NStorage::TDistributedConfigKeeper::TStaticGroupReassignments reassignments;

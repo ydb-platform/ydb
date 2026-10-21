@@ -6,6 +6,9 @@ PEERDIR(
     library/cpp/threading/future
     ydb/core/base
     ydb/core/blobstorage/base
+    ydb/core/blobstorage/groupinfo
+    ydb/core/sys_view/common
+    ydb/core/tablet
 )
 
 SRCS(
@@ -16,6 +19,8 @@ SRCS(
     mon_check_integrity.h
     mon_get_blob_page.cpp
     mon_get_blob_page.h
+    mon_restore_part.cpp
+    mon_restore_part.h
     mon_vdisk_stream.cpp
     mon_vdisk_stream.h
 )

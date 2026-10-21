@@ -112,6 +112,7 @@
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
 #include <ydb/core/blobstorage/other/mon_blob_range_page.h>
 #include <ydb/core/blobstorage/other/mon_check_integrity.h>
+#include <ydb/core/blobstorage/other/mon_restore_part.h>
 #include <ydb/core/blobstorage/other/mon_vdisk_stream.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
@@ -1894,6 +1895,8 @@ void TKikimrRunner::InitializeActorSystem(
             TMailboxType::HTSwap, AppData->SystemPoolId));
         setup->LocalServices.emplace_back(MakeMonCheckIntegrityId(), TActorSetupCmd(CreateMonCheckIntegrityActor(),
             TMailboxType::HTSwap, AppData->SystemPoolId));
+        setup->LocalServices.emplace_back(MakeMonRestorePartId(), TActorSetupCmd(CreateMonRestorePartActor(),
+            TMailboxType::HTSwap, AppData->SystemPoolId));
     }
 
     ApplyLogSettings(runConfig);
@@ -1972,6 +1975,14 @@ void TKikimrRunner::InitializeActorSystem(
                 false,
                 ActorSystem.Get(),
                 MakeMonCheckIntegrityId());
+
+        Monitoring->RegisterActorPage(
+                nullptr,
+                "restore_part",
+                TString(),
+                false,
+                ActorSystem.Get(),
+                MakeMonRestorePartId());
 
         Monitoring->RegisterActorPage(
                 nullptr,

@@ -99,6 +99,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     static const TSet<TString> ModeSettings = {
         "consistency_level",
         "commit_interval",
+        "initial_scan",
     };
 
     static const TSet<TString> StateSettings = {
@@ -125,6 +126,11 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
     if (keyName == "commit_interval") {
         if (value->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
+            return false;
+        }
+    } else if (keyName == "initial_scan") {
+        if (!value->IsLiteral() || value->GetLiteralType() != "Bool") {
+            ctx.Context().Error() << "Literal of Bool type is expected for " << key.Name;
             return false;
         }
     } else {

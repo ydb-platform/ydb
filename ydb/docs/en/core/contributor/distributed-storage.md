@@ -86,55 +86,6 @@ The composition of each group is not constant and may change while the system is
 
 As a rule, groups of two adjacent generations differ by no more than one slot.
 
-### Mixed storage in a bridge cluster {#non-uniform-bridge-storage}
-
-A [bridge cluster](../concepts/bridge.md) can contain both bridged blob-storage pools and ordinary `mirror-3-dc` pools. A bridged group has a physical component in each participating pile; an ordinary group spans three real datacenters and uses the ordinary DS proxy and quorum rules. This makes it possible to choose a different storage overhead for new databases while retaining shared bridge management.
-
-The root domain and its static system storage remain bridged. Tablet placement and promotion, state storage, and interconnect isolation are still shared by both pool types. For example, disconnecting a pile also removes access to ordinary VDisks in that pile. Bridge recovery on one surviving pile does not restore the write quorum of an ordinary `mirror-3-dc` group.
-
-To enable this combination, set `enable_non_uniform_storage: true` in the existing `bridge_config`. The following is a configuration fragment; retain the existing pile list:
-
-```yaml
-bridge_config:
-  enable_non_uniform_storage: true
-```
-
-For an existing cluster, activation requires a bridged configuration with BSC conversion complete. It can also be enabled when bootstrapping a new native bridge cluster. Activation is durable and irreversible: later configuration replacements must retain the flag. It raises the required bridge feature level to 3, and configuration replacement checks connected-node capabilities before accepting that increase. Nodes that do not support the persisted requirement cannot reconnect to the cluster.
-
-The optional `BridgeMode` field of `TDefineStoragePool`, written as `bridge_mode` in YAML, selects a pool's policy:
-
-| Value | New pool | Existing pool update |
-|---|---|---|
-| Absent | Inherit the cluster default | Preserve the stored policy |
-| `true` | Create bridged groups | Accepted only if the effective mode is already bridged |
-| `false` | Create ordinary `mirror-3-dc` groups | Accepted only if the effective mode is already ordinary |
-
-BSC persists the explicit override separately from the effective mode. Reading and redefining a pool preserves whether the override was absent, `true`, or `false`, including across BSC restarts. Explicit overrides require activation; an ordinary override with another erasure scheme is rejected. Changing a pool's effective mode or moving groups between pools with different effective modes is rejected.
-
-Use existing storage-pool kinds to expose the choice during database creation. These illustrative entries belong to a domain's `storage_pool_types` list; retain `box_id`, `vdisk_kind`, PDisk filters, and the required geometry from the complete templates:
-
-```yaml
-storage_pool_types:
-  - kind: ssd-bridged
-    pool_config:
-      kind: ssd-bridged
-      erasure_species: block-4-2
-      bridge_mode: true
-  - kind: ssd-ordinary
-    pool_config:
-      kind: ssd-ordinary
-      erasure_species: mirror-3-dc
-      bridge_mode: false
-```
-
-Database creation selects the kind using the existing storage-unit `unit_kind` field. Console passes the full pool template to BSC and retains it when allocating more groups. There is no separate database-mode API: actual tablet channel bindings determine which pools a database uses, and serverless databases use their shared resource database's pools. With a single selected pool, default tablet profile 0 can fall back to that pool; explicit profiles and exact-kind paths, including topic profiles, need matching kind configuration.
-
-Ordinary placement crosses pile boundaries while preserving the nodes' pile labels and normal DC/rack geometry. For an explicit ordinary override, allocation, layout checking, and self-heal ignore the logical `BridgePileName` prefix when interpreting location geometry; physical `DataCenter` and rack levels still determine failure domains. Allocation, repair, reassignment, and allocation reserve checks use the cross-pile scope. Disconnected, inactive, and suspended piles are excluded as targets for new placements. Ordinary groups retain ordinary recovery and garbage-collection behavior; they do not acquire bridge components or bridge synchronization state.
-
-Aggregate available-group forecasts still use the existing default geometry and erasure/filter grouping, which does not distinguish a pool's bridge policy. The placement changes do not provide mode-aware capacity forecasts, and theoretical payload savings should not be treated as measured workload savings.
-
-This interface is intended for new databases and pools. Growth and maintenance keep their selected policy; migration of existing databases, pools, or data and cross-mode channel rebinding are outside this implementation. Temporary pile disconnection does not evacuate ordinary data. The existing guard prevents destructive removal of a pile while ordinary VDisks remain there.
-
 ### Subgroups
 
 A special concept of a *subgroup* is introduced for each blob. It is an ordered subset of group disks with a strictly constant number of elements that will store the blob's data, depending on the encoding type (the number of elements in a group must be the same or greater). For single-datacenter groups with conventional encoding, this subset is selected as the first N elements of a cyclic disk permutation in the group, where the permutation depends on the BlobId hash.

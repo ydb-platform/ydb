@@ -375,6 +375,14 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
             module->SetManifestPath(manifest);
         }
         const auto factory = CreateServiceGatewayFactory(config, TestServiceConnections());
+        const auto* signature = factory->FindServiceFunction("WASM_PROFILE.Profile");
+        UNIT_ASSERT(signature);
+        UNIT_ASSERT_VALUES_EQUAL(signature->Input.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(signature->Input[0].Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(signature->Input[0].Type, "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(signature->Output.size(), 3);
+        UNIT_ASSERT(signature->Batch);
+        UNIT_ASSERT(!factory->FindServiceFunction("WASM_PROFILE.Unknown"));
         auto gateway = factory->CreateDqFunctionGateway("Echo", {}, "service");
         const auto description = gateway->ResolveFunction({}, "Length").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(description.Type, "Echo");
@@ -829,4 +837,4 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
         });
         UNIT_ASSERT_VALUES_EQUAL(env.Output->Rows.size(), 1);
     }
-}
+}   // Y_UNIT_TEST_SUITE(TFqWasmQueryTest)

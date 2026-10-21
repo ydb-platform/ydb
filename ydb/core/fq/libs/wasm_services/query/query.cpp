@@ -655,6 +655,41 @@ NYql::TDqFunctionGatewayFactory::TPtr CreateServiceGatewayFactoryWithResolver(
         factory->Register(manifest->Name, [manifest, resolver, bytes, bufferedBytes](const auto&, const TString& connection) {
             return std::make_shared<TServiceGateway>(manifest, connection, resolver(connection), bytes, bufferedBytes);
         });
+        for (const auto& [name, method] : manifest->Methods) {
+            NYql::NDqFunction::TServiceFunctionSignature signature;
+            const auto fields = [](const auto& source, auto& target) {
+                for (const auto& field : source) {
+                    const char* type = nullptr;
+                    switch (field.Type) {
+                        case EValueType::Uint64:
+                            type = "Uint64";
+                            break;
+                        case EValueType::Uint32:
+                            type = "Uint32";
+                            break;
+                        case EValueType::Int64:
+                            type = "Int64";
+                            break;
+                        case EValueType::Bool:
+                            type = "Bool";
+                            break;
+                        case EValueType::String:
+                            type = "String";
+                            break;
+                        case EValueType::Utf8:
+                            type = "Utf8";
+                            break;
+                    }
+                    Y_ENSURE(type, "Unsupported service expression field type");
+                    target.push_back({ field.Name, type });
+                }
+            };
+            fields(method.Input, signature.Input);
+            fields(method.Output, signature.Output);
+            signature.Batch = method.Batch;
+            signature.MaxBatchRows = method.MaxBatchRows;
+            factory->RegisterServiceFunction(manifest->Name, name, std::move(signature));
+        }
     }
     return factory;
 }

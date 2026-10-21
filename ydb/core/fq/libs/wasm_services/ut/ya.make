@@ -4,9 +4,10 @@ YQL_LAST_ABI_VERSION()
 
 SIZE(MEDIUM)
 
-SRCS(auth_query_ut.cpp auth_ut.cpp tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
+SRCS(service_expression_ut.cpp auth_query_ut.cpp auth_ut.cpp tracing_ut.cpp metrics_ut.cpp transport_ut.cpp manifest_ut.cpp modules_ut.cpp query_ut.cpp tvm_ut.cpp)
 
 PEERDIR(
+    ydb/library/yql/providers/function/provider
     library/cpp/http/server
     library/cpp/resource
     library/cpp/testing/common

@@ -1390,6 +1390,18 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
     }
 
     void SendBSCRequests() {
+        // the change judged while the pile was connected is not to be made (or retried) once the pile is cut off; BSC
+        // also skips such changes for it, as this node may learn of the cut off later than BSC does
+        EraseNodesIf(SentinelState->ChangeRequests, [&](const auto& item) {
+            if (IsPileCutOff(item.first.NodeId)) {
+                YDB_LOG_NOTICE("PDisk status change dropped, its pile is cut off from the cluster",
+                    {"name", Name()},
+                    {"PDiskId", item.first});
+                return true;
+            }
+            return false;
+        });
+
         if (SentinelState->ChangeRequests.empty()) {
             return;
         }
@@ -1408,6 +1420,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
             command.SetStatus(info->GetStatus());
+            command.SetSkipIfPileCutOff(true);
             if (info->GetMaintenanceStatus() != info->ActualMaintenanceStatus) {
                 command.SetMaintenanceStatus(info->GetMaintenanceStatus());
             }

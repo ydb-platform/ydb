@@ -478,6 +478,52 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
             UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::ACTIVE, pdisk.DebugString());
         });
 
+        // status change as CMS sentinel makes it, judging the drive by what it sees of it
+        auto updateObservedStatus = [&](ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            auto *cmd = request.AddCommand()->MutableUpdateDriveStatus();
+            cmd->MutableHostKey()->SetNodeId(nodeId);
+            cmd->SetPDiskId(pdiskId);
+            cmd->SetStatus(status);
+            cmd->SetSkipIfPileCutOff(true);
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        };
+
+        // the stale change comes after the removal (e.g. the sentinel retries the one judged before the pile went
+        // away): the drives of the pile cut off from the cluster keep their status
+        forEachPileDrive([&](const auto& pdisk) {
+            updateObservedStatus(pdisk.GetNodeId(), pdisk.GetPDiskId(), NKikimrBlobStorage::EDriveStatus::INACTIVE);
+        });
+        forEachPileDrive([&](const auto& pdisk) {
+            UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::ACTIVE, pdisk.DebugString());
+        });
+
+        // while the drives of connected piles get it
+        std::optional<std::tuple<ui32, ui32>> connectedDrive;
+        const auto baseConfig = env.FetchBaseConfig();
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            if (pdisk.GetNodeId() == 1) {
+                connectedDrive.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+        }
+        UNIT_ASSERT(connectedDrive);
+        const auto& [connectedNodeId, connectedPDiskId] = *connectedDrive;
+        updateObservedStatus(connectedNodeId, connectedPDiskId, NKikimrBlobStorage::EDriveStatus::INACTIVE);
+        bool found = false;
+        const auto updatedBaseConfig = env.FetchBaseConfig();
+        for (const auto& pdisk : updatedBaseConfig.GetPDisk()) {
+            if (pdisk.GetNodeId() == connectedNodeId && pdisk.GetPDiskId() == connectedPDiskId) {
+                UNIT_ASSERT_EQUAL_C(pdisk.GetDriveStatus(), NKikimrBlobStorage::EDriveStatus::INACTIVE, pdisk.DebugString());
+                found = true;
+            }
+        }
+        UNIT_ASSERT(found);
+        env.UpdateDriveStatus(connectedNodeId, connectedPDiskId, NKikimrBlobStorage::EDriveStatus::ACTIVE, {}, true);
+
         AddPileAndWait(env, "pile_3");
         UNIT_ASSERT_VALUES_EQUAL(CheckPileParts(env, 2, FirstThirdPileNodeId, LastThirdPileNodeId), 1);
         RejoinPile(env, 2);

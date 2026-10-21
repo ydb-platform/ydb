@@ -3795,8 +3795,19 @@ selector_config: []
         auto& runtime = fixture.Runtime;
         const TActorId edge = runtime.AllocateEdgeActor(1);
         std::optional<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> response;
+        std::optional<NKikimrBlobStorage::TStorageConfig> disabledCommittedConfig;
         ui32 disableRequests = 0;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType
+                    && ev->GetRecipientRewrite() == MakeBlobStorageNodeWardenID(1)) {
+                const auto& msg = *ev->Get<TEvNodeWardenStorageConfig>();
+                if (!msg.SelfManagementEnabled) {
+                    UNIT_ASSERT_VALUES_EQUAL(msg.Config->GetFingerprint(), fixture.Config.GetFingerprint());
+                    if (msg.CommittedConfig) {
+                        disabledCommittedConfig = *msg.CommittedConfig;
+                    }
+                }
+            }
             if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
                     && ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
                 const auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfRequest>()->Record;
@@ -3828,12 +3839,15 @@ selector_config: []
         } else {
             UNIT_ASSERT_C(response->GetStatus() == TResult::OK, response->DebugString());
             UNIT_ASSERT_VALUES_EQUAL(disableRequests, 1);
-            UNIT_ASSERT(SimUntil(runtime, [&] {
-                const auto it = fixture.State.NodeWardenConfigs.find(1);
-                return it != fixture.State.NodeWardenConfigs.end()
-                    && it->second->GetGeneration() == fixture.Config.GetGeneration() + 1
-                    && !it->second->GetSelfManagementConfig().GetEnabled();
-            }));
+            UNIT_ASSERT_C(SimUntil(runtime, [&] {
+                return disabledCommittedConfig
+                    && disabledCommittedConfig->GetGeneration() == fixture.Config.GetGeneration() + 1
+                    && !disabledCommittedConfig->GetSelfManagementConfig().GetEnabled();
+            }), (disabledCommittedConfig ? disabledCommittedConfig->DebugString() : "missing disabled notification"));
+            const auto applied = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetGeneration(), fixture.Config.GetGeneration() + 1);
+            UNIT_ASSERT(!applied.GetSelfManagementConfig().GetEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(applied.GetFingerprint(), disabledCommittedConfig->GetFingerprint());
         }
     }
 

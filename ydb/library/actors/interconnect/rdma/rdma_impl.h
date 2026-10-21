@@ -396,8 +396,6 @@ private:
     absl::flat_hash_map<ui32, NActors::TActorId> QpActors;
 };
 
-
-
 class TCqCommon : public ICq {
 public:
     TCqCommon(NActors::TActorSystem* as)

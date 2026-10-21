@@ -183,7 +183,6 @@ public:
             return;
         }
         DrainLock.Acquire();
-        FillRequested.store(false, std::memory_order_release);
         TQueuePair::TPtr qp;
         while(Cache.Dequeue(qp)) {
             const size_t cachedQps = CachedQps.fetch_sub(1, std::memory_order_relaxed);
@@ -305,10 +304,10 @@ private:
         auto cache = Cache.lock();
         int terminalError = 0;
         if (cache) {
-            THPTimer timer;
+            const ui64 fillStart = GetCycleCountFast();
             LastFillStatus = cache->TryAcquireAndFeed([&] {
                 bool ready = false;
-                for (ui16 i = 0; i < CacheSize; ++i) {
+                for (size_t i = 0; i < CacheSize; ++i) {
                     auto qp = std::unique_ptr<TQueuePair>(new TQueuePair());
                     const int error = qp->Init(const_cast<TRdmaCtx*>(Ctx), cq.get(), MaxWr);
                     if (error) {
@@ -334,7 +333,8 @@ private:
                 return TQpCache::EFillStatus::Ready;
             });
             if (LastFillStatus != TQpCache::EFillStatus::Error) {
-                Counters->FillTimeUs->Collect(timer.Passed() * 1'000'000);
+                Counters->FillTimeUs->Collect(
+                    NHPTimer::GetSeconds(GetCycleCountFast() - fillStart) * 1'000'000.0);
             }
         } else {
             LastFillStatus = TQpCache::EFillStatus::Error;

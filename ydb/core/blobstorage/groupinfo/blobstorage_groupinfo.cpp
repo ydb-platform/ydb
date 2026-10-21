@@ -927,18 +927,18 @@ bool TBlobStorageGroupInfo::TMirror3dcState::CanTransitionTo(const TMirror3dcSta
         case T::DC_FAILURE_PENDING:
             return next.Mode == T::DC_FAILURE;
         case T::DC_FAILURE:
-            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_SYNC_PENDING;
+            return next.Mode == T::DC_FAILURE_INV_1 || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_FAILURE_INV_1:
             return next.Mode == T::DC_FAILURE_INV_2_PENDING || next.Mode == T::SOLO_DC_INV_1_PENDING
-                || next.Mode == T::DC_SYNC_PENDING;
+                || next.Mode == T::DC_RECOVERY_PENDING;
         case T::DC_FAILURE_INV_2_PENDING:
             return next.Mode == T::DC_FAILURE_INV_2 || next.Mode == T::DC_FAILURE_INV_1
                 || next.Mode == T::SOLO_DC_INV_1_PENDING;
         case T::DC_FAILURE_INV_2:
-            return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::DC_SYNC_PENDING;
-        case T::DC_SYNC_PENDING:
-            return next.Mode == T::DC_SYNC || next.Mode == T::DC_FAILURE_PENDING;
-        case T::DC_SYNC:
+            return next.Mode == T::SOLO_DC_INV_2_PENDING || next.Mode == T::DC_RECOVERY_PENDING;
+        case T::DC_RECOVERY_PENDING:
+            return next.Mode == T::DC_RECOVERY || next.Mode == T::DC_FAILURE_PENDING;
+        case T::DC_RECOVERY:
             return next.Mode == T::NORMAL_PENDING || next.Mode == T::DC_FAILURE_PENDING;
         case T::NORMAL_PENDING:
             return next.Mode == T::DC_FAILURE_PENDING;
@@ -966,8 +966,8 @@ TVector<TBlobStorageGroupInfo::TFailRealmState> TBlobStorageGroupInfo::TMirror3d
         case T::NORMAL:
             return {};
         case T::DC_FAILURE_PENDING:
-        case T::DC_SYNC_PENDING:
-        case T::DC_SYNC:
+        case T::DC_RECOVERY_PENDING:
+        case T::DC_RECOVERY:
         case T::NORMAL_PENDING:
             // Writes are allowed; read completeness must not depend on this realm.
             return {{*FailedFailRealmIdx, S::Joining}};
@@ -1001,8 +1001,8 @@ TBlobStorageGroupInfo::TWritePolicy TBlobStorageGroupInfo::TMirror3dcState::GetW
     using T = NKikimrBlobStorage::TMirror3dcGroupState;
     switch (Mode) {
         case T::NORMAL:
-        case T::DC_SYNC_PENDING:
-        case T::DC_SYNC:
+        case T::DC_RECOVERY_PENDING:
+        case T::DC_RECOVERY:
         case T::NORMAL_PENDING:
             return {{{1, 1, 1}, {2, 2}}, {{1, 1, 1}}};
         case T::DC_FAILURE_PENDING:

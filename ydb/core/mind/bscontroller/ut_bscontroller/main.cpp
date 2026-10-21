@@ -444,8 +444,8 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             {T::DC_FAILURE_INV_1, 0, {}}, {T::DC_FAILURE_INV_2_PENDING, 0, {}}, {T::DC_FAILURE_INV_2, 0, {}},
             {T::SOLO_DC_INV_2_PENDING, 0, 2}, {T::SOLO_DC_INV_2, 0, 2},
             {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2},
-            {T::DC_FAILURE_INV_2, 0, {}}, {T::DC_SYNC_PENDING, 0, {}},
-            {T::DC_SYNC, 0, {}}, {T::NORMAL_PENDING, 0, {}}, {},
+            {T::DC_FAILURE_INV_2, 0, {}}, {T::DC_RECOVERY_PENDING, 0, {}},
+            {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, {},
         };
         auto combined = request(path[0]);
         auto second = combined.GetCommand(0);

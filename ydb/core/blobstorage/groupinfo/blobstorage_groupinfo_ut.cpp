@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             normal, {T::DC_FAILURE_PENDING, 0, {}}, failed, inv1,
             {T::SOLO_DC_INV_1_PENDING, 0, 2}, solo1, solo2,
             {T::SOLO_DC_RECOVERY_PENDING, 0, 2}, {T::SOLO_DC_RECOVERY, 0, 2}, inv2,
-            {T::DC_SYNC_PENDING, 0, {}}, {T::DC_SYNC, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
+            {T::DC_RECOVERY_PENDING, 0, {}}, {T::DC_RECOVERY, 0, {}}, {T::NORMAL_PENDING, 0, {}}, normal,
         };
         for (size_t i = 1; i < path.size(); ++i) {
             UNIT_ASSERT_C(path[i - 1].CanTransitionTo(path[i]), i);

@@ -121,8 +121,8 @@ message TMirror3dcGroupState {
         DC_FAILURE = 2;
         DC_FAILURE_INV_1 = 3;
         DC_FAILURE_INV_2 = 4;
-        DC_SYNC_PENDING = 5;
-        DC_SYNC = 6;
+        DC_RECOVERY_PENDING = 5;
+        DC_RECOVERY = 6;
         NORMAL_PENDING = 7;
         SOLO_DC_INV_1 = 8;
         SOLO_DC_INV_2 = 9;

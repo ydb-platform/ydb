@@ -407,13 +407,13 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         NResourcePool::TPoolSettings poolSettings;
         poolSettings.TotalMemoryLimitPercentPerNode = 30;
         const TActorId sender = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)));
+        runtime.Send(new IEventHandle(service, sender, new NScheduler::TEvAddPool("db", "pool", poolSettings)), 0, true);
 
         auto addQuery = MakeHolder<NScheduler::TEvAddQuery>();
         addQuery->DatabaseId = "db";
         addQuery->PoolId = "pool";
         addQuery->QueryId = 1;
-        runtime.Send(new IEventHandle(service, sender, addQuery.Release(), 0, 1));
+        runtime.Send(new IEventHandle(service, sender, addQuery.Release(), 0, 1), 0, true);
         UNIT_ASSERT_VALUES_EQUAL(!!runtime.GrabEdgeEvent<NScheduler::TEvQueryResponse>(sender)->Get()->Query, CpuEnabled);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
@@ -452,7 +452,7 @@ Y_UNIT_TEST_SUITE(KqpComputeSchedulerService) {
         auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         request->Record.MutableConfig()->MutableFeatureFlags()->SetEnableResourcePoolsScheduler(false);
         const TActorId sender = runtime.AllocateEdgeActor();
-        runtime.Send(new IEventHandle(service, sender, request.Release()));
+        runtime.Send(new IEventHandle(service, sender, request.Release()), 0, true);
         runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(sender);
 
         UNIT_ASSERT_VALUES_EQUAL(scheduler->IsEnabled(), MemoryEnabled);

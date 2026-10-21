@@ -87,9 +87,38 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         case NKikimrScheme::StatusPathDoesNotExist:
             // A deleted destination has nothing left to detach.
             return Success();
+        case NKikimrScheme::StatusNameConflict:
+            // An already collected path id resolves to an empty path, which
+            // ALTER reports as a name conflict. Confirm that it is absent.
+            AlterError = record.GetReason();
+            Send(PipeCache, new TEvPipeCache::TEvForward(
+                new TEvSchemeShard::TEvDescribeScheme(DstPathId), SchemeShardId));
+            return Become(&TThis::StateCheckDst);
         default:
             return Error(record.GetStatus(), record.GetReason());
         }
+    }
+
+    STATEFN(StateCheckDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCheckDst"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            sFunc(TEvents::TEvWakeup, AllocateTxId);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
+
+        if (ev->Get()->GetRecord().GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+            return Success();
+        }
+
+        return Error(NKikimrScheme::StatusNameConflict, AlterError);
     }
 
     void SubscribeTx(ui64 txId) {
@@ -211,6 +240,7 @@ private:
 
     ui64 TxId = 0;
     TActorId PipeCache;
+    TString AlterError;
     static constexpr auto RetryInterval = TDuration::Seconds(10);
 
 }; // TDstAlterer

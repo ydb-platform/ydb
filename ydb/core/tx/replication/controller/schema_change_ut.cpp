@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "dst_alterer.h"
 #include "dst_creator.h"
 #include "dst_schema_changer.h"
 
@@ -1038,6 +1039,53 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
+    Y_UNIT_TEST(DoneAfterDestinationNameConflict) {
+        for (const auto status : {NKikimrScheme::StatusPathDoesNotExist,
+                NKikimrScheme::StatusSuccess, NKikimrScheme::StatusSchemeError}) {
+            TTestActorRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto parent = runtime.AllocateEdgeActor();
+            const auto allocator = runtime.AllocateEdgeActor();
+            const auto pipeCache = runtime.AllocateEdgeActor();
+            runtime.RegisterService(MakeTxProxyID(), allocator);
+            const TPathId pathId(1, 2);
+            const auto alterer = runtime.Register(CreateDstAlterer(parent, pathId.OwnerId,
+                1, 1, TReplication::ETargetKind::Table, pathId, TReplication::EState::Done));
+
+            runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
+            NTxProxy::TTxProxyServices services;
+            services.LeaderPipeCache = pipeCache;
+            runtime.Send(alterer, allocator,
+                new TEvTxUserProxy::TEvAllocateTxIdResult(100, services, {}));
+            const auto alter = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(alter->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+            const TString error = "path is empty";
+            runtime.Send(alterer, pipeCache,
+                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
+                    NKikimrScheme::StatusNameConflict, 100, pathId.OwnerId, error));
+
+            const auto describe = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
+            UNIT_ASSERT_VALUES_EQUAL(describe->Get()->Ev->Type(),
+                NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
+            const auto& request = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeScheme*>(
+                describe->Get()->Ev.Get())->Record;
+            UNIT_ASSERT_VALUES_EQUAL(request.GetSchemeshardId(), pathId.OwnerId);
+            UNIT_ASSERT_VALUES_EQUAL(request.GetPathId(), pathId.LocalPathId);
+            auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
+            description->Record.SetStatus(status);
+            runtime.Send(alterer, pipeCache, description.Release());
+
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvAlterDstResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->IsSuccess(),
+                status == NKikimrScheme::StatusPathDoesNotExist);
+            if (!result->Get()->IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusNameConflict);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
+            }
+        }
+    }
+
     Y_UNIT_TEST(DoneAfterAttachmentValidationError) {
         CheckDoneAfterAttachmentError(false);
     }
@@ -1075,8 +1123,8 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
         AssertEventuallyDone(env, info);
         AssertAttachmentPaths(env, pending, {});
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetStatus(),
-            static_cast<ui32>(NKikimrScheme::StatusPathDoesNotExist));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist);
     }
 
     Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {

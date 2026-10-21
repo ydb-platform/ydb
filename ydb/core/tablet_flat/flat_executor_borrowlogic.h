@@ -4,7 +4,7 @@
 #include "flat_exec_commit.h"
 #include "flat_executor_tx_env.h"
 #include "flat_sausage_slicer.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/protos/flat_executor.pb.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

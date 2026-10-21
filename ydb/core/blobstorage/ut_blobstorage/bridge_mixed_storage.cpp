@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         env.Sim(TDuration::Seconds(10));
         const auto config = QueryStorageConfig(env);
         UNIT_ASSERT_VALUES_EQUAL(NStorage::GetRequiredBridgeFeatureLevel(config),
-            NStorage::BridgeFeatureLevelNonUniformStorage);
+            ui32(NStorage::BridgeFeatureLevelNonUniformStorage));
         pool.SetErasureSpecies("block-4-2");
         response = DefinePool(env, pool);
         UNIT_ASSERT(!response.GetSuccess());

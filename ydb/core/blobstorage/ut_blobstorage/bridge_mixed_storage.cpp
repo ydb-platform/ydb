@@ -273,11 +273,18 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
             env.StartNode(node);
         }
         TString lastConfigError;
+        TString lastSyncerError;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
             if (event->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
                 const auto& record = event->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
                 if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                     lastConfigError = record.ShortDebugString();
+                }
+            } else if (event->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateSyncerState::EventType) {
+                for (const auto& syncer : event->Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetSyncers()) {
+                    if (syncer.HasErrorReason()) {
+                        lastSyncerError = syncer.ShortDebugString();
+                    }
                 }
             }
             return true;
@@ -292,7 +299,8 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
             const auto config = QueryStorageConfig(env);
             return TStringBuilder() << config.GetClusterState().ShortDebugString()
                 << " details# " << config.GetClusterStateDetails().ShortDebugString()
-                << " lastError# " << lastConfigError;
+                << " lastError# " << lastConfigError << " syncerError# " << lastSyncerError
+                << " group# " << GetGroupInfo(env, bridged).ShortDebugString();
         });
         env.Runtime->FilterFunction = {};
         WaitForOrdinaryGroupReady(env, ordinary);

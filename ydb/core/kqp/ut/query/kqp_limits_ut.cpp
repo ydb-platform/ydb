@@ -59,8 +59,9 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
-    Y_UNIT_TEST(QSReplySizeEnsureMemoryLimits) {
+    Y_UNIT_TEST_TWIN(QSReplySizeEnsureMemoryLimits, EnableComputeSchedulerMemory) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 1'000, 100, 1'000, 1'000);
@@ -211,8 +212,10 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(KqpMkqlMemoryLimitException, EnableComputeSchedulerMemory) {
+        auto settings = TKikimrSettings();
+        settings.AppConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
+        TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10, 10, 1'000'000, 1);
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
@@ -239,8 +242,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
     }
 
-    Y_UNIT_TEST(LargeParametersAndMkqlFailure) {
+    Y_UNIT_TEST_TWIN(LargeParametersAndMkqlFailure, EnableComputeSchedulerMemory) {
         auto app = NKikimrConfig::TAppConfig();
+        app.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(app);
@@ -814,8 +818,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(ComputeNodeMemoryLimit) {
+    Y_UNIT_TEST_TWIN(ComputeNodeMemoryLimit, EnableComputeSchedulerMemory) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableComputeSchedulerMemory(EnableComputeSchedulerMemory);
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000);
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetComputeNodeMemoryLimitBytes(100'000'000);

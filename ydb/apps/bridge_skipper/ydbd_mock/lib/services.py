@@ -4,7 +4,10 @@ Every method goes through the node's fault hook. Application errors are ready Op
 with a status, never gRPC errors. Methods the mock does not override, and services it does not
 register, answer gRPC UNIMPLEMENTED and record an `rpc.unimplemented` event.
 """
+import base64
+import asyncio
 import grpc
+from google.protobuf import json_format
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib import config_yaml, health, model, operations
 from ydb.public.api.grpc import ydb_config_v1_pb2
@@ -46,8 +49,61 @@ class _Servicer:
         self.node = runtime.node
         self.tls = tls
 
-    async def _run(self, method: str, context, call, summary: str = ""):
-        return await self.rt.run("/%s/%s" % (self.SERVICE, method), context, call, summary, operation_status)
+    async def _run(self, method: str, context, call, summary: str = "", request=None):
+        module = {DISCOVERY: ydb_discovery_pb2, CONFIG: ydb_config_pb2,
+                  MONITORING: ydb_monitoring_pb2, BRIDGE: ydb_bridge_pb2}[self.SERVICE]
+
+        async def dispatch():
+            mutation = self.SERVICE == BRIDGE and method != "GetClusterState"
+            if self._authorized(context, mutation=mutation):
+                override = self.rt.take_rpc_override(method)
+                if override is not None:
+                    raw = override.pop("_raw_result", None)
+                    response = json_format.ParseDict(override, getattr(module, method + "Response")())
+                    if raw is not None:
+                        response.operation.result.type_url = raw["type_url"]
+                        response.operation.result.value = base64.b64decode(raw["value_base64"])
+                    return response
+            return await call()
+
+        run = self.rt.run("/%s/%s" % (self.SERVICE, method), context, dispatch, summary, operation_status)
+        timeout = 0.0
+        if request is not None and hasattr(request, "operation_params"):
+            duration = request.operation_params.operation_timeout
+            timeout = duration.seconds + duration.nanos / 1e9
+        if timeout > 0:
+            try:
+                return await asyncio.wait_for(run, timeout)
+            except asyncio.TimeoutError:
+                return getattr(module, method + "Response")(operation=operations.error(
+                    model.TIMEOUT, "Operation timeout"))
+        return await run
+
+    def _authorized(self, context, mutation=False):
+        token = self.inst.policies.admin_token if mutation else self.inst.policies.read_token
+        metadata = {k.lower(): v for k, v in (context.invocation_metadata() or ())}
+        if mutation:
+            names = self.inst.policies.admin_certificate_cn
+            if names:
+                certificates = context.auth_context().get("x509_common_name", ())
+                if any(c.decode("utf-8", errors="replace") in names for c in certificates):
+                    return True
+                return bool(token) and metadata.get(AUTH_TICKET_HEADER) == token
+        return not token or metadata.get(AUTH_TICKET_HEADER) == token
+
+    async def _read(self, method, context, result, response_type):
+        if not self._authorized(context):
+            return response_type(operation=operations.error(model.UNAUTHORIZED, "Authentication token is required"))
+        override = self.rt.response_override(method)
+        if override is not None:
+            result = json_format.ParseDict(override, type(result)())
+        # The message is already a snapshot; a release cannot make this reply newer.
+        response = response_type(operation=operations.ok(result))
+        await self.rt.checkpoint("/%s/%s" % (self.SERVICE, method), "after_snapshot", context)
+        return response
+
+    async def _checkpoint(self, method, stage, context):
+        await self.rt.checkpoint("/%s/%s" % (self.SERVICE, method), stage, context)
 
 
 class DiscoveryServicer(_Servicer, ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer):
@@ -67,11 +123,12 @@ class DiscoveryServicer(_Servicer, ydb_discovery_v1_pb2_grpc.DiscoveryServiceSer
             )
             result = ydb_discovery_pb2.ListEndpointsResult(endpoints=[info], self_location=node.data_center)
             state = self.inst.replica.state
-            for i, name in enumerate(self.inst.names):
-                result.pile_states.add(pile_name=name, state=model.public_state(state, i))
-            return ydb_discovery_pb2.ListEndpointsResponse(operation=operations.ok(result))
+            if state.bridged:
+                for name in state.registered_names(self.inst.names):
+                    result.pile_states.add(pile_name=name, state=model.public_state(state, self.inst.names.index(name)))
+            return await self._read("ListEndpoints", context, result, ydb_discovery_pb2.ListEndpointsResponse)
 
-        return await self._run("ListEndpoints", context, call, "database=%r" % request.database)
+        return await self._run("ListEndpoints", context, call, "database=%r" % request.database, request)
 
 
 class ConfigServicer(_Servicer, ydb_config_v1_pb2_grpc.ConfigServiceServicer):
@@ -79,14 +136,15 @@ class ConfigServicer(_Servicer, ydb_config_v1_pb2_grpc.ConfigServiceServicer):
 
     async def FetchConfig(self, request, context):
         async def call():
-            entry = ydb_config_pb2.ConfigEntry(config=config_yaml.render(self.inst.topo, 1))
-            entry.identity.version = 1
+            version = self.inst.state.revision + 1
+            entry = ydb_config_pb2.ConfigEntry(config=config_yaml.render(self.inst.topo, version, self.inst.state))
+            entry.identity.version = version
             entry.identity.cluster = self.inst.topo.cluster_name
             entry.identity.main.SetInParent()
             result = ydb_config_pb2.FetchConfigResult(config=[entry])
-            return ydb_config_pb2.FetchConfigResponse(operation=operations.ok(result))
+            return await self._read("FetchConfig", context, result, ydb_config_pb2.FetchConfigResponse)
 
-        return await self._run("FetchConfig", context, call)
+        return await self._run("FetchConfig", context, call, request=request)
 
 
 class MonitoringServicer(_Servicer, ydb_monitoring_v1_pb2_grpc.MonitoringServiceServicer):
@@ -95,11 +153,11 @@ class MonitoringServicer(_Servicer, ydb_monitoring_v1_pb2_grpc.MonitoringService
     async def SelfCheck(self, request, context):
         async def call():
             result = health.build(self.inst, self.node)
-            return ydb_monitoring_pb2.SelfCheckResponse(operation=operations.ok(result))
+            return await self._read("SelfCheck", context, result, ydb_monitoring_pb2.SelfCheckResponse)
 
         summary = "verbose=%s merge=%s cache=%s" % (
             request.return_verbose_status, request.merge_records, not request.do_not_cache)
-        return await self._run("SelfCheck", context, call, summary)
+        return await self._run("SelfCheck", context, call, summary, request)
 
 
 class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
@@ -108,12 +166,27 @@ class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
     async def GetClusterState(self, request, context):
         async def call():
             state = self.inst.replica.state
-            result = ydb_bridge_pb2.GetClusterStateResult(generation=state.generation)
-            for i, name in enumerate(self.inst.names):
-                result.pile_states.add(pile_name=name, state=model.public_state(state, i))
-            return ydb_bridge_pb2.GetClusterStateResponse(operation=operations.ok(result))
+            if not self._authorized(context):
+                return ydb_bridge_pb2.GetClusterStateResponse(operation=operations.error(
+                    model.UNAUTHORIZED, "Authentication token is required"))
+            if not state.self_management:
+                return ydb_bridge_pb2.GetClusterStateResponse(operation=operations.error(
+                    model.UNSUPPORTED, "Bridge operations require self-management mode to be enabled"))
+            if not state.bridged:
+                return ydb_bridge_pb2.GetClusterStateResponse(operation=operations.error(
+                    model.NOT_FOUND, "Bridge cluster state is not configured"))
+            result = ydb_bridge_pb2.GetClusterStateResult(
+                generation=state.generation, conversion_in_progress=state.conversion_in_progress)
+            for name in state.registered_names(self.inst.names):
+                result.pile_states.add(pile_name=name, state=model.public_state(state, self.inst.names.index(name)))
+            if state.pending_pile_operation:
+                pending = state.pending_pile_operation
+                result.pending_pile_operation.pile_name = pending["pile_name"]
+                result.pending_pile_operation.kind = ydb_bridge_pb2.PendingPileOperation.Kind.Value(pending["kind"])
+                result.pending_pile_operation.error_reason = pending.get("error_reason", "")
+            return await self._read("GetClusterState", context, result, ydb_bridge_pb2.GetClusterStateResponse)
 
-        return await self._run("GetClusterState", context, call)
+        return await self._run("GetClusterState", context, call, request=request)
 
     async def UpdateClusterState(self, request, context):
         updates = [(u.pile_name, u.state) for u in request.updates]
@@ -122,21 +195,48 @@ class BridgeServicer(_Servicer, ydb_bridge_v1_pb2_grpc.BridgeServiceServicer):
             ", ".join("%s=%s" % (n, model.public_name(s)) for n, s in updates), quorum)
 
         async def call():
-            token = self.inst.policies.admin_token
-            if token:
-                metadata = {k.lower(): v for k, v in (context.invocation_metadata() or ())}
-                if metadata.get(AUTH_TICKET_HEADER) != token:
-                    return ydb_bridge_pb2.UpdateClusterStateResponse(operation=operations.error(
-                        model.UNAUTHORIZED, "Bridge operations require administrator privileges"))
+            if not self._authorized(context, mutation=True):
+                return ydb_bridge_pb2.UpdateClusterStateResponse(operation=operations.error(
+                    model.UNAUTHORIZED, "Bridge operations require administrator privileges"))
             self.rt.track_update_reply(context)
-            outcome = await self.inst.admin_update(updates, quorum)
+            outcome = await self.inst.admin_update(updates, quorum, accepted=lambda: self._checkpoint(
+                "UpdateClusterState", "after_acceptance", context))
             if outcome.error is not None:
                 return ydb_bridge_pb2.UpdateClusterStateResponse(
                     operation=operations.error(outcome.error.status, outcome.error.message))
+            await self._checkpoint("UpdateClusterState", "after_commit", context)
             return ydb_bridge_pb2.UpdateClusterStateResponse(
                 operation=operations.ok(ydb_bridge_pb2.UpdateClusterStateResult()))
 
-        return await self._run("UpdateClusterState", context, call, summary)
+        return await self._run("UpdateClusterState", context, call, summary, request)
+
+    async def _lifecycle(self, method, kind, request, context):
+        response_type = getattr(ydb_bridge_pb2, method + "Response")
+        result_type = getattr(ydb_bridge_pb2, method + "Result")
+
+        async def call():
+            if not self._authorized(context, mutation=True):
+                return response_type(operation=operations.error(
+                    model.UNAUTHORIZED, "Bridge operations require administrator privileges"))
+            self.rt.track_update_reply(context)
+            outcome = await self.inst.admin_lifecycle(
+                kind, getattr(request, "pile_name", ""),
+                accepted=lambda: self._checkpoint(method, "after_acceptance", context),
+                committed=lambda: self._checkpoint(method, "after_commit", context))
+            if outcome.error:
+                return response_type(operation=operations.error(outcome.error.status, outcome.error.message))
+            return response_type(operation=operations.ok(result_type()))
+
+        return await self._run(method, context, call, "pile=%r" % getattr(request, "pile_name", ""), request)
+
+    async def ConvertToBridge(self, request, context):
+        return await self._lifecycle("ConvertToBridge", "convert", request, context)
+
+    async def AddPile(self, request, context):
+        return await self._lifecycle("AddPile", "add", request, context)
+
+    async def RemovePile(self, request, context):
+        return await self._lifecycle("RemovePile", "remove", request, context)
 
 
 def _fill_unimplemented(cls, base, service: str) -> None:

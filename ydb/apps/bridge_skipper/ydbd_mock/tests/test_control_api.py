@@ -421,7 +421,7 @@ class ResetAndScenarioTest(ApiCase):
 class PeerApiTest(ApiCase):
     async def test_ping_and_state(self):
         ping = await self.get("pile1", "/peer/ping", **{"from": "pile2"})
-        self.assertEqual(ping, {"pile": "pile1", "generation": 1, "ready": True})
+        self.assertEqual(ping, {"pile": "pile1", "generation": 1, "revision": 0, "ready": True})
         state = await self.get("pile1", "/peer/state", **{"from": "pile2"})
         self.assertEqual((state["generation"], state["per_pile"], state["primary"]), (1, [3, 3], 0))
 
@@ -434,6 +434,7 @@ class PeerApiTest(ApiCase):
     async def test_prepare_then_abort(self):
         snapshot = self.c.inst("pile1").replica.state.copy()
         snapshot.generation += 1
+        snapshot.revision += 1
         reply = await self.post("pile1", "/peer/prepare", {
             "from": "pile2", "proposal_id": "p1", "snapshot": snapshot.to_json()})
         self.assertEqual(reply["ok"], True)
@@ -456,6 +457,7 @@ class PeerApiTest(ApiCase):
     async def test_prepared_state_expires(self):
         snapshot = self.c.inst("pile1").replica.state.copy()
         snapshot.generation += 1
+        snapshot.revision += 1
         await self.post("pile1", "/peer/prepare", {
             "from": "pile2", "proposal_id": "p1", "snapshot": snapshot.to_json()})
         started = time.monotonic()

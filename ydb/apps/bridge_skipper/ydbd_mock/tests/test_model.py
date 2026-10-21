@@ -33,6 +33,7 @@ class TraitsTest(unittest.TestCase):
             N2: (True, True, True),
             D: (False, False, False),
             X: (False, True, True),
+            Stored.INACTIVE: (False, False, False),
         }
         self.assertEqual(model.TRAITS, expected)
         for stored, (data, config, connect) in expected.items():
@@ -56,6 +57,7 @@ class PublicStateTest(unittest.TestCase):
             N2: model.PUB_NOT_SYNCHRONIZED,
             S: model.PUB_SYNCHRONIZED,
             X: model.PUB_SUSPENDED,
+            Stored.INACTIVE: model.PUB_INACTIVE,
         }
         for n in (1, 2, 3):
             for combo in itertools.product(list(Stored), repeat=n):

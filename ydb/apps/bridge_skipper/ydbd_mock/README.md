@@ -1,8 +1,8 @@
 # ydbd_mock
 
-A Python mock of a YDB bridge cluster, built to run the unmodified bridge skipper demo (`ydb/apps/bridge_skipper_demo`) and the `ydb` CLI against it, with no real YDB.
+A Python mock of the public YDB Bridge API, for testing Skipper controllers, the unmodified bridge skipper demo (`ydb/apps/bridge_skipper_demo`), and the `ydb` CLI without running real YDB.
 
-**One `ydbd_mock` process is one pile.** It serves K nodes (default 3), each on its own gRPC port on `127.0.0.1`, plus one HTTP port for the control API and the peer API. For two piles, start two processes. They keep a replicated cluster state (two-phase commit, heartbeats, anti-entropy) exactly as the piles of a real bridge cluster keep theirs.
+**One `ydbd_mock` process is one pile.** It serves K nodes (default 3), each on its own gRPC port on `127.0.0.1`, plus one HTTP port for the control API and the peer API. Processes exchange snapshots using a simplified commit protocol with heartbeats and anti-entropy. This tests client-visible behavior; it does not simulate real storage durability or distconf consensus.
 
 Design, including what the demo requires and the HTTP API: [README.ai.md](README.ai.md). Manual test script: [MANUAL_TEST_SCENARIO.ai.md](MANUAL_TEST_SCENARIO.ai.md).
 
@@ -13,16 +13,11 @@ Design, including what the demo requires and the HTTP API: [README.ai.md](README
 | Discovery | `ListEndpoints` (the answering node only, with `pile_states`) |
 | Config | `FetchConfig` (one YAML document with `config.hosts[]`) |
 | Monitoring | `SelfCheck` (`BRIDGE_GROUP` RED issues for blamed piles) |
-| Bridge | `GetClusterState`, `UpdateClusterState` (same validation and error texts as the server) |
+| Bridge | `GetClusterState`, `UpdateClusterState`, `ConvertToBridge`, `AddPile`, `RemovePile` |
 
 Every other method returns `UNIMPLEMENTED` and an `rpc.unimplemented` event.
 
-Inactive piles and add/remove-pile operations are not modeled. With schemas
-containing `PileState.INACTIVE = 7`, an otherwise valid update requesting that
-state returns `BAD_REQUEST` with `Pile can't be switched to INACTIVE state, it
-has to be removed from the cluster instead`, leaving the cluster state unchanged.
-Older schemas reject the unknown wire value with `INTERNAL_ERROR` and
-`Unsupported pile state`.
+The mock supports inactive piles, persistent named registry slots, deployed-config changes, conversion and pending add/remove operations. Omitted states retain `_2` and `INACTIVE`; batched disconnects are allowed. Deterministic hooks can hold snapshots or accepted mutations, lose committed replies, inject per-node observations, and hold/release BSC work. The versioned supervisor HTTP API is intended for a Skipper Lab UI. See [the behavior and conformance contract](README.ai.md) for exact controls and limits.
 
 ## Quick start
 
@@ -67,27 +62,24 @@ ydbd_mock/
   MANUAL_TEST_SCENARIO.ai.md
 ```
 
-## Build and run with ya
+## Build and test
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/bridge_skipper/ydbd_mock
 ydb/apps/bridge_skipper/ydbd_mock/ydbd_mock selfcheck        # imports everything, prints versions
 
 YDBD_MOCK_IMPL=ya ydb/apps/bridge_skipper/ydbd_mock/scripts/mock.sh cluster up --fresh
 ```
 
-`./ya make --build relwithdebinfo -tA ydb/apps/bridge_skipper/ydbd_mock/tests` is the canonical unit test command. **It does not run on macOS** in this checkout: the `TEST_TOOL_HOST` resource has no darwin build ("Resource mapping doesn't have required resource"). On Linux it is the way to run the tests. On macOS use the virtualenv below.
+Build target: `ydb/apps/bridge_skipper/ydbd_mock`. Canonical test target: `ydb/apps/bridge_skipper/ydbd_mock/tests`. Use the checkout’s build and test instructions. The commands above assume the binary is already built; platform support must be determined by the actual build result.
 
-## Run with the virtualenv (fast loop, and the only test path on macOS)
+## Virtualenv runtime and compatibility scripts
 
 ```bash
 S=ydb/apps/bridge_skipper/ydbd_mock/scripts
 $S/setup_venv.sh        # ~/ydbd_mock_work/venv with grpcio, protobuf, aiohttp, PyYAML, requests
 $S/gen_protos.sh        # generates the *_pb2 modules into ~/ydbd_mock_work/gen
-$S/test.sh              # all unit tests (tests/)
-$S/test.sh test_validator.ValidatorTest.test_failover        # one test
-$S/test.sh -e2e         # e2e/: needs the ydb CLI (~/ydb/bin/ydb) and the demo; 6-8 minutes
-$S/test.sh -e2e test_cli
+# tests/ is the canonical suite; follow the checkout build instructions
+# scripts/test.sh retains an optional venv CLI/demo compatibility harness
 ```
 
 ## Run a cluster by hand
@@ -101,7 +93,7 @@ $S/demo.sh --fresh                                                       # the u
 $S/mock.sh cluster down
 ```
 
-State lives in `$YDBD_MOCK_RUN_DIR` (default `~/ydbd_mock_work/run`): `topology.yaml`, `endpoint_map.json`, `pids/`, `state/<pile>/replica.json`, `logs/<pile>.log`, `logs/<pile>.events.jsonl`.
+State lives in `$YDBD_MOCK_RUN_DIR` (default `~/ydbd_mock_work/run`): `topology.yaml`, `cluster.json`, `macros.json`, `endpoint_map.json`, `endpoint_manifest.json`, `pids/`, `state/<pile>/replica.json`, `logs/<pile>.log`, `logs/<pile>.events.jsonl`.
 
 ### Why a shim
 
@@ -122,8 +114,10 @@ The demo hardcodes `grpc://<host>:2135` and takes hosts from `config fetch`. The
 | `replica P [--generation G] [--states a=PRIMARY,b=...] [--detach] [--clear]` | override or detach one replica |
 | `timings k=v ...`, `policies k=v ...` | change on every live instance |
 | `reset` | revive and un-fault everything, install a fresh snapshot above every previously persisted generation |
+| `manifest` | versioned node identities and direct SDK dial endpoints |
+| `serve [--host 127.0.0.1] [--port 21999] [--allow-remote]` | foreground cluster HTTP API under `/api/v1` |
 
-The HTTP API behind it (`/state`, `/events`, `/control`, `/link`, `/replica`, `/timings`, `/policies`, `/reset-prepare`, `/reset-cancel`, `/reset-local`, `/scenario`, `/peer/*`) is in [README.ai.md](README.ai.md).
+The supervisor serves cluster controls under `/api/v1`. Each pile separately serves `/state`, `/events`, `/control`, `/link`, `/replica`, `/topology`, `/followups`, `/timings`, `/policies`, `/failpoints`, `/response-override`, `/rpc-override`, `/reset-prepare`, `/reset-cancel`, `/reset-local`, `/scenario`, and internal `/peer/*` routes. Both APIs are documented in [README.ai.md](README.ai.md).
 
 `reset` first pauses new proposals and follow-ups on every pile through `/reset-prepare`. It then reads the
 persisted `max_generation` watermarks and installs the initial snapshot at their maximum plus one. A lower
@@ -140,13 +134,30 @@ generation supplied by its caller. Run one `cluster reset` at a time; concurrent
 - A CLI call to a **frozen process** (`stop`, SIGSTOP) hangs for 19-20 s (the CLI's discovery deadline is about 10 s and it retries). The demo's health data has a 10 s TTL, so a frozen pile makes the demo go stale and report "unresponsive" for that long. Prefer `kill` for "dead" and `stop` only to study this.
 - `fault ... --op silence` makes calls hang until the client gives up (add `--methods GetClusterState` to hold only that method). The CLI sets no deadline on `bridge list`, so the demo's `bridge list` blocks until the fault clears. Always pass `--max SECONDS` or clear it.
 - The demo waits 10 s at start and polls every second. After `kill` of a pile it sends the failover 1-3 s later (the survivor blames the dead pile after about 1 s of missed heartbeats, and the CLI is refused at once). After `stop` (frozen) expect 10-25 s, because every call hangs first.
+- Every successful `cluster up`, with or without `--fresh`, mints a new `cluster_id`; a pinned Skipper Lab binding must treat down/up as a new cluster and use a new Skipper state directory. Restarting `cluster serve` preserves `cluster_id` and changes only `supervisor_id`.
 - `cluster up --fresh` also deletes the event logs. A plain `cluster up` keeps them and continues their `seq`. Save `cluster events` output first if you need it.
-- A pile that becomes `DISCONNECTED` (or `NOT_SYNCHRONIZED_1`) closes its gRPC listeners, as a real node does (`run.cpp`). Its control and peer API stay up: use `cluster state PILE` to see its replica. `--set policies.close_grpc_when_disconnected=false` turns this off.
+- Every pile without the config-quorum trait (`DISCONNECTED`, `NOT_SYNCHRONIZED_1`, or `INACTIVE`) has closed gRPC listeners, as a real node does (`run.cpp`). Its control and peer API stay up: use `cluster state PILE` to see its replica. `--set policies.close_grpc_when_disconnected=false` turns this off.
 - Two commits proposed at the same moment on different piles exclude each other (the proposer asks every pile that could be committing, not only the ones that must accept). A failover while the old pile is frozen (`stop`) waits one `peer_timeout` (0.8 s) for it.
 - An admin request is finished by the instance even if the client's deadline expires first.
-- The topology `host` must be a loopback address (`allow_remote: true` overrides it): the control API has no authentication.
+- The topology `host` must be a loopback address (`allow_remote: true` opts into remote binding for pile gRPC/control/peer listeners). The supervisor requires its own `cluster serve --allow-remote` for a remote `--host`. Both HTTP APIs are unauthenticated.
 - An unreadable `replica.json` stops the instance with an error instead of starting from generation 1. Delete the file (or use `cluster up --fresh`) to start over.
-- The CLI's `--timeout` is an operation timeout the mock ignores; only a client deadline ends a call that `silence` holds.
-- A DISCONNECTED pile is never pulled forward by anti-entropy: a revived pile stays stale until an operator runs `rejoin`.
-- TLS is best-effort: put `tls: {cert_file: ..., key_file: ...}` in a topology file (`cluster up --topology F`) and the node listeners become secure with `ssl=true` in discovery. It is covered by an in-process test only; the demo and the CLI are run in plaintext. Every RPC outside the four services above is not implemented.
+- Public operation timeouts return TIMEOUT envelopes; client deadlines return gRPC DEADLINE_EXCEEDED. Accepted mutations can still complete after either timeout.
+- Anti-entropy normally refuses snapshots that leave the local pile DISCONNECTED or INACTIVE. It still pulls when the registry or `configured_piles` differ, to propagate deployed-config changes. An ordinary revived DISCONNECTED pile with the same configuration stays stale until `rejoin`.
+- TLS and mTLS use `tls: {cert_file: ..., key_file: ..., root_cert_file: ..., require_client_auth: true}`. Optional `policies.admin_certificate_cn` models an explicit administrator CN allowlist; it does not model YDB SID/ACL mapping. Direct gRPC certificate tests cover trusted and untrusted peers.
 - The demo supports exactly 2 piles (it exits with code 2 on three). The mock itself serves N piles.
+
+## Health and replication policies
+
+All three policies below default to `true`. Configure them under `policies` in the topology or with `cluster policies key=value`; per-pile `/policies` changes only that process.
+
+| Policy | Default behavior | Effect of `false` |
+| --- | --- | --- |
+| `auto_blame_dead_piles` | Emit RED BRIDGE_GROUP issues for unreachable peer piles whose local stored state is SYNCHRONIZED | Only explicit storage/connectivity fault injections produce pile issues |
+| `enforce_config_quorum` | Require every pile with the config-quorum trait in the proposed state to prepare | Bypass that simulated commit requirement; for deliberately unrealistic lab scenarios |
+| `anti_entropy` | Periodically pull newer snapshots from peers, subject to state/configuration rules above | Disable periodic pulling; proposal replication still occurs |
+
+SelfCheck evaluates only SYNCHRONIZED pile copies, including PRIMARY/PROMOTED. A failed NOT_SYNCHRONIZED_2 pile produces no BRIDGE_GROUP issue even though it still blocks the data quorum. Manual storage/connectivity blame follows the same state filter. A representative group is ORANGE (`MAINTENANCE_REQUIRED`) when some synchronized copies fail, RED (`EMERGENCY`) only when all fail, and GREEN (`GOOD`) otherwise. `issue_style: realistic` adds the parent STORAGE_GROUP issue; the default `minimal` style keeps the child issues and the same aggregate statuses.
+
+SelfCheck always returns synthetic verbose coverage. It ignores diagnostic request settings for minimum status, maximum level, verbose output, merging, and caching. It does not collect tablets/whiteboards or generate BSC-unavailable, missing-data, or HEALTHCHECK_STATUS truncation messages itself. Use response overrides for captured real-YDB fixtures; mock health alone cannot certify production failover.
+
+An exact empty pile name is supported: create it with `cluster up --topology FILE` and YAML `piles: [named, ""]`, then select it with quoted CLI arguments such as `state ""` or JSON `{"pile":""}` / `{"piles":[""]}`. It differs from an omitted selector. The `cluster up --piles` CSV shorthand rejects empty segments, including leading/trailing commas and repeated commas, before changing the run directory or starting processes. In a `partition` spec the empty name is a whole empty group, e.g. `partition "|named"`; with an empty-named pile present, blank tokens inside a group (`"named, |other"`) are rejected as ambiguous. This covers empty names on the public wire and UI; real conversion's ImplicitPileId and hosts with an omitted `bridge_pile_name` still require real-YDB fixtures. The unmodified demo does not support an empty name.

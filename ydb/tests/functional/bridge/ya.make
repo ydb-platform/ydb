@@ -6,6 +6,7 @@ TEST_SRCS(
     test_bridge.py
     test_conversion.py
     test_discovery.py
+    test_pile_ops.py
     test_three_piles.py
     test_mixed_storage.py
     test_sdk_cleanup.py

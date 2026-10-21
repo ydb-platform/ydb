@@ -3800,8 +3800,8 @@ selector_config: []
             if (ev->GetTypeRewrite() == TEvTabletPipe::EvSend
                     && ev->Type == TEvBlobStorage::TEvControllerDistconfRequest::EventType) {
                 const auto& record = ev->Get<TEvBlobStorage::TEvControllerDistconfRequest>()->Record;
-                UNIT_ASSERT_VALUES_EQUAL(record.GetOperation(),
-                    NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf);
+                UNIT_ASSERT_C(record.GetOperation() ==
+                    NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf, record.DebugString());
                 UNIT_ASSERT(record.HasCompressedMainConfig());
                 UNIT_ASSERT(!record.GetDedicatedConfigMode());
                 UNIT_ASSERT(!record.GetDryRun());

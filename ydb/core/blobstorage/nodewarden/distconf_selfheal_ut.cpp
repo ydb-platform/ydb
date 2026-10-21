@@ -54,8 +54,8 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         setup.ExpectRequest(false);
         setup.ReplyOK();
         const auto result = setup.Runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRootResult>(setup.Client);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
-            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
+        UNIT_ASSERT_C(result->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, result->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 42);
     }
 

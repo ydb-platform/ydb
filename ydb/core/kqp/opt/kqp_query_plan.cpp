@@ -1288,7 +1288,7 @@ private:
         // Qualify their input binding with the owning stage; otherwise a later
         // transform overwrites the earlier binding and creates a cycle in EXPLAIN.
         auto sinkContext = CurrentArgContext;
-        sinkContext.stack.push_back(stage.Raw());
+        sinkContext.stack.push_back(stage.Ptr().Get());
         auto inputContext = sinkContext.AddArg(sinkLike.Ptr().Get());
         LambdaInputs[inputContext] = &stagePlanNode;
         op.Inputs.push_back(inputContext);

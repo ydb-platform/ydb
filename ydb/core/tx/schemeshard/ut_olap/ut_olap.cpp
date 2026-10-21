@@ -1595,6 +1595,95 @@ Y_UNIT_TEST_SUITE(TOlap) {
         }
     }
 
+    Y_UNIT_TEST_FLAG(InStoreTtlAlterSurvivesReboot, DisableExtendedTtlTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTableDatetime64(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::HasColumnTableSchemaPreset("default"));
+
+        const TString alter = R"(
+            Name: "ColumnTable"
+            AlterTtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    ExpireAfterSeconds: 300
+                }
+            }
+        )";
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", alter);
+        runtime.WaitFor("in-store TTL proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+        NKikimrTxColumnShard::TSchemaTxBody originalProposal;
+        UNIT_ASSERT(originalProposal.ParseFromString(proposals.front()->Get()->Record.GetTxBody()));
+        UNIT_ASSERT(originalProposal.GetAlterTable().HasSchemaPreset());
+        UNIT_ASSERT(originalProposal.GetAlterTable().GetTtlSettings().HasEnabled());
+
+        // The ALTER is persisted, but no shard has received it.
+        // Changing the flag must affect new requests, not recovery of this ALTER.
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(!DisableExtendedTtlTypes);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        const auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("in-store TTL proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody restoredProposal;
+            UNIT_ASSERT(restoredProposal.ParseFromString(ev->Get()->Record.GetTxBody()));
+            UNIT_ASSERT_VALUES_EQUAL(restoredProposal.GetAlterTable().SerializeAsString(),
+                originalProposal.GetAlterTable().SerializeAsString());
+        }
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+
+        const auto checkTtl = [&]() {
+            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableTtlSettingsVersion(originalProposal.GetAlterTable().GetTtlSettings().GetVersion()),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        };
+        checkTtl();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkTtl();
+
+        if (DisableExtendedTtlTypes) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", alter,
+                {{NKikimrScheme::StatusSchemeError,
+                    "TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled"}});
+        }
+    }
+
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;

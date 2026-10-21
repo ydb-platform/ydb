@@ -179,8 +179,10 @@ public:
     }
 
     void Stop() noexcept {
+        if (Stopped.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
         DrainLock.Acquire();
-        Stopped.store(true, std::memory_order_release);
         FillRequested.store(false, std::memory_order_release);
         TQueuePair::TPtr qp;
         while(Cache.Dequeue(qp)) {
@@ -541,6 +543,9 @@ public:
             }
             std::get<0>(it->second).AsyncEventToken->Request(true, false);
         } else {
+            if (qpCache) {
+                qpCache->Stop();
+            }
             for (auto p : waiters) {
                 TlsActivationContext->Send(p->Sender, std::unique_ptr<TEvGetCqHandle>(p->Release().Release()));
             }

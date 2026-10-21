@@ -13,7 +13,11 @@ ENDIF()
 
 SIZE(LARGE)
 
-REQUIREMENTS(ram:16 cpu:4)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:16 cpu:4)
+ELSE()
+    REQUIREMENTS(ram:16 cpu:2)
+ENDIF()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 

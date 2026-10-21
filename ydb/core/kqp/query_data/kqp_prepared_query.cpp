@@ -231,15 +231,19 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         bool Unbounded = false;
     };
     THashMap<TString, TTableReads> tableReads;
-    // A null range is a read (or write) that is not bounded by a key range.
-    auto addRead = [&](const TString& path, const NKqpProto::TKqpPhyKeyRange* range,
+    // A read (or write) that is not bounded by a key range.
+    auto addUnbounded = [&](const TString& path) {
+        tableReads[path].Unbounded = true;
+    };
+    // Only DataShard tables are snapshotted by key ranges.
+    auto addRange = [&](const NKqpProto::TKqpPhyTableId& table, const NKqpProto::TKqpPhyKeyRange& range,
         const THashSet<TString>& queryParams)
     {
-        auto& reads = tableReads[path];
-        if (range && IsKeyRangeKnownBeforeExecution(*range, queryParams)) {
-            reads.KeyRanges.push_back(range);
+        auto info = TableConstInfoById->Map.FindPtr(MakeTableId(table));
+        if (info && (*info)->TableKind == ETableKind::Datashard && IsKeyRangeKnownBeforeExecution(range, queryParams)) {
+            tableReads[table.GetPath()].KeyRanges.push_back(&range);
         } else {
-            reads.Unbounded = true;
+            addUnbounded(table.GetPath());
         }
     };
 
@@ -260,41 +264,48 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
         for (const auto& stage: phyTx.GetStages()) {
 
             for (const auto& tableOp: stage.GetTableOps()) {
-                addRead(tableOp.GetTable().GetPath(),
-                    tableOp.HasReadRange() ? &tableOp.GetReadRange().GetKeyRange() : nullptr, queryParams);
+                if (tableOp.HasReadRange()) {
+                    addRange(tableOp.GetTable(), tableOp.GetReadRange().GetKeyRange(), queryParams);
+                } else {
+                    addUnbounded(tableOp.GetTable().GetPath());
+                }
             }
 
             for (const auto& input : stage.GetInputs()) {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                    addRead(input.GetStreamLookup().GetTable().GetPath(), nullptr, queryParams);
+                    addUnbounded(input.GetStreamLookup().GetTable().GetPath());
                 }
 
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
-                    addRead(input.GetSequencer().GetTable().GetPath(), nullptr, queryParams);
+                    addUnbounded(input.GetSequencer().GetTable().GetPath());
                 }
             }
 
             for (const auto& source : stage.GetSources()) {
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kReadRangesSource) {
                     const auto& read = source.GetReadRangesSource();
-                    addRead(read.GetTable().GetPath(), read.HasKeyRange() ? &read.GetKeyRange() : nullptr, queryParams);
+                    if (read.HasKeyRange()) {
+                        addRange(read.GetTable(), read.GetKeyRange(), queryParams);
+                    } else {
+                        addUnbounded(read.GetTable().GetPath());
+                    }
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    addRead(source.GetFullTextSource().GetTable().GetPath(), nullptr, queryParams);
+                    addUnbounded(source.GetFullTextSource().GetTable().GetPath());
                 }
             }
 
             auto fillFromSettings = [&](const NKikimrKqp::TKqpTableSinkSettings& settings) {
-                addRead(settings.GetTable().GetPath(), nullptr, queryParams);
+                addUnbounded(settings.GetTable().GetPath());
                 for (const auto& indexSettings : settings.GetIndexes()) {
-                    addRead(indexSettings.GetTable().GetPath(), nullptr, queryParams);
+                    addUnbounded(indexSettings.GetTable().GetPath());
                     if (indexSettings.HasFulltextSettings()) {
-                        addRead(indexSettings.GetDocsTable().GetPath(), nullptr, queryParams);
+                        addUnbounded(indexSettings.GetDocsTable().GetPath());
                         if (indexSettings.HasDictTable()) {
-                            addRead(indexSettings.GetDictTable().GetPath(), nullptr, queryParams);
+                            addUnbounded(indexSettings.GetDictTable().GetPath());
                         }
-                        addRead(indexSettings.GetStatsTable().GetPath(), nullptr, queryParams);
+                        addUnbounded(indexSettings.GetStatsTable().GetPath());
                     }
                 }
             };

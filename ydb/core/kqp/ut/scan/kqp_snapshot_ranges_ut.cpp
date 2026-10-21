@@ -265,6 +265,13 @@ Y_UNIT_TEST_SUITE(KqpSnapshotRanges) {
         }
     }
 
+    Y_UNIT_TEST(ColumnTableUsesFullTable) {
+        TSnapshotPlan plan;
+        plan.Tx->MutableTables(0)->SetKind(NKqpProto::TABLE_KIND_OLAP);
+        SetRange(plan.AddRead(), 100, 200);
+        AssertFullTable(plan.Build());
+    }
+
     Y_UNIT_TEST(StreamLookupUsesFullTable) {
         TSnapshotPlan plan;
         SetRange(plan.AddRead(), 100, 200);

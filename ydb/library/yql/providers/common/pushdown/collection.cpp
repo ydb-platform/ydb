@@ -878,6 +878,10 @@ std::optional<TLikeSettings> ExtractLikeSettings(const NNodes::TExprBase& node)
         return std::nullopt;
     }
 
+    if (!namedApply->Child(1)->IsList() || namedApply->Child(1)->ChildrenSize() != 0) {
+        return std::nullopt;
+    }
+
     auto optionsUdf = maybeOptionsUdf.Cast();
     if (optionsUdf.MethodName() != "Re2.Options") {
         return std::nullopt;

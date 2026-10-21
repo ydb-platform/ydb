@@ -801,10 +801,15 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     }
                 }
                 const ui32 qpCachePoolId = GetPoolIdForQpCache(setup, appData, icConfig.GetRdmaQpCachePoolName());
+                if (icConfig.GetRdmaQpPoolSize() > RdmaRuntimeMaxQpPoolSize) {
+                    Cerr << "Warning: RDMA QP pool size " << icConfig.GetRdmaQpPoolSize()
+                        << " exceeds the supported limit " << RdmaRuntimeMaxQpPoolSize
+                        << " and will be clamped" << Endl;
+                }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
                         CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()),
-                            icConfig.GetEnableRdmaSendReceive(), qpCachePoolId),
+                            icConfig.GetEnableRdmaSendReceive(), icConfig.GetRdmaQpPoolSize(), qpCachePoolId),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));

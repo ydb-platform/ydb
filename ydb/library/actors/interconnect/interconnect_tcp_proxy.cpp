@@ -8,17 +8,24 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/system/getpid.h>
 
+#include <algorithm>
+#include <limits>
+
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
 namespace NActors {
-    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive, ui32 qpCachePoolId) noexcept {
+    const ui32 RdmaRuntimeMaxQpPoolSize = std::numeric_limits<ui16>::max();
+
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(
+            int maxWr, bool enableSendReceive, ui32 qpPoolSize, ui32 qpCachePoolId) noexcept {
+        qpPoolSize = std::min(qpPoolSize, RdmaRuntimeMaxQpPoolSize);
         const int rdmaReceiveBufSize = TTcpPacketBuf::FullPacketSize;
         return {
             -1,
             maxWr,
             enableSendReceive ? maxWr : 0,
             enableSendReceive ? rdmaReceiveBufSize : 0,
-            1024,
+            static_cast<ui16>(qpPoolSize),
             1024,
             qpCachePoolId,
         };
@@ -395,9 +402,6 @@ namespace NActors {
 
         bool runDelayedRdmaHandshakeTimer = false;
         const bool rdmaHandshakeSucceeded = msg->RdmaHanshakeResult.IsOk();
-        if (auto rdmaDisabled = msg->RdmaHanshakeResult.GetDisabled()) {
-            runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
-        }
 
         const auto handshakeSuccessLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
             ? NLog::PRI_NOTICE
@@ -412,6 +416,9 @@ namespace NActors {
         } else if (ev->Sender == OutgoingHandshakeActor) {
             YDB_LOG_COMP(handshakeSuccessLogPriority, NActorsServices::INTERCONNECT, "Outgoing handshake succeeded",
                 {"marker", "ICP20"});
+            if (auto rdmaDisabled = msg->RdmaHanshakeResult.GetDisabled()) {
+                runDelayedRdmaHandshakeTimer = rdmaDisabled->RunDelayedHandshake;
+            }
             DropIncomingHandshake();
             DropOutgoingHandshake(false);
         } else {

@@ -1186,6 +1186,7 @@ namespace NActors {
                             {"marker", "ICRDMA"});
                         Rdma.HandShakeMemRegion.Reset();
                         Rdma.Clear();
+                        RunDelayedRdmaHandshake = success.GetRdmaRetryable();
                     }
                 }
 
@@ -1530,6 +1531,9 @@ namespace NActors {
                         }
                     } else {
                         success.SetRdmaErr("Rdma is not ready on the incoming side");
+                    }
+                    if (request.HasRdmaHandshake() && RunDelayedRdmaHandshake) {
+                        success.SetRdmaRetryable(true);
                     }
 
                     success.SetUseModernFrame(true);

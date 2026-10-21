@@ -202,6 +202,10 @@ message THandshakeSuccess {
         TRdmaHandshake QpPrepared = 19; // Set and contains QP of incoming handshaker
         string RdmaErr = 20;
     }
+
+    // The peer supports RDMA, but could not initialize it due to a temporary
+    // local condition. The outgoing side should retry RDMA later.
+    optional bool RdmaRetryable = 23;
 }
 
 message THandshakeReply {

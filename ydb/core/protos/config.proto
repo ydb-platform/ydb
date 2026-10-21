@@ -565,6 +565,7 @@ message TInterconnectConfig {
     reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
     optional string RdmaQpCachePoolName = 71; // Specify name of pool for qp creation/destruction
+    optional uint32 RdmaQpPoolSize = 72 [default = 1024];
 
     message TV2Config {
         // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config

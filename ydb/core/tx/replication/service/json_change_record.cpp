@@ -1,6 +1,7 @@
 #include "json_change_record.h"
 
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -9,6 +10,7 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 
@@ -116,6 +118,10 @@ ui64 GetTxId(const NJson::TJsonValue& json, TStringBuf key) {
 }
 
 ui64 TChangeRecord::GetStep() const {
+    if (IsBinary) {
+        return BinaryHeader.Has(NChangeExchange::EBinaryCdcFlag::HasTs) ? BinaryHeader.Step : 0;
+    }
+
     switch (GetKind()) {
         case EKind::CdcDataChange: return NService::GetStep(JsonBody, "ts");
         case EKind::CdcHeartbeat: return NService::GetStep(JsonBody, "resolved");
@@ -125,6 +131,10 @@ ui64 TChangeRecord::GetStep() const {
 }
 
 ui64 TChangeRecord::GetTxId() const {
+    if (IsBinary) {
+        return BinaryHeader.Has(NChangeExchange::EBinaryCdcFlag::HasTs) ? BinaryHeader.TxId : 0;
+    }
+
     switch (GetKind()) {
         case EKind::CdcDataChange: return NService::GetTxId(JsonBody, "ts");
         case EKind::CdcHeartbeat: return NService::GetTxId(JsonBody, "resolved");
@@ -142,6 +152,18 @@ bool TChangeRecord::IsValidJson(TString& error) const {
 }
 
 NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
+    if (IsBinary) {
+        switch (BinaryHeader.Kind) {
+        case NChangeExchange::EBinaryCdcKind::Heartbeat:
+            return EKind::CdcHeartbeat;
+        case NChangeExchange::EBinaryCdcKind::Schema:
+            return EKind::CdcSchemaChange;
+        case NChangeExchange::EBinaryCdcKind::Data:
+            return EKind::CdcDataChange;
+        }
+        Y_ABORT("unreachable");
+    }
+
     if (JsonBody.Has("resolved")) {
         return EKind::CdcHeartbeat;
     }
@@ -149,6 +171,121 @@ NChangeExchange::IChangeRecord::EKind TChangeRecord::GetKind() const {
         return EKind::CdcSchemaChange;
     }
     return EKind::CdcDataChange;
+}
+
+bool LooksLikeJson(TStringBuf body) {
+    for (const char c : body) {
+        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            continue;
+        }
+        return c == '{' || c == '[';
+    }
+    return false;
+}
+
+void TChangeRecord::ClassifyBody(TStringBuf body) {
+    if (!LooksLikeJson(body) && body.size() >= 8) {
+        NChangeExchange::TBinaryCdcReader reader;
+        TString error;
+        if (!reader.Parse(body, error)) {
+            IsBinary = true;
+            JsonParsed = false;
+            JsonError = error;
+            return;
+        }
+
+        // Schema records wrap the JSON snapshot. The existing schema parser
+        // reads JsonBody, so the wrapper itself is not a binary data record.
+        if (reader.Header().Kind == NChangeExchange::EBinaryCdcKind::Schema) {
+            JsonParsed = TChangeRecordBuilder::ParseJsonBody(reader.SchemaJson(), JsonBody, JsonError);
+            return;
+        }
+
+        IsBinary = true;
+        BinaryHeader = reader.Header();
+        JsonParsed = true;
+        return;
+    }
+
+    JsonParsed = TChangeRecordBuilder::ParseJsonBody(body, JsonBody, JsonError);
+}
+
+bool TChangeRecord::EnsureBinaryCells(TString& error) const {
+    if (BinaryReady) {
+        error = BinaryError;
+        return BinaryError.empty();
+    }
+    BinaryReady = true;
+
+    auto fail = [&](TString message) {
+        BinaryError = std::move(message);
+        error = BinaryError;
+        return false;
+    };
+
+    if (!Schema) {
+        return fail("binary CDC record has no schema");
+    }
+
+    NChangeExchange::TBinaryCdcReader reader;
+    if (!reader.Parse(GetBody(), BinaryError)) {
+        error = BinaryError;
+        return false;
+    }
+    if (reader.Header().Kind != NChangeExchange::EBinaryCdcKind::Data) {
+        return fail("binary CDC record is not a data change");
+    }
+    if (reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasOldImage)
+        || reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasNewImage))
+    {
+        return fail("binary CDC image columns are not applied by async replication");
+    }
+
+    switch (reader.Header().Op) {
+    case NChangeExchange::EBinaryCdcOp::Upsert:
+    case NChangeExchange::EBinaryCdcOp::Reset:
+    case NChangeExchange::EBinaryCdcOp::Erase:
+        break;
+    default:
+        return fail("unsupported binary CDC operation");
+    }
+
+    TVector<std::pair<TString, const TLightweightSchema::TColumn*>> columns;
+    columns.reserve(Schema->ValueColumns.size());
+    for (const auto& [name, column] : Schema->ValueColumns) {
+        columns.emplace_back(name, &column);
+    }
+    Sort(columns);
+
+    TVector<NScheme::TTypeInfo> types(columns.size());
+    TVector<NTable::TTag> tags(columns.size());
+    for (size_t i = 0; i < columns.size(); ++i) {
+        types[i] = columns[i].second->Type;
+        tags[i] = columns[i].second->Tag;
+    }
+
+    if (!reader.ReadKeys(Schema->KeyColumns, BinaryKeys, BinaryError)
+        || !reader.ReadIndexed(reader.Header().ValueCount, types, BinaryValueIndexes, BinaryValues, BinaryError))
+    {
+        error = BinaryError;
+        return false;
+    }
+    if (!reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasUser)
+        && !reader.Header().Has(NChangeExchange::EBinaryCdcFlag::HasTrace)
+        && !reader.Rest().empty())
+    {
+        return fail("trailing bytes in binary CDC record");
+    }
+
+    BinaryOp = reader.Header().Op;
+    BinaryDestTags.reserve(BinaryValueIndexes.size());
+    for (const ui16 index : BinaryValueIndexes) {
+        if (index >= tags.size()) {
+            return fail("binary CDC value index is out of range");
+        }
+        BinaryDestTags.push_back(tags[index]);
+    }
+    return true;
 }
 
 static bool ParseKey(TVector<TCell>& cells,
@@ -227,6 +364,29 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
         record.SetWriteTxId(WriteTxId);
     }
 
+    if (IsBinary) {
+        TString error;
+        Y_ABORT_UNLESS(EnsureBinaryCells(error), "%s", error.c_str());
+        record.SetKey(TSerializedCellVec::Serialize(BinaryKeys));
+        auto fill = [&](NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& to) {
+            *to.MutableTags() = {BinaryDestTags.begin(), BinaryDestTags.end()};
+            to.SetData(TSerializedCellVec::Serialize(BinaryValues));
+        };
+        switch (BinaryOp) {
+        case NChangeExchange::EBinaryCdcOp::Upsert:
+            fill(*record.MutableUpsert());
+            return;
+        case NChangeExchange::EBinaryCdcOp::Reset:
+            fill(*record.MutableReset());
+            return;
+        case NChangeExchange::EBinaryCdcOp::Erase:
+            record.MutableErase();
+            return;
+        default:
+            Y_ABORT("Unsupported binary CDC operation");
+        }
+    }
+
     TString error;
 
     if (JsonBody.Has("key") && JsonBody["key"].IsArray()) {
@@ -250,6 +410,16 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
 }
 
 TConstArrayRef<TCell> TChangeRecord::GetKey(TMemoryPool& pool) const {
+    if (IsBinary) {
+        if (!Key) {
+            TString error;
+            Y_ABORT_UNLESS(EnsureBinaryCells(error), "%s", error.c_str());
+            Key.ConstructInPlace(BinaryKeys);
+        }
+        Y_ABORT_UNLESS(Key);
+        return *Key;
+    }
+
     if (!Key) {
         TString error;
 

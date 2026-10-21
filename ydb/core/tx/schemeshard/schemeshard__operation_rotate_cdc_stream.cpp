@@ -265,6 +265,7 @@ public:
         switch (newStreamDesc.GetFormat()) {
         case NKikimrSchemeOp::ECdcStreamFormatProto:
         case NKikimrSchemeOp::ECdcStreamFormatJson:
+        case NKikimrSchemeOp::ECdcStreamFormatBinary:
             break;
         case NKikimrSchemeOp::ECdcStreamFormatDynamoDBStreamsJson:
             if (!AppData()->FeatureFlags.GetEnableChangefeedDynamoDBStreamsFormat()) {
@@ -306,6 +307,7 @@ public:
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -318,6 +320,7 @@ public:
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatProto:
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
@@ -329,6 +332,7 @@ public:
         if (newStreamDesc.GetSchemaChanges()) {
             switch (newStreamDesc.GetFormat()) {
             case NKikimrSchemeOp::ECdcStreamFormatJson:
+            case NKikimrSchemeOp::ECdcStreamFormatBinary:
                 break;
             default:
                 result->SetError(NKikimrScheme::StatusInvalidParameter,

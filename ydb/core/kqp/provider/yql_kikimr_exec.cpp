@@ -3152,6 +3152,8 @@ public:
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DYNAMODB_STREAMS_JSON);
                                     } else if (to_lower(format) == "debezium_json") {
                                         add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_DEBEZIUM_JSON);
+                                    } else if (to_lower(format) == "binary") {
+                                        add_changefeed->set_format(Ydb::Table::ChangefeedFormat::FORMAT_BINARY);
                                     } else {
                                         ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                                             TStringBuilder() << "Unknown changefeed format: " << format));

@@ -5,40 +5,44 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(RevokeYdbPermission) {
-    Y_UNIT_TEST(Connect) {
+    Y_UNIT_TEST(ConnectRevokesLegacyAndCurrentGrants) {
         using namespace NACLib;
-        const TString subject = "user@builtin";
-        const TString otherSubject = "other@builtin";
+        const TString targetSubject = "user@builtin";
+        const TString unrelatedSubject = "other@builtin";
 
-        TACL expected;
-        expected.AddAccess(EAccessType::Allow, SelectRow, subject);
-        expected.AddAccess(EAccessType::Deny, ConnectDatabase, subject, InheritNone);
-        expected.AddAccess(EAccessType::Allow, ConnectDatabase, otherSubject, InheritNone);
+        // These entries must survive revoking the target subject's Allow CONNECT grants.
+        TACL expectedRemainingAcl;
+        expectedRemainingAcl.AddAccess(EAccessType::Allow, SelectRow, targetSubject);
+        expectedRemainingAcl.AddAccess(EAccessType::Deny, ConnectDatabase, targetSubject, InheritNone);
+        expectedRemainingAcl.AddAccess(EAccessType::Allow, ConnectDatabase, unrelatedSubject, InheritNone);
 
-        for (const auto& inheritanceTypes : {
+        for (const auto& connectGrantInheritanceTypes : {
             TVector<ui32>{},
             TVector<ui32>{InheritNone},
             TVector<ui32>{DefaultInheritanceType},
             TVector<ui32>{InheritNone, DefaultInheritanceType},
         }) {
-            TACL acl(expected);
-            for (ui32 inheritance : inheritanceTypes) {
-                acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, inheritance);
+            TACL aclBeforeRevoke(expectedRemainingAcl);
+            for (ui32 inheritanceType : connectGrantInheritanceTypes) {
+                aclBeforeRevoke.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, inheritanceType);
             }
+            UNIT_ASSERT_VALUES_EQUAL(aclBeforeRevoke.ACESize(), expectedRemainingAcl.ACESize() + connectGrantInheritanceTypes.size());
 
-            TDiffACL diff;
-            RevokeYdbPermission(diff, "ydb.database.connect", subject);
-            acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+            TDiffACL revokeDiff;
+            RevokeYdbPermission("ydb.database.connect", targetSubject, revokeDiff);
+            TACL aclAfterRevoke(aclBeforeRevoke);
+            aclAfterRevoke.ApplyDiff(TDiffACL(revokeDiff.SerializeAsString()));
 
-            UNIT_ASSERT_VALUES_EQUAL(acl.ToString(), expected.ToString());
+            UNIT_ASSERT_VALUES_EQUAL(aclBeforeRevoke.ACESize() - aclAfterRevoke.ACESize(), connectGrantInheritanceTypes.size());
+            UNIT_ASSERT_VALUES_EQUAL(aclAfterRevoke.ToString(), expectedRemainingAcl.ToString());
         }
     }
 
-    Y_UNIT_TEST(ConnectKeepsCustomInheritance) {
+    Y_UNIT_TEST(ConnectPreservesGrantsWithCustomInheritance) {
         using namespace NACLib;
-        const TString subject = "user@builtin";
+        const TString targetSubject = "user@builtin";
 
-        for (ui32 inheritance : TVector<ui32>{
+        for (ui32 customInheritanceType : TVector<ui32>{
             InheritObject,
             InheritContainer,
             InheritOnly,
@@ -46,58 +50,61 @@ Y_UNIT_TEST_SUITE(RevokeYdbPermission) {
             InheritContainer | InheritOnly,
             DefaultInheritanceType | InheritOnly,
         }) {
-            TACL expected;
-            expected.AddAccess(EAccessType::Allow, ConnectDatabase, subject, inheritance);
+            TACL expectedRemainingAcl;
+            expectedRemainingAcl.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, customInheritanceType);
 
-            TACL acl(expected);
-            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, InheritNone);
-            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, DefaultInheritanceType);
+            TACL aclBeforeRevoke(expectedRemainingAcl);
+            aclBeforeRevoke.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, InheritNone);
+            aclBeforeRevoke.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, DefaultInheritanceType);
 
-            TDiffACL diff;
-            RevokeYdbPermission(diff, "ydb.database.connect", subject);
-            acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+            TDiffACL revokeDiff;
+            RevokeYdbPermission("ydb.database.connect", targetSubject, revokeDiff);
+            TACL aclAfterRevoke(aclBeforeRevoke);
+            aclAfterRevoke.ApplyDiff(TDiffACL(revokeDiff.SerializeAsString()));
 
-            UNIT_ASSERT_VALUES_EQUAL_C(acl.ToString(), expected.ToString(), inheritance);
+            UNIT_ASSERT_VALUES_EQUAL_C(aclAfterRevoke.ToString(), expectedRemainingAcl.ToString(), customInheritanceType);
         }
     }
 
-    Y_UNIT_TEST(ConnectKeepsCompositePermissions) {
+    Y_UNIT_TEST(ConnectPreservesCompositePermissionGrants) {
         using namespace NACLib;
-        const TString subject = "user@builtin";
+        const TString targetSubject = "user@builtin";
 
-        for (ui32 access : TVector<ui32>{ConnectDatabase | SelectRow, GenericUse, GenericFull}) {
-            TACL expected;
-            expected.AddAccess(EAccessType::Allow, access, subject, InheritNone);
-            expected.AddAccess(EAccessType::Allow, access, subject, DefaultInheritanceType);
+        for (ui32 compositeAccessMask : TVector<ui32>{ConnectDatabase | SelectRow, GenericUse, GenericFull}) {
+            TACL expectedRemainingAcl;
+            expectedRemainingAcl.AddAccess(EAccessType::Allow, compositeAccessMask, targetSubject, InheritNone);
+            expectedRemainingAcl.AddAccess(EAccessType::Allow, compositeAccessMask, targetSubject, DefaultInheritanceType);
 
-            TACL acl(expected);
-            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, InheritNone);
-            acl.AddAccess(EAccessType::Allow, ConnectDatabase, subject, DefaultInheritanceType);
+            TACL aclBeforeRevoke(expectedRemainingAcl);
+            aclBeforeRevoke.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, InheritNone);
+            aclBeforeRevoke.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, DefaultInheritanceType);
 
-            TDiffACL diff;
-            RevokeYdbPermission(diff, "ydb.database.connect", subject);
-            acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+            TDiffACL revokeDiff;
+            RevokeYdbPermission("ydb.database.connect", targetSubject, revokeDiff);
+            TACL aclAfterRevoke(aclBeforeRevoke);
+            aclAfterRevoke.ApplyDiff(TDiffACL(revokeDiff.SerializeAsString()));
 
-            UNIT_ASSERT_VALUES_EQUAL_C(acl.ToString(), expected.ToString(), access);
+            UNIT_ASSERT_VALUES_EQUAL_C(aclAfterRevoke.ToString(), expectedRemainingAcl.ToString(), compositeAccessMask);
         }
     }
 
-    Y_UNIT_TEST(OtherPermissionsKeepInheritanceFilter) {
+    Y_UNIT_TEST(SelectRowRevokesOnlyMatchingInheritance) {
         using namespace NACLib;
-        const TString subject = "user@builtin";
+        const TString targetSubject = "user@builtin";
 
-        TACL expected;
-        expected.AddAccess(EAccessType::Allow, SelectRow, subject, InheritNone);
-        expected.AddAccess(EAccessType::Allow, ConnectDatabase, subject, InheritNone);
+        TACL expectedRemainingAcl;
+        expectedRemainingAcl.AddAccess(EAccessType::Allow, SelectRow, targetSubject, InheritNone);
+        expectedRemainingAcl.AddAccess(EAccessType::Allow, ConnectDatabase, targetSubject, InheritNone);
 
-        TACL acl(expected);
-        acl.AddAccess(EAccessType::Allow, SelectRow, subject);
+        TACL aclBeforeRevoke(expectedRemainingAcl);
+        aclBeforeRevoke.AddAccess(EAccessType::Allow, SelectRow, targetSubject);
 
-        TDiffACL diff;
-        RevokeYdbPermission(diff, "ydb.granular.select_row", subject);
-        acl.ApplyDiff(TDiffACL(diff.SerializeAsString()));
+        TDiffACL revokeDiff;
+        RevokeYdbPermission("ydb.granular.select_row", targetSubject, revokeDiff);
+        TACL aclAfterRevoke(aclBeforeRevoke);
+        aclAfterRevoke.ApplyDiff(TDiffACL(revokeDiff.SerializeAsString()));
 
-        UNIT_ASSERT_VALUES_EQUAL(acl.ToString(), expected.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(aclAfterRevoke.ToString(), expectedRemainingAcl.ToString());
     }
 }
 

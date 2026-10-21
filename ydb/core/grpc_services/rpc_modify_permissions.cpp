@@ -81,7 +81,7 @@ private:
                 break;
                 case Ydb::Scheme::PermissionsAction::kRevoke: {
                     for (const auto& n : perm.revoke().permission_names()) {
-                        RevokeYdbPermission(acl, n, perm.revoke().subject());
+                        RevokeYdbPermission(n, perm.revoke().subject(), acl);
                     }
                 }
                 break;

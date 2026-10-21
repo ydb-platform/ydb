@@ -972,7 +972,8 @@ TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     return it->second;
 }
 
-void RevokeYdbPermission(NACLib::TDiffACL& acl, const TString& name, const TString& sid) {
+// TODO: Remove this helper as part of https://st.yandex-team.ru/KIKIMR-27401.
+void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl) {
     const auto attrs = ConvertYdbPermissionNameToACLAttrs(name);
     acl.RemoveAccess(NACLib::EAccessType::Allow, attrs.AccessMask, sid, attrs.InheritanceType);
     if (attrs.AccessMask == NACLib::EAccessRights::ConnectDatabase) {

@@ -46,7 +46,7 @@ struct TACLAttrs {
 };
 
 TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name);
-void RevokeYdbPermission(NACLib::TDiffACL& acl, const TString& name, const TString& sid);
+void RevokeYdbPermission(const TString& name, const TString& sid, NACLib::TDiffACL& acl);
 
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32);
 TString ConvertShortYdbPermissionNameToFullYdbPermissionName(const TString& name);

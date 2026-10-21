@@ -1787,7 +1787,7 @@ public:
                     } else {
                         for (const auto& sid : settings.Roles) {
                             for (const auto& permission : settings.Permissions) {
-                                RevokeYdbPermission(acl, permission, sid);
+                                RevokeYdbPermission(permission, sid, acl);
                             }
                         }
                     }

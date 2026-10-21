@@ -323,7 +323,7 @@ namespace NKikimr::NStorage {
 
                 for (auto& [timestamp, ev] : queue) {
                     THolder<IEventHandle> tmp(ev.release());
-                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                    TActivationContext::Forward(tmp, tmp->GetForwardOnNondeliveryRecipient());
                 }
 
                 GroupPendingQueue.erase(it);

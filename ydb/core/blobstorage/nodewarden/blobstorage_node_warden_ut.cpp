@@ -1414,7 +1414,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui32 StaticGroupId;
         TActorId NodeWardenId;
 
-        TStaticGroupProxyTestSetup(ui32 maxStaticNodeId)
+        TStaticGroupProxyTestSetup(ui32 maxStaticNodeId, bool enableProxyMock = false)
             : Runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>())
             , StaticGroupId(TGroupID(EGroupConfigurationType::Static, 1, 0).GetRaw())
         {
@@ -1430,6 +1430,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             ObtainStaticKey(&nodeWardenConfig->StaticKey);
 
             auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            serviceSet->SetEnableProxyMock(enableProxyMock);
             auto* group = serviceSet->AddGroups();
             group->SetGroupID(StaticGroupId);
             group->SetGroupGeneration(1);
@@ -1508,6 +1509,58 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         UNIT_ASSERT_C(setup.HasGroupProxy(),
             "Static group proxy should be created on-demand after a request on static node");
+    }
+
+    Y_UNIT_TEST(TestUnknownStaticGroupPendingRequestsForwardedAfterConfig) {
+        TStaticGroupProxyTestSetup setup(100, true);
+        setup.Bootstrap();
+
+        const ui32 groupId = TGroupID(EGroupConfigurationType::Static, 1, 1).GetRaw();
+        UNIT_ASSERT(groupId != 0 && groupId != setup.StaticGroupId);
+        const TActorId proxyService = MakeBlobStorageProxyID(groupId);
+        const TActorId nodeWardenService = MakeBlobStorageNodeWardenID(setup.NodeId);
+        const TActorId sender = setup.Runtime.AllocateEdgeActor(setup.NodeId);
+        const auto deadline = setup.Runtime.GetClock() + TDuration::Seconds(5);
+        for (ui64 cookie : {41, 42}) {
+            setup.Runtime.Send(new IEventHandle(proxyService, sender,
+                new TEvBlobStorage::TEvStatus(TInstant::Max()), IEventHandle::FlagForwardOnNondelivery,
+                cookie, &nodeWardenService), setup.NodeId);
+        }
+
+        setup.Runtime.Sim([&] {
+            UNIT_ASSERT(setup.Runtime.GetClock() < deadline);
+            bool queued = false;
+            setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+                const auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+                UNIT_ASSERT(!warden.Groups.contains(groupId));
+                const auto it = warden.GroupPendingQueue.find(groupId);
+                queued = it != warden.GroupPendingQueue.end() && it->second.size() == 2;
+            });
+            return !queued;
+        });
+
+        NKikimrBlobStorage::TGroupInfo group;
+        setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+            const auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+            group = *warden.Groups.at(setup.StaticGroupId).Group;
+        });
+        group.SetGroupID(groupId);
+        setup.Runtime.Send(new IEventHandle(setup.NodeWardenId, sender,
+            new TEvBlobStorage::TEvUpdateGroupInfo(TGroupId::FromValue(groupId),
+                group.GetGroupGeneration(), group)), setup.NodeId);
+
+        for (ui64 cookie : {41, 42}) {
+            const auto response = setup.Runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+            UNIT_ASSERT(setup.Runtime.GetClock() < deadline);
+            setup.Runtime.WrapInActorContext(setup.NodeWardenId, [&](IActor* actor) {
+                const auto& warden = *static_cast<NStorage::TNodeWarden*>(actor);
+                UNIT_ASSERT(!warden.GroupPendingQueue.contains(groupId));
+                UNIT_ASSERT(warden.TimeoutToQueue.empty());
+                UNIT_ASSERT_VALUES_EQUAL(response->Sender, warden.Groups.at(groupId).ProxyId);
+            });
+        }
     }
 
 }

@@ -89,6 +89,7 @@ public:
         TExprNode::TPtr inputType;
         TExprNode::TPtr outputType;
         TExprNode::TPtr batchSize;
+        bool enrichRows = false;
 
         for (const auto &tuple: callable.Settings().Ref().Children()) {
             const auto paramName = tuple->Head().Content();
@@ -98,6 +99,8 @@ public:
                 inputType = tuple->TailPtr();
             } else if (paramName == "output_type") {
                 outputType = tuple->TailPtr();
+            } else if (paramName == "enrich_rows") {
+                enrichRows = tuple->Tail().Head().IsAtom("true");
             } else if (paramName == "batch_size") {
                 const auto value = TExprBase(tuple->TailPtr()).Maybe<TCoInt32>();
                 i32 rows = 0;
@@ -131,6 +134,10 @@ public:
                 .InvokeUrl<TCoAtom>().Build(description->InvokeUrl);
         if (batchSize) {
             settingsBuilder.BatchSize(batchSize);
+        }
+        if (enrichRows) {
+            if (!batchSize) settingsBuilder.BatchSize().Build("0");
+            settingsBuilder.EnrichRows().Build("true");
         }
         auto settings = settingsBuilder.Done();
 

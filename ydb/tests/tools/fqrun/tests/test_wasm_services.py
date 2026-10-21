@@ -782,3 +782,66 @@ def test_sql_batch_size_per_invocation(service, tmp_path):
     expected = list(range(1000, 1016)) + list(range(2000, 2016))
     assert sorted(received) == expected
     assert sorted(int(row['id']) for row in runner.rows()) == expected
+
+
+@pytest.mark.parametrize('use_lambda', [False, True])
+@pytest.mark.parametrize('batch_size', [1, 8, 64])
+def test_service_expression_200_rows(service, tmp_path, use_lambda, batch_size):
+    runner = Runner(tmp_path, service)
+    options = "AsStruct('%s' AS connection, %d AS batch_size)" % ('profiles_http', batch_size)
+    source = ','.join('AsStruct(%dul AS ordinal, %dul AS id, "row-%d" AS payload)' %
+                      (i, 1000 + i % 3, i) for i in range(200))
+    expression = '$lookup(id)' if use_lambda else 'WASM_PROFILE::Profile(id, $options)'
+    sql = (
+        "$options = " + options + ";"
+        "$lookup = ($id) -> { RETURN WASM_PROFILE::Profile($id, $options); };"
+        "$input = SELECT * FROM AS_TABLE(AsList(" + source + "));"
+        "$result = SELECT ordinal, payload, " + expression + " AS profile FROM $input;"
+        "SELECT ordinal, payload, profile.id AS id, profile.name AS name, profile.score AS score "
+        "FROM $result ORDER BY ordinal;"
+    )
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    rows = runner.rows()
+    assert len(rows) == 200
+    assert [int(row['ordinal']) for row in rows] == list(range(200))
+    assert [int(row['id']) for row in rows] == [1000 + i % 3 for i in range(200)]
+    assert [row['payload'] for row in rows] == ['row-%d' % i for i in range(200)]
+    assert all(row['name'] == 'Ada' and int(row['score']) == 97 for row in rows)
+    batches = [request if isinstance(request, tuple) else (request,) for _, request, _ in service.requests]
+    assert sum(map(len, batches)) == 200
+    assert all(1 <= len(batch) <= batch_size for batch in batches)
+    if batch_size > 1:
+        assert any(len(batch) > 1 for batch in batches)
+    assert 'DqTransform' in runner.ast.read_text() and 'WasmService' in runner.ast.read_text()
+
+
+@pytest.mark.parametrize('dependent', [False, True])
+def test_service_expression_multiple_calls(service, tmp_path, dependent):
+    runner = Runner(tmp_path, service)
+    second = 'WASM_PROFILE::Profile(id, $options)' if not dependent else 'WASM_PROFILE::Profile(first.id, $options)'
+    sql = (
+        "$options=AsStruct('profiles_http' AS connection, 8 AS batch_size);"
+        "$input=SELECT * FROM AS_TABLE(AsList(AsStruct(42ul AS id), AsStruct(43ul AS id)));"
+        "$first=SELECT id, WASM_PROFILE::Profile(id, $options) AS first FROM $input;"
+        "$both=SELECT first, " + second + " AS second FROM $first;"
+        "SELECT first.id AS id, second.id AS second_id FROM $both ORDER BY id;"
+    )
+    assert runner.wait(runner.start(sql=sql)) == 0, runner.output()
+    assert [(int(row['id']), int(row['second_id'])) for row in runner.rows()] == [(42, 42), (43, 43)]
+    received = [value for _, request, _ in service.requests
+                for value in (request if isinstance(request, tuple) else (request,))]
+    assert sorted(received) == [42, 42, 43, 43]
+
+
+@pytest.mark.parametrize('expression', [
+    "WASM_PROFILE::Profile(id, AsStruct('profiles_http' AS connection, 0 AS batch_size))",
+    "WASM_PROFILE::Profile(CAST(id AS String), $options)",
+    "WASM_PROFILE::Profile(id, AsStruct(CAST(id AS String) AS connection))",
+])
+def test_service_expression_invalid_before_network(service, tmp_path, expression):
+    runner = Runner(tmp_path, service)
+    sql = ("$options=AsStruct('profiles_http' AS connection);"
+           "$input=SELECT 42ul AS id; SELECT " + expression + " AS profile FROM $input;")
+    assert runner.wait(runner.start(sql=sql)) != 0
+    assert not service.requests
+    assert 'Service' in runner.output()

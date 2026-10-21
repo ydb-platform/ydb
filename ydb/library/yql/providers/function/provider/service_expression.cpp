@@ -20,6 +20,20 @@ namespace NYql::NDqFunction {
 
     TExprNode::TPtr RewriteServiceExpression(const TExprNode::TPtr& apply,
                                              const TDqFunctionGatewayFactory& factory, TExprContext& ctx) {
+        if (apply->IsCallable("SqlCall") && apply->ChildrenSize() >= 2 && apply->Head().IsAtom() &&
+            factory.FindServiceFunction(TString(apply->Head().Content()))) {
+            const auto& tuple = *apply->Child(1);
+            if (!tuple.ChildrenSize() || !tuple.Head().IsCallable("PositionalArgs") || tuple.ChildrenSize() > 2 ||
+                (tuple.ChildrenSize() == 2 && (!tuple.Tail().IsCallable("AsStruct") || tuple.Tail().ChildrenSize()))) {
+                ctx.AddError(TIssue(ctx.GetPosition(apply->Pos()), "Service methods require positional arguments and an options struct"));
+                return {};
+            }
+            TExprNode::TListType args{ctx.NewCallable(apply->Pos(), "Udf", {apply->HeadPtr()})};
+            for (const auto& arg : tuple.Head().Children()) {
+                args.push_back(arg);
+            }
+            return RewriteServiceExpression(ctx.NewCallable(apply->Pos(), "Apply", std::move(args)), factory, ctx);
+        }
         if (!apply->IsCallable("Apply") || !apply->ChildrenSize() || !apply->Head().IsCallable("Udf") ||
             !apply->Head().ChildrenSize() || !apply->Head().Head().IsAtom()) {
             return apply;
@@ -37,7 +51,7 @@ namespace NYql::NDqFunction {
             return fail("Service method requires its manifest arguments and a constant options struct (connection, optional batch_size)");
         }
         const auto& options = apply->Tail();
-        if (!options.IsCallable("AsStruct")) {
+        if (!options.IsCallable({"AsStruct", "AsStructUnordered"})) {
             return fail("Service options must be a constant struct");
         }
         TExprNode::TPtr connection, batch;

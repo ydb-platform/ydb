@@ -7,7 +7,7 @@ namespace NYql {
 using namespace NCommon;
 
 TSolomonConfiguration::TSolomonConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(SolomonProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TSolomonSettings>(SolomonProviderName, TQContext(), strictConfigValidation)
 {
     REGISTER_SETTING(*this, _EnableReading);
     REGISTER_SETTING(*this, _EnableRuntimeListing);

@@ -73,6 +73,19 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(dcs.size(), 3);
         return group.GetGroupId();
     }
+
+    void WaitForOrdinaryGroupReady(TEnvironmentSetup& env, ui32 groupId) {
+        WaitUntil(env, [&] {
+            const auto config = env.FetchBaseConfig();
+            ui32 ready = 0;
+            for (const auto& slot : config.GetVSlot()) {
+                if (slot.GetGroupId() == groupId && slot.GetReady()) {
+                    ++ready;
+                }
+            }
+            return ready == 9;
+        }, "ordinary VDisks ready");
+    }
 }
 
 Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
@@ -90,16 +103,7 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         checker.Write(ordinary);
         checker.Write(bridged);
 
-        WaitUntil(env, [&] {
-            const auto config = env.FetchBaseConfig();
-            ui32 ready = 0;
-            for (const auto& slot : config.GetVSlot()) {
-                if (slot.GetGroupId() == ordinary && slot.GetReady()) {
-                    ++ready;
-                }
-            }
-            return ready == 9;
-        }, "ordinary VDisks ready for reassignment");
+        WaitForOrdinaryGroupReady(env, ordinary);
 
         const auto before = env.FetchBaseConfig();
         for (const auto& slot : before.GetVSlot()) {
@@ -270,6 +274,9 @@ Y_UNIT_TEST_SUITE(BridgeMixedStorage) {
         }
         SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitForPileState(env, 2, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        WaitForOrdinaryGroupReady(env, ordinary);
         checker.CheckAll();
         checker.Write(ordinary);
         UNIT_ASSERT_VALUES_EQUAL(OrdinaryGroup(env), ordinary);

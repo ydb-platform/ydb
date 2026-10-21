@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
             TVector<ui64> ids;
             TVector<TString> payloads;
             for (ui64 i = 1000 + epoch * 100; i < 1100 + epoch * 100; ++i) {
-                ids.push_back(i % 3);
+                ids.push_back(1000 + i % 3);
                 payloads.push_back(TStringBuilder() << "original-row-" << i);
             }
             env.Output->BlockAfterRows = 1;
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TFqWasmQueryTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(delivered.size(), 200);
         for (size_t i = 0; i < delivered.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(delivered[i], (1000 + i) % 3);
+            UNIT_ASSERT_VALUES_EQUAL(delivered[i], 1000 + (1000 + i) % 3);
             UNIT_ASSERT_VALUES_EQUAL(saved.at(i), TStringBuilder() << "original-row-" << 1000 + i);
         }
     }

@@ -1059,7 +1059,7 @@ private:
                     unavailableClusters.push_back(state.Config.Name);
                 }
             }
-            if (unavailableClusters.size() >= 2) {
+            if (unavailableClusters.size() == Self.Clusters.size()) {
                 TStringBuilder message;
                 message << "Failed to read topic \"" << Self.Settings.Stream
                     << "\": " << unavailableClusters.size() << " clusters are unavailable simultaneously: "

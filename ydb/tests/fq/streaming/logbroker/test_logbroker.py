@@ -179,14 +179,16 @@ class TestLogbroker(StreamingTestBase):
 
             def check_read_write(available_clusters, phase):
                 clients = {name: self.logbrokers_client[name] for name in available_clusters}
+                expected_count = sum(read_counts[name] for name in clients)
                 for cluster_name, client in clients.items():
                     for partition_id in range(4):
                         message = f"{phase}, {cluster_name}, partition {partition_id}"
                         client.topic_write(self.input_topic, [message], partition_id=partition_id)
                         expected_messages.append(message)
+                        expected_count += 1
 
                 # Output can be distributed across any of the available clusters.
-                counts = wait_topic_messages(clients, self.output_topic, len(expected_messages))
+                counts = wait_topic_messages(clients, self.output_topic, expected_count)
                 for cluster_name, count in counts.items():
                     unread_count = count - read_counts[cluster_name]
                     if unread_count:
@@ -236,7 +238,14 @@ class TestLogbroker(StreamingTestBase):
             cleanup.callback(logbroker_federation.start_cluster, cluster3)
             logging.info("Stopping cluster %s while cluster %s is already stopped", cluster3, cluster2)
             logbroker_federation.stop_cluster(cluster3)
-            logging.info("Cluster %s stopped; waiting for query %s to retry", cluster3, self.query_name)
+            self.wait_available_clusters(kikimr, 1)
+            cluster1 = cluster_names[0]
+            check_read_write([cluster1], "two clusters stopped")
+
+            cleanup.callback(logbroker_federation.start_cluster, cluster1)
+            logging.info("Stopping last available cluster %s", cluster1)
+            logbroker_federation.stop_cluster(cluster1)
+            logging.info("All clusters stopped; waiting for query %s to retry", self.query_name)
 
             deadline = time.monotonic() + 120
             while True:
@@ -246,7 +255,7 @@ class TestLogbroker(StreamingTestBase):
                     logging.info("Query %s retried: RetryCount %s -> %s; issues=%s", self.query_name, retry_count, state.RetryCount, state.Issues)
                     break
                 assert time.monotonic() < deadline, (
-                    f"Query did not retry after stopping {cluster3} with {cluster2} already stopped: "
+                    "Query did not retry after stopping all three clusters: "
                     f"RetryCount {retry_count} -> {state.RetryCount}; "
                     f"status: {state.Status}; issues: {state.Issues}"
                 )

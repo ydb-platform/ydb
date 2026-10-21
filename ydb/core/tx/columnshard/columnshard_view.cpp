@@ -1,12 +1,15 @@
 #include "columnshard_impl.h"
 #include "columnshard_view.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <library/cpp/json/writer/json.h>
+#include <library/cpp/monlib/service/pages/mon_page.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -799,6 +802,7 @@ TString TTxMonitoring::RenderMainPage() {
     html << "<h3><a href=\"app?page=scan&TabletID=" << cgi.Get("TabletID") << "\"> Scan </a></h3>";
     html << "<h3><a href=\"app?page=portions&TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Portions </a></h3>";
     html << "<h3><a href=\"app?page=cuthistory&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> CutHistory </a></h3>";
+    html << "<h3><a href=\"app?page=localdb_backup&amp;TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\"> Local DB backup (S3) </a></h3>";
     html << RenderLwTraceStartScript();
     html << "<h3>" << RenderLwTraceShardLinks("scan_traces", "YDB_CS_SCAN", "StartScan", Self->TabletID(), Self->SelfId().NodeId(),
                           "Traces for all scans on shard")
@@ -1404,6 +1408,15 @@ bool TColumnShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
     if (cgi.Has("page") && cgi.Get("page") == "scan_traces") {
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(RenderScanTracesPage(TabletID(), ctx.SelfID.NodeId())));
         return true;
+    }
+
+    if (cgi.Has("page") && cgi.Get("page") == "localdb_backup") {
+        const auto* appData = AppData(ctx);
+        if (appData->FeatureFlags.GetEnableTabletDevUiSecurePath() && !IsAdministrator(appData, ev->Get()->GetUserToken())) {
+            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+            return true;
+        }
+        return HandleLocalDbBackupPage(ev, ctx);
     }
 
     Execute(new TTxMonitoring(this, ev), ctx);

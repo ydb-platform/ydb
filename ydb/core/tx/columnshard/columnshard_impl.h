@@ -7,6 +7,7 @@
 #include "counters.h"
 #include "defs.h"
 #include "inflight_request_tracker.h"
+#include "local_db_backup/events.h"
 #include "tables_manager.h"
 
 #include "bg_tasks/events/local.h"
@@ -319,6 +320,15 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvTieringModified::TPtr& ev, const TActorContext&);
     void Handle(TEvPrivate::TEvNormalizerResult::TPtr& ev, const TActorContext&);
 
+    // Manual backup of the local DB (tablet_flat) to S3, triggered from the App page. The logic lives in
+    // NLocalDbBackup::TLocalDbBackupActor; the tablet only forwards the page and serves the executor-bound requests.
+    bool HandleLocalDbBackupPage(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvStartBackup::TPtr& ev, const TActorContext& ctx);
+    void Handle(NLocalDbBackup::TEvCancelScans::TPtr& ev, const TActorContext& ctx);
+    void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext& ctx) override;
+    void CancelLocalDbBackupScans();
+    void StopLocalDbBackup(const TActorContext& ctx);
+
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>>& ev);
     void Handle(TAutoPtr<NActors::TEventHandle<NConsole::TEvConsole::TEvConfigNotificationRequest>>& ev);
     void Handle(TEvPrivate::TEvRetryConfigSubscription::TPtr& ev);
@@ -519,6 +529,8 @@ private:
     // Local CMS snapshot of ColumnShardConfig. Heap-allocated so this header
     // does not need a complete NKikimrConfig::TColumnShardConfig / config.pb.h.
     std::unique_ptr<NKikimrConfig::TColumnShardConfig> ColumnShardConfig;
+    TActorId LocalDbBackupActorId;              // created lazily on the first visit of the page
+    THashMap<ui32, ui64> LocalDbBackupScans;   // tableId -> QueueScan taskId
     std::shared_ptr<NSubscriber::TManager> Subscribers;
     std::shared_ptr<TTiersManager> Tiers;
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;

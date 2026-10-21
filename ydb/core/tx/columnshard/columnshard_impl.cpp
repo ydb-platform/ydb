@@ -44,6 +44,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/local_db_backup/events.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -2001,6 +2002,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         HFunc(NActors::TEvents::TEvWakeup, Handle);
         HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
+        HFunc(NLocalDbBackup::TEvStartBackup, Handle);
+        HFunc(NLocalDbBackup::TEvCancelScans, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);

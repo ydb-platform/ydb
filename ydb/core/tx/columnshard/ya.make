@@ -19,6 +19,7 @@ SRCS(
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard_impl.cpp
+    columnshard_local_db_backup.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
     columnshard_subdomain_path_id.cpp
@@ -62,6 +63,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/writer
     ydb/core/tx/columnshard/export
     ydb/core/tx/columnshard/loading
+    ydb/core/tx/columnshard/local_db_backup
     ydb/core/tx/columnshard/normalizer
     ydb/core/tx/columnshard/operations
     ydb/core/tx/columnshard/overload_manager
@@ -110,6 +112,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     hooks/abstract
     ut_cut_history
+    ut_local_db_backup
     ut_rw
     ut_schema
     backup
